@@ -1,0 +1,108 @@
+services:
+  # EMQX MQTT Broker
+  emqx:
+    image: emqx/emqx:5.6.0
+    container_name: emqx
+    depends_on:
+      - postgres
+    ports:
+      - '0.0.0.0:1883:1883' # Standard MQTT
+      - '0.0.0.0:8883:8883' # Secure MQTT (MQTTS)
+      - '0.0.0.0:18083:18083' # Dashboard
+    environment:
+      - EMQX_NODE_NAME=emqx@127.0.0.1
+      # ----------------------------------------
+      # Listeners (WSS Configuration)
+      - EMQX_LISTENERS__SSL__DEFAULT__BIND=8883
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CACERTFILE=/opt/emqx/etc/certs/ca.pem
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE=/opt/emqx/etc/certs/server.pem
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE=/opt/emqx/etc/certs/server.key
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__VERIFY=verify_none
+      # ----------------------------------------
+      # Auth 1: JWT (For ESP Devices)
+      # ----------------------------------------
+      - EMQX_AUTHENTICATION__1__MECHANISM=jwt
+      - EMQX_AUTHENTICATION__1__USE_JWKS=false
+      - EMQX_AUTHENTICATION__1__ALGORITHM=hmac-based
+      - EMQX_AUTHENTICATION__1__SECRET=${JWT_SECRET}
+      - EMQX_AUTHENTICATION__1__SECRET_BASE64_ENCODED=false
+      # ----------------------------------------
+      # Auth 2: PostgreSQL (For TS App / Humans)
+      # ----------------------------------------
+      - EMQX_AUTHENTICATION__2__MECHANISM=password_based
+      - EMQX_AUTHENTICATION__2__BACKEND=postgresql
+      - EMQX_AUTHENTICATION__2__SERVER=${EMQX_DB_SERVER}
+      - EMQX_AUTHENTICATION__2__DATABASE=postgres
+      - EMQX_AUTHENTICATION__2__USERNAME=${EMQX_DB_USERNAME}
+      - EMQX_AUTHENTICATION__2__PASSWORD=${EMQX_DB_PASSWORD}
+      - EMQX_AUTHENTICATION__2__QUERY=SELECT password_hash, is_superuser FROM mqtt_user WHERE username = $${username} LIMIT 1
+      - EMQX_AUTHENTICATION__2__PASSWORD_HASH_ALGORITHM__NAME=bcrypt
+      # --- ACL / Authorization Setup ---
+      - EMQX_AUTHORIZATION__NO_MATCH=deny
+      - EMQX_AUTHORIZATION__SOURCES__1__TYPE=file
+      - EMQX_AUTHORIZATION__SOURCES__1__ENABLE=true
+      - EMQX_AUTHORIZATION__SOURCES__1__PATH=/opt/emqx/etc/acl.conf
+      # Default admin dashboard credentials (admin / public)
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USERNAME}
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
+    volumes:
+      - ./certs:/opt/emqx/etc/certs:ro
+      - ./acl.conf:/opt/emqx/etc/acl.conf
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-emqx_data}
+      - BACKEND_DB_USER=${BACKEND_DB_USER}
+      - BACKEND_DB_PASSWORD=${BACKEND_DB_PASSWORD}
+      - EMQX_DB_USERNAME=${EMQX_DB_USERNAME}
+      - EMQX_DB_PASSWORD=${EMQX_DB_PASSWORD}
+      - MQTT_APP_USERNAME=${MQTT_APP_USERNAME}
+      - MQTT_APP_PASSWORD=${MQTT_APP_PASSWORD}
+      - TZ=Asia/Jerusalem
+      - PGTZ=Asia/Jerusalem
+    ports:
+      - '5432:5432'
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    restart: always
+
+  # Adminer (Database Management Tool)
+  adminer:
+    image: adminer:latest
+    container_name: adminer_ui
+    ports:
+      - '8080:8080' # Access via http://localhost:8080
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10' # Equivalent to cpu: 100m
+          memory: 64M # Equivalent to memory: 64Mi
+    restart: always
+    depends_on:
+      - postgres
+  cache:
+    image: redis:7-alpine
+    container_name: redis_cache
+    command: >
+     redis-server 
+     --maxmemory 256mb 
+     --maxmemory-policy volatile-lru 
+     --appendonly yes
+     --user ${REDIS_USER} on ">${REDIS_PASSWORD}" ~* +@all
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    restart: always
+volumes:
+  emqx-data:
+  pg-data:
+  redis_data:

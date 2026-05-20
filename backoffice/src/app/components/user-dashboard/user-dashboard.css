@@ -1,0 +1,43 @@
+.material-symbols-outlined {
+  font-variation-settings:
+  'FILL' 0,
+  'wght' 400,
+  'GRAD' 0,
+  'opsz' 24
+}
+
+.status-indicator {
+  font-size: 16px; /* Adjust size */
+}
+.status-indicator.active {
+  color: #4CAF50; /* Material Green 500 */
+}
+.status-indicator.inactive {
+  color: #9E9E9E; /* Material Gray 500 */
+}
+
+/* The active/available state */
+.card-enabled {
+  /* border: 1px solid transparent; */
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  margin: 10px;
+  /* background-color: #69d59335 !important; */
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* The unavailable/disabled state */
+.card-disabled {
+  opacity: 0.6;
+  filter: grayscale(65%);
+  cursor: not-allowed !important;
+  pointer-events: none; /* Prevents clicks on internal buttons */
+  user-select: none;
+  background-color: #77676747 !important;
+  /* border: 1px solid #e0e0e0; */
+  margin: 10px;
+}

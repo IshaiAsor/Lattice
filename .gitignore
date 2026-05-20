@@ -53,3 +53,14 @@ ESP32Code/src/secrets.h
 .env.*.local
 !.env.example
 !backend/.env.example
+certs/ca.key
+certs/ca.pem
+certs/ca.srl
+certs/cert.pem
+certs/extfile.cnf
+certs/key.pem
+certs/server.csr
+certs/server.key
+certs/server.pem
+sql/*.testseed.sql
+google-homegraph-key.json

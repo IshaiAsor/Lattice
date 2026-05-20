@@ -1,0 +1,11 @@
+<h2 mat-dialog-title>Rename Device</h2>
+<mat-dialog-content>
+  <mat-form-field>
+    <mat-label>New Device Name</mat-label>
+    <input matInput [(ngModel)]="data.deviceName" />
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions>
+  <button mat-button (click)="onCancel()">Cancel</button>
+  <button mat-button [mat-dialog-close]="data.deviceName" cdkFocusInitial>Save</button>
+</mat-dialog-actions>

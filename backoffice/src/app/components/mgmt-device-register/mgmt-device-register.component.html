@@ -1,0 +1,29 @@
+<h2 mat-dialog-title>New Device Registration</h2>
+<mat-dialog-content>
+  <p>Open Bluetooth settings and pair with the device.</p>
+</mat-dialog-content>
+<mat-dialog-content>
+  <p>After pairing, click "Yes" to complete the registration process.</p>
+
+  <div *ngIf="isProvisioning">
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    <p>Provisioning in progress, please wait...</p>
+  </div>
+
+  <div *ngIf="provisioningSteps.length > 0" class="status-log">
+    <h3>Provisioning Log:</h3>
+    <mat-list role="list">
+      <mat-list-item role="listitem" *ngFor="let step of provisioningSteps"
+        >{{ getStepDisplayName(step.step) }}: {{ step.message }}</mat-list-item
+      >
+    </mat-list>
+  </div>
+
+  <div *ngIf="error" class="error-message">
+    <p>{{ error }}</p>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-raised-button color="primary" (click)="startProvisioning()">Pair with Device</button>
+  <button mat-button [mat-dialog-close]="true" cdkFocusInitial>Cancel</button>
+</mat-dialog-actions>

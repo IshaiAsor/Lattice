@@ -1,0 +1,35 @@
+<div class="header">
+    <h1></h1>
+</div>
+<div class="card-grid">
+    <ng-container *ngFor="let action of actions">
+        <mat-card appearance="outlined" *ngIf="action.googleType.name === 'Outlet'"
+            [ngClass]="action.online ? 'card-enabled' : 'card-disabled'">
+            <mat-card-header>
+                <mat-card-title-group>
+                    <span class="material-symbols-outlined">outlet</span>
+                    <mat-card-title>{{ action.name }}</mat-card-title>
+                </mat-card-title-group>
+            </mat-card-header>
+            <mat-card-content>
+                <mat-slide-toggle (change)="onToggle(action, $event)" [checked]="action.state === 'on'"
+                    [disabled]="action.state ==0"></mat-slide-toggle>
+            </mat-card-content>
+
+        </mat-card>
+        <mat-card class="weather-card" appearance="outlined" *ngIf="action.googleType.name === 'Sensor'"
+            [ngClass]="action.online ? 'card-enabled' : 'card-disabled'">
+            <mat-card-header>
+                <mat-card-title-group>
+                    <span class="material-symbols-outlined">thermometer</span>
+                    <mat-card-title>{{ action.name }}</mat-card-title>
+                </mat-card-title-group>
+
+            </mat-card-header>
+            <mat-card-content class="temp-display">
+                <span class="value">{{ action.state | number:'1.0-1' }}</span>
+                <span class="unit">°C</span>
+            </mat-card-content>
+        </mat-card>
+    </ng-container>
+</div>

@@ -5,60 +5,59 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
-import fs from 'fs'; // Import filesystem to check for the folder
+import fs from 'fs';
 import config from './config/env.config';
-import { initializeDatabase } from './dal/database-init';
-
-import devicesRoute from './routes/device.routes';
+import deviceMgmtRoutes from './routes/device.mgmt.routes';
+import actionsMgmtRoutes from './routes/actions.mgmt.routes';
 import googleRoutes from './routes/google.routes';
 import authRoutes from './routes/auth.routes';
+import provisioningRoutes from './routes/provisioning.routes';
+import googleActionsTypesRoutes from './routes/google.actions.types.routes';
+import googleActionsTraitsRoutes from './routes/google.actions.traits.routes';
+import googleSmartHomeRoutes from './routes/google.smarthome.routes';
+import http from 'http';
+import socketService from './services/socket.service';
+import { redisService } from './services/redis.service';
 
 const app = express();
+const server = http.createServer(app);
+socketService.init(server);
 
-// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 1. Mount API Routes FIRST
-// This ensures they work even if the static files aren't found
 app.use('/api/auth', authRoutes);
-app.use('/api/devices', devicesRoute);
-app.use('/', googleRoutes);
+app.use('/api/mgmt/devices',  deviceMgmtRoutes);
+app.use('/api/mgmt/actions', actionsMgmtRoutes);
+app.use('/api/google', googleRoutes);
+app.use('/api/provisioning', provisioningRoutes);
+app.use('/api/google/actions/types', googleActionsTypesRoutes);
+app.use('/api/google/actions/traits', googleActionsTraitsRoutes);
+app.use('/api/google/smarthome', googleSmartHomeRoutes);
 
-// 2. Conditional Static File Serving
 const rootDir = process.cwd();
-// In your Dockerfile, we copy to 'dist/public'. 
-// Locally, this folder won't exist, so we check for it.
 const publicPath = path.join(rootDir, 'dist', 'public');
 
 if (fs.existsSync(publicPath)) {
-    console.log(`✅ Serving static files from: ${publicPath}`);
-    app.use(express.static(publicPath));
+  console.log(`✅ Serving static files from: ${publicPath}`);
+  app.use(express.static(publicPath));
 
-    // Catch-all for Angular Routing (Only if public exists)
-    // Using '/*' instead of '(.*)' is the standard fix for Express 5 path errors
-    
-    app.get('/:any', (req: express.Request, res: express.Response) => {
-        res.sendFile(path.join(publicPath, 'index.html'));
-    });
+  app.get('/:any', (req: express.Request, res: express.Response) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
 } else {
-    console.log('ℹ️ Static "public" folder not found. Running in API-only mode.');
-    
-    // Optional: Basic landing page for local dev so it's not a 404
-    app.get('/', (req, res) => {
-        res.send('Smart Home API is running. (Angular UI not found in dist/public)');
-    });
+  console.log('ℹ️ Static "public" folder not found. Running in API-only mode.');
+
+  app.get('/', (req, res) => {
+    res.send('Smart Home API is running. (Angular UI not found in dist/public)');
+  });
 }
 
-// Initialize database and start server
 async function startServer() {
-  await initializeDatabase();
-
-  app.listen(config.port, () => {
+  redisService.connect();
+  server.listen(config.port, () => {
     console.log(`🚀 Smart Home Server running on port ${config.port}`);
-    console.log(`- UI API: http://localhost:${config.port}/api/devices`);
-    console.log(`- Google Webhook: http://localhost:${config.port}/smarthome`);
   });
 }
 

@@ -1,0 +1,6 @@
+ CREATE TABLE IF NOT EXISTS user_login_audit (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        ip_address VARCHAR(100)
+      );

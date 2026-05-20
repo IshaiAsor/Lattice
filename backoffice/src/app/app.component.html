@@ -1,2 +1,42 @@
+<mat-toolbar color="tertiary" class="navbar">
+    <span routerLink="/" style="cursor: pointer">Smart home control</span>
+    <span class="spacer"></span>
+   <ng-template #loggedOut>
+       <ng-container >
+           <button routerLink="/login" mat-button>
+               <mat-icon>account_circle</mat-icon>
+               Login
+            </button>
+        </ng-container>
+    </ng-template>
+        
+    <ng-container *ngIf="authService.getCurrentUser()  as user; else loggedOut ">
+        <button mat-button routerLink="/Dashboard">Dashboard</button>
+        <button mat-button routerLink="/mgmt/actions">Actions</button>
+        <button mat-button routerLink="/mgmt/devices">Devices</button>
+        <span class="user-name">{{ user.username }}</span>
 
-<router-outlet></router-outlet>
+        <button mat-icon-button [matMenuTriggerFor]="profileMenu" disableRipple>
+            <img *ngIf="user.profileImage; else defaultIcon" [src]="user.profileImage"
+                class="nav-profile-pic">
+            <ng-template #defaultIcon>
+                <mat-icon>account_circle</mat-icon>
+            </ng-template>
+        </button>
+
+        <mat-menu #profileMenu="matMenu">
+            <button mat-menu-item>
+                <mat-icon>person</mat-icon>
+                <span>My Profile</span>
+            </button>
+            <button mat-menu-item (click)="logout()">
+                <mat-icon>exit_to_app</mat-icon>
+                <span>Logout</span>
+            </button>
+        </mat-menu>
+    </ng-container>
+
+</mat-toolbar>
+<div class="container">
+    <router-outlet></router-outlet>
+</div>

@@ -1,193 +1,317 @@
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <PubSubClient.h>
-#include <Adafruit_NeoPixel.h>
+// #pragma once
 #include <Arduino.h>
-#include <secrets.dev.h>
-#include <cert.h>
+#include <cstring>
+#include <cstdlib>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <PubSubClient.h>
+#include <Preferences.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+#include <ArduinoJson.h>
+#include <nvs_flash.h>
+#include <certs/cert.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <WiFiManager.h>
+#include "services/PreferencesManagerService.h"
+#include "models/ProvisioningData.h"
+#include "models/BluetoothResponse.h"
+#include "services/JwtService.h"
+#include "services/mqtt.h"
+#include <ESP32ProvisionToolkit.h>
+#include "services/BleServer.h"
+#include <WiFiManager.h>
+#include "services/BleNotificationService.h"
+#include "services/ProvisioningCallbacks.h"
+#include "services/DateTimeSyncService.h"
+#include "actions/DeviceActions.h"
+#include "services/ProvisioningBleService.h"
+const char *root_ca = certificate_root;
 
-const char *ssid;        // = SECRET_SSID;
-const char *password;    //= SECRET_PASS;
-const char *mqtt_server; // = SECRET_MQTT_SERVER;
-int mqtt_port;           //= SECRET_MQTT_PORT;
-const char *mqtt_user;   // = SECRET_MQTT_USER;
-const char *mqtt_pass;   // = SECRET_MQTT_PASS;
-char deviceID[13];
-const char *root_ca = certificate_root; // Defined in cert.hS
+unsigned long buttonPressTime = 0;
+unsigned long previousMillis = 0;
 
+bool isPressing = false;
+
+bool provisioningMode = false;
+
+QueueHandle_t provisioningQueue = NULL;
+QueueHandle_t bleResponseQueue = NULL;
+
+WiFiManager wm;
 WiFiClientSecure espClient;
-PubSubClient client(espClient);
+PreferencesManagerService prefService;
+JwtService jwtService;
+DateTimeSyncService dateTimeSyncService;
+BleServer bleServer;
+MqttService mqttService(espClient);
+BleNotificationService bleNotificationService(&bleServer, &bleResponseQueue);
+ProvisioningCallbacks provisioningCallbacks(&bleNotificationService, &provisioningQueue);
+ProvisioningBleService provisioningBleService(&bleNotificationService, &dateTimeSyncService, &wm, &prefService, &jwtService, &mqttService);
+BLECharacteristic *pCharacteristic;
+
+void setupBleProvisioning();
+void bleResponseTask(void *pvParameters);
+void handleTelematryReading();
+void handleProvisioningQueue();
+void handleReset();
+void performFactoryReset();
+void loopCommnds();
 
 void setup()
 {
   Serial.begin(115200);
-  loadSavedCredentials();
-  // wifiManager.autoConnect("SmartHomeAP", "password123") ;
-  setupWifiAndMqttServer();
-  setupMqtt();
-  syncTime();
-}
+  delay(1000); // Allow time for Serial to initialize
+  Serial.println("Device Starting...");
 
-void loop()
-{
-  if (WiFi.status() != WL_CONNECTED || !client.connected())
+  if (digitalRead(BUTTON_PIN) == LOW)
   {
-    reconnect();
+    Serial.println("Boot button press detected. Initiating factory reset...");
+    performFactoryReset();
   }
-  // This keeps the connection alive and checks for incoming messages
-  client.loop();
-}
 
-#define Serial Serial0 // or USBSerial, depending on your board's specific S3 wiring
-
-// --- 3. The "Ear" (Listening for Messages) ---
-
-WiFiManager wifiManager;
-void loadSavedCredentials()
-{
-}
-
-void setupWifiAndMqttServer()
-{
-  Serial.println("\nStarting WiFi Manager...");
-  WiFiManagerParameter custom_mqtt_server("server", "MQTT Server", mqtt_server, 40);
-  WiFiManagerParameter custom_mqtt_port("port", "MQTT Port", String(mqtt_port).c_str(), 6);
-  WiFiManagerParameter custom_mqtt_user("user", "MQTT User", mqtt_user, 32);
-  WiFiManagerParameter custom_mqtt_pass("pass", "MQTT Password", mqtt_pass, 32);
-  wifiManager.addParameter(&custom_mqtt_server);
-  wifiManager.addParameter(&custom_mqtt_port);
-  wifiManager.addParameter(&custom_mqtt_user);
-  wifiManager.addParameter(&custom_mqtt_pass);
-  wifiManager.preloadWiFi(ssid, password);
-
-  if (wifiManager.autoConnect("SmartHomeAP", "123456789"))
+  size_t actionCount = sizeof(DEVICE_ACTIONS_SETUP) / sizeof(DEVICE_ACTIONS_SETUP[0]);
+  for (int i = 0; i < actionCount; i++)
   {
-    mqtt_server = custom_mqtt_server.getValue();
-    mqtt_port = atoi(custom_mqtt_port.getValue());
-    mqtt_user = custom_mqtt_user.getValue();
-    mqtt_pass = custom_mqtt_pass.getValue();
-    ssid = wifiManager.getWiFiSSID().c_str();
-    password = wifiManager.getWiFiPass().c_str();
-    
-    Serial.println("Connected to WiFi!");
+    DEVICE_ACTIONS_SETUP[i]->initPins();
+  }
+
+  size_t telActionCount = sizeof(TELEMETRY_ACTIONS_SETUP) / sizeof(TELEMETRY_ACTIONS_SETUP[0]);
+  for (int i = 0; i < telActionCount; i++)
+  {
+    TELEMETRY_ACTIONS_SETUP[i]->initPins();
+  }
+  onboardLed.execute("orange");
+
+  provisioningQueue = xQueueCreate(1, sizeof(char *));
+  bleResponseQueue = xQueueCreate(5, sizeof(BluetoothResponse));
+
+  if (provisioningQueue == NULL || bleResponseQueue == NULL)
+  {
+    Serial.println("ERROR: Could not create queues!");
+  }
+
+  // Create BLE response handler task with larger stack (3072 bytes)
+  xTaskCreatePinnedToCore(
+      bleResponseTask,   //  // Task function
+      "BLEResponseTask", // Task name
+      3072,              // Stack size
+      NULL,              // Parameters
+      1,                 // Priority
+      NULL,              // Task handle
+      0                  // Core affinity (PRO_CPU)
+  );
+
+  WiFi.mode(WIFI_STA); // Initialize WiFi driver to properly read from NVS
+  String savedSSID = wm.getWiFiSSID();
+
+  if (wm.getWiFiSSID() == "" || !wm.getWiFiIsSaved())
+  {
+    Serial.println("No saved WiFi credentials. Entering provisioning mode...");
+    setupBleProvisioning();
   }
   else
   {
-    wifiManager.resetSettings(); // Clear WiFi credentials if connection fails
-    Serial.println("Failed to connect to WiFi. Restarting...");
-    ESP.restart();
-  }
-}
-
-void setupMqttRegistration(){
-
-}
-
-void syncTime()
-{
-  // --- NEW: Sync the clock with the internet ---
-  Serial.print("Syncing time");
-  // Set time zone to Israel (GMT+2)
-  configTime(2 * 3600, 0, "pool.ntp.org", "time.nist.gov");
-
-  time_t now = time(nullptr);
-  // Wait until the time is updated (greater than year 1970)
-  while (now < 24 * 3600)
-  {
-    delay(500);
-    Serial.print(".");
-    now = time(nullptr);
-  }
-  Serial.println("\nTime synced successfully!");
-}
-
-// 1. Define your status topic
-const char *statusTopic = "home/outlet-1/status";
-bool connecteToMQTT()
-{
-  return client.connect("ESP32Client", mqtt_user, mqtt_pass, statusTopic, 0, true, "offline");
-}
-void reconnect()
-{
-  int attempt = 0;
-  int max_attempts = 5;
-  while (!client.connected())
-  {
-    Serial.print("Attempting MQTT connection...");
-
-    // 2. Connect with Last Will and Testament (LWT)
-    // client.connect(clientID, username, password, willTopic, willQoS, willRetain, willMessage)
-    if (connecteToMQTT())
+    Serial.print("WiFi credentials found for SSID: ");
+    Serial.println(savedSSID);
+    Serial.println("Connecting to WiFi...");
+    if (FORCE_WPA3)
     {
-      Serial.println("connected");
+      WiFi.setMinSecurity(WIFI_AUTH_WPA2_WPA3_PSK);
+    }
+    WiFi.begin(); // Explicitly trigger connection using the saved credentials
 
-      // 3. Send the Birth Message immediately after connecting
-      client.publish(statusTopic, "online", true); // true = retained message
+    unsigned long start = millis();
+    while (millis() - start < WIFI_TIMEOUT && WiFi.status() != WL_CONNECTED)
+    {
+      Serial.print('.');
+      delay(500);
+    }
+    Serial.println();
 
-      // (Don't forget to resubscribe to your '/set' topic here!)
-      client.subscribe("home/outlet-1/set");
-      attempt = 0; // Reset attempt counter on successful connection
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      Serial.println("WiFi did not connect in time. Entering provisioning mode...");
+      if (PROVISION_ON_ERROR)
+      {
+        setupBleProvisioning();
+      }
+      else
+      {
+        onboardLed.execute("red");
+      }
     }
     else
     {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      delay(5000);
-      attempt++;
-      if (attempt >= max_attempts)
+      dateTimeSyncService.syncTime();
+
+      if (!mqttService.testMqtt())
       {
-        Serial.println("Max MQTT connection attempts reached. Restarting...");
-        wifiManager.resetSettings(); // Clear WiFi credentials to allow reconfiguration
-        ESP.restart();
+        Serial.println("MQTT test failed after WiFi connected. Entering provisioning mode...");
+        provisioningMode = true;
+        if (PROVISION_ON_ERROR)
+        {
+          setupBleProvisioning();
+        }
+        else
+        {
+          onboardLed.execute("red");
+        }
+      }
+      else
+      {
+        onboardLed.execute("green");
       }
     }
   }
 }
 
-void setupMqtt()
+void loop()
 {
-  Serial.print("Setting up MQTT...");
-  Serial.println(mqtt_server);
-  Serial.println(mqtt_port);
-  client.setServer(mqtt_server, mqtt_port);
-  espClient.setCACert(root_ca);
-  client.setCallback(callback);
+  delay(100);
+  handleReset();
+  if (!provisioningMode)
+  {
+    if (!WiFi.isConnected())
+    {
+      Serial.println("Not connected to WiFi. Restarting to re-enter provisioning mode...");
+      ESP.restart(); // Restart to re-enter provisioning mode if not connected
+    }
+    else if (!mqttService.loopMqtt())
+    {
+      Serial.println("MQTT connection lost. Restarting to re-enter provisioning mode...");
+      ESP.restart();
+    }
+    handleTelematryReading();
+    loopCommnds();
+  }
+  else
+  {
+    handleProvisioningQueue();
+  }
+  return;
 }
 
-void callback(char *topic, byte *payload, unsigned int length)
+void loopCommnds()
 {
-  Serial.print("Message arrived on topic: ");
-  Serial.println(topic);
-
-  // Convert the payload to a readable string
-  String message = "";
-  for (int i = 0; i < length; i++)
+  size_t actionCount = sizeof(DEVICE_ACTIONS_SETUP) / sizeof(DEVICE_ACTIONS_SETUP[0]);
+  for (int i = 0; i < actionCount; i++)
   {
-    message += (char)payload[i];
+    DEVICE_ACTIONS_SETUP[i]->loop();
   }
-  Serial.print("Payload: ");
-  Serial.println(message);
+}
 
-  // Check what to do
-  if (String(topic) == "home/outlet-1/set")
+void performFactoryReset()
+{
+  Serial.println("Performing factory reset...");
+  prefService.ClearCredentials();
+  WiFi.mode(WIFI_STA); // Initialize WiFi driver to allow credentials deletion
+  wm.resetSettings();  // This handles the WiFi disconnect and credential wipe internally
+
+  Serial.println("Forcing NVS wipe...");
+  nvs_flash_deinit();
+  nvs_flash_erase();
+  nvs_flash_init();
+
+  Serial.println("Factory reset complete. Rebooting...");
+  delay(2000); // Debounce and allow serial to flush
+  ESP.restart();
+}
+
+void handleTelematryReading()
+{
+  unsigned long currentMillis = millis();
+
+  size_t actionCount = sizeof(TELEMETRY_ACTIONS_SETUP) / sizeof(TELEMETRY_ACTIONS_SETUP[0]);
+  for (int i = 0; i < actionCount; i++)
   {
-    if (message == "1")
+    TELEMETRY_ACTIONS_SETUP[i]->execute(currentMillis, [](const char *topic, const char *payload)
+                                        { mqttService.publishTelemetry(topic, payload); });
+  }
+}
+
+void bleResponseTask(void *pvParameters)
+{
+  BluetoothResponse bleResponse;
+
+  while (true)
+  {
+    // Wait for BLE responses to send
+    if (xQueueReceive(bleResponseQueue, &bleResponse, pdMS_TO_TICKS(100)) == pdPASS)
     {
-      Serial.println("Turning Outlet 1 ON!");
-      digitalWrite(2, HIGH);
-      neopixelWrite(48, 150, 0, 0);
-      // --- 4. The "Mouth" (Reporting back to the server) ---
-      // client.publish("home/outlet-1/set", "1");
+      Serial.print("Processing BLE response of type: ");
+      Serial.println(static_cast<int>(bleResponse.type));
+      Serial.print("Response message: ");
+      Serial.println(bleResponse.response);
+      if (pCharacteristic != NULL)
+      {
+        JsonDocument reqDoc;
+        bleResponse.toJson(reqDoc); // We know this exists because of JsonModel
+
+        String payloadString;
+        serializeJson(reqDoc, payloadString);
+        pCharacteristic->setValue((uint8_t *)payloadString.c_str(), payloadString.length());
+        pCharacteristic->notify();
+        Serial.print("BLE Response status: ");
+        Serial.println(static_cast<int>(bleResponse.type));
+        Serial.print("BLE Response sent: ");
+        Serial.println(bleResponse.response);
+      }
     }
-    else if (message == "0")
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
+
+void handleReset()
+{
+  if (digitalRead(BUTTON_PIN) == LOW)
+  {
+    if (!isPressing)
     {
-      Serial.println("Turning Outlet 1 OFF!");
-      digitalWrite(2, LOW);
-      neopixelWrite(48, 0, 0, 150);
-      // Report back to the server
-      // client.publish("home/outlet-1/set", "0");
+      buttonPressTime = millis();
+      isPressing = true;
+    }
+    else if (millis() - buttonPressTime > 5000)
+    { // 5 second long press
+      Serial.println("Long press detected. Initiating factory reset...");
+      performFactoryReset();
     }
   }
+  else
+  {
+    isPressing = false;
+  }
+}
+
+void handleProvisioningQueue()
+{
+  char *payload = NULL;
+  if (xQueueReceive(provisioningQueue, &payload, 0) == pdPASS)
+  {
+    provisioningBleService.HandleProvisioning(payload);
+  }
+}
+
+void setupBleProvisioning()
+{
+  provisioningMode = true;
+  onboardLed.execute("blue");
+  BLEDevice::init(DEVICE_TYPE);
+  BLEServer *pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new BleServer());
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  pCharacteristic = pService->createCharacteristic(
+      CHAR_UUID,
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+  pCharacteristic->setCallbacks(&provisioningCallbacks);
+  pCharacteristic->addDescriptor(new BLE2902());
+  pService->start();
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  BLEDevice::startAdvertising();
+  Serial.println("BLE Server started. Waiting for a client to connect...");
 }

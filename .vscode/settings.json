@@ -1,0 +1,18 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "[html]": {
+    "editor.defaultFormatter": "vscode.html-language-features"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "platformio-ide.activateProjectOnTextEditorChange": true,
+  "platformio-ide.autoRebuildAutocompleteIndex": true,
+  "platformio-ide.customPATH": null,
+  "platformio-ide.useDevelopmentPIOCore": false
+}

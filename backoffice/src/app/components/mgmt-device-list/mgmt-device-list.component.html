@@ -1,0 +1,23 @@
+<div class="header">
+  <h1>Device List</h1>
+  <button matButton="filled" (click)="addDevice()">Add Device</button>
+</div>
+<div class="card-grid">
+  <mat-card class="card" [class.is-connected]="device.online" appearance="outlined"
+    *ngFor="let device of devices">
+    <mat-card-header>
+      <mat-card-title-group>
+        <mat-card-title>{{ device.deviceName }}</mat-card-title>
+        <mat-card-subtitle *ngIf="!device.online">Device is offline since {{ device.lastOnlineDate | date: 'medium'}}</mat-card-subtitle>
+        <div mat-card-avatar class="example-header-image"></div>
+      </mat-card-title-group>
+    </mat-card-header>
+    <mat-card-content>
+      {{ device.type }}
+    </mat-card-content>
+    <mat-card-actions>
+      <button matButton (click)="deleteDevice(device)">delete</button>
+      <button matButton (click)="updateName(device)">edit</button>
+    </mat-card-actions>
+  </mat-card>
+</div>

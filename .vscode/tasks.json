@@ -4,7 +4,10 @@
     {
       "label": "build-backend",
       "type": "shell",
-      "command": "npx tsc -p backend/tsconfig.json",
+      "command": "npx tsc -p tsconfig.json",
+      "options": {
+        "cwd": "${workspaceFolder:Backend API}"
+      },
       "group": "build",
       "presentation": {
         "reveal": "always"
@@ -24,7 +27,7 @@
       "dependsOn": ["kill-old-tunnel"],
       "dependsOrder": "sequence",
       "type": "shell",
-      "command": "ssh -L 5432:localhost:5432 ubuntu@k3sa1-ishai.duckdns.org 'sudo fuser -k 5432/tcp || true; sudo kubectl port-forward svc/postgres 5432:5432 -n my-apps'",
+      "command": "ssh -L 5432:localhost:5432 -i C:\\Users\\Consist\\Desktop\\k3s-infra\\k3s-a1.1.key ubuntu@k3sa1-ishai.duckdns.org 'sudo fuser -k 5432/tcp || true; sudo kubectl port-forward svc/postgres 5432:5432 -n my-apps'",
       "isBackground": true,
       "problemMatcher": {
         "pattern": [
@@ -44,10 +47,7 @@
     },
     {
       "label": "pre-debug-compiled",
-      "dependsOn": [
-        "build-backend",
-        "ssh-postgres-tunnel"
-      ],
+      "dependsOn": ["build-backend"],
       "dependsOrder": "sequence"
     },
     {
@@ -55,7 +55,7 @@
       "type": "shell",
       "command": "npm start",
       "options": {
-        "cwd": "${workspaceFolder}/backoffice"
+        "cwd": "${workspaceFolder:Backoffice UI}"
       },
       "isBackground": true,
       "problemMatcher": {
@@ -70,6 +70,17 @@
           }
         }
       }
+    },
+    {
+      "type": "PlatformIO",
+      "task": "Build",
+      "problemMatcher": [
+        "$platformio"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder:ESP32 Firmware}"
+      },
+      "label": "PlatformIO: Build (ESP32Code)"
     }
   ]
 }

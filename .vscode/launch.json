@@ -14,19 +14,30 @@
         "type": "node"
     },
     {
+        "name": "Start SSH Tunnel",
+        "type": "node",
+        "request": "launch",
+        "preLaunchTask": "ssh-postgres-tunnel",
+        "runtimeExecutable": "node",
+        "runtimeArgs": [
+            "-e",
+            "console.log('✅ SSH tunnel task started in the background.');"
+        ]
+    },
+    {
         "type": "node",
         "request": "launch",
         "name": "Debug Backend (ts-node)",
-        "preLaunchTask": "ssh-postgres-tunnel",
         "runtimeArgs": [
             "-r",
             "ts-node/register"
         ],
-        "program": "${workspaceFolder}/backend/index.ts",
-        "cwd": "${workspaceFolder}/backend",
-        "outFiles": ["${workspaceFolder}/backend/**/*.js"],
+        "program": "${workspaceFolder:Backend API}/index.ts",
+        "cwd": "${workspaceFolder:Backend API}",
+        "outFiles": ["${workspaceFolder:Backend API}/**/*.js"],
+        "envFile": "${workspaceFolder:Project Root}/.env",
         "env": {
-            "TS_NODE_PROJECT": "${workspaceFolder}/backend/tsconfig.json"
+            "TS_NODE_PROJECT": "${workspaceFolder:Backend API}/tsconfig.json"
         },
         "skipFiles": ["<node_internals>/**"]
     },
@@ -34,22 +45,42 @@
         "type": "node",
         "request": "launch",
         "name": "Debug Backend (compiled)",
-        "program": "${workspaceFolder}/backend/dist/index.js",
-        "cwd": "${workspaceFolder}/backend",
+        "program": "${workspaceFolder:Backend API}/dist/index.js",
+        "cwd": "${workspaceFolder:Backend API}",
         "preLaunchTask": "pre-debug-compiled",
-        "outFiles": ["${workspaceFolder}/backend/dist/**/*.js"],
+        "outFiles": ["${workspaceFolder:Backend API}/dist/**/*.js"],
         "skipFiles": ["<node_internals>/**"]
     },
     {
-        "name": "Debug Backoffice (Chrome)",
+        "name": "Debug FrontEnd (Chrome)",
         "type": "pwa-chrome",
         "request": "launch",
         "url": "http://localhost:4200",
-        "webRoot": "${workspaceFolder}/backoffice",
+        "webRoot": "${workspaceFolder:Backoffice UI}",
         "preLaunchTask": "serve-backoffice"
+    },
+    {
+        "type": "platformio-debug",
+        "request": "launch",
+        "name": "ESP32: PIO Debug (test)",
+        "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-test/firmware.elf",
+        "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-test",
+        "projectDir": "${workspaceFolder:ESP32 Firmware}",
+        "cwd": "${workspaceFolder:ESP32 Firmware}",
+        "preLaunchTask": "PlatformIO: Build (ESP32Code)",
+        "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+        "type": "platformio-debug",
+        "request": "launch",
+        "name": "ESP32: PIO Debug (prod)",
+        "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-prod/firmware.elf",
+        "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-prod",
+        "projectDir": "${workspaceFolder:ESP32 Firmware}",
+        "cwd": "${workspaceFolder:ESP32 Firmware}",
+        "internalConsoleOptions": "openOnSessionStart"
     }
-    ],
-    "compounds": [
+    ],    "compounds": [
     {
         "name": "Full Stack Debug (ts-node)",
         "configurations": ["Debug Backend (ts-node)", "Debug Backoffice (Chrome)"]
