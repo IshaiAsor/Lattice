@@ -14,7 +14,7 @@ class MqttService {
 
   constructor() {
 
-    let caPath = path.join(__dirname,config.mqtt.caCertPath);
+    let caPath = path.resolve(__dirname, config.mqtt.caCertPath);
     console.log(`CA cert path: ${caPath}`);
     const CA_CERT = fs.readFileSync(caPath);
     console.log(`CA cert: ${CA_CERT}`);
