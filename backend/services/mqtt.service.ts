@@ -14,16 +14,15 @@ class MqttService {
   client: MqttClient;
 
   constructor() {
-    const options: mqtt.IClientOptions = {
+    const options: any = {
       host: config.mqtt.internalHost,
       port: config.mqtt.port,
       protocol: 'mqtts',
       username: config.mqtt.username,
       password: config.mqtt.password,
       rejectUnauthorized: config.mqtt.validateCert,
-      // @ts-ignore - servername is a valid option for TLS in mqtt.js
       servername: config.mqtt.serverName, 
-      checkServerIdentity: (host, cert) => {
+      checkServerIdentity: (host: string, cert: tls.PeerCertificate) => {
         // Force verification against the public domain name to allow internal loopback
         if (config.mqtt.serverName) {
             return tls.checkServerIdentity(config.mqtt.serverName, cert);
