@@ -11,15 +11,24 @@ declare global {
 
 export const verifyToken = (purpose: JwtPurpose) => {
   return (req: Request, res: Response, next: NextFunction) => {
+    let token = '';
     const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      console.log(`Authorization header missing`);
+    
+    if (authHeader) {
+      token = authHeader.split(' ')[1];
+    } else if (req.body && req.body.provisioningToken) {
+      token = req.body.provisioningToken;
+    }
+
+    if (!token) {
+      console.log(`Authorization token missing (header or body)`);
       return res.sendStatus(401);
     }
+
     try {
-      const token = authHeader.split(' ')[1];
       let decoded = jwtService.verifyToken(token, purpose);
       if (!decoded.valid) {
+        console.log(`Jwt verification failed for purpose ${purpose}`);
         return res.sendStatus(403);
       }
       req.user = decoded.decoded;
