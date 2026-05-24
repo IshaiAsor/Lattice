@@ -1,6 +1,6 @@
 export interface MqttConfig {
   serverName?: string;
-  serverNameOverride?: string;
+  internalHost?: string;
   username?: string;
   password?: string;
   port?: number;
@@ -68,7 +68,7 @@ const config: EnvConfig = {
   port: +(process.env.PORT || 3000),
   mqtt: {
     serverName: process.env.MQTT_SERVER_NAME,
-    serverNameOverride: process.env.MQTT_SERVER_HOSTNAME,
+    internalHost: process.env.MQTT_INTERNAL_HOST || process.env.MQTT_SERVER_NAME,
     username: process.env.MQTT_APP_USERNAME,
     password: process.env.MQTT_APP_PASSWORD,
     port: process.env.MQTT_PORT ? parseInt(process.env.MQTT_PORT) : undefined,

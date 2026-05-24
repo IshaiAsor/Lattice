@@ -14,14 +14,14 @@ class MqttService {
 
   constructor() {
     const options: mqtt.IClientOptions = {
-      host: config.mqtt.serverName,
+      host: config.mqtt.internalHost,
       port: config.mqtt.port,
       protocol: 'mqtts',
       username: config.mqtt.username,
       password: config.mqtt.password,
       rejectUnauthorized: config.mqtt.validateCert,
       // @ts-ignore - servername is a valid option for TLS in mqtt.js
-      servername: config.mqtt.serverNameOverride || config.mqtt.serverName, 
+      servername: config.mqtt.serverName, 
       keepalive: 60,
       reconnectPeriod: 1000,
     };
