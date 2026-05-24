@@ -151,7 +151,6 @@ void setup()
       if (!mqttService.testMqtt())
       {
         Serial.println("MQTT test failed after WiFi connected. Entering provisioning mode...");
-        provisioningMode = true;
         if (PROVISION_ON_ERROR)
         {
           setupBleProvisioning();

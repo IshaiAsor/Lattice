@@ -33,13 +33,15 @@ class DeviceMgmtService {
       type: deviceType,
     });
 
-    for (let actionDef of deviceActions) {
-      await userDevicesActionsRepository.insertAction({
+    const actionPromises = deviceActions.map(actionDef =>
+      userDevicesActionsRepository.insertAction({
         user_device_id: newDevice.id,
         action_name: actionDef.default_name,
         action_id: actionDef.id,
-      });
-    }
+      })
+    );
+    await Promise.all(actionPromises);
+
     return newDevice;
   }
 

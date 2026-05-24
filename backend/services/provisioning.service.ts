@@ -75,7 +75,7 @@ class ProvisioningService {
 
     let newDevice = await deviceMgmtService.registerUserDevice(userId, provisioningToken, deviceType, deviceId, macAddress, version);
 
-    var permanentToken = await provisioningService.GenerateDevicePermenantMqttToken(userId, newDevice.id);
+    var permanentToken = await this.GenerateDevicePermenantMqttToken(userId, newDevice.id);
     console.log(
       `Provisioning successful for device ${newDevice.id} of type ${deviceType} with MQTT token:`,
       permanentToken,

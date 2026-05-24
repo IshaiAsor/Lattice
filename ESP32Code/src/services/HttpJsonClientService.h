@@ -23,6 +23,7 @@ public:
 
     TOut PostJson(const String url, const String token, const TIn *payload, bool validateCACert)
     {
+        Serial.println("Posting request");
         Serial.println(url);
         Serial.println(token);
         
