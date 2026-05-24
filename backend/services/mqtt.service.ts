@@ -20,6 +20,8 @@ class MqttService {
       username: config.mqtt.username,
       password: config.mqtt.password,
       rejectUnauthorized: config.mqtt.validateCert,
+      // @ts-ignore - servername is a valid option for TLS in mqtt.js
+      servername: config.mqtt.serverNameOverride || config.mqtt.serverName, 
       keepalive: 60,
       reconnectPeriod: 1000,
     };
