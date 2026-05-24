@@ -2,6 +2,7 @@ import mqtt, { MqttClient } from 'mqtt';
 import config from '../config/env.config';
 import { userDevicesRepository } from '../dal/user.devices.repository';
 import * as fs from 'fs';
+import * as tls from 'tls';
 import path from 'path';
 import socketService from './socket.service';
 import { userDevicesActionsRepository } from '../dal/user.devices.actions.repository';
@@ -22,6 +23,13 @@ class MqttService {
       rejectUnauthorized: config.mqtt.validateCert,
       // @ts-ignore - servername is a valid option for TLS in mqtt.js
       servername: config.mqtt.serverName, 
+      checkServerIdentity: (host, cert) => {
+        // Force verification against the public domain name to allow internal loopback
+        if (config.mqtt.serverName) {
+            return tls.checkServerIdentity(config.mqtt.serverName, cert);
+        }
+        return tls.checkServerIdentity(host, cert);
+      },
       keepalive: 60,
       reconnectPeriod: 1000,
     };
