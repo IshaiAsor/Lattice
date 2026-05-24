@@ -27,14 +27,25 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # 5. Build and Push (Watch the indentation carefully here!)
+      # 5. Generate a new Tag (Auto-increment)
+      - name: Bump version and push tag
+        id: tag_version
+        uses: anothrNick/github-tag-action@1.64.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+
+      # 6. Build and Push (Using the new tag)
       - name: Build and push Unified Image
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/smarthome-server:${{ github.sha }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/smarthome-server:${{ steps.tag_version.outputs.new_tag }}
+            ${{ secrets.DOCKER_USERNAME }}/smarthome-server:latest
 
       - name: Checkout GitOps Repository
         uses: actions/checkout@v4
