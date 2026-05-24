@@ -37,7 +37,7 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
 
-      # 6. Build and Push (To GHCR)
+      # 6. Build and Push (To GHCR with Caching)
       - name: Build and push Unified Image
         uses: docker/build-push-action@v5
         with:
@@ -47,3 +47,5 @@ jobs:
           tags: |
             ghcr.io/ishaiasor/smarthome-server:${{ steps.tag_version.outputs.new_tag }}
             ghcr.io/ishaiasor/smarthome-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

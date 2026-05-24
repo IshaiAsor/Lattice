@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.vscode
+backoffice/node_modules
+backoffice/dist
+backend/node_modules
+backend/dist
+Dockerfile
+.dockerignore
+.github
+README.md
