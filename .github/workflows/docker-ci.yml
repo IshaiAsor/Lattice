@@ -43,17 +43,17 @@ jobs:
           token: ${{ secrets.GITOPS_PAT }}
           path: gitops-repo
 
-      - name: Update Image Tag in GitOps Repo
-        run: |
-          cd gitops-repo
+      # - name: Update Image Tag in GitOps Repo
+      #   run: |
+      #     cd gitops-repo
           
-          # Find the deployment.yaml and swap the image tag
-          # Make sure the path matches where your web-app deployment lives in the GitOps repo
-          sed -i "s|image: ${{ secrets.DOCKER_USERNAME }}/smarthome-server:.*|image: ${{ secrets.DOCKER_USERNAME }}/smarthome-server:${{ github.sha }}|g" apps/web-app/deployment.yaml
+      #     # Find the deployment.yaml and swap the image tag
+      #     # Make sure the path matches where your web-app deployment lives in the GitOps repo
+      #     sed -i "s|image: ${{ secrets.DOCKER_USERNAME }}/smarthome-server:.*|image: ${{ secrets.DOCKER_USERNAME }}/smarthome-server:${{ github.sha }}|g" apps/web-app/deployment.yaml
           
-          # Commit and push the change to the GitOps repo
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          git add apps/web-app/deployment.yaml
-          git commit -m "chore: auto-update web-app image to ${{ github.sha }}"
-          git push
+      #     # Commit and push the change to the GitOps repo
+      #     git config user.name "GitHub Actions Bot"
+      #     git config user.email "actions@github.com"
+      #     git add apps/web-app/deployment.yaml
+      #     git commit -m "chore: auto-update web-app image to ${{ github.sha }}"
+      #     git push
