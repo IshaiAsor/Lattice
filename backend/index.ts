@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.text({ type: 'text/plain' }));
+app.use(bodyParser.text({ type: '*/*' })); // Catch everything else as text
 
 // Post-parser debug logging
 app.use((req, res, next) => {

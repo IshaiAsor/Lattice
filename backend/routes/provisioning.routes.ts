@@ -17,16 +17,22 @@ router.get('/provision-token', verifyToken(JwtPurpose.app_usage), async (req: Re
 });
 
 router.post('/register-device', verifyToken(JwtPurpose.device_provisioning),async (req: Request, res: Response) => {
-  console.log('Received device registration request with body:', req.body);
+  console.log('Received device registration request with body type:', typeof req.body);
 
-  const provisioningToken = req.body.provisioningToken;
-  const deviceType = req.body.deviceType;
-  const deviceId = req.body.deviceId;
-  const macAddress = req.body.macAddress;
-  const version = req.body.version;
+  let provisioningToken = '';
+  if (typeof req.body === 'string' && req.body.startsWith('ey')) {
+    provisioningToken = req.body;
+  } else {
+    provisioningToken = req.body.provisioningToken;
+  }
+
+  const deviceType = req.body.deviceType || req.query.deviceType;
+  const deviceId = req.body.deviceId || req.query.deviceId;
+  const macAddress = req.body.macAddress || req.query.macAddress;
+  const version = req.body.version || req.query.version;
   const userId = req.user.userId;
 
-  let permanentToken = await provisioningService.registerDevice(userId,provisioningToken, deviceType, deviceId, macAddress, version);
+  let permanentToken = await provisioningService.registerDevice(userId, provisioningToken, deviceType as string, Number(deviceId), macAddress as string, version as string);
   res.json(permanentToken);
 });
 
