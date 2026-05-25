@@ -52,9 +52,12 @@ app.use('/api/google/actions/traits', googleActionsTraitsRoutes);
 app.use('/api/google/smarthome', googleSmartHomeRoutes);
 
 // 404 Logger - Catch anything that didn't match the routes above
-app.use('/api/*', (req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ⚠️ 404 - API Route Not Found: ${req.method} ${req.url}`);
-  res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api')) {
+    console.log(`[${new Date().toISOString()}] ⚠️ 404 - API Route Not Found: ${req.method} ${req.url}`);
+    return res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
+  }
+  next();
 });
 
 const rootDir = process.cwd();
