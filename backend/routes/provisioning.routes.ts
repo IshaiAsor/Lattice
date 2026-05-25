@@ -17,26 +17,32 @@ router.get('/provision-token', verifyToken(JwtPurpose.app_usage), async (req: Re
 });
 
 router.post('/register-device', verifyToken(JwtPurpose.device_provisioning),async (req: Request, res: Response) => {
-  console.log('Received device registration request with body type:', typeof req.body);
+  let bodyData = req.body;
+  if (typeof bodyData === 'string') {
+    try {
+      const parsed = JSON.parse(bodyData.trim());
+      if (parsed && typeof parsed === 'object') bodyData = parsed;
+    } catch (e) {}
+  }
 
   let provisioningToken = '';
-  if (typeof req.body === 'string' && (req.body.startsWith('ey') || req.body.startsWith('"ey'))) {
-    provisioningToken = req.body.trim();
+  if (typeof bodyData === 'string' && (bodyData.startsWith('ey') || bodyData.startsWith('"ey'))) {
+    provisioningToken = bodyData.trim();
     if (provisioningToken.startsWith('"') && provisioningToken.endsWith('"')) {
         provisioningToken = provisioningToken.substring(1, provisioningToken.length - 1);
     }
   } else {
-    provisioningToken = req.body.provisioningToken;
+    provisioningToken = bodyData.provisioningToken;
     if (provisioningToken) provisioningToken = provisioningToken.trim();
   }
 
-  const deviceType = req.body.deviceType || req.query.deviceType;
-  const deviceId = req.body.deviceId || req.query.deviceId;
-  const macAddress = req.body.macAddress || req.query.macAddress;
-  const version = req.body.version || req.query.version;
+  const deviceType = bodyData.deviceType || req.query.deviceType;
+  const deviceId = bodyData.deviceId || req.query.deviceId;
+  const macAddress = bodyData.macAddress || req.query.macAddress;
+  const version = bodyData.version || req.query.version;
   const userId = req.user.userId;
 
-  let permanentToken = await provisioningService.registerDevice(userId, provisioningToken, deviceType as string, Number(deviceId), macAddress as string, version as string);
+  let permanentToken = await provisioningService.registerDevice(userId, provisioningToken, deviceType as string, deviceId, macAddress as string, version as string);
   res.json(permanentToken);
 });
 

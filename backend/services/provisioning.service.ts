@@ -63,7 +63,7 @@ class ProvisioningService {
     userId: number,
     provisioningToken: string,
     deviceType: string,
-    deviceId: number,
+    deviceId: string,
     macAddress: string,
     version: string
   ) {

@@ -21,14 +21,22 @@ export const verifyToken = (purpose: JwtPurpose) => {
     
     // 2. Try Request Body (Intelligent detection)
     if (!token && req.body) {
-      if (typeof req.body === 'string' && (req.body.startsWith('ey') || req.body.startsWith('"ey'))) {
-        token = req.body.trim(); 
-        // Remove wrapping quotes if they exist (some clients send "token")
+      let bodyData = req.body;
+      if (typeof bodyData === 'string') {
+        bodyData = bodyData.trim();
+        try {
+          const parsed = JSON.parse(bodyData);
+          if (parsed && typeof parsed === 'object') bodyData = parsed;
+        } catch (e) {}
+      }
+
+      if (typeof bodyData === 'string' && (bodyData.startsWith('ey') || bodyData.startsWith('"ey'))) {
+        token = bodyData;
         if (token.startsWith('"') && token.endsWith('"')) {
             token = token.substring(1, token.length - 1);
         }
-      } else if (req.body.provisioningToken) {
-        token = req.body.provisioningToken.trim();
+      } else if (bodyData && bodyData.provisioningToken) {
+        token = bodyData.provisioningToken.trim();
       }
     }
     

@@ -46,6 +46,8 @@ public:
 
         String payloadString;
         serializeJson(reqDoc, payloadString);
+        Serial.print("Payload:");
+        Serial.println(payloadString);
 
         int httpResponseCode = httpClient.POST(payloadString);
 
