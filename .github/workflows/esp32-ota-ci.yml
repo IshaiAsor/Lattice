@@ -2,35 +2,39 @@ name: ESP32 Firmware CI/CD
 
 on:
   push:
-    tags:
-      - 'v*' # Trigger on version tags like v1.1.0
+    branches: [ "main", "master" ]
+    paths:
+      - 'iot-smart-home/ESP32Code/**'
 
 jobs:
   build-and-upload-staging:
     runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Cache pip
-        uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          fetch-depth: 0
+
+      # 1. Generate a new Tag (Auto-increment) matching your web-app style
+      - name: Bump version and push tag
+        id: tag_version
+        uses: anothrNick/github-tag-action@1.64.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
 
       - name: Cache PlatformIO
         uses: actions/cache@v4
         with:
           path: ~/.platformio
           key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
-          restore-keys: |
-            ${{ runner.os }}-platformio-
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-python-version: '3.11'
+          python-version: '3.11'
 
       - name: Install PlatformIO
         run: |
@@ -40,19 +44,17 @@ jobs:
       - name: Build Firmware
         run: |
           cd iot-smart-home/ESP32Code
-          # Build for mini-prod (or your primary target)
           pio run -e esp32s3_mini-prod
 
       - name: Upload to Staging OTA Manager
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${{ steps.tag_version.outputs.new_tag }}
           curl -X POST https://ota.iotiotstg.duckdns.org/release \
             -F "firmware=@iot-smart-home/ESP32Code/.pio/build/esp32s3_mini-prod/firmware.bin" \
             -F "deviceType=ESP32_SmartOutlet" \
             -F "version=$VERSION" \
             -F "releaseNotes=Automated build for $VERSION"
 
-  # This job updates the git repo to inform Kargo of a new "Firmware Freight"
   register-freight:
     needs: build-and-upload-staging
     runs-on: ubuntu-latest
@@ -64,7 +66,8 @@ jobs:
       
       - name: Update Firmware Version for Kargo
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${{ needs.build-and-upload-staging.outputs.new_tag }}
+          # Note: We need to expose the tag from the previous job
           echo $VERSION > firmware-version.txt
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
