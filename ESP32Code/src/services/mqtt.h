@@ -47,7 +47,7 @@ public:
 
     bool reconnectMqtt()
     {
-        Serial.println("Attempting to reconnect to MQTT...");
+        Serial.println("Attempting to reconnect to MQTT... ");
         if (jwtData == nullptr)
         {
             Serial.println("No JWT token available. Attempting to retrieve from storage...");
