@@ -10,6 +10,7 @@
             "includePath": [
                 "C:/Projects/iot-smart-home/ESP32Code/include",
                 "C:/Projects/iot-smart-home/ESP32Code/src",
+                "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/HTTPUpdate/src",
                 "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/HTTPClient/src",
                 "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                 "C:/Projects/iot-smart-home/ESP32Code/.pio/libdeps/esp32s3_mini-prod/DallasTemperature",
@@ -238,7 +239,6 @@
                 "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                 "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src",
                 "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/FFat/src",
-                "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/HTTPUpdate/src",
                 "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/HTTPUpdateServer/src",
                 "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/I2S/src",
                 "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/Insights/src",
@@ -260,6 +260,7 @@
                 "path": [
                     "C:/Projects/iot-smart-home/ESP32Code/include",
                     "C:/Projects/iot-smart-home/ESP32Code/src",
+                    "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/HTTPUpdate/src",
                     "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/HTTPClient/src",
                     "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                     "C:/Projects/iot-smart-home/ESP32Code/.pio/libdeps/esp32s3_mini-prod/DallasTemperature",
@@ -488,7 +489,6 @@
                     "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                     "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src",
                     "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/FFat/src",
-                    "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/HTTPUpdate/src",
                     "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/HTTPUpdateServer/src",
                     "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/I2S/src",
                     "C:/Users/ishai/.platformio/packages/framework-arduinoespressif32/libraries/Insights/src",
