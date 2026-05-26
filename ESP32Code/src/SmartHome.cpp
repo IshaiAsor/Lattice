@@ -12,7 +12,7 @@
 #include <BLE2902.h>
 #include <ArduinoJson.h>
 #include <nvs_flash.h>
-#include "certs/cert.h"
+#include "Certs/cert.h"
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <WiFiManager.h>
