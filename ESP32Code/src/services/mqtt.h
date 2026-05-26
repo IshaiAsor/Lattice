@@ -26,7 +26,7 @@ public:
         espClient.setCACert(root_ca);
         espClient.setHandshakeTimeout(10000);
         client = new PubSubClient(espClient);
-        client->setBufferSize(512);
+        client->setBufferSize(2048);
         client->setKeepAlive(10);
         client->setCallback(MqttActionsHandlerService::callback);
     }

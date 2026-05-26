@@ -16,6 +16,7 @@ class ProvisioningService {
       server: config.mqtt.serverName,
       mqttPort: config.mqtt.port,
       provisioningCallbackUrl: provisioningCallbackUrl,
+      validateCACert: config.mqtt.validateCert
     };
   }
 

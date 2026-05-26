@@ -14,7 +14,6 @@ class HttpJsonClientService
 
 private:
     HTTPClient httpClient;
-    WiFiClient client;
     WiFiClientSecure secureClient;
 
 public:
@@ -23,10 +22,16 @@ public:
 
     TOut PostJson(const String url, const String token, const TIn *payload, bool validateCACert)
     {
-        Serial.println("Posting request");
+         Serial.write("Post request");
+        Serial.print("url : ");
         Serial.println(url);
+        Serial.print("token : ");
         Serial.println(token);
-        
+        Serial.print("validateCACert : ");
+        Serial.println(validateCACert);
+        Serial.print("root_ca : ");
+        Serial.println(root_ca);
+        Serial.println(validateCACert);
         if (validateCACert)
         {
             secureClient.setCACert(root_ca);
@@ -34,7 +39,8 @@ public:
         }
         else
         {
-            httpClient.begin(client, url.c_str());
+            secureClient.setInsecure();
+            httpClient.begin(secureClient, url.c_str());
         }
 
         httpClient.addHeader("Content-Type", "application/json");
@@ -86,10 +92,16 @@ public:
 
     TOut GetJson(const String url, const String token, bool validateCACert)
     {
-        Serial.write("Posting request");
+        Serial.write("Get request");
+        Serial.print("url : ");
         Serial.println(url);
+        Serial.print("token : ");
         Serial.println(token);
-
+        Serial.print("validateCACert : ");
+        Serial.println(validateCACert);
+        Serial.print("root_ca : ");
+        Serial.println(root_ca);
+        Serial.println(validateCACert);
         if (validateCACert)
         {
             secureClient.setCACert(root_ca);
@@ -97,7 +109,8 @@ public:
         }
         else
         {
-            httpClient.begin(client, url.c_str());
+            secureClient.setInsecure();
+            httpClient.begin(secureClient, url.c_str());
         }
 
         httpClient.addHeader("Content-Type", "application/json");
