@@ -68,12 +68,17 @@ mqttClient.on('connect', () => {
 // 1. Serve firmware binaries
 app.use('/download', express.static(firmwarePath));
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // 2. Metadata check
 app.get('/check', (req, res) => {
-    const { deviceType, currentVersion } = req.query;
+    const { deviceType } = req.query;
     if (!deviceType) return res.status(400).send('Missing deviceType');
 
     const metaFile = path.join(firmwarePath, deviceType, 'latest.json');
+    console.log(`🔍 Checking metadata for ${deviceType} at ${metaFile}`);
+    
     if (fs.existsSync(metaFile)) {
         const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
         return res.json(meta);
@@ -85,7 +90,10 @@ app.get('/check', (req, res) => {
 app.post('/release', upload.single('firmware'), (req, res) => {
     const { deviceType, version, releaseNotes } = req.body;
     
+    console.log(`📥 Received release request: type=${deviceType}, version=${version}`);
+
     if (!req.file || !deviceType || !version) {
+        console.error('❌ Missing required fields in release request');
         return res.status(400).send('Missing file, deviceType, or version');
     }
 
@@ -99,17 +107,20 @@ app.post('/release', upload.single('firmware'), (req, res) => {
         timestamp: new Date().toISOString()
     };
 
+    const targetDir = path.join(firmwarePath, deviceType);
+    if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+    }
+
     // Save as latest
-    fs.writeFileSync(
-        path.join(firmwarePath, deviceType, 'latest.json'),
-        JSON.stringify(releaseData, null, 2)
-    );
+    const metaPath = path.join(targetDir, 'latest.json');
+    fs.writeFileSync(metaPath, JSON.stringify(releaseData, null, 2));
 
     // Broadcast to devices
     const topic = `ota/updates/${deviceType}`;
     mqttClient.publish(topic, JSON.stringify(releaseData), { qos: 1, retain: true });
 
-    console.log(`🚀 Released version ${version} for ${deviceType}`);
+    console.log(`🚀 Released version ${version} for ${deviceType}. Metadata saved to ${metaPath}`);
     res.json({ message: 'Release published', data: releaseData });
 });
 
