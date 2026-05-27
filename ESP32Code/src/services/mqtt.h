@@ -80,7 +80,7 @@ public:
             espClient.setCACert(root_ca);
         }
 
-        // client->setServer(mqttCreds->server.c_str(), mqttCreds->port);
+        client->setServer(mqttCreds->server.c_str(), mqttCreds->port);
 
         String commandTopicStr = String(COMMAND_TOPIC);
         commandTopicStr.replace("%{userid}", mqttCreds->userId.c_str());
