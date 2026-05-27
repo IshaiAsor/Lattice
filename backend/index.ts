@@ -20,6 +20,7 @@ import socketService from './services/socket.service';
 import { redisService } from './services/redis.service';
 
 const app = express();
+app.set('trust proxy', 1); // trust Traefik ingress X-Forwarded-For header
 const server = http.createServer(app);
 socketService.init(server);
 
