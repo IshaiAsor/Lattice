@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: IshaiAsor/oci-k3s-gitops
-          token: ${{ secrets.GITOPS_REPO_TOKEN }}
+          token: ${{ secrets.GITOPS_PAT }}
       
       - name: Update Firmware Version for Kargo
         run: |
