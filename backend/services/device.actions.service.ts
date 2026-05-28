@@ -64,6 +64,12 @@ class DeviceActionsService {
     };
   }
 
+  async updateAction(actionId: number, updates: { name?: string }) {
+    await userDevicesActionsRepository.updateAction(actionId, {
+      ...(updates.name !== undefined && { action_name: updates.name }),
+    });
+  }
+
   async deleteAction(userId: number, actionId: number) {
     await userDevicesActionsRepository.deleteAction(actionId);
   }

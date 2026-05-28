@@ -14,4 +14,10 @@ router.get('/', async (req, res) => {
   res.json(actions);
 });
 
+router.patch('/:actionId', async (req, res) => {
+  const actionId = parseInt(req.params.actionId);
+  await deviceActionsService.updateAction(actionId, req.body);
+  res.status(204).send();
+});
+
 export default router;
