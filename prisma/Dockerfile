@@ -9,4 +9,4 @@ COPY . ./prisma/
 
 RUN mkdir -p /app/backend/node_modules
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed"]
+CMD ["sh", "-c", "cd /app/prisma && export PATH=/app/node_modules/.bin:$PATH && prisma migrate deploy && prisma db seed"]
