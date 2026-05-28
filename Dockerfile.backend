@@ -20,7 +20,6 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install
 COPY backend/ ./
-COPY tsconfig.json /app/tsconfig.json
 RUN npx prisma generate --schema ../prisma/schema.prisma && npm run build
 RUN npm prune --production
 
