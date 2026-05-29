@@ -156,7 +156,7 @@ services:
   generate:
     build:
       context: ./prisma
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile     
     command: npx prisma generate
     profiles:
       - generate

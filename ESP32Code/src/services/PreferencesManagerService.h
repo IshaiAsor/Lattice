@@ -16,6 +16,7 @@ typedef struct
   String token;
   String refreshToken;
   String refreshTokenCallbackUrl;
+  String deviceConfigUrl;
   bool validateCACert;
   uint32_t deviceId;
 } JwtToken;
@@ -75,6 +76,7 @@ public:
     preferences.putString("token", jwtData.token);
     preferences.putString("refresh_token", jwtData.refreshToken);
     preferences.putString("ref_token_url", jwtData.refreshTokenCallbackUrl);
+    preferences.putString("config_url", jwtData.deviceConfigUrl);
     preferences.putBool("validateCACert", jwtData.validateCACert);
     preferences.putUInt("device_id", jwtData.deviceId);
     preferences.end();
@@ -94,6 +96,7 @@ public:
         .token = preferences.getString("token", ""),
         .refreshToken = preferences.getString("refresh_token", ""),
         .refreshTokenCallbackUrl = preferences.getString("ref_token_url", ""),
+        .deviceConfigUrl = preferences.getString("config_url", ""),
         .validateCACert = preferences.getBool("validateCACert", false),
         .deviceId = preferences.getUInt("device_id", 0)};
 
@@ -105,6 +108,8 @@ public:
     Serial.println(jwtData->refreshToken);
     Serial.print("Refresh Token Callback URL: ");
     Serial.println(jwtData->refreshTokenCallbackUrl);
+    Serial.print("Device Config URL: ");
+    Serial.println(jwtData->deviceConfigUrl);
     Serial.print("validateCACert: ");
     Serial.println(jwtData->validateCACert);
     Serial.print("Device ID: ");

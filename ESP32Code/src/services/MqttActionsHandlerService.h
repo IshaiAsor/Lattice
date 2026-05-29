@@ -10,7 +10,10 @@
 #include "PreferencesManagerService.h"
 #include "JwtService.h"
 #include "actions/DeviceActions.h"
+#include "actions/DynamicDeviceActionsService.h"
 #include "OtaService.h"
+
+extern DynamicDeviceActionsService deviceActionsService;
 
 class MqttActionsHandlerService
 {
@@ -23,11 +26,9 @@ public:
         static OtaService *otaService = new OtaService(DEVICE_VERSION, DEVICE_TYPE, root_ca);
         Serial.print("Message arrived on topic: ");
         Serial.println(topic);
-        // "users/%{userid}/devices/%{deviceid}/telemetry/#"
 
         std::vector<char *> parts;
 
-        // Phase 1: Split and store pointers
         char *token = std::strtok(topic, "/");
         while (token != nullptr)
         {
@@ -35,10 +36,10 @@ public:
             token = std::strtok(nullptr, "/");
         }
 
-        char *userId = parts[1];
-        char *deviceId = parts[3];
+        char *userId     = parts[1];
+        char *deviceId   = parts[3];
         char *actionType = parts[4];
-        char *action = parts[5];
+        char *action     = parts[5];
 
         Serial.print("User ID: ");
         Serial.println(userId);
@@ -48,12 +49,11 @@ public:
         Serial.println(actionType);
         Serial.print("Action: ");
         Serial.println(action);
+
         String message;
         message.reserve(length);
         for (unsigned int i = 0; i < length; i++)
-        {
             message += (char)payload[i];
-        }
 
         // Handle OTA topic
         if (strcmp(parts[0], "ota") == 0)
@@ -95,15 +95,13 @@ public:
 
     static BaseCommandAction *getAction(String actionName)
     {
-        for (int i = 0; i < sizeof(DEVICE_ACTIONS_SETUP) / sizeof(DEVICE_ACTIONS_SETUP[0]); i++)
+        for (size_t i = 0; i < deviceActionsService.getDeviceActionsCount(); i++)
         {
-            if (strcmp(DEVICE_ACTIONS_SETUP[i]->actionName.c_str(), actionName.c_str()) == 0)
-            {
-                return DEVICE_ACTIONS_SETUP[i];
-            }
+            BaseCommandAction *a = deviceActionsService.getDeviceActions()[i];
+            if (a->actionName == actionName)
+                return a;
         }
-
-        Serial.println("Action not found");
+        Serial.println("Action not found: " + actionName);
         return nullptr;
     }
 };

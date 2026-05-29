@@ -8,7 +8,7 @@ import socketService from './socket.service';
 import { userDevicesActionsRepository } from '../dal/user.devices.actions.repository';
 import { deviceMgmtService } from './device.mgmt.service';
 import { deviceActionsService } from './device.actions.service';
-import { googleHomegraphService } from './google.homegraph.service';
+import { googleHomegraphService } from './google-smart-home/google.homegraph.service';
 
 class MqttService {
   client: MqttClient;

@@ -1,11 +1,9 @@
 import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Observable } from 'rxjs';
 import { DeviceMgmtService, DeviceView } from 'src/app/services/device.mgmt.service';
 import { MgmtDeviceRegisterComponent } from '../mgmt-device-register/mgmt-device-register.component';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
-import { MgmtActionEditComponent } from '../mgmt-action-edit/mgmt-action-edit.component';
 import { MgmtDeviceEdit } from '../mgmt-device-edit/mgmt-device-edit';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -17,11 +15,9 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
   styleUrls: ['./mgmt-device-list.component.css'],
 })
 export class MgmtDeviceListComponent implements OnInit {
-  constructor(
-    private deviceMgmtService: DeviceMgmtService,
-    private snackBar: MatSnackBar,
-    private dialog: MatDialog,
-  ) {}
+  private deviceMgmtService = inject(DeviceMgmtService);
+  private snackBar = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
   socketService = inject(DeviceSocketService);
   destroyRef = inject(DestroyRef);
 
@@ -32,8 +28,8 @@ export class MgmtDeviceListComponent implements OnInit {
     this.socketService
       .onDeviceOnlineStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
-
-      .subscribe((data) => {
+      .subscribe((res: unknown) => {
+        const data = res as { deviceId: number; state: boolean };
         console.log('Received device state update:', data);
         const device = this.devices?.find((e) => e.id == data.deviceId);
         if (device) {

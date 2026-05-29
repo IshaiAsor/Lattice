@@ -7,7 +7,7 @@ export class LoginService {
   private generateAuthResponse(user: any, purpose: JwtPurpose): string {
     let payload = {
       id: user.id,
-      username: user.username || user.email,
+      username: user.user_name || user.full_name || user.email,
       role: user.user_role,
       email: user.email,
       user_type: user.user_type,

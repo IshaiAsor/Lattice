@@ -1,42 +1,62 @@
-<mat-toolbar color="tertiary" class="navbar">
-    <span routerLink="/" style="cursor: pointer">Smart home control</span>
-    <span class="spacer"></span>
-   <ng-template #loggedOut>
-       <ng-container >
-           <button routerLink="/login" mat-button>
-               <mat-icon>account_circle</mat-icon>
-               Login
-            </button>
-        </ng-container>
-    </ng-template>
-        
-    <ng-container *ngIf="authService.getCurrentUser()  as user; else loggedOut ">
-        <button mat-button routerLink="/Dashboard">Dashboard</button>
-        <button mat-button routerLink="/mgmt/actions">Actions</button>
-        <button mat-button routerLink="/mgmt/devices">Devices</button>
-        <span class="user-name">{{ user.username }}</span>
+<nav class="navbar">
 
-        <button mat-icon-button [matMenuTriggerFor]="profileMenu" disableRipple>
-            <img *ngIf="user.profileImage; else defaultIcon" [src]="user.profileImage"
-                class="nav-profile-pic">
-            <ng-template #defaultIcon>
-                <mat-icon>account_circle</mat-icon>
-            </ng-template>
-        </button>
+  <!-- Brand -->
+  <a class="nav-brand" routerLink="/">
+    <mat-icon class="brand-icon">hub</mat-icon>
+    <span class="brand-text">SmartHome</span>
+  </a>
 
-        <mat-menu #profileMenu="matMenu">
-            <button mat-menu-item>
-                <mat-icon>person</mat-icon>
-                <span>My Profile</span>
-            </button>
-            <button mat-menu-item (click)="logout()">
-                <mat-icon>exit_to_app</mat-icon>
-                <span>Logout</span>
-            </button>
-        </mat-menu>
-    </ng-container>
+  <!-- Nav links (authenticated only) -->
+  @if (authService.getCurrentUser(); as user) {
+    <div class="nav-sep"></div>
+    <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">
+      <mat-icon>dashboard</mat-icon>
+      <span>Dashboard</span>
+    </a>
+    <a class="nav-link" routerLink="/mgmt/actions" routerLinkActive="active">
+      <mat-icon>bolt</mat-icon>
+      <span>Actions</span>
+    </a>
+    <a class="nav-link" routerLink="/mgmt/devices" routerLinkActive="active">
+      <mat-icon>device_hub</mat-icon>
+      <span>Devices</span>
+    </a>
+  }
 
-</mat-toolbar>
-<div class="container">
-    <router-outlet></router-outlet>
+  <div class="spacer"></div>
+
+  <!-- Right: authenticated / guest -->
+  @if (authService.getCurrentUser(); as user) {
+    <div class="user-section">
+      <span class="user-name">{{ user.username }}</span>
+      <button mat-icon-button [matMenuTriggerFor]="profileMenu" class="profile-btn" disableRipple>
+        @if (user.profileImage) {
+          <img [src]="user.profileImage" class="nav-profile-pic">
+        } @else {
+          <mat-icon>account_circle</mat-icon>
+        }
+      </button>
+    </div>
+
+    <mat-menu #profileMenu="matMenu">
+      <button mat-menu-item>
+        <mat-icon>person</mat-icon>
+        <span>My Profile</span>
+      </button>
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>Logout</span>
+      </button>
+    </mat-menu>
+  } @else {
+    <a class="nav-link" routerLink="/login">
+      <mat-icon>login</mat-icon>
+      <span>Sign in</span>
+    </a>
+  }
+
+</nav>
+
+<div class="page-container">
+  <router-outlet></router-outlet>
 </div>

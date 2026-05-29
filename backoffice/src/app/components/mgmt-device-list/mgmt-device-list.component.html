@@ -1,23 +1,67 @@
 <div class="header">
-  <h1>Device List</h1>
-  <button matButton="filled" (click)="addDevice()">Add Device</button>
+    <h1>Device List</h1>
 </div>
+
 <div class="card-grid">
-  <mat-card class="card" [class.is-connected]="device.online" appearance="outlined"
-    *ngFor="let device of devices">
-    <mat-card-header>
-      <mat-card-title-group>
-        <mat-card-title>{{ device.deviceName }}</mat-card-title>
-        <mat-card-subtitle *ngIf="!device.online">Device is offline since {{ device.lastOnlineDate | date: 'medium'}}</mat-card-subtitle>
-        <div mat-card-avatar class="example-header-image"></div>
-      </mat-card-title-group>
-    </mat-card-header>
-    <mat-card-content>
-      {{ device.type }}
-    </mat-card-content>
-    <mat-card-actions>
-      <button matButton (click)="deleteDevice(device)">delete</button>
-      <button matButton (click)="updateName(device)">edit</button>
-    </mat-card-actions>
-  </mat-card>
+    @for (device of devices; track device.id) {
+    <div class="device-card-wrapper">
+        <div class="device-card" [ngClass]="device.online ? 'card-enabled' : 'card-disabled'">
+
+            <div class="card-header">
+                <span class="material-symbols-outlined device-icon">developer_board</span>
+                <span class="card-name">{{ device.deviceName }}</span>
+                <span class="header-spacer"></span>
+                <span class="status-dot" [class.online]="device.online" [class.offline]="!device.online"
+                    [matTooltip]="device.online ? 'Online' : 'Offline'"></span>
+                <button mat-icon-button [matMenuTriggerFor]="deviceMenu" class="card-menu-btn">
+                    <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #deviceMenu="matMenu">
+                    <button mat-menu-item (click)="updateName(device)">
+                        <mat-icon>edit</mat-icon>
+                        <span>Rename</span>
+                    </button>
+                    <button mat-menu-item (click)="deleteDevice(device)" class="menu-delete">
+                        <mat-icon>delete_outline</mat-icon>
+                        <span>Delete</span>
+                    </button>
+                </mat-menu>
+            </div>
+
+            <div class="card-content">
+                @if (!device.online) {
+                <div class="offline-overlay">
+                    <mat-icon>wifi_off</mat-icon>
+                    <span>Offline</span>
+                </div>
+                }
+                <div class="device-info">
+                    <div class="info-row">
+                        <span class="info-label">Type</span>
+                        <span class="info-value">{{ device.type }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Version</span>
+                        <span class="info-value">{{ device.version }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">ID</span>
+                        <span class="info-value">#{{ device.id }}</span>
+                    </div>
+                    @if (!device.online && device.lastOnlineDate) {
+                    <div class="info-row muted">
+                        <span class="info-label">Last seen</span>
+                        <span class="info-value">{{ device.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
+                    </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </div>
+    }
 </div>
+
+<button mat-fab class="add-fab" (click)="addDevice()" matTooltip="Add Device" matTooltipPosition="left">
+    <mat-icon>add</mat-icon>
+</button>

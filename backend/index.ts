@@ -15,6 +15,7 @@ import provisioningRoutes from './routes/provisioning.routes';
 import googleActionsTypesRoutes from './routes/google.actions.types.routes';
 import googleActionsTraitsRoutes from './routes/google.actions.traits.routes';
 import googleSmartHomeRoutes from './routes/google.smarthome.routes';
+import deviceConfigurationRoutes from './routes/device.configuration.routes';
 import http from 'http';
 import socketService from './services/socket.service';
 import { redisService } from './services/redis.service';
@@ -51,6 +52,7 @@ app.use('/api/provisioning', provisioningRoutes);
 app.use('/api/google/actions/types', googleActionsTypesRoutes);
 app.use('/api/google/actions/traits', googleActionsTraitsRoutes);
 app.use('/api/google/smarthome', googleSmartHomeRoutes);
+app.use('/api/device', deviceConfigurationRoutes);
 
 
 const rootDir = process.cwd();

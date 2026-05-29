@@ -1,54 +1,83 @@
 <div class="header">
-    <h1></h1>
+    <h1>Dashboard</h1>
 </div>
 <div class="card-grid" cdkDropList cdkDropListOrientation="mixed" (cdkDropListDropped)="drop($event)">
-    <ng-container *ngFor="let action of actions">
-        <mat-card appearance="outlined" *ngIf="action.googleType.name === 'Outlet'"
-            [ngClass]="action.online ? 'card-enabled' : 'card-disabled'"
-            cdkDrag>
-            <mat-card-header>
-                <mat-card-title-group>
-                    <span class="drag-handle" cdkDragHandle>
-                        <mat-icon>drag_indicator</mat-icon>
-                    </span>
-                    <span class="material-symbols-outlined">outlet</span>
-                    <mat-card-title>{{ action.name }}</mat-card-title>
-                </mat-card-title-group>
-            </mat-card-header>
-            <mat-card-content>
-                <mat-slide-toggle (change)="onToggle(action, $event)" [checked]="action.state === 'on'"
-                    [disabled]="action.state ==0"></mat-slide-toggle>
-            </mat-card-content>
-            <mat-card-actions align="end">
-                <button mat-icon-button (click)="renameAction(action)" matTooltip="Rename">
-                    <mat-icon>edit</mat-icon>
+    @for (action of actions; track action.id) {
+    <div class="device-card-wrapper" cdkDrag>
+        <div class="drag-rail" cdkDragHandle>
+            <div class="drag-rail-dots">
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+        <div class="device-card" [ngClass]="action.online ? 'card-enabled' : 'card-disabled'">
+            <div class="card-header">
+                <span class="material-symbols-outlined device-icon">
+                    @switch (action.googleType?.value) {
+                    @case ('action.devices.types.OUTLET') { outlet }
+                    @case ('action.devices.types.SENSOR') { thermometer }
+                    @case ('action.devices.types.FAN') { toys_fan }
+                    @default { device_unknown } }
+                </span>
+                <span class="card-name">{{ action.name }}</span>
+                <span class="header-spacer"></span>
+                <span class="status-dot" [class.online]="action.online" [class.offline]="!action.online"
+                    [matTooltip]="action.online ? 'Online' : 'Offline'"></span>
+                <button mat-icon-button [matMenuTriggerFor]="actionMenu" class="card-menu-btn">
+                    <mat-icon>more_vert</mat-icon>
                 </button>
-            </mat-card-actions>
-            <div *cdkDragPlaceholder class="drag-placeholder"></div>
-        </mat-card>
+                <mat-menu #actionMenu="matMenu">
+                    <button mat-menu-item (click)="renameAction(action)">
+                        <mat-icon>edit</mat-icon>
+                        <span>Rename</span>
+                    </button>
+                </mat-menu>
+            </div>
 
-        <mat-card class="weather-card" appearance="outlined" *ngIf="action.googleType.name === 'Sensor'"
-            [ngClass]="action.online ? 'card-enabled' : 'card-disabled'"
-            cdkDrag>
-            <mat-card-header>
-                <mat-card-title-group>
-                    <span class="drag-handle" cdkDragHandle>
-                        <mat-icon>drag_indicator</mat-icon>
-                    </span>
-                    <span class="material-symbols-outlined">thermometer</span>
-                    <mat-card-title>{{ action.name }}</mat-card-title>
-                </mat-card-title-group>
-            </mat-card-header>
-            <mat-card-content class="temp-display">
-                <span class="value">{{ action.state | number:'1.0-1' }}</span>
-                <span class="unit">°C</span>
-            </mat-card-content>
-            <mat-card-actions align="end">
-                <button mat-icon-button (click)="renameAction(action)" matTooltip="Rename">
-                    <mat-icon>edit</mat-icon>
-                </button>
-            </mat-card-actions>
-            <div *cdkDragPlaceholder class="drag-placeholder"></div>
-        </mat-card>
-    </ng-container>
+            <div class="card-content">
+                @if (!action.online) {
+                <div class="offline-overlay">
+                    <mat-icon>wifi_off</mat-icon>
+                    <span>Offline</span>
+                </div>
+                }
+                @if (action.googleTraits.some(trait => trait.value === 'action.devices.traits.OnOff')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="action.state === 'on'"
+                        (click)="changeActionState(action, action.state === 'on' ? 'off' : 'on')"
+                        [disabled]="action.state === 0"
+                        [matTooltip]="action.state === 'on' ? 'Turn off' : 'Turn on'">
+                        <mat-icon>power_settings_new</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (action.googleTraits.some(trait => trait.value === 'action.devices.traits.FanSpeed')) {
+                <svg class="speed-dial" viewBox="-8 -8 136 110"
+                    (pointerdown)="onDialPointerDown($event, action)"
+                    (pointermove)="onDialPointerMove($event, action)">
+                    <path class="dial-track" [attr.d]="dialTrackPath()" />
+                    <path class="dial-active" [attr.d]="dialActivePath(action.state)" />
+                    <circle class="dial-thumb"
+                        [attr.cx]="dialThumbPt(action.state).x"
+                        [attr.cy]="dialThumbPt(action.state).y" r="7" />
+                    <text x="60" y="50" text-anchor="middle" dominant-baseline="middle" class="dial-value">{{ $any(action.state) || 0 }}</text>
+                    <text x="60" y="64" text-anchor="middle" class="dial-unit">% speed</text>
+                </svg>
+                }
+                @if (action.googleType?.value === 'action.devices.types.SENSOR') {
+                @if (action.googleTraits.some(trait => trait.value === 'action.devices.traits.TemperatureSetting')) {
+                <div class="sensor-display">
+                    <span class="sensor-value">{{ $any(action.state) | number:'1.0-1' }}</span>
+                    <span class="sensor-unit">°C</span>
+                </div>
+                } @else {
+                <div class="sensor-display">
+                    <span class="sensor-value">{{ action.state }}</span>
+                </div>
+                } }
+            </div>
+        </div>
+        <div *cdkDragPlaceholder class="drag-placeholder"></div>
+    </div>
+    }
 </div>

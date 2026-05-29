@@ -1,4 +1,3 @@
-
 #pragma once
 #include <vector>
 #include <string>
@@ -16,17 +15,30 @@ private:
     OneWire oneWire;
     DallasTemperature sensors;
 
-public:
-    TemperatureAction(int pinNumber, String name, int readInterval)
-        : BaseTelemetryAction(name, readInterval, {ActionPinsSetup(pinNumber, INPUT)})
+    void initSensor(int pin)
     {
-        this->pinNumber = pinNumber;
-        oneWire = OneWire(pinNumber);
+        pinNumber = pin;
+        oneWire = OneWire(pin);
         sensors = DallasTemperature(&oneWire);
         sensors.begin();
     }
 
-    void initPins() override {};
+public:
+    // Static / fallback constructor
+    TemperatureAction(int pin, String name, int readInterval)
+        : BaseTelemetryAction(name, readInterval, {ActionPinsSetup(pin, INPUT)})
+    {
+        initSensor(pin);
+    }
+
+    // Dynamic constructor — pin from server
+    TemperatureAction(String name, std::vector<ActionPinsSetup> pins, int readInterval)
+        : BaseTelemetryAction(name, readInterval, pins)
+    {
+        initSensor(pins.empty() ? 0 : pins[0].PIN_NUMBER);
+    }
+
+    void initPins() override {}
 
     String executeTelemetryAction() override
     {

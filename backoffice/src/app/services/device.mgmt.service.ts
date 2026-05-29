@@ -1,22 +1,22 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import { GoogleActionType } from './google.actions.types.service';
+import { GoogleActionTrait } from './google.actions.traits.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class DeviceMgmtService {
   private apiUrl = `${environment.apiUrl}`;
-
-  constructor(private http: HttpClient) { }
+  private http = inject(HttpClient);
 
   getDevices(): Observable<DeviceView[]> {
     return this.http.get<DeviceView[]>(`${this.apiUrl}/api/mgmt/devices`);
   }
 
-  addDevice(deviceData: any): Observable<DeviceView> {
+  addDevice(deviceData: unknown): Observable<DeviceView> {
     return this.http.post<DeviceView>(`${this.apiUrl}/api/mgmt/devices`, deviceData);
   }
 
@@ -24,7 +24,7 @@ export class DeviceMgmtService {
     return this.http.patch<DeviceView>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/status`, { status });
   }
 
-  updateDevice(deviceId: number, updates: any): Observable<DeviceView> {
+  updateDevice(deviceId: number, updates: unknown): Observable<DeviceView> {
     return this.http.patch<DeviceView>(`${this.apiUrl}/api/mgmt/devices/${deviceId}`, updates);
   }
 
@@ -46,10 +46,10 @@ export interface DeviceActionView {
   id: number;
   name: string;
   type: string;
-  trait: string;
-  state: any;
+  googleTraits: GoogleActionTrait[];
+  state: unknown;
   deviceId: number;
-  googleType: any;
+  googleType: GoogleActionType | null;
   online:boolean;
   pins: DeviceActionPinView[];
 }
@@ -64,5 +64,3 @@ export interface DeviceActionPinView {
   currentValue: string;
   device?: DeviceView;
 }
-
-

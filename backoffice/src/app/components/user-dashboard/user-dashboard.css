@@ -1,75 +1,315 @@
 .material-symbols-outlined {
   font-variation-settings:
-  'FILL' 0,
-  'wght' 400,
-  'GRAD' 0,
-  'opsz' 24
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
 }
 
-.status-indicator {
-  font-size: 16px; /* Adjust size */
-}
-.status-indicator.active {
-  color: #4CAF50; /* Material Green 500 */
-}
-.status-indicator.inactive {
-  color: #9E9E9E; /* Material Gray 500 */
+/* ── Card grid layout ───────────────────────────────────────────── */
+.card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding: 8px;
 }
 
-/* The active/available state */
-.card-enabled {
-  /* border: 1px solid transparent; */
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  cursor: pointer;
+/* ── Card wrapper (drag target) ─────────────────────────────────── */
+.device-card-wrapper {
+  display: flex;
+  flex-direction: row;
+  border-radius: 12px;
+  overflow: hidden;
   margin: 10px;
-  /* background-color: #69d59335 !important; */
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
+  width: 240px;
+  height: 300px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
-/* The unavailable/disabled state */
-.card-disabled {
-  opacity: 0.6;
-  filter: grayscale(65%);
-  cursor: not-allowed !important;
-  pointer-events: none; /* Prevents clicks on internal buttons */
-  user-select: none;
-  background-color: #77676747 !important;
-  /* border: 1px solid #e0e0e0; */
-  margin: 10px;
-}
-
-/* Drag handle */
-.drag-handle {
+/* ── Left drag rail ─────────────────────────────────────────────── */
+.drag-rail {
+  width: 16px;
+  background: #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   cursor: grab;
-  color: #9e9e9e;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.drag-rail:hover { background: #e0e0e0; }
+.drag-rail:active { cursor: grabbing; background: #d6d6d6; }
+
+.drag-rail-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drag-rail-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #bdbdbd;
+}
+
+.drag-rail:hover .drag-rail-dots span { background: #9e9e9e; }
+
+/* ── Card shell (plain div) ─────────────────────────────────────── */
+.device-card {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-left: none;
+  box-sizing: border-box;
+}
+
+/* ── Card header ────────────────────────────────────────────────── */
+.card-header {
   display: flex;
   align-items: center;
-  margin-right: 4px;
-}
-.drag-handle:active {
-  cursor: grabbing;
+  padding: 10px 6px 8px 12px;
+  gap: 6px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-/* Ghost card shown at the drop target position */
+.device-icon {
+  font-size: 18px;
+  color: #757575;
+  flex-shrink: 0;
+}
+
+.card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #212121;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.header-spacer { flex: 1; }
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: #4caf50;
+  box-shadow: 0 0 4px rgba(76, 175, 80, 0.5);
+}
+
+.status-dot.offline { background: #9e9e9e; }
+
+.card-menu-btn {
+  width: 28px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  flex-shrink: 0;
+}
+
+.card-menu-btn mat-icon {
+  font-size: 16px;
+  color: #9e9e9e;
+}
+
+/* ── Card body ──────────────────────────────────────────────────── */
+.card-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px;
+}
+
+/* ── Offline overlay ────────────────────────────────────────────── */
+.offline-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(2px);
+  color: #9e9e9e;
+  z-index: 1;
+}
+
+.offline-overlay mat-icon {
+  font-size: 28px;
+  width: 28px;
+  height: 28px;
+  color: #bdbdbd;
+}
+
+.offline-overlay span {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9e9e9e;
+}
+
+/* Dial fills the full column width */
+.card-content .speed-dial {
+  width: 100%;
+}
+
+/* ── Power button (OnOff) ───────────────────────────────────────── */
+.control-onoff {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.power-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid #e0e0e0;
+  background: #fafafa;
+  color: #bdbdbd;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.power-btn mat-icon {
+  font-size: 24px;
+  width: 24px;
+  height: 24px;
+}
+
+.power-btn:hover {
+  border-color: #bdbdbd;
+  background: #f5f5f5;
+}
+
+.power-btn.on {
+  background: #e8f5e9;
+  border-color: #4caf50;
+  color: #4caf50;
+  box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.12);
+}
+
+.power-btn.on:hover {
+  background: #c8e6c9;
+  box-shadow: 0 0 0 6px rgba(76, 175, 80, 0.15);
+}
+
+.power-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Arc speed dial ─────────────────────────────────────────────── */
+.speed-dial {
+  width: 100%;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  display: block;
+}
+
+.dial-track {
+  fill: none;
+  stroke: #eeeeee;
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+
+.dial-active {
+  fill: none;
+  stroke: #1976d2;
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+
+.dial-thumb {
+  fill: white;
+  stroke: #1976d2;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 1px 3px rgba(25, 118, 210, 0.35));
+}
+
+.dial-value {
+  font-size: 18px;
+  font-weight: 300;
+  fill: #212121;
+}
+
+.dial-unit {
+  font-size: 10px;
+  fill: #9e9e9e;
+  letter-spacing: 0.04em;
+}
+
+/* ── Sensor display ─────────────────────────────────────────────── */
+.sensor-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.sensor-value {
+  font-size: 2rem;
+  font-weight: 300;
+  color: #212121;
+  line-height: 1;
+}
+
+.sensor-unit {
+  font-size: 1rem;
+  color: #9e9e9e;
+}
+
+/* ── Card states ─────────────────────────────────────────────────── */
+.device-card-wrapper:has(.card-enabled):hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+}
+
+.card-disabled {
+  opacity: 0.75;
+  filter: grayscale(50%);
+}
+
+/* ── CDK drag states ─────────────────────────────────────────────── */
 .drag-placeholder {
-  min-height: 80px;
+  width: 240px;
+  min-height: 100px;
   border: 2px dashed #bdbdbd;
-  border-radius: 4px;
+  border-radius: 12px;
   background: transparent;
-  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+  margin: 10px;
+  box-sizing: border-box;
 }
 
-/* Smooth animation when cards snap into their new position */
 .cdk-drag-animating {
   transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
 }
 
-/* Slightly elevate the card while dragging */
 .cdk-drag-preview {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   opacity: 0.95;
+  border-radius: 12px;
 }

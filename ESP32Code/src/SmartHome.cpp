@@ -51,10 +51,11 @@ BleNotificationService bleNotificationService(&bleServer, &bleResponseQueue);
 ProvisioningCallbacks provisioningCallbacks(&bleNotificationService, &provisioningQueue);
 ProvisioningBleService provisioningBleService(&bleNotificationService, &dateTimeSyncService, &wm, &prefService, &jwtService, &mqttService);
 BLECharacteristic *pCharacteristic;
+DynamicDeviceActionsService deviceActionsService;
 
 void setupBleProvisioning();
 void bleResponseTask(void *pvParameters);
-void handleTelematryReading();
+void handleTelametryReading();
 void handleProvisioningQueue();
 void handleReset();
 void performFactoryReset();
@@ -72,17 +73,7 @@ void setup()
     performFactoryReset();
   }
 
-  size_t actionCount = sizeof(DEVICE_ACTIONS_SETUP) / sizeof(DEVICE_ACTIONS_SETUP[0]);
-  for (int i = 0; i < actionCount; i++)
-  {
-    DEVICE_ACTIONS_SETUP[i]->initPins();
-  }
-
-  size_t telActionCount = sizeof(TELEMETRY_ACTIONS_SETUP) / sizeof(TELEMETRY_ACTIONS_SETUP[0]);
-  for (int i = 0; i < telActionCount; i++)
-  {
-    TELEMETRY_ACTIONS_SETUP[i]->initPins();
-  }
+  onboardLed.initPins();
   onboardLed.execute("orange");
 
   provisioningQueue = xQueueCreate(1, sizeof(char *));
@@ -95,7 +86,7 @@ void setup()
 
   // Create BLE response handler task with larger stack (3072 bytes)
   xTaskCreatePinnedToCore(
-      bleResponseTask,   //  // Task function
+      bleResponseTask,   // Task function
       "BLEResponseTask", // Task name
       3072,              // Stack size
       NULL,              // Parameters
@@ -149,7 +140,22 @@ void setup()
 
       JwtToken *jwtData = jwtService.GetCurrentJwtToken();
       MqttCredentials *creds = prefService.LoadMqttServerCredentials();
-      if (!creds || !jwtData || !mqttService.testMqtt(creds, jwtData))
+
+      // Verify the device config URL was set during provisioning.
+      // Missing URL means the device was provisioned before this feature was added — re-provision to get it.
+      if (jwtData && jwtData->deviceConfigUrl.isEmpty())
+      {
+        Serial.println("Device config URL missing — re-provisioning required.");
+        if (PROVISION_ON_ERROR)
+        {
+          setupBleProvisioning();
+        }
+        else
+        {
+          onboardLed.execute("red");
+        }
+      }
+      else if (!creds || !jwtData || !mqttService.testMqtt(creds, jwtData))
       {
         Serial.println("MQTT test failed after WiFi connected. Entering provisioning mode...");
         if (PROVISION_ON_ERROR)
@@ -163,6 +169,21 @@ void setup()
       }
       else
       {
+        // Load device actions from server — no fallback; restart if unavailable
+        if (!deviceActionsService.loadFromServer(jwtData))
+        {
+          Serial.println("[Config] Failed to load device configuration. Restarting in 5s...");
+          onboardLed.execute("red");
+          delay(5000);
+          ESP.restart();
+        }
+
+        // Initialize pins on all dynamically loaded actions
+        for (size_t i = 0; i < deviceActionsService.getDeviceActionsCount(); i++)
+          deviceActionsService.getDeviceActions()[i]->initPins();
+        for (size_t i = 0; i < deviceActionsService.getTelemetryActionsCount(); i++)
+          deviceActionsService.getTelemetryActions()[i]->initPins();
+
         onboardLed.execute("green");
       }
     }
@@ -178,14 +199,14 @@ void loop()
     if (!WiFi.isConnected())
     {
       Serial.println("Not connected to WiFi. Restarting to re-enter provisioning mode...");
-      ESP.restart(); // Restart to re-enter provisioning mode if not connected
+      ESP.restart();
     }
     else if (!mqttService.loopMqtt())
     {
       Serial.println("MQTT connection lost. Restarting to re-enter provisioning mode...");
       ESP.restart();
     }
-    handleTelematryReading();
+    handleTelametryReading();
     loopCommnds();
   }
   else
@@ -197,19 +218,16 @@ void loop()
 
 void loopCommnds()
 {
-  size_t actionCount = sizeof(DEVICE_ACTIONS_SETUP) / sizeof(DEVICE_ACTIONS_SETUP[0]);
-  for (int i = 0; i < actionCount; i++)
-  {
-    DEVICE_ACTIONS_SETUP[i]->loop();
-  }
+  for (size_t i = 0; i < deviceActionsService.getDeviceActionsCount(); i++)
+    deviceActionsService.getDeviceActions()[i]->loop();
 }
 
 void performFactoryReset()
 {
   Serial.println("Performing factory reset...");
   prefService.ClearCredentials();
-  WiFi.mode(WIFI_STA); // Initialize WiFi driver to allow credentials deletion
-  wm.resetSettings();  // This handles the WiFi disconnect and credential wipe internally
+  WiFi.mode(WIFI_STA);
+  wm.resetSettings();
 
   Serial.println("Forcing NVS wipe...");
   nvs_flash_deinit();
@@ -217,19 +235,19 @@ void performFactoryReset()
   nvs_flash_init();
 
   Serial.println("Factory reset complete. Rebooting...");
-  delay(2000); // Debounce and allow serial to flush
+  delay(2000);
   ESP.restart();
 }
 
-void handleTelematryReading()
+void handleTelametryReading()
 {
   unsigned long currentMillis = millis();
-
-  size_t actionCount = sizeof(TELEMETRY_ACTIONS_SETUP) / sizeof(TELEMETRY_ACTIONS_SETUP[0]);
-  for (int i = 0; i < actionCount; i++)
+  for (size_t i = 0; i < deviceActionsService.getTelemetryActionsCount(); i++)
   {
-    TELEMETRY_ACTIONS_SETUP[i]->execute(currentMillis, [](const char *topic, const char *payload)
-                                        { mqttService.publishTelemetry(topic, payload); });
+    deviceActionsService.getTelemetryActions()[i]->execute(currentMillis,
+      [](const char *topic, const char *payload) {
+        mqttService.publishTelemetry(topic, payload);
+      });
   }
 }
 
@@ -239,7 +257,6 @@ void bleResponseTask(void *pvParameters)
 
   while (true)
   {
-    // Wait for BLE responses to send
     if (xQueueReceive(bleResponseQueue, &bleResponse, pdMS_TO_TICKS(100)) == pdPASS)
     {
       Serial.print("Processing BLE response of type: ");
@@ -249,7 +266,7 @@ void bleResponseTask(void *pvParameters)
       if (pCharacteristic != NULL)
       {
         JsonDocument reqDoc;
-        bleResponse.toJson(reqDoc); // We know this exists because of JsonModel
+        bleResponse.toJson(reqDoc);
 
         String payloadString;
         serializeJson(reqDoc, payloadString);
@@ -275,7 +292,7 @@ void handleReset()
       isPressing = true;
     }
     else if (millis() - buttonPressTime > 5000)
-    { // 5 second long press
+    {
       Serial.println("Long press detected. Initiating factory reset...");
       performFactoryReset();
     }

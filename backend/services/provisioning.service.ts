@@ -6,7 +6,6 @@ import { userDevicesRepository } from '../dal/user.devices.repository';
 import * as crypto from 'crypto';
 
 class ProvisioningService {
-
   async GenerateProvisioningToken(userId: number) {
     const tokenPayload = { userId };
     const token = jwtService.generateToken(tokenPayload, JwtPurpose.device_provisioning);
@@ -19,7 +18,7 @@ class ProvisioningService {
       server: config.mqtt.serverName,
       mqttPort: config.mqtt.port,
       provisioningCallbackUrl: provisioningCallbackUrl,
-      validateCACert: config.mqtt.validateCert
+      validateCACert: config.mqtt.validateCert,
     };
   }
 
@@ -36,10 +35,15 @@ class ProvisioningService {
     return this.GenerateDevicePermenantMqttToken(
       verificationResult.decoded.userId,
       verificationResult.decoded.deviceId,
+      verificationResult.decoded.version,
     );
   }
 
-  private async GenerateDevicePermenantMqttToken(userId: number, deviceId: number) {
+  private async GenerateDevicePermenantMqttToken(
+    userId: number,
+    deviceId: number,
+    deviceVersion: string,
+  ) {
     const tokenPayload = {
       userid: userId,
       clientid: deviceId,
@@ -53,12 +57,14 @@ class ProvisioningService {
       JwtPurpose.device_usage_refresh,
     );
 
-    let refreshTokenCallbackUrl = `${config.baseUrl}/api/provisioning/refresh-token`; // Endpoint for clients to call to refresh their MQTT token
+    const refreshTokenCallbackUrl = `${config.baseUrl}/api/provisioning/refresh-token`;
+    const deviceConfigUrl = `${config.baseUrl}/api/device/${encodeURIComponent(deviceVersion)}/configuration`;
     return {
       deviceId: deviceId,
       mqttToken: token,
       refreshToken: refreshToken,
       refreshTokenCallbackUrl,
+      deviceConfigUrl,
       validateCACert: config.mqtt.validateCert,
     };
   }
@@ -83,11 +89,11 @@ class ProvisioningService {
     deviceType: string,
     deviceId: string,
     macAddress: string,
-    version: string
+    version: string,
   ) {
     console.log(`Received device registration request (Step 1), 
       provisioningToken: ${provisioningToken}, deviceType: ${deviceType}, deviceId: ${deviceId}, macAddress: ${macAddress}, version: ${version}`);
-    
+
     if (!provisioningToken || !deviceType || !macAddress || !deviceId || !version) {
       throw new Error('Missing required fields');
     }
@@ -111,9 +117,9 @@ class ProvisioningService {
       deviceType,
       deviceId,
       macAddress,
-      version
+      version,
     };
-    
+
     await redisService.connect();
     await redisService.setTempData(`reg:${registrationId}`, registrationData, 600); // 10 minutes TTL
 
@@ -121,11 +127,11 @@ class ProvisioningService {
     const tempToken = await this.GenerateDeviceTempMqttToken(userId, macAddress);
 
     console.log(`Registration (Step 1) successful for registrationId: ${registrationId}`);
-    
+
     return {
       registrationId,
       ...tempToken,
-      finalizeCallbackUrl: `${config.baseUrl}/api/provisioning/finalize-registration`
+      finalizeCallbackUrl: `${config.baseUrl}/api/provisioning/finalize-registration`,
     };
   }
 
@@ -142,11 +148,18 @@ class ProvisioningService {
     const { userId, deviceType, deviceId, macAddress, version } = registrationData;
 
     // 4. Call server and insert to db
-    let newDevice = await deviceMgmtService.registerUserDevice(userId, '', deviceType, deviceId, macAddress, version);
+    let newDevice = await deviceMgmtService.registerUserDevice(
+      userId,
+      '',
+      deviceType,
+      deviceId,
+      macAddress,
+      version,
+    );
 
     // 5. Generate permanent token
-    var permanentToken = await this.GenerateDevicePermenantMqttToken(userId, newDevice.id);
-    
+    var permanentToken = await this.GenerateDevicePermenantMqttToken(userId, newDevice.id, version);
+
     // 6. Cleanup Redis
     await redisService.deleteTempData(`reg:${registrationId}`);
 

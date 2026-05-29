@@ -141,6 +141,7 @@ public:
             .token = response.mqttToken,
             .refreshToken = response.refreshToken,
             .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl,
+            .deviceConfigUrl = response.deviceConfigUrl,
             .validateCACert = response.validateCACert,
             .deviceId = response.deviceId};
 
@@ -175,10 +176,11 @@ public:
 
         jwtData = new JwtToken{
             .token = response.mqttToken,
-            .refreshToken = "", // No refresh token for temp access
+            .refreshToken = "",
             .refreshTokenCallbackUrl = "",
+            .deviceConfigUrl = "",
             .validateCACert = response.validateCACert,
-            .deviceId = 0}; // Temp deviceId
+            .deviceId = 0};
 
         return jwtData;
     }
@@ -204,6 +206,7 @@ public:
             .token = response.mqttToken,
             .refreshToken = response.refreshToken,
             .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl,
+            .deviceConfigUrl = response.deviceConfigUrl,
             .validateCACert = response.validateCACert,
             .deviceId = response.deviceId};
 

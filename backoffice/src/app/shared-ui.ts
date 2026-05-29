@@ -3,7 +3,6 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { errorInterceptor } from './services/error.interceptor';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -16,7 +15,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle'; // Fix 1
 import { DragDropModule } from '@angular/cdk/drag-drop';
-
+import { MatSliderModule } from '@angular/material/slider'; // Fix 2
 export const SHARED_MATERIAL = [
     CommonModule,
     FormsModule,
@@ -37,4 +36,5 @@ export const SHARED_MATERIAL = [
     MatMenuModule,
     MatSlideToggleModule,
     DragDropModule,
+    MatSliderModule , // Fix 2
 ] as const;

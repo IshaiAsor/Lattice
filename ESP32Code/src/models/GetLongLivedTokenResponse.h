@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "JsonModel.h"
@@ -10,6 +9,7 @@ struct GetLongLivedTokenResponse : public JsonModel
   String refreshToken;
   uint32_t jwtExpiry;
   String refreshTokenCallbackUrl;
+  String deviceConfigUrl;
   bool validateCACert;
 
   void fromJson(JsonVariantConst src) override
@@ -19,6 +19,7 @@ struct GetLongLivedTokenResponse : public JsonModel
     jwtExpiry = src["jwtExpiry"] | 0;
     refreshToken = src["refreshToken"] | "";
     refreshTokenCallbackUrl = src["refreshTokenCallbackUrl"] | "";
+    deviceConfigUrl = src["deviceConfigUrl"] | "";
     validateCACert = src["validateCACert"] | false;
   }
 
@@ -29,6 +30,7 @@ struct GetLongLivedTokenResponse : public JsonModel
     dst["jwtExpiry"] = jwtExpiry;
     dst["refreshToken"] = refreshToken;
     dst["refreshTokenCallbackUrl"] = refreshTokenCallbackUrl;
+    dst["deviceConfigUrl"] = deviceConfigUrl;
     dst["validateCACert"] = validateCACert;
   }
 };

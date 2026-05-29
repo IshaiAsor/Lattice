@@ -1,8 +1,8 @@
 import { google } from 'googleapis';
 import path from 'path';
-import config from '../config/env.config';
+import config from '../../config/env.config';
 import { googleStateService } from './google.state.service';
-import { DeviceActionView } from './device.actions.service';
+import { DeviceActionView } from '../device.actions.service';
 
 class GoogleHomegraphService {
     private homegraph = undefined;

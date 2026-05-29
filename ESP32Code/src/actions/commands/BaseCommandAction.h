@@ -8,7 +8,10 @@
 class BaseCommandAction
 {
 protected:
-    String state;
+    bool hasRange = false;
+    int  rangeMin = 0;
+    int  rangeMax = 0;
+
     bool validateActionPayload(String action)
     {
         for (int i = 0; i < validParameters.size(); i++)
@@ -16,6 +19,24 @@ protected:
             if (strcmp(action.c_str(), validParameters[i].c_str()) == 0)
             {
                 return true;
+            }
+        }
+        if (hasRange)
+        {
+            bool isNum = action.length() > 0;
+            for (unsigned int i = 0; i < action.length(); i++)
+            {
+                if (!isdigit(action[i]) && !(i == 0 && action[i] == '-'))
+                {
+                    isNum = false;
+                    break;
+                }
+            }
+            if (isNum)
+            {
+                int val = action.toInt();
+                if (val >= rangeMin && val <= rangeMax)
+                    return true;
             }
         }
         return false;
@@ -39,11 +60,23 @@ public:
     String actionName;
     std::vector<ActionPinsSetup> actionPinsSetup;
     std::vector<std::string> validParameters;
-    BaseCommandAction(String name, std::vector<ActionPinsSetup> pinsSetup, std::vector<std::string> validParameters)
+
+    BaseCommandAction(String name, std::vector<ActionPinsSetup> pinsSetup, std::vector<std::string> validParams)
     {
         actionName = name;
         actionPinsSetup = pinsSetup;
-        this->validParameters = validParameters;
+        validParameters = validParams;
+    }
+
+    BaseCommandAction(String name, std::vector<ActionPinsSetup> pinsSetup, std::vector<std::string> validParams,
+                      bool useRange, int rMin, int rMax)
+    {
+        actionName = name;
+        actionPinsSetup = pinsSetup;
+        validParameters = validParams;
+        hasRange = useRange;
+        rangeMin = rMin;
+        rangeMax = rMax;
     }
 
     virtual ~BaseCommandAction() {}
@@ -70,7 +103,10 @@ public:
         }
         else
         {
-            Serial.println("Invalid parameter");
+            Serial.println("Invalid parameter : " + action);
         }
     }
+
+protected:
+    String state;
 };

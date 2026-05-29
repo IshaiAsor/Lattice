@@ -57,14 +57,17 @@ model Device {
 }
 
 model DeviceAction {
-  id               Int               @id @default(autoincrement())
-  device_id        Int
-  default_name     String            @db.VarChar(255)
-  google_type_id   Int
-  mqtt_action_type String?           @db.VarChar(255)
-  mqtt_action_name String?           @db.VarChar(255)
-  device           Device            @relation(fields: [device_id], references: [id], onDelete: Cascade)
-  action_type_traits ActionTypeTrait[]
+  id                  Int               @id @default(autoincrement())
+  device_id           Int
+  default_name        String            @db.VarChar(255)
+  google_type_id      Int
+  mqtt_action_type    String?           @db.VarChar(255)
+  mqtt_action_name    String?           @db.VarChar(255)
+  implementation_type String            @db.VarChar(64)
+  valid_parameters    Json?
+  pins                Json?
+  device              Device            @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  action_type_traits  ActionTypeTrait[]
   user_device_actions UserDeviceAction[]
 
   @@unique([device_id, default_name])

@@ -1,10 +1,132 @@
-.spacer { flex: 1 1 auto; }
-.container { padding: 20px; }
-.navbar{ background: #d7e3ff ;}
-.user-name {
-  margin-right: 8px;
+/* ── Navbar shell ─────────────────────────────────────────────────── */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  height: 60px;
+  min-height: 60px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  background: #0f1729;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 16px rgba(0, 0, 0, 0.45);
+  gap: 2px;
+}
+
+/* ── Brand ────────────────────────────────────────────────────────── */
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  margin-right: 4px;
+  transition: background 0.15s;
+}
+
+.nav-brand:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.brand-icon {
+  color: #7c9cf5;
+  font-size: 22px !important;
+  width: 22px !important;
+  height: 22px !important;
+}
+
+.brand-text {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* ── Vertical separator ───────────────────────────────────────────── */
+.nav-sep {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+
+/* ── Nav links ────────────────────────────────────────────────────── */
+.nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
   font-size: 14px;
   font-weight: 500;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.nav-link mat-icon {
+  font-size: 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0;
+}
+
+.nav-link:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav-link.active {
+  color: #fff;
+  background: rgba(124, 156, 245, 0.14);
+}
+
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: #7c9cf5;
+}
+
+/* ── Spacer ───────────────────────────────────────────────────────── */
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* ── Right user section ───────────────────────────────────────────── */
+.user-section {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 4px;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  padding-right: 2px;
+  line-height: 1;
+}
+
+.profile-btn {
+  align-self: center !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
 .nav-profile-pic {
@@ -12,8 +134,11 @@
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  vertical-align: middle;
+  border: 2px solid rgba(124, 156, 245, 0.5);
+  display: block;
 }
 
-/* Optional: hover effect for the profile button */
+/* ── Page container ───────────────────────────────────────────────── */
+.page-container {
+  padding: 24px;
+}
