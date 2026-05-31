@@ -88,6 +88,15 @@
         "internalConsoleOptions": "openOnSessionStart"
     },
     {
+        "type": "debugpy",
+        "request": "launch",
+        "name": "Train Hydro Vision Model",
+        "program": "${workspaceFolder:Project Root}/hydro-vision-service/training/train.py",
+        "cwd": "${workspaceFolder:Project Root}/hydro-vision-service",
+        "console": "integratedTerminal",
+        "args": []
+    },
+    {
         "type": "platformio-debug",
         "request": "launch",
         "name": "ESP32: PIO Debug (prod)",

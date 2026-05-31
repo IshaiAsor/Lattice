@@ -132,6 +132,15 @@ services:
       - emqx
     restart: always
 
+  # Hydro Vision Service — plant health AI inference
+  hydro-vision-service:
+    build:
+      context: ./hydro-vision-service
+    container_name: hydro-vision-service
+    ports:
+      - '3002:3000'
+    restart: always
+
   # Prisma migrations — run once on first setup or after schema changes:
   #   docker compose run --rm migrate
   migrate:
