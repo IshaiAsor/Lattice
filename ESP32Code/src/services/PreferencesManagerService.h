@@ -1,6 +1,7 @@
 #pragma once
 #include <Preferences.h>
 #include <Arduino.h>
+#include <nvs_flash.h>
 
 typedef struct
 {
@@ -19,6 +20,8 @@ typedef struct
   String deviceConfigUrl;
   bool validateCACert;
   uint32_t deviceId;
+  String wsStreamUrl;
+  String cameraHttpUrl;
 } JwtToken;
 
 class PreferencesManagerService
@@ -76,9 +79,11 @@ public:
     preferences.putString("token", jwtData.token);
     preferences.putString("refresh_token", jwtData.refreshToken);
     preferences.putString("ref_token_url", jwtData.refreshTokenCallbackUrl);
-    preferences.putString("config_url", jwtData.deviceConfigUrl);
-    preferences.putBool("validateCACert", jwtData.validateCACert);
-    preferences.putUInt("device_id", jwtData.deviceId);
+    preferences.putString("config_url",      jwtData.deviceConfigUrl);
+    preferences.putBool("validateCACert",    jwtData.validateCACert);
+    preferences.putUInt("device_id",         jwtData.deviceId);
+    preferences.putString("ws_stream_url",   jwtData.wsStreamUrl);
+    preferences.putString("camera_url",      jwtData.cameraHttpUrl);
     preferences.end();
   }
 
@@ -93,27 +98,28 @@ public:
       return nullptr;
     }
     JwtToken *jwtData = new JwtToken{
-        .token = preferences.getString("token", ""),
-        .refreshToken = preferences.getString("refresh_token", ""),
-        .refreshTokenCallbackUrl = preferences.getString("ref_token_url", ""),
-        .deviceConfigUrl = preferences.getString("config_url", ""),
-        .validateCACert = preferences.getBool("validateCACert", false),
-        .deviceId = preferences.getUInt("device_id", 0)};
+        .token                   = preferences.getString("token",          ""),
+        .refreshToken            = preferences.getString("refresh_token",  ""),
+        .refreshTokenCallbackUrl = preferences.getString("ref_token_url",  ""),
+        .deviceConfigUrl         = preferences.getString("config_url",     ""),
+        .validateCACert          = preferences.getBool("validateCACert",   false),
+        .deviceId                = preferences.getUInt("device_id",        0),
+        .wsStreamUrl             = preferences.getString("ws_stream_url",  ""),
+        .cameraHttpUrl           = preferences.getString("camera_url",     ""),
+    };
 
     preferences.end();
     Serial.println("JWT token retrieved:");
     Serial.print("Token: ");
     Serial.println(jwtData->token);
-    Serial.print("Refresh Token: ");
-    Serial.println(jwtData->refreshToken);
-    Serial.print("Refresh Token Callback URL: ");
-    Serial.println(jwtData->refreshTokenCallbackUrl);
     Serial.print("Device Config URL: ");
     Serial.println(jwtData->deviceConfigUrl);
+    Serial.print("WS Stream URL: ");
+    Serial.println(jwtData->wsStreamUrl);
+    Serial.print("Camera HTTP URL: ");
+    Serial.println(jwtData->cameraHttpUrl);
     Serial.print("validateCACert: ");
     Serial.println(jwtData->validateCACert);
-    Serial.print("Device ID: ");
-    Serial.println(jwtData->deviceId);
     return jwtData;
   }
 
@@ -122,6 +128,16 @@ public:
     preferences.begin(PREF_NAMESPACE, false);
     preferences.clear();
     preferences.end();
+  }
+
+  void ClearAllCredentials()
+  {
+    preferences.begin(PREF_NAMESPACE, false);
+    preferences.clear();
+    preferences.end();
+    nvs_flash_deinit();
+    nvs_flash_erase();
+    nvs_flash_init();
   }
 
   void SaveActionState(char *action, char *state)

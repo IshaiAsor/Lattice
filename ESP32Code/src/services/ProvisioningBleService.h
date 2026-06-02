@@ -27,7 +27,8 @@
 #include "services/BleNotificationService.h"
 #include "services/ProvisioningCallbacks.h"
 #include "services/DateTimeSyncService.h"
-#include "actions/DeviceActions.h"
+#include "actions/commands/OnboardLedCommandAction.h"
+extern OnboardLedAction onboardLed;
 
 class ProvisioningBleService
 {
@@ -42,13 +43,13 @@ private:
 
 public:
     ProvisioningBleService(
- BleNotificationService *bleNotificationService,
-    DateTimeSyncService *dateTimeSyncService,
-    WiFiManager *wm,
-    PreferencesManagerService *prefService,
-    JwtService *jwtService,
-    MqttService *mqttService
-    ){
+        BleNotificationService *bleNotificationService,
+        DateTimeSyncService *dateTimeSyncService,
+        WiFiManager *wm,
+        PreferencesManagerService *prefService,
+        JwtService *jwtService,
+        MqttService *mqttService)
+    {
         this->bleNotificationService = bleNotificationService;
         this->dateTimeSyncService = dateTimeSyncService;
         this->wm = wm;
@@ -145,43 +146,46 @@ public:
         mqttCreds.userId = pData.userId;
 
         // Note: We don't save to preferences yet, just use in memory
-      //  mqttService->updateCredentials(mqttCreds, tempJwtData->token);
+        //  mqttService->updateCredentials(mqttCreds, tempJwtData->token);
 
-        // Test MQTT connection
+        // Notify phone before BLE goes down, then release BLE memory.
+        // BLE (Bluedroid) + WiFi together hold ~150 KB of DRAM, leaving nothing for
+        // the ~32 KB mbedTLS SSL context. Deiniting BLE returns that memory so the
+        // TLS handshake can succeed. The device restarts either way, so BLE is not needed anymore.
         Serial.println("Testing MQTT connection with temp token...");
         bleNotificationService->NotifyBleDevice(ResponseType::TESTING_MQTT_CONNECTION, "OK: Testing MQTT...");
+        delay(300); // let the BLE notification flush before stack teardown
+        
 
         if (!mqttService->testMqtt(&mqttCreds, tempJwtData))
         {
-            Serial.println("MQTT connection failed.");
-            bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_FAILED, "FAIL: MQTT connection failed.");
+            Serial.println("MQTT connection failed. Restarting to retry provisioning...");
+            onboardLed.execute("red");
+            delay(2000);
+            ESP.restart();
         }
-        else
+
+        Serial.println("MQTT connection successful! Finalizing registration...");
+        JwtToken *permanentJwtData = jwtService->FinalizeRegistration(finalizeUrl, registrationId, pData.validateCACert);
+
+        if (permanentJwtData == nullptr)
         {
-            Serial.println("MQTT connection successful! Finalizing registration...");
-            bleNotificationService->NotifyBleDevice(ResponseType::MQTT_CONNECTION_SUCCESSFUL, "OK: MQTT Connected, Finalizing...");
-
-            JwtToken *permanentJwtData = jwtService->FinalizeRegistration(finalizeUrl, registrationId, pData.validateCACert);
-
-            if (permanentJwtData == nullptr)
-            {
-                Serial.println("Finalization failed.");
-                bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_FAILED, "FAIL: Finalization failed.");
-                return;
-            }
-
-            // Update credentials for permanent use
-            mqttCreds.clientId = String(permanentJwtData->deviceId);
-            prefService->SaveMqttServerCredentials(mqttCreds);
-            
-            Serial.println("Provisioning successful and finalized!");
-            bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_SUCCESSFUL, "OK: Provisioning Complete");
-
-            onboardLed.execute("green");
-
-            delay(2000);   // Give time for notification to send
-            ESP.restart(); // Restart to connect with new credentials
+            Serial.println("Finalization failed. Restarting to retry provisioning...");
+            onboardLed.execute("red");
+            delay(2000);
+            ESP.restart();
         }
+
+        mqttCreds.clientId = String(permanentJwtData->deviceId);
+        prefService->SaveMqttServerCredentials(mqttCreds);
+
+        Serial.println("Provisioning successful and finalized!");
+        bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_SUCCESSFUL, "OK: Provisioning Complete");
+
+        onboardLed.execute("green");
+
+        delay(2000);
+        ESP.restart();
         delay(1000); // Short delay before allowing next provisioning attempt
         Serial.println("Provisioning process complete.");
     }

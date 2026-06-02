@@ -1,0 +1,54 @@
+<div class="header">
+  <h1>Rules</h1>
+  <button mat-raised-button color="primary" (click)="openEditor()" [disabled]="!actionsLoaded">
+    <mat-icon>add</mat-icon>
+    New Rule
+  </button>
+</div>
+
+@if (rules.length === 0) {
+  <div class="empty-state">
+    <mat-icon class="empty-icon">auto_awesome</mat-icon>
+    <p>No rules yet. Create one to automate your devices.</p>
+  </div>
+}
+
+@for (rule of rules; track rule.id) {
+  <mat-card class="rule-card" [class.disabled]="!rule.enabled">
+    <div class="rule-card-header">
+      <mat-icon class="rule-icon">bolt</mat-icon>
+      <span class="rule-name">{{ rule.name }}</span>
+      <span class="header-spacer"></span>
+      <mat-slide-toggle
+        [checked]="rule.enabled"
+        (change)="toggle(rule)"
+        [matTooltip]="rule.enabled ? 'Enabled' : 'Disabled'">
+      </mat-slide-toggle>
+      <button mat-icon-button (click)="openEditor(rule)" matTooltip="Edit">
+        <mat-icon>edit</mat-icon>
+      </button>
+      <button mat-icon-button (click)="delete(rule)" matTooltip="Delete" class="delete-btn">
+        <mat-icon>delete</mat-icon>
+      </button>
+    </div>
+
+    <div class="rule-flow">
+      <div class="rule-conditions">
+        <span class="flow-label">IF</span>
+        <span class="flow-text">{{ conditionSummary(rule) }}</span>
+      </div>
+      <mat-icon class="flow-arrow">arrow_forward</mat-icon>
+      <div class="rule-actions">
+        <span class="flow-label then">THEN</span>
+        <span class="flow-text">{{ actionSummary(rule) }}</span>
+      </div>
+    </div>
+
+    @if (rule.last_triggered) {
+      <div class="rule-footer">
+        <mat-icon class="footer-icon">schedule</mat-icon>
+        Last triggered: {{ rule.last_triggered | date:'short' }}
+      </div>
+    }
+  </mat-card>
+}

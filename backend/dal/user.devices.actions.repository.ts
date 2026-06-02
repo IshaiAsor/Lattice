@@ -7,8 +7,8 @@ export type UserDeviceActionWithActionAndDevice = UserDeviceAction & { action: D
 class UserDevicesActionsRepository {
 
   async updateState(id: number, state: any) {
-    await db.userDeviceAction.updateMany({
-      where: { action_id: id },
+    await db.userDeviceAction.update({
+      where: { id },
       data: { current_state: state, updated_at: new Date() },
     });
   }
@@ -51,11 +51,11 @@ class UserDevicesActionsRepository {
     return db.userDeviceAction.delete({ where: { id: actionId } });
   }
 
-  async getById(actionId: number): Promise<UserDeviceActionWithAction> {
-    return db.userDeviceAction.findFirstOrThrow({
+  async getById(actionId: number): Promise<UserDeviceActionWithAction | null> {
+    return db.userDeviceAction.findFirst({
       where: { id: actionId },
       include: { action: true },
-    }) as Promise<UserDeviceActionWithAction>;
+    }) as Promise<UserDeviceActionWithAction | null>;
   }
 
   async updateAction(id: number, updates: Partial<UserDeviceAction>) {

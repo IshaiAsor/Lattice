@@ -3,6 +3,7 @@ import { deviceStatusEnum } from '../common/deviceStatusEnum';
 import { devicesRepository } from '../dal/devices';
 import { deviceActionDefinitionRepository } from '../dal/device.actions.repository';
 import { userDevicesActionsRepository } from '../dal/user.devices.actions.repository';
+import mqttService from './mqtt.service';
 
 export interface DeviceView {
   id: number;
@@ -66,6 +67,11 @@ class DeviceMgmtService {
   }
 
   async deleteDevice(userId: number, deviceId: number) {
+    try {
+      await mqttService.publish(userId, deviceId, 'command', 'hard-reset');
+    } catch (err) {
+      console.warn(`[DeviceMgmt] Could not send hard-reset before deleting device ${deviceId}:`, err);
+    }
     await userDevicesRepository.deleteDevice(deviceId, userId);
   }
 }

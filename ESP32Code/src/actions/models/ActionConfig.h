@@ -18,11 +18,8 @@ struct ActionConfig
     String mqtt_action_name;
     String implementation_type;
     String mqtt_action_type;
-    std::vector<String> valid_literals;
-    bool   has_range = false;
-    int    range_min = 0;
-    int    range_max = 0;
     std::vector<ActionPinsSetup> pins;
+    int    telemetry_interval_ms = 0;  // 0 = not set, use firmware default
 };
 
 class DeviceConfigurationResponse : public JsonModel
@@ -41,17 +38,6 @@ public:
             ac.implementation_type = obj["implementation_type"] | "";
             ac.mqtt_action_type    = obj["mqtt_action_type"] | "command";
 
-            // valid_parameters: { "values": [...], "range": {"min":0,"max":100} }
-            JsonObjectConst vp = obj["valid_parameters"].as<JsonObjectConst>();
-            for (JsonVariantConst v : vp["values"].as<JsonArrayConst>())
-                ac.valid_literals.push_back(v.as<String>());
-            if (!vp["range"].isNull())
-            {
-                ac.has_range = true;
-                ac.range_min = vp["range"]["min"] | 0;
-                ac.range_max = vp["range"]["max"] | 0;
-            }
-
             // pins: [{"pinNumber":4,"pinMode":"OUTPUT"}, ...]
             for (JsonObjectConst pinObj : obj["pins"].as<JsonArrayConst>())
             {
@@ -60,6 +46,8 @@ public:
                     pinObj["pinNumber"] | 0,
                     mode == "OUTPUT" ? OUTPUT : INPUT));
             }
+
+            ac.telemetry_interval_ms = obj["telemetry_interval_ms"] | 0;
 
             actions.push_back(ac);
         }

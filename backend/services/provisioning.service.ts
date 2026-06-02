@@ -66,6 +66,8 @@ class ProvisioningService {
       refreshTokenCallbackUrl,
       deviceConfigUrl,
       validateCACert: config.mqtt.validateCert,
+      wsStreamUrl: config.baseUrl,
+      cameraHttpUrl: config.baseUrl,
     };
   }
 

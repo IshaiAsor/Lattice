@@ -73,13 +73,6 @@ protected:
         }
     }
 
-    virtual void loadState()
-    {
-        String lastState = prefService.LoadActionState((char *)actionName.c_str());
-        if (lastState != nullptr)
-            applyAction(lastState);
-    }
-
     virtual void executeValidAction(String action) = 0;
 
 private:
@@ -109,6 +102,14 @@ public:
     }
 
     virtual ~BaseCommandAction() {}
+
+    // Restores the last saved state from NVS. Call once after initPins() on boot.
+    void loadState()
+    {
+        String lastState = prefService.LoadActionState((char *)actionName.c_str());
+        if (lastState.length() > 0)
+            applyAction(lastState);
+    }
 
     // Fires auto-off when the duration timer expires.
     virtual void loop()

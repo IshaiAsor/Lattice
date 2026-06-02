@@ -83,6 +83,34 @@ export class MgmtDeviceListComponent implements OnInit {
     );
   }
 
+  reprovisionDevice(device: DeviceView) {
+    this.deviceMgmtService.reprovisionDevice(device.id).subscribe({
+      next: () => this.snackBar.open('Reprovision command sent', 'close', { duration: 2000 }),
+      error: () => this.snackBar.open('Failed to send reprovision command', 'close', { duration: 3000 }),
+    });
+  }
+
+  softResetDevice(device: DeviceView) {
+    this.deviceMgmtService.softResetDevice(device.id).subscribe({
+      next: () => this.snackBar.open('Soft reset command sent', 'close', { duration: 2000 }),
+      error: () => this.snackBar.open('Failed to send soft reset command', 'close', { duration: 3000 }),
+    });
+  }
+
+  hardResetDevice(device: DeviceView) {
+    this.deviceMgmtService.hardResetDevice(device.id).subscribe({
+      next: () => this.snackBar.open('Hard reset command sent', 'close', { duration: 2000 }),
+      error: () => this.snackBar.open('Failed to send hard reset command', 'close', { duration: 3000 }),
+    });
+  }
+
+  restartDevice(device: DeviceView) {
+    this.deviceMgmtService.restartDevice(device.id).subscribe({
+      next: () => this.snackBar.open('Restart command sent', 'close', { duration: 2000 }),
+      error: () => this.snackBar.open('Failed to send restart command', 'close', { duration: 3000 }),
+    });
+  }
+
   addDevice() {
     const dialogRef = this.dialog.open(MgmtDeviceRegisterComponent, {});
 

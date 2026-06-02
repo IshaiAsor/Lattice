@@ -1,0 +1,10 @@
+<div class="camera-display" (click)="openFullscreen()" [matTooltip]="'Click to expand'">
+  @if (action().state) {
+  <img [src]="'data:image/jpeg;base64,' + action().state" alt="Camera" class="camera-img" />
+  } @else {
+  <div class="camera-placeholder">
+    <span class="material-symbols-outlined">photo_camera</span>
+    <span>No image yet</span>
+  </div>
+  }
+</div>

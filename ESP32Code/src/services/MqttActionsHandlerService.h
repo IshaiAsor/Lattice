@@ -9,7 +9,6 @@
 #include "mqtt.h"
 #include "PreferencesManagerService.h"
 #include "JwtService.h"
-#include "actions/DeviceActions.h"
 #include "actions/DynamicDeviceActionsService.h"
 #include "OtaService.h"
 
@@ -36,10 +35,16 @@ public:
             token = std::strtok(nullptr, "/");
         }
 
+        if (strcmp(parts[0], "ota") != 0 && parts.size() < 7)
+        {
+            Serial.printf("[MQTT] Unexpected topic format (%d parts) — ignoring\n", (int)parts.size());
+            return;
+        }
+
         char *userId     = parts[1];
         char *deviceId   = parts[3];
-        char *actionType = parts[4];
-        char *action     = parts[5];
+        char *actionType = parts[5];
+        char *action     = parts[6];
 
         Serial.print("User ID: ");
         Serial.println(userId);
@@ -71,6 +76,28 @@ public:
         }
         else if (strcmp(actionType, "command") == 0)
         {
+            if (strcmp(action, "reprovision") == 0 || strcmp(action, "soft-reset") == 0)
+            {
+                Serial.println("[MQTT] Soft reset: clearing IoT credentials and restarting...");
+                PreferencesManagerService p;
+                p.ClearCredentials();
+                ESP.restart();
+                return;
+            }
+            if (strcmp(action, "hard-reset") == 0)
+            {
+                Serial.println("[MQTT] Hard reset: erasing all NVS data and restarting...");
+                PreferencesManagerService p;
+                p.ClearAllCredentials();
+                ESP.restart();
+                return;
+            }
+            if (strcmp(action, "restart") == 0)
+            {
+                Serial.println("[MQTT] Restart: rebooting device...");
+                ESP.restart();
+                return;
+            }
             BaseCommandAction *deviceAction = getAction(action);
             if (deviceAction != nullptr)
             {

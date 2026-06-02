@@ -1,0 +1,246 @@
+<h2 mat-dialog-title>{{ data.rule ? 'Edit Rule' : 'New Rule' }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="editor-form">
+
+    <!-- Name -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Rule name</mat-label>
+      <input matInput formControlName="name" placeholder="e.g. Cool down when hot">
+    </mat-form-field>
+
+    <!-- Condition operator -->
+    <div class="section-label">Match</div>
+    <div class="operator-toggle">
+      <mat-button-toggle-group formControlName="condition_operator">
+        <mat-button-toggle value="AND">ALL (AND)</mat-button-toggle>
+        <mat-button-toggle value="OR">ANY (OR)</mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+
+    <!-- Conditions -->
+    <div class="section-label">Conditions</div>
+    <div formArrayName="conditions">
+      @for (cond of conditionsArray.controls; track $index; let i = $index) {
+        <div [formGroupName]="i" class="condition-row">
+
+          <div class="condition-header">
+            <span class="condition-type-badge"
+              [class.schedule]="cond.get('condition_type')?.value === 'schedule'"
+              [class.device-status]="cond.get('condition_type')?.value === 'device_status'">
+              {{ cond.get('condition_type')?.value === 'schedule' ? 'Schedule' :
+                 cond.get('condition_type')?.value === 'threshold' ? 'Threshold' :
+                 cond.get('condition_type')?.value === 'device_status' ? 'Device Status' : 'State' }}
+            </span>
+            <span class="header-spacer"></span>
+            <button mat-icon-button type="button" (click)="removeCondition(i)"
+                    class="remove-btn" matTooltip="Remove">
+              <mat-icon>remove_circle_outline</mat-icon>
+            </button>
+          </div>
+
+          @if (cond.get('condition_type')?.value === 'device_state') {
+            <!-- Device State: device + online/offline -->
+            <div class="state-fields">
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Device</mat-label>
+                <mat-select formControlName="device_id">
+                  @for (d of uniqueDevices; track d.id) {
+                    <mat-option [value]="d.id">{{ d.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="val-field">
+                <mat-label>Is</mat-label>
+                <mat-select formControlName="value">
+                  <mat-option value="online">Online</mat-option>
+                  <mat-option value="offline">Offline</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+          }
+
+          @if (cond.get('condition_type')?.value === 'threshold') {
+            <!-- Threshold: device → action → operator → numeric value -->
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Device</mat-label>
+              <mat-select formControlName="device_id" (selectionChange)="onConditionDeviceChange(i)">
+                @for (d of uniqueDevices; track d.id) {
+                  <mat-option [value]="d.id">{{ d.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Action</mat-label>
+              <mat-select formControlName="user_device_action_id"
+                          (selectionChange)="onConditionActionChange(i)">
+                @for (a of getActionsForDevice(cond.get('device_id')?.value); track a.id) {
+                  <mat-option [value]="a.id">{{ a.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <div class="state-fields">
+              <mat-form-field appearance="outline" class="op-field">
+                <mat-label>Is</mat-label>
+                <mat-select formControlName="operator">
+                  @for (op of getConditionOperators(i); track op.value) {
+                    <mat-option [value]="op.value">{{ op.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              @switch (getActionControlType(cond.get('user_device_action_id')?.value)) {
+                @case ('onoff') {
+                  <mat-form-field appearance="outline" class="val-field">
+                    <mat-label>Value</mat-label>
+                    <mat-select formControlName="value">
+                      <mat-option value="on">On</mat-option>
+                      <mat-option value="off">Off</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                }
+                @case ('dial') {
+                  <mat-form-field appearance="outline" class="val-field">
+                    <mat-label>Value (0–100)</mat-label>
+                    <input matInput type="number" min="0" max="100" formControlName="value">
+                  </mat-form-field>
+                }
+                @default {
+                  <mat-form-field appearance="outline" class="val-field">
+                    <mat-label>Value</mat-label>
+                    <input matInput type="number" formControlName="value">
+                  </mat-form-field>
+                }
+              }
+            </div>
+          }
+
+          @if (cond.get('condition_type')?.value === 'schedule') {
+            <div class="schedule-fields">
+              <mat-form-field appearance="outline" class="time-field">
+                <mat-label>Time</mat-label>
+                <input matInput type="time" formControlName="time">
+              </mat-form-field>
+              <div class="days-group" [formArrayName]="'days'">
+                @for (label of dayLabels; track $index; let d = $index) {
+                  <mat-checkbox [formControlName]="d" [matTooltip]="dayNames[d]">
+                    {{ label }}
+                  </mat-checkbox>
+                }
+              </div>
+            </div>
+          }
+
+        </div>
+      }
+    </div>
+
+    <button mat-stroked-button type="button" [matMenuTriggerFor]="addCondMenu" class="add-btn">
+      <mat-icon>add</mat-icon> Add Condition
+    </button>
+    <mat-menu #addCondMenu="matMenu">
+      <button mat-menu-item (click)="addCondition('device_state')">
+        <mat-icon>toggle_on</mat-icon> Device State
+      </button>
+      <button mat-menu-item (click)="addCondition('threshold')">
+        <mat-icon>thermostat</mat-icon> Threshold (numeric)
+      </button>
+<button mat-menu-item (click)="addCondition('schedule')">
+        <mat-icon>schedule</mat-icon> Schedule
+      </button>
+    </mat-menu>
+
+    <!-- Actions -->
+    <div class="section-label then">Then do</div>
+    <div formArrayName="actions">
+      @for (act of actionsArray.controls; track $index; let i = $index) {
+        <div [formGroupName]="i" class="action-row">
+          <div class="action-row-header">
+            <span class="header-spacer"></span>
+            <button mat-icon-button type="button" (click)="removeAction(i)"
+                    class="remove-btn" matTooltip="Remove">
+              <mat-icon>remove_circle_outline</mat-icon>
+            </button>
+          </div>
+
+          <!-- Target action selector -->
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Target action</mat-label>
+            <mat-select formControlName="user_device_action_id"
+                        (selectionChange)="onTargetActionChange(i)">
+              @for (a of data.actions; track a.id) {
+                <mat-option [value]="a.id">{{ actionLabel(a) }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <!-- State input — switches based on action trait -->
+          @if (getActionControlType(act.get('user_device_action_id')?.value) !== 'sensor') {
+            <div class="action-fields">
+              @switch (getActionControlType(act.get('user_device_action_id')?.value)) {
+                @case ('onoff') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Set to</mat-label>
+                    <mat-select formControlName="target_state">
+                      <mat-option value="on">On</mat-option>
+                      <mat-option value="off">Off</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                }
+                @case ('dial') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Set value (0–100)</mat-label>
+                    <input matInput type="number" min="0" max="100" formControlName="target_state">
+                    <span matSuffix>%</span>
+                  </mat-form-field>
+                }
+                @default {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Set state to</mat-label>
+                    <input matInput formControlName="target_state">
+                  </mat-form-field>
+                }
+              }
+              <mat-form-field appearance="outline" class="delay-field">
+                <mat-label>Delay</mat-label>
+                <input matInput type="number" formControlName="delay_seconds" min="0">
+                <span matSuffix>s</span>
+              </mat-form-field>
+            </div>
+          } @else {
+            <p class="sensor-note">
+              <mat-icon>info_outline</mat-icon>
+              Sensor actions are read-only and cannot be set.
+            </p>
+          }
+
+        </div>
+      }
+    </div>
+
+    @if (actionsArray.length === 0) {
+      <button mat-stroked-button type="button" (click)="addAction()" class="add-btn">
+        <mat-icon>add</mat-icon> Add Action
+      </button>
+    }
+
+    <!-- Cooldown -->
+    <div class="cooldown-row">
+      <span class="cooldown-label">Re-trigger cooldown:</span>
+      <mat-form-field appearance="outline" class="cooldown-field">
+        <input matInput type="number" formControlName="cooldown_seconds" min="0">
+        <span matSuffix>sec</span>
+        <mat-hint>Min. seconds between firings</mat-hint>
+      </mat-form-field>
+    </div>
+
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="dialogRef.close()">Cancel</button>
+  <button mat-raised-button color="primary"
+    [disabled]="form.invalid || conditionsArray.length === 0 || actionsArray.length === 0"
+    (click)="save()">
+    {{ data.rule ? 'Save Changes' : 'Create Rule' }}
+  </button>
+</mat-dialog-actions>

@@ -29,8 +29,12 @@ public:
         espClient.setCACert(root_ca);
         espClient.setHandshakeTimeout(10000);
         client = new PubSubClient(espClient);
+#ifdef HAS_CAMERA
+        client->setBufferSize(65535);
+#else
         client->setBufferSize(2048);
-        client->setKeepAlive(10);
+#endif
+        client->setKeepAlive(60);
         client->setCallback(MqttActionsHandlerService::callback);
         otaService = new OtaService(DEVICE_VERSION, DEVICE_TYPE, root_ca);
     }
@@ -55,7 +59,11 @@ public:
         }
         testClient.setHandshakeTimeout(10000);
         PubSubClient testPubSubClient(testClient);
+#ifdef HAS_CAMERA
+        testPubSubClient.setBufferSize(65535);
+#else
         testPubSubClient.setBufferSize(2048);
+#endif
         testPubSubClient.setKeepAlive(10);
         testPubSubClient.setServer(creds->server.c_str(), creds->port);
 
@@ -131,14 +139,12 @@ public:
         String commandTopicStr = String(COMMAND_TOPIC);
         commandTopicStr.replace("%{userid}", creds->userId.c_str());
         commandTopicStr.replace("%{deviceid}", creds->clientId.c_str());
+        commandTopicStr.replace("%{version}", DEVICE_VERSION);
 
         String statusTopicStr = String(STATUS_TOPIC);
         statusTopicStr.replace("%{userid}", creds->userId.c_str());
         statusTopicStr.replace("%{deviceid}", creds->clientId.c_str());
-
-        String telemetryTopicStr = String(TELEMETRY_TOPIC);
-        telemetryTopicStr.replace("%{userid}", creds->userId.c_str());
-        telemetryTopicStr.replace("%{deviceid}", creds->clientId.c_str());
+        statusTopicStr.replace("%{version}", DEVICE_VERSION);
 
         String otaTopicStr = String(OTA_TOPIC);
         otaTopicStr.replace("%{devicetype}", DEVICE_TYPE);
@@ -152,7 +158,6 @@ public:
             {
                 client->publish(statusTopicStr.c_str(), "online", true);
                 client->subscribe(commandTopicStr.c_str());
-                client->subscribe(telemetryTopicStr.c_str());
                 client->subscribe(otaTopicStr.c_str());
 
                 Serial.println("connected and subscribed to topics");
@@ -227,6 +232,7 @@ public:
             String telemetryTopicStr = String(TELEMETRY_TOPIC);
             telemetryTopicStr.replace("%{userid}", creds->userId.c_str());
             telemetryTopicStr.replace("%{deviceid}", creds->clientId.c_str());
+            telemetryTopicStr.replace("%{version}", DEVICE_VERSION);
             telemetryTopicStr.replace("#", actionType);
             client->publish(telemetryTopicStr.c_str(), payload);
         }

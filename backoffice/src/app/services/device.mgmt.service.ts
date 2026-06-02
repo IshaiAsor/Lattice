@@ -31,6 +31,22 @@ export class DeviceMgmtService {
   deleteDevice(deviceId: number): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}`);
   }
+
+  reprovisionDevice(deviceId: number): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/reprovision`, {});
+  }
+
+  softResetDevice(deviceId: number): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/soft-reset`, {});
+  }
+
+  hardResetDevice(deviceId: number): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/hard-reset`, {});
+  }
+
+  restartDevice(deviceId: number): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/restart`, {});
+  }
 }
 export interface DeviceView {
   id: number;
@@ -45,6 +61,7 @@ export interface DeviceView {
 export interface DeviceActionView {
   id: number;
   name: string;
+  deviceName: string;
   type: string;
   googleTraits: GoogleActionTrait[];
   state: unknown;

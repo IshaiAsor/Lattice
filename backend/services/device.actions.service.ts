@@ -6,11 +6,13 @@ import { googleActionsTraitsService, GoogleActionTraitView } from './google.acti
 export interface DeviceActionView {
   id: number;
   deviceId: number;
+  deviceName: string;
   name: string;
   type?: string;
-  googleType?:GoogleActionTypeEntity;
+  googleType?: GoogleActionTypeEntity;
   googleTraits: GoogleActionTraitView[];
   actionName: string;
+  implementation_type: string;
   state?: any;
   online?: boolean;
   sortOrder: number;
@@ -27,10 +29,12 @@ class DeviceActionsService {
     return Promise.all(actions.map(async (a) => ({
       id: a.id,
       name: a.action_name,
+      deviceName: a.user_device?.name ?? '',
       type: googleActionTypes.find((g) => g.id === a.action.google_type_id)?.name,
       googleType: googleActionTypes.find((g) => g.id === a.action.google_type_id),
       googleTraits: await googleActionsTraitsService.GetActionDefinitionTraits(a.action_id),
       actionName: a.action_name,
+      implementation_type: a.action.implementation_type,
       state: a.current_state,
       deviceId: a.user_device_id,
       online: a.user_device?.online ?? false,
@@ -55,10 +59,12 @@ class DeviceActionsService {
     return {
       id: action.id,
       name: action.action_name,
+      deviceName: device.name,
       type: googleActionType?.name,
       googleType: googleActionType,
       googleTraits: googleTraits,
       actionName: action.action_name,
+      implementation_type: action.action.implementation_type,
       state: action.current_state,
       deviceId: action.user_device_id,
       online: device.online ?? false,

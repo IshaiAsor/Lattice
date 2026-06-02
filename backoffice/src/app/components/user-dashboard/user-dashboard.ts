@@ -1,5 +1,6 @@
 import { Component, DestroyRef, HostListener, inject, OnInit } from '@angular/core';
 import { DeviceActionView } from 'src/app/services/device.mgmt.service';
+import { iconForDeviceType, hasTrait, COLOR_OPTIONS } from 'src/app/utils/device-type.utils';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { ActionGroupView, DashboardItem, UserActionsService } from 'src/app/services/user.actions.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
@@ -9,6 +10,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
 import { GroupTileComponent } from '../group-tile/group-tile.component';
+import { CameraDisplayComponent } from '../camera-display/camera-display.component';
 import { GroupBottomSheetComponent } from '../group-bottom-sheet/group-bottom-sheet.component';
 import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop';
 import { forkJoin } from 'rxjs';
@@ -25,7 +27,7 @@ function toSvgPt(angleDeg: number) {
 
 @Component({
   selector: 'app-user-dashboard',
-  imports: [SHARED_MATERIAL, GroupTileComponent],
+  imports: [SHARED_MATERIAL, GroupTileComponent, CameraDisplayComponent],
   templateUrl: './user-dashboard.html',
   styleUrl: './user-dashboard.css',
 })
@@ -299,6 +301,12 @@ export class UserDashboard implements OnInit {
     forkJoin(group.actions.map(a => this.userActionsService.setActionGroup(a.id, null)))
       .subscribe(() => this.reloadActions());
   }
+
+  // ── Device type icon + trait helpers ─────────────────────────────
+
+  iconForType = iconForDeviceType;
+  hasTrait = hasTrait;
+  colorOptions = COLOR_OPTIONS;
 
   // ── Action card actions ──────────────────────────────────────────
 

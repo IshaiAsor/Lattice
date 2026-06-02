@@ -26,7 +26,7 @@ class GoogleSyncDevicesService {
       case 'action.devices.types.FAN':
         return {
           reversible: true,
-          supportsFanSpeedPercent: true, // Allows 0-100% controls
+          supportsFanSpeedPercent: true,
           availableFanSpeeds: {
             speeds: [
               {
@@ -40,6 +40,13 @@ class GoogleSyncDevicesService {
             ],
             ordered: true,
           },
+        };
+      case 'action.devices.types.CAMERA':
+        // Registers the camera device type. Actual streaming requires a relay server
+        // (ESP32 sends JPEG frames via WebSocket, not via Google's streaming protocols).
+        return {
+          cameraStreamSupportedProtocols: ['progressive_mp4'],
+          cameraStreamNeedAuthToken: false,
         };
       default:
         return undefined;

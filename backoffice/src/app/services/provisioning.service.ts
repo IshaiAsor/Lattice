@@ -99,7 +99,9 @@ export class ProvisioningService {
         switchMap((result: any) =>
           from(
             navigator.bluetooth.requestDevice({
-              filters: [{ name: 'ESP32_SmartOutlet' }],
+              filters: [
+                { namePrefix: 'ESP32' }
+              ],
               optionalServices: [SERVICE_UUID],
             }),
           ).pipe(

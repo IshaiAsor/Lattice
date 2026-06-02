@@ -9,6 +9,10 @@ import { userDevicesActionsRepository } from '../dal/user.devices.actions.reposi
 import { deviceMgmtService } from './device.mgmt.service';
 import { deviceActionsService } from './device.actions.service';
 import { googleHomegraphService } from './google-smart-home/google.homegraph.service';
+import { rulesEngineService } from './rules.engine.service';
+
+export type MqttChannel = 'command' | 'telemetry';
+export type CommandName = 'reprovision' | 'soft-reset' | 'hard-reset' | 'restart';
 
 class MqttService {
   client: MqttClient;
@@ -51,7 +55,7 @@ class MqttService {
 
     this.client.on('connect', () => {
       console.log('✅ Connected to MQTT Broker');
-      const topicsToSubscribe = ['users/+/devices/+/status', 'users/+/devices/+/telemetry/#'];
+      const topicsToSubscribe = ['users/+/devices/+/+/status', 'users/+/devices/+/+/telemetry/#'];
 
       this.client.subscribe(topicsToSubscribe, (err) => {
         if (!err) {
@@ -69,13 +73,16 @@ class MqttService {
     this.client.on('message', async (topic: string, message: Buffer) => {
       const payload = message.toString();
 
-      console.log(`📥 Received MQTT -> ${topic}: ${payload}`);
+      const logPayload = payload.length > 100
+        ? `${payload.substring(0, 100)}...[${payload.length} chars]`
+        : payload;
+      console.log(`📥 Received MQTT -> ${topic}: ${logPayload}`);
 
       const parts = topic.split('/');
       const userId = parseInt(parts[1]);//userid
       const deviceId = parseInt(parts[3]);//clientid
-      const channel = parts[4]; // 'status', 'telemetry', or 'command'
-      const actionName = parts[5]; //sensor1 / outlet1 etc
+      const channel = parts[5]; // 'status', 'telemetry', or 'command'
+      const actionName = parts[6]; //sensor1 / outlet1 etc
 
       let userDevices = await deviceMgmtService.getUserDevices(userId);
       let device = userDevices.find((d) => d.id === deviceId);
@@ -98,25 +105,38 @@ class MqttService {
       return;
     }
       if (channel === 'telemetry') {
-          await userDevicesActionsRepository.updateState(action.action_id, payload);
-          socketService.publishActionStateUpdate(userId, action.action_id, payload);
+          await userDevicesActionsRepository.updateState(action.id, payload);
+          socketService.publishActionStateUpdate(userId, action.id, payload);
+          rulesEngineService.evaluateForUser(userId);
 
-          // Report state to Google Homegraph
-          const actionView = await deviceActionsService.getActionView(action.action_id);
-          if (actionView) {
-            // The state in the actionView is the old one, we need to update it with the new payload
-            actionView.state = payload;
-            await googleHomegraphService.reportState(userId.toString(), actionView);
+          // Report state to Google Homegraph (skip for high-frequency binary types like camera)
+          if (action.action.implementation_type !== 'TakePictureAction') {
+            const actionView = await deviceActionsService.getActionView(action.id);
+            if (actionView) {
+              actionView.state = payload;
+              await googleHomegraphService.reportState(userId.toString(), actionView);
+            }
           }
           
       } 
     });
   }
 
-  publishActionState(userId: number, deviceId: number, actionType: string, actionName: string, state: any) {
-    const topic = `users/${userId}/devices/${deviceId}/${actionType}/${actionName}`;
-    console.log(`📤 Publishing MQTT -> ${topic}: ${state}`);
-    this.client.publish(topic, state);
+  private async resolveVersion(deviceId: number): Promise<string | undefined> {
+    try {
+      const userDevice = await userDevicesRepository.getById(deviceId);
+      return userDevice.device.version ?? undefined;
+    } catch (err) {
+      console.error(`[MQTT] Could not resolve version for device ${deviceId}, using fallback:`, err);
+      return undefined;
+    }
+  }
+
+  async publish<C extends MqttChannel>(userId: number, deviceId: number, channel: C, actionName: C extends 'command' ? CommandName : string, payload: string = ''): Promise<void> {
+    const version = await this.resolveVersion(deviceId);
+    const topic = `users/${userId}/devices/${deviceId}/${version}/${channel}/${actionName}`;
+    console.log(`📤 Publishing MQTT -> ${topic}: ${payload}`);
+    this.client.publish(topic, payload);
   }
 }
 

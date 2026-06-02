@@ -1,5 +1,6 @@
 import { Component, DestroyRef, HostListener, inject, OnInit } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
+import { iconForDeviceType, hasTrait, COLOR_OPTIONS } from 'src/app/utils/device-type.utils';
 import { ActionGroupView } from 'src/app/services/user.actions.service';
 import { UserActionsService } from 'src/app/services/user.actions.service';
 import { DeviceActionView } from 'src/app/services/device.mgmt.service';
@@ -42,6 +43,10 @@ export class GroupBottomSheetComponent implements OnInit {
   dragUpActive = false;
   private draggingActionId: number | null = null;
 
+  iconForType = iconForDeviceType;
+  hasTrait = hasTrait;
+  colorOptions = COLOR_OPTIONS;
+
   @HostListener('document:pointerup')
   onDocumentPointerUp() { this.draggingActionId = null; }
 
@@ -76,6 +81,12 @@ export class GroupBottomSheetComponent implements OnInit {
 
   changeActionState(action: DeviceActionView, actionState: unknown) {
     this.socketService.publishActionState(action.id, String(actionState));
+  }
+
+  openCameraFullscreen(action: DeviceActionView) {
+    if (!action.state) return;
+    const win = window.open();
+    win?.document.write(`<img src="data:image/jpeg;base64,${action.state}" style="max-width:100%;max-height:100vh;">`);
   }
 
   renameAction(action: DeviceActionView) {

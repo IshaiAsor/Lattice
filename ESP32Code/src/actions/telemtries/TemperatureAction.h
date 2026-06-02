@@ -10,6 +10,24 @@
 
 class TemperatureAction : public BaseTelemetryAction
 {
+public:
+    static const PinSlotDef* blueprint() {
+        static const PinSlotDef slots[] = {
+            { "data", "1-Wire Data", INPUT },
+            { nullptr }
+        };
+        return slots;
+    }
+
+    static const GoogleTraitDef* supportedTraits() {
+        static const GoogleTraitDef traits[] = {
+            { "action.devices.traits.TemperatureSetting", "TemperatureSetting" },
+            { "action.devices.traits.HumiditySetting",    "HumiditySetting"    },
+            { nullptr }
+        };
+        return traits;
+    }
+
 private:
     int pinNumber;
     OneWire oneWire;

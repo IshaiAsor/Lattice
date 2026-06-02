@@ -1,0 +1,51 @@
+import { Component, inject } from '@angular/core';
+import { FormBuilder, Validators } from '@angular/forms';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { SHARED_MATERIAL } from 'src/app/shared-ui';
+import { AdminDeviceType } from 'src/app/services/admin.device.config.service';
+
+@Component({
+  selector: 'app-device-type-dialog',
+  imports: [SHARED_MATERIAL],
+  template: `
+    <h2 mat-dialog-title>{{ data ? 'Edit' : 'Add' }} Device Type</h2>
+    <mat-dialog-content>
+      <form [formGroup]="form" class="dialog-form">
+        <mat-form-field appearance="outline">
+          <mat-label>Type (e.g. OUTLET)</mat-label>
+          <input matInput formControlName="type" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Version (e.g. 1.0)</mat-label>
+          <input matInput formControlName="version" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Default Name</mat-label>
+          <input matInput formControlName="default_name" />
+        </mat-form-field>
+      </form>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button mat-dialog-close>Cancel</button>
+      <button mat-flat-button color="primary" [disabled]="form.invalid" (click)="save()">Save</button>
+    </mat-dialog-actions>
+  `,
+  styles: [`.dialog-form { display: flex; flex-direction: column; gap: 8px; min-width: 320px; padding-top: 8px; }`],
+})
+export class DeviceTypeDialogComponent {
+  private fb = inject(FormBuilder);
+  private dialogRef = inject(MatDialogRef<DeviceTypeDialogComponent>);
+  data: AdminDeviceType | null = inject(MAT_DIALOG_DATA);
+
+  form = this.fb.group({
+    type: [this.data?.type ?? '', Validators.required],
+    version: [this.data?.version ?? '', Validators.required],
+    default_name: [this.data?.default_name ?? '', Validators.required],
+  });
+
+  save() {
+    if (this.form.valid) {
+      this.dialogRef.close(this.form.value);
+    }
+  }
+}

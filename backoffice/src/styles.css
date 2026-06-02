@@ -2,3 +2,11 @@
 
 html, body { height: 100%; }
 body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+
+/* Camera fullscreen popup — remove default Material dialog padding */
+.camera-dialog-panel .mat-mdc-dialog-container,
+.camera-dialog-panel .mdc-dialog__container,
+.camera-dialog-panel .mdc-dialog__surface {
+  padding: 0 !important;
+  overflow: hidden;
+}

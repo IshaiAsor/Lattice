@@ -2,100 +2,98 @@ import { SmartHomeV1ExecuteRequestExecution } from 'actions-on-google';
 import { deviceActionsService, DeviceActionView } from '../device.actions.service';
 import socketActionsService from '../socket.actions.service';
 
+type ValueMapper = (params: any) => string | undefined;
+
+const IMPLEMENTATION_COMMAND_MAP: Record<string, Record<string, ValueMapper>> = {
+  OutletAction: {
+    'action.devices.commands.OnOff':      p => p.on ? 'on' : 'off',
+    'action.devices.commands.LockUnlock': p => p.lock ? 'on' : 'off',
+    'action.devices.commands.StartStop':  p => p.start ? 'on' : 'off',
+    'action.devices.commands.OpenClose':  p => p.openPercent > 0 ? 'on' : 'off',
+    'action.devices.commands.ArmDisarm':  p => p.arm ? 'arm' : 'disarm',
+  },
+  LightDimmerAction: {
+    'action.devices.commands.OnOff':              p => p.on ? 'on' : 'off',
+    'action.devices.commands.BrightnessAbsolute': p => String(p.brightness),
+  },
+  OneDirectionalMotorAction: {
+    'action.devices.commands.OnOff':       p => p.on ? 'on' : 'off',
+    'action.devices.commands.SetFanSpeed': p => p.fanSpeedPercent !== undefined
+                                               ? String(p.fanSpeedPercent)
+                                               : p.fanSpeed === 'high_speed' ? '100' : '50',
+    'action.devices.commands.StartStop':   p => p.start ? 'on' : 'off',
+  },
+  TemperatureAction: {},
+  WaterLevelAction:      {},
+  PhLevelAction:         {},
+  TdsLevelAction:        {},
+  HumidityAction:        {},
+  AirTemperatureAction:  {},
+  CO2LevelAction:        {},
+  TakePictureAction: {},
+  LiveStreamAction:  {},
+};
+
 class GoogleExecuteDeviceService {
   public async ExecuteDeviceCommands(userId: number, commands: any[]): Promise<any> {
     const actions = await deviceActionsService.getUserActions(userId);
+    const responses: any[] = [];
 
-    const responses = commands.map((command) => {
+    for (const command of commands) {
       const deviceIds = command.devices.map((d: any) => parseInt(d.id));
 
-      command.execution.forEach(async (execution: SmartHomeV1ExecuteRequestExecution) => {
-        await this.HandleExecuteCommand(userId, execution, actions, deviceIds);
-      });
+      for (const execution of command.execution) {
+        await this.handleExecuteCommand(userId, execution, actions, deviceIds);
+      }
 
-      return {
-        ids: deviceIds,
-        status: 'SUCCESS',
-        states: {
-          online: true,
-          ...(command.execution[0].params as object),
-        },
-      };
-    });
+      responses.push({ ids: deviceIds, status: 'SUCCESS', states: { online: true } });
+    }
 
     return responses;
   }
 
-  private async HandleExecuteCommand(
+  private async handleExecuteCommand(
     userId: number,
     execution: SmartHomeV1ExecuteRequestExecution,
     actions: DeviceActionView[],
     deviceIds: number[],
-  ): Promise<string[]> {
-    let successIds: string[] = [];
+  ): Promise<void> {
     for (const deviceId of deviceIds) {
       try {
-        const userAction = actions.find((a) => a.id === deviceId);
+        const userAction = actions.find(a => a.id === deviceId);
         if (!userAction) {
           console.error(`Action ${deviceId} not found for user ${userId}`);
           continue;
         }
 
-        let deviceValue: string | undefined = undefined; // You can extract this from execution.params if needed for more complex commands
-
-        deviceValue = this.MapDeviceValue(execution, deviceValue, deviceId);
+        const deviceValue = this.mapExecutionToValue(execution, userAction.implementation_type, deviceId);
         if (deviceValue === undefined) {
-          console.warn(`No value extracted for command ${execution.command} on device ${deviceId}`);
+          console.warn(`No mapping for command '${execution.command}' on ${userAction.implementation_type} (device ${deviceId})`);
           continue;
-        } else {
-          console.log(
-            `Extracted value for command ${execution.command} on device ${deviceId}: ${deviceValue}`,
-          );
-          await socketActionsService.handleActionUpdate(userId, userAction.id, deviceValue);
         }
-        successIds.push(deviceId.toString());
-        console.log(`Successfully executed command on device ${deviceId}`);
+
+        console.log(`Executing '${execution.command}' → '${deviceValue}' on device ${deviceId}`);
+        await socketActionsService.handleActionUpdate(userId, userAction.id, deviceValue);
       } catch (err) {
         console.error(`Failed to execute command on device ${deviceId}:`, err);
       }
     }
-    return successIds;
   }
 
-    private MapDeviceValue(execution: SmartHomeV1ExecuteRequestExecution, deviceValue: string | undefined, deviceId: number) {
-        switch (execution.command) {
-            case 'action.devices.commands.OnOff':
-                deviceValue = execution.params?.on ? 'on' : 'off';
-                break;
-            case 'action.devices.commands.SetFanSpeed':
-                const params = execution.params as { fanSpeed?: string; fanSpeedPercent?: number; };
-                if (params.fanSpeedPercent !== undefined) {
-                    deviceValue = params.fanSpeedPercent.toString();
-                } else if (params.fanSpeed) {
-                    switch (params.fanSpeed) {
-                        case 'low_speed':
-                            deviceValue = '50';
-                            break;
-                        case 'high_speed':
-                            deviceValue = '100';
-                            break;
-                        default:
-                            console.warn(`Unsupported fan speed ${params.fanSpeed} for device ${deviceId}`);
-                    }
-                }
-                break;
-            case 'action.devices.commands.SetTemperature':
-                const tempParams = execution.params as { temperature?: number; };
-                if (tempParams.temperature !== undefined) {
-                    deviceValue = tempParams.temperature.toString();
-                }
-                break;
-
-            default:
-                console.warn(`Unsupported command ${execution.command} for device ${deviceId}`);
-                break;
-        }
-        return deviceValue;
+  private mapExecutionToValue(
+    execution: SmartHomeV1ExecuteRequestExecution,
+    implType: string,
+    deviceId: number,
+  ): string | undefined {
+    const implMap = IMPLEMENTATION_COMMAND_MAP[implType];
+    if (!implMap) {
+      console.warn(`No command map for implementation type '${implType}' (device ${deviceId})`);
+      return undefined;
     }
+    const mapper = implMap[execution.command];
+    if (!mapper) return undefined;
+    return mapper(execution.params ?? {});
+  }
 }
+
 export const googleExecuteDeviceService = new GoogleExecuteDeviceService();

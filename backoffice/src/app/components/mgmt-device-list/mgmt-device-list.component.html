@@ -21,6 +21,18 @@
                         <mat-icon>edit</mat-icon>
                         <span>Rename</span>
                     </button>
+                    <button mat-menu-item (click)="restartDevice(device)">
+                        <mat-icon>power_settings_new</mat-icon>
+                        <span>Restart</span>
+                    </button>
+                    <button mat-menu-item (click)="softResetDevice(device)">
+                        <mat-icon>restart_alt</mat-icon>
+                        <span>Soft Reset</span>
+                    </button>
+                    <button mat-menu-item (click)="hardResetDevice(device)" class="menu-delete">
+                        <mat-icon>device_reset</mat-icon>
+                        <span>Hard Reset</span>
+                    </button>
                     <button mat-menu-item (click)="deleteDevice(device)" class="menu-delete">
                         <mat-icon>delete_outline</mat-icon>
                         <span>Delete</span>

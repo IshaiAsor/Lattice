@@ -284,6 +284,36 @@
   color: #9e9e9e;
 }
 
+/* ── Color controls ─────────────────────────────────────────────── */
+.color-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 0 4px;
+  flex-wrap: wrap;
+}
+
+.color-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.color-chip:hover { transform: scale(1.15); }
+.color-chip.active { border-color: #333; transform: scale(1.1); }
+
+.color-chip.color-red    { background: #e53935; }
+.color-chip.color-green  { background: #43a047; }
+.color-chip.color-blue   { background: #1e88e5; }
+.color-chip.color-orange { background: #fb8c00; }
+.color-chip.color-off    { background: #bdbdbd; }
+
+/* ── Sensor icon ─────────────────────────────────────────────────── */
+.sensor-icon { font-size: 18px; height: 18px; width: 18px; vertical-align: middle; margin-right: 2px; }
+
 /* ── Card states ─────────────────────────────────────────────────── */
 .device-card-wrapper:has(.card-enabled):hover {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);

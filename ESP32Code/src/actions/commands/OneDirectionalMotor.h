@@ -6,29 +6,35 @@
 
 class OneDirectionalMotorAction : public BaseCommandAction
 {
+public:
+    static const PinSlotDef* blueprint() {
+        static const PinSlotDef slots[] = {
+            { "in1", "Direction Pin 1 (IN1)", OUTPUT },
+            { "in2", "Direction Pin 2 (IN2)", OUTPUT },
+            { "pwm", "Speed Pin (PWM)",       OUTPUT },
+            { nullptr }
+        };
+        return slots;
+    }
+
+    static const GoogleTraitDef* supportedTraits() {
+        static const GoogleTraitDef traits[] = {
+            { "action.devices.traits.OnOff",     "OnOff"     },
+            { "action.devices.traits.FanSpeed",   "FanSpeed"  },
+            { "action.devices.traits.StartStop",  "StartStop" },
+            { nullptr }
+        };
+        return traits;
+    }
+
 private:
     int in1PinNumber;
     int in2PinNumber;
     int pwmPinNumber;
 
 public:
-    // Static / fallback constructor
-    OneDirectionalMotorAction(String name, int in1Pin, int in2Pin, int pwmPin)
-        : BaseCommandAction(name,
-                            {ActionPinsSetup(in1Pin, OUTPUT),
-                             ActionPinsSetup(in2Pin, OUTPUT),
-                             ActionPinsSetup(pwmPin, OUTPUT)},
-                            {"off", "on"})
-    {
-        in1PinNumber = in1Pin;
-        in2PinNumber = in2Pin;
-        pwmPinNumber = pwmPin;
-    }
-
-    // Dynamic constructor — pins, literals, and numeric range from server
-    OneDirectionalMotorAction(String name, std::vector<ActionPinsSetup> pins,
-                              std::vector<std::string> literals, bool useRange, int rMin, int rMax)
-        : BaseCommandAction(name, pins, literals, useRange, rMin, rMax)
+    OneDirectionalMotorAction(String name, std::vector<ActionPinsSetup> pins)
+        : BaseCommandAction(name, pins, {"off", "on"}, true, 0, 100)
     {
         in1PinNumber = pins.size() > 0 ? pins[0].PIN_NUMBER : 0;
         in2PinNumber = pins.size() > 1 ? pins[1].PIN_NUMBER : 0;
@@ -37,7 +43,6 @@ public:
 
     void initPins() override
     {
-        // Pin modes set by base class; no need to populate validParameters from a loop
         BaseCommandAction::initPins();
     }
 

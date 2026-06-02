@@ -63,9 +63,10 @@ model DeviceAction {
   google_type_id      Int
   mqtt_action_type    String?           @db.VarChar(255)
   mqtt_action_name    String?           @db.VarChar(255)
-  implementation_type String            @db.VarChar(64)
-  valid_parameters    Json?
-  pins                Json?
+  implementation_type           String            @db.VarChar(64)
+  valid_parameters              Json?
+  pins                          Json?
+  telemetry_interval_ms         Int?
   device              Device            @relation(fields: [device_id], references: [id], onDelete: Cascade)
   action_type_traits  ActionTypeTrait[]
   user_device_actions UserDeviceAction[]
@@ -81,6 +82,7 @@ model ActionTypeTrait {
   device_action          DeviceAction @relation(fields: [device_action_type_id], references: [id], onDelete: Cascade)
   google_trait           GoogleDeviceTrait @relation(fields: [google_trait_id], references: [id], onDelete: Cascade)
 
+  @@unique([device_action_type_id, google_trait_id])
   @@map("action_type_traits")
 }
 
@@ -98,6 +100,7 @@ model User {
   updated_at          DateTime?         @default(now()) @db.Timestamptz(6)
   user_devices        UserDevice[]
   user_login_audit    UserLoginAudit[]
+  user_rules          UserRule[]
 
   @@map("users")
 }
@@ -124,13 +127,14 @@ model UserDeviceAction {
   user_device_id Int
   action_id      Int
   action_name    String     @db.VarChar(255)
-  current_state  String?    @db.VarChar(255)
+  current_state  String?    @db.Text
   sort_order     Int        @default(0)
   group_name     String?    @db.VarChar(255)
   created_at     DateTime?  @default(now()) @db.Timestamp(6)
   updated_at     DateTime?  @default(now()) @db.Timestamp(6)
   user_device    UserDevice @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
   action         DeviceAction @relation(fields: [action_id], references: [id], onDelete: Cascade)
+  rule_actions   UserRuleAction[]
 
   @@map("user_device_actions")
 }
@@ -153,4 +157,43 @@ model MqttUser {
   created_at    DateTime? @default(now()) @db.Timestamp(6)
 
   @@map("mqtt_user")
+}
+
+model UserRule {
+  id                 Int                 @id @default(autoincrement())
+  user_id            Int
+  name               String              @db.VarChar(255)
+  enabled            Boolean             @default(true)
+  condition_operator String              @default("AND") @db.VarChar(3)
+  cooldown_seconds   Int                 @default(60)
+  last_triggered     DateTime?           @db.Timestamp(6)
+  created_at         DateTime?           @default(now()) @db.Timestamp(6)
+  updated_at         DateTime?           @default(now()) @db.Timestamp(6)
+  user               User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  conditions         UserRuleCondition[]
+  actions            UserRuleAction[]
+
+  @@map("user_rules")
+}
+
+model UserRuleCondition {
+  id             Int      @id @default(autoincrement())
+  rule_id        Int
+  condition_type String   @db.VarChar(20)
+  parameters     Json
+  rule           UserRule @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+
+  @@map("user_rule_conditions")
+}
+
+model UserRuleAction {
+  id                    Int              @id @default(autoincrement())
+  rule_id               Int
+  user_device_action_id Int
+  target_state          String           @db.VarChar(255)
+  delay_seconds         Int              @default(0)
+  rule                  UserRule         @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+  user_device_action    UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
+
+  @@map("user_rule_actions")
 }

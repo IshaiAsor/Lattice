@@ -16,13 +16,20 @@ import googleActionsTypesRoutes from './routes/google.actions.types.routes';
 import googleActionsTraitsRoutes from './routes/google.actions.traits.routes';
 import googleSmartHomeRoutes from './routes/google.smarthome.routes';
 import deviceConfigurationRoutes from './routes/device.configuration.routes';
+import userRulesRoutes from './routes/user.rules.routes';
+import adminDeviceConfigRoutes from './routes/admin.device.config.routes';
+import cameraRoutes from './routes/camera.routes';
+import { rulesEngineService } from './services/rules.engine.service';
+import cron from 'node-cron';
 import http from 'http';
 import socketService from './services/socket.service';
+import wsStreamService from './services/ws.stream.service';
 import { redisService } from './services/redis.service';
 
 const app = express();
 app.set('trust proxy', 1); // trust Traefik ingress X-Forwarded-For header
 const server = http.createServer(app);
+wsStreamService.init(server);
 socketService.init(server);
 
 // Debug logging middleware - MOVED TO TOP
@@ -53,6 +60,9 @@ app.use('/api/google/actions/types', googleActionsTypesRoutes);
 app.use('/api/google/actions/traits', googleActionsTraitsRoutes);
 app.use('/api/google/smarthome', googleSmartHomeRoutes);
 app.use('/api/device', deviceConfigurationRoutes);
+app.use('/api/rules', userRulesRoutes);
+app.use('/api/admin/device-config', adminDeviceConfigRoutes);
+app.use('/api/camera', cameraRoutes);
 
 
 const rootDir = process.cwd();
@@ -75,6 +85,7 @@ if (fs.existsSync(publicPath)) {
 
 async function startServer() {
   redisService.connect();
+  cron.schedule('* * * * *', () => rulesEngineService.evaluateScheduledRules());
   server.listen(config.port, () => {
     console.log(`🚀 Smart Home Server running on port ${config.port}`);
   });

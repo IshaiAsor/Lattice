@@ -22,12 +22,7 @@
         <div class="device-card" [ngClass]="item.action!.online ? 'card-enabled' : 'card-disabled'">
             <div class="card-header">
                 <span class="material-symbols-outlined device-icon">
-                    @switch (item.action!.googleType?.value) {
-                    @case ('action.devices.types.OUTLET') { outlet }
-                    @case ('action.devices.types.SENSOR') { thermometer }
-                    @case ('action.devices.types.FAN') { toys_fan }
-                    @case ('action.devices.types.LIGHT') { light_mode }
-                    @default { device_unknown } }
+                    {{ iconForType(item.action!.googleType?.value) }}
                 </span>
                 <span class="card-name">{{ item.action!.name }}</span>
                 <span class="header-spacer"></span>
@@ -51,18 +46,53 @@
                     <span>Offline</span>
                 </div>
                 }
-                @if (item.action!.googleTraits.some(trait => trait.value === 'action.devices.traits.OnOff')) {
+                @if (hasTrait(item.action!, 'action.devices.traits.OnOff')) {
                 <div class="control-onoff">
                     <button class="power-btn" [class.on]="item.action!.state === 'on'"
                         (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
-                        [disabled]="item.action!.state === 0"
                         [matTooltip]="item.action!.state === 'on' ? 'Turn off' : 'Turn on'">
                         <mat-icon>power_settings_new</mat-icon>
                     </button>
                 </div>
                 }
-                @if (item.action!.googleTraits.some(trait => trait.value === 'action.devices.traits.FanSpeed' || trait.value
-                === 'action.devices.traits.Brightness')) {
+                @if (hasTrait(item.action!, 'action.devices.traits.LockUnlock')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="item.action!.state === 'lock'"
+                        (click)="changeActionState(item.action!, item.action!.state === 'lock' ? 'unlock' : 'lock')"
+                        [matTooltip]="item.action!.state === 'lock' ? 'Unlock' : 'Lock'">
+                        <mat-icon>{{ item.action!.state === 'lock' ? 'lock' : 'lock_open' }}</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.OpenClose')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="item.action!.state === 'on'"
+                        (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
+                        [matTooltip]="item.action!.state === 'on' ? 'Close' : 'Open'">
+                        <mat-icon>{{ item.action!.state === 'on' ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.StartStop')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="item.action!.state === 'on'"
+                        (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
+                        [matTooltip]="item.action!.state === 'on' ? 'Stop' : 'Start'">
+                        <mat-icon>{{ item.action!.state === 'on' ? 'stop' : 'play_arrow' }}</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.ArmDisarm')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="item.action!.state === 'arm'"
+                        (click)="changeActionState(item.action!, item.action!.state === 'arm' ? 'disarm' : 'arm')"
+                        [matTooltip]="item.action!.state === 'arm' ? 'Disarm' : 'Arm'">
+                        <mat-icon>{{ item.action!.state === 'arm' ? 'shield' : 'shield_with_heart' }}</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.FanSpeed') ||
+                     hasTrait(item.action!, 'action.devices.traits.Brightness')) {
                 <svg class="speed-dial" viewBox="-8 -8 136 96"
                     (pointerdown)="onDialPointerDown($event, item.action!)"
                     (pointermove)="onDialPointerMove($event, item.action!)">
@@ -73,23 +103,62 @@
                     <text x="60" y="48" text-anchor="middle" dominant-baseline="middle" class="dial-value">{{
                         $any(item.action!.state) || 0 }}<tspan font-size="11" fill="#9e9e9e" dy="-3">%</tspan></text>
                     <text x="60" y="62" text-anchor="middle" class="dial-unit">
-                        {{ item.action!.googleTraits.some(t => t.value === 'action.devices.traits.Brightness') ?
-                        'brightness' : 'speed' }}
+                        {{ hasTrait(item.action!, 'action.devices.traits.Brightness') ? 'brightness' : 'speed' }}
                     </text>
                 </svg>
                 }
-                @if (item.action!.googleType?.value === 'action.devices.types.SENSOR') {
-                @if (item.action!.googleTraits.some(trait => trait.value ===
-                'action.devices.traits.TemperatureSetting')) {
+                @if (hasTrait(item.action!, 'action.devices.traits.TemperatureSetting')) {
                 <div class="sensor-display">
                     <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
                     <span class="sensor-unit">°C</span>
                 </div>
-                } @else {
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.HumiditySetting')) {
                 <div class="sensor-display">
-                    <span class="sensor-value">{{ item.action!.state }}</span>
+                    <mat-icon class="sensor-icon">humidity_high</mat-icon>
+                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-0' }}</span>
+                    <span class="sensor-unit">%</span>
                 </div>
-                } }
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.WaterLevel')) {
+                <div class="sensor-display">
+                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
+                    <span class="sensor-unit">%</span>
+                </div>
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.PhLevel')) {
+                <div class="sensor-display">
+                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-2' }}</span>
+                    <span class="sensor-unit">pH</span>
+                </div>
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.TdsLevel')) {
+                <div class="sensor-display">
+                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
+                    <span class="sensor-unit">ppm</span>
+                </div>
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.CO2Level')) {
+                <div class="sensor-display">
+                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-0' }}</span>
+                    <span class="sensor-unit">ppm</span>
+                </div>
+                }
+                @if (hasTrait(item.action!, 'action.devices.traits.ColorSetting')) {
+                <div class="color-controls">
+                    @for (color of colorOptions; track color) {
+                    <button class="color-chip" [class.active]="item.action!.state === color"
+                        [ngClass]="'color-' + color"
+                        [matTooltip]="color"
+                        (click)="changeActionState(item.action!, color)">
+                    </button>
+                    }
+                </div>
+                }
+                @if (item.action!.googleType?.value === 'action.devices.types.CAMERA' ||
+                     item.action!.googleType?.value === 'action.devices.types.DOORBELL') {
+                <app-camera-display [action]="item.action!"></app-camera-display>
+                }
             </div>
 
         </div>
@@ -102,7 +171,6 @@
         </app-group-tile>
         }
 
-        <!-- Group target hint: absolute overlay on the wrapper -->
         @if (groupDropTargetIndex === i) {
         <div class="group-drop-hint">
             <mat-icon>create_new_folder</mat-icon>

@@ -29,12 +29,7 @@
         <div class="device-card" [ngClass]="action.online ? 'card-enabled' : 'card-disabled'">
             <div class="card-header">
                 <span class="material-symbols-outlined device-icon">
-                    @switch (action.googleType?.value) {
-                    @case ('action.devices.types.OUTLET') { outlet }
-                    @case ('action.devices.types.SENSOR') { thermometer }
-                    @case ('action.devices.types.FAN') { toys_fan }
-                    @case ('action.devices.types.LIGHT') { light_mode }
-                    @default { device_unknown } }
+                    {{ iconForType(action.googleType?.value) }}
                 </span>
                 <span class="card-name">{{ action.name }}</span>
                 <span class="header-spacer"></span>
@@ -62,18 +57,55 @@
                     <span>Offline</span>
                 </div>
                 }
-                @if (action.googleTraits.some(trait => trait.value === 'action.devices.traits.OnOff')) {
+                @if (hasTrait(action, 'action.devices.traits.OnOff')) {
                 <div class="control-onoff">
                     <button class="power-btn" [class.on]="action.state === 'on'"
                         (click)="changeActionState(action, action.state === 'on' ? 'off' : 'on')"
-                        [disabled]="action.state === 0" [matTooltip]="action.state === 'on' ? 'Turn off' : 'Turn on'">
+                        [matTooltip]="action.state === 'on' ? 'Turn off' : 'Turn on'">
                         <mat-icon>power_settings_new</mat-icon>
                     </button>
                 </div>
                 }
-                @if (action.googleTraits.some(trait => trait.value === 'action.devices.traits.FanSpeed' || trait.value
-                === 'action.devices.traits.Brightness')) {
-                <svg class="speed-dial" viewBox="-8 -8 136 96" (pointerdown)="onDialPointerDown($event, action)"
+                @if (hasTrait(action, 'action.devices.traits.LockUnlock')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="action.state === 'lock'"
+                        (click)="changeActionState(action, action.state === 'lock' ? 'unlock' : 'lock')"
+                        [matTooltip]="action.state === 'lock' ? 'Unlock' : 'Lock'">
+                        <mat-icon>{{ action.state === 'lock' ? 'lock' : 'lock_open' }}</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (hasTrait(action, 'action.devices.traits.OpenClose')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="action.state === 'on'"
+                        (click)="changeActionState(action, action.state === 'on' ? 'off' : 'on')"
+                        [matTooltip]="action.state === 'on' ? 'Close' : 'Open'">
+                        <mat-icon>{{ action.state === 'on' ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (hasTrait(action, 'action.devices.traits.StartStop')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="action.state === 'on'"
+                        (click)="changeActionState(action, action.state === 'on' ? 'off' : 'on')"
+                        [matTooltip]="action.state === 'on' ? 'Stop' : 'Start'">
+                        <mat-icon>{{ action.state === 'on' ? 'stop' : 'play_arrow' }}</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (hasTrait(action, 'action.devices.traits.ArmDisarm')) {
+                <div class="control-onoff">
+                    <button class="power-btn" [class.on]="action.state === 'arm'"
+                        (click)="changeActionState(action, action.state === 'arm' ? 'disarm' : 'arm')"
+                        [matTooltip]="action.state === 'arm' ? 'Disarm' : 'Arm'">
+                        <mat-icon>{{ action.state === 'arm' ? 'shield' : 'shield_with_heart' }}</mat-icon>
+                    </button>
+                </div>
+                }
+                @if (hasTrait(action, 'action.devices.traits.FanSpeed') ||
+                     hasTrait(action, 'action.devices.traits.Brightness')) {
+                <svg class="speed-dial" viewBox="-8 -8 136 96"
+                    (pointerdown)="onDialPointerDown($event, action)"
                     (pointermove)="onDialPointerMove($event, action)">
                     <path class="dial-track" [attr.d]="dialTrackPath()" />
                     <path class="dial-active" [attr.d]="dialActivePath($any(action.state) || 0)" />
@@ -82,22 +114,47 @@
                     <text x="60" y="48" text-anchor="middle" dominant-baseline="middle" class="dial-value">{{
                         $any(action.state) || 0 }}<tspan font-size="11" fill="#9e9e9e" dy="-3">%</tspan></text>
                     <text x="60" y="62" text-anchor="middle" class="dial-unit">
-                        {{ action.googleTraits.some(t => t.value === 'action.devices.traits.Brightness') ? 'brightness'
-                        : 'speed' }}
+                        {{ hasTrait(action, 'action.devices.traits.Brightness') ? 'brightness' : 'speed' }}
                     </text>
                 </svg>
                 }
-                @if (action.googleType?.value === 'action.devices.types.SENSOR') {
-                @if (action.googleTraits.some(trait => trait.value === 'action.devices.traits.TemperatureSetting')) {
+                @if (hasTrait(action, 'action.devices.traits.TemperatureSetting')) {
                 <div class="sensor-display">
                     <span class="sensor-value">{{ $any(action.state) | number:'1.0-1' }}</span>
                     <span class="sensor-unit">°C</span>
                 </div>
-                } @else {
+                }
+                @if (hasTrait(action, 'action.devices.traits.HumiditySetting')) {
                 <div class="sensor-display">
-                    <span class="sensor-value">{{ action.state }}</span>
+                    <mat-icon class="sensor-icon">humidity_high</mat-icon>
+                    <span class="sensor-value">{{ $any(action.state) | number:'1.0-0' }}</span>
+                    <span class="sensor-unit">%</span>
                 </div>
-                } }
+                }
+                @if (hasTrait(action, 'action.devices.traits.ColorSetting')) {
+                <div class="color-controls">
+                    @for (color of colorOptions; track color) {
+                    <button class="color-chip" [class.active]="action.state === color"
+                        [ngClass]="'color-' + color"
+                        [matTooltip]="color"
+                        (click)="changeActionState(action, color)">
+                    </button>
+                    }
+                </div>
+                }
+                @if (action.googleType?.value === 'action.devices.types.CAMERA' ||
+                     action.googleType?.value === 'action.devices.types.DOORBELL') {
+                <div class="camera-display" (click)="openCameraFullscreen(action)" [matTooltip]="'Click to expand'">
+                    @if (action.state) {
+                    <img [src]="'data:image/jpeg;base64,' + action.state" alt="Camera" class="camera-img" />
+                    } @else {
+                    <div class="camera-placeholder">
+                        <span class="material-symbols-outlined">photo_camera</span>
+                        <span>No image yet</span>
+                    </div>
+                    }
+                </div>
+                }
             </div>
         </div>
 

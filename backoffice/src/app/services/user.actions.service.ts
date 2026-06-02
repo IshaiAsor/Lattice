@@ -28,10 +28,6 @@ export class UserActionsService {
     return this.http.get<DeviceActionView[]>(`${this.apiUrl}/api/mgmt/actions`);
   }
 
-  addUserAction(action: DeviceActionView) {
-    return this.http.post<DeviceActionView>(`${this.apiUrl}/api/mgmt/actions`, action);
-  }
-
   updateUserAction(action: DeviceActionView) {
     return this.http.patch<DeviceActionView>(
       `${this.apiUrl}/api/mgmt/actions/${action.id}`,
@@ -47,9 +43,5 @@ export class UserActionsService {
     return this.http.patch<void>(`${this.apiUrl}/api/mgmt/actions/${actionId}`, {
       group_name: groupName,
     });
-  }
-
-  delete(action: DeviceActionView) {
-    return this.http.delete<void>(`${this.apiUrl}/api/mgmt/actions/${action.id}`);
   }
 }

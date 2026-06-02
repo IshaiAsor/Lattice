@@ -1,9 +1,12 @@
 #pragma once
-const char DEVICE_TYPE[] = "ESP32_SmartOutlet";
+#ifndef DEVICE_TYPE_STR
+#error "DEVICE_TYPE_STR must be defined in build_flags (e.g. -D DEVICE_TYPE_STR=\"ESP32S3_Mini\")"
+#endif
+const char DEVICE_TYPE[] = DEVICE_TYPE_STR;
 const char DEVICE_VERSION[] = "V1.0.0";
-const char COMMAND_TOPIC[] = "users/%{userid}/devices/%{deviceid}/command/#";
-const char STATUS_TOPIC[] = "users/%{userid}/devices/%{deviceid}/status";
-const char TELEMETRY_TOPIC[] = "users/%{userid}/devices/%{deviceid}/telemetry/#";
+const char COMMAND_TOPIC[] = "users/%{userid}/devices/%{deviceid}/%{version}/command/#";
+const char STATUS_TOPIC[] = "users/%{userid}/devices/%{deviceid}/%{version}/status";
+const char TELEMETRY_TOPIC[] = "users/%{userid}/devices/%{deviceid}/%{version}/telemetry/#";
 const char OTA_TOPIC[] = "ota/updates/%{devicetype}";
 const char AP_HOTSPOT_NAME[] = "SmartOutlet_Setup";
 const char AP_HOTSPOT_PASSWORD[] = ""; // Open network for easier provisioning

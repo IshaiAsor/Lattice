@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <cstring>
 #include <cstdlib>
+#include <esp_heap_caps.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
@@ -26,8 +27,13 @@
 #include "services/BleNotificationService.h"
 #include "services/ProvisioningCallbacks.h"
 #include "services/DateTimeSyncService.h"
-#include "actions/DeviceActions.h"
 #include "services/ProvisioningBleService.h"
+#include "actions/DynamicDeviceActionsService.h"
+#ifdef HAS_CAMERA
+#include "services/LiveStreamService.h"
+#include "services/HttpFrameService.h"
+#endif
+#include "actions/commands/OnboardLedCommandAction.h"
 const char *root_ca = certificate_root;
 
 unsigned long buttonPressTime = 0;
@@ -52,6 +58,12 @@ ProvisioningCallbacks provisioningCallbacks(&bleNotificationService, &provisioni
 ProvisioningBleService provisioningBleService(&bleNotificationService, &dateTimeSyncService, &wm, &prefService, &jwtService, &mqttService);
 BLECharacteristic *pCharacteristic;
 DynamicDeviceActionsService deviceActionsService;
+extern OnboardLedAction onboardLed;
+#ifdef HAS_CAMERA
+LiveStreamService liveStreamService;
+LiveStreamService wsCaptureService;
+HttpFrameService httpFrameService;
+#endif
 
 void setupBleProvisioning();
 void bleResponseTask(void *pvParameters);
@@ -64,8 +76,28 @@ void loopCommnds();
 void setup()
 {
   Serial.begin(115200);
-  delay(1000); // Allow time for Serial to initialize
+#ifdef ARDUINO_USB_CDC_ON_BOOT
+  // USB CDC: wait up to 3 s for the host to open the port, then continue
+  uint32_t t = millis();
+  while (!Serial && (millis() - t) < 3000)
+    delay(10);
+#endif
   Serial.println("Device Starting...");
+
+#ifdef BOARD_HAS_PSRAM
+  if (psramFound())
+  {
+    // Route malloc() >= 4 KB to PSRAM so mbedTLS SSL buffers (~60 KB) don't
+    // compete with fragmented internal DRAM.
+    heap_caps_malloc_extmem_enable(4096);
+    Serial.printf("PSRAM OK: %u bytes free\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+  }
+  else
+  {
+    Serial.println("PSRAM NOT FOUND - SSL connections may fail");
+  }
+  Serial.printf("Internal DRAM free: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+#endif
 
   if (digitalRead(BUTTON_PIN) == LOW)
   {
@@ -73,6 +105,7 @@ void setup()
     performFactoryReset();
   }
 
+  // Initialize the global onboardLed defined in DynamicDeviceActionsService.h
   onboardLed.initPins();
   onboardLed.execute("orange");
 
@@ -141,8 +174,6 @@ void setup()
       JwtToken *jwtData = jwtService.GetCurrentJwtToken();
       MqttCredentials *creds = prefService.LoadMqttServerCredentials();
 
-      // Verify the device config URL was set during provisioning.
-      // Missing URL means the device was provisioned before this feature was added — re-provision to get it.
       if (jwtData && jwtData->deviceConfigUrl.isEmpty())
       {
         Serial.println("Device config URL missing — re-provisioning required.");
@@ -178,9 +209,12 @@ void setup()
           ESP.restart();
         }
 
-        // Initialize pins on all dynamically loaded actions
+        // Initialize pins then restore last saved state for command actions
         for (size_t i = 0; i < deviceActionsService.getDeviceActionsCount(); i++)
+        {
           deviceActionsService.getDeviceActions()[i]->initPins();
+          deviceActionsService.getDeviceActions()[i]->loadState();
+        }
         for (size_t i = 0; i < deviceActionsService.getTelemetryActionsCount(); i++)
           deviceActionsService.getTelemetryActions()[i]->initPins();
 
@@ -207,6 +241,9 @@ void loop()
       Serial.println("MQTT connection lost. Restarting to re-enter provisioning mode...");
       ESP.restart();
     }
+    // #ifdef HAS_CAMERA
+    //     liveStreamService.loop();
+    // #endif
     handleTelametryReading();
     loopCommnds();
   }
@@ -246,9 +283,10 @@ void handleTelametryReading()
   for (size_t i = 0; i < deviceActionsService.getTelemetryActionsCount(); i++)
   {
     deviceActionsService.getTelemetryActions()[i]->execute(currentMillis,
-      [](const char *topic, const char *payload) {
-        mqttService.publishTelemetry(topic, payload);
-      });
+                                                           [](const char *topic, const char *payload)
+                                                           {
+                                                             mqttService.publishTelemetry(topic, payload);
+                                                           });
   }
 }
 
@@ -292,10 +330,19 @@ void handleReset()
       buttonPressTime = millis();
       isPressing = true;
     }
-    else if (millis() - buttonPressTime > 5000)
+    else
     {
-      Serial.println("Long press detected. Initiating factory reset...");
-      performFactoryReset();
+      unsigned long pressDuration = millis() - buttonPressTime;
+      if (pressDuration > 10000)
+      {
+        Serial.println("10s press detected. Initiating factory reset...");
+        performFactoryReset();
+      }
+      else if (pressDuration > 5000 && !provisioningMode)
+      {
+        Serial.println("5s press detected. Entering provision mode...");
+        setupBleProvisioning();
+      }
     }
   }
   else

@@ -6,30 +6,36 @@
 
 class LightDimmerAction : public BaseCommandAction
 {
+public:
+    static const PinSlotDef* blueprint() {
+        static const PinSlotDef slots[] = {
+            { "pwm", "PWM", OUTPUT },
+            { nullptr }
+        };
+        return slots;
+    }
+
+    static const GoogleTraitDef* supportedTraits() {
+        static const GoogleTraitDef traits[] = {
+            { "action.devices.traits.OnOff",      "OnOff"      },
+            { "action.devices.traits.Brightness",  "Brightness" },
+            { nullptr }
+        };
+        return traits;
+    }
+
 private:
     int dimmerPinNumber;
 
 public:
-    // Static / fallback constructor
-    LightDimmerAction(String name, int dimmerPin)
-        : BaseCommandAction(name,
-                            {ActionPinsSetup(dimmerPin, OUTPUT)},
-                            {"off", "on"})
-    {
-        dimmerPinNumber = dimmerPin;
-    }
-
-    // Dynamic constructor — pins, literals, and numeric range from server
-    LightDimmerAction(String name, std::vector<ActionPinsSetup> pins,
-                      std::vector<std::string> literals, bool useRange, int rMin, int rMax)
-        : BaseCommandAction(name, pins, literals, useRange, rMin, rMax)
+    LightDimmerAction(String name, std::vector<ActionPinsSetup> pins)
+        : BaseCommandAction(name, pins, {"off", "on"}, true, 0, 100)
     {
         dimmerPinNumber = pins.empty() ? 0 : pins[0].PIN_NUMBER;
     }
 
     void initPins() override
     {
-        // Pin modes set by base class; no loop needed — validParameters from server
         BaseCommandAction::initPins();
     }
 

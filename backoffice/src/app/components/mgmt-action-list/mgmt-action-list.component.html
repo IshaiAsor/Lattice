@@ -1,8 +1,0 @@
-
-<div *ngFor="let action of actions$| async">
-    {{action.name}}
-    <button (click)="edit(action)">Edit</button>
-    <button (click)="delete(action)">Delete</button>
-    {{action| json}}
-</div>
-<button (click)="add()">add</button>

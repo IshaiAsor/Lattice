@@ -6,20 +6,32 @@
 
 class OutletCommandAction : public BaseCommandAction
 {
+public:
+    static const PinSlotDef* blueprint() {
+        static const PinSlotDef slots[] = {
+            { "relay", "Relay", OUTPUT },
+            { nullptr }
+        };
+        return slots;
+    }
+
+    static const GoogleTraitDef* supportedTraits() {
+        static const GoogleTraitDef traits[] = {
+            { "action.devices.traits.OnOff",     "OnOff"     },
+            { "action.devices.traits.LockUnlock", "LockUnlock" },
+            { "action.devices.traits.StartStop",  "StartStop"  },
+            { "action.devices.traits.OpenClose",  "OpenClose"  },
+            { nullptr }
+        };
+        return traits;
+    }
+
 private:
     int outletPinNumber;
 
 public:
-    // Static / fallback constructor
-    OutletCommandAction(String name, int pinNumber)
-        : BaseCommandAction(name, {ActionPinsSetup(pinNumber, OUTPUT)}, {"1", "0", "on", "off"})
-    {
-        outletPinNumber = pinNumber;
-    }
-
-    // Dynamic constructor — pins and valid parameters from server
-    OutletCommandAction(String name, std::vector<ActionPinsSetup> pins, std::vector<std::string> literals)
-        : BaseCommandAction(name, pins, literals, false, 0, 0)
+    OutletCommandAction(String name, std::vector<ActionPinsSetup> pins)
+        : BaseCommandAction(name, pins, {"1", "0", "on", "off"})
     {
         outletPinNumber = pins.empty() ? 0 : pins[0].PIN_NUMBER;
     }
@@ -33,14 +45,10 @@ public:
             digitalWrite(outletPinNumber, HIGH);
             Serial.println("Outlet ON");
         }
-        else if (strcmp(action.c_str(), "0") == 0 || strcmp(action.c_str(), "off") == 0)
+        else
         {
             digitalWrite(outletPinNumber, LOW);
             Serial.println("Outlet OFF");
-        }
-        else
-        {
-            Serial.println("Invalid parameter :" + action);
         }
     }
 };

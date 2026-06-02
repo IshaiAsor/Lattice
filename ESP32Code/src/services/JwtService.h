@@ -137,13 +137,17 @@ public:
         Serial.println("Permanent MQTT token received:");
         Serial.println(response.mqttToken);
 
+        // Preserve existing service URLs if the refresh response omits them
         jwtData = new JwtToken{
-            .token = response.mqttToken,
-            .refreshToken = response.refreshToken,
-            .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl,
-            .deviceConfigUrl = response.deviceConfigUrl,
-            .validateCACert = response.validateCACert,
-            .deviceId = response.deviceId};
+            .token                   = response.mqttToken,
+            .refreshToken            = response.refreshToken            != "" ? response.refreshToken            : jwtData->refreshToken,
+            .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl != "" ? response.refreshTokenCallbackUrl : jwtData->refreshTokenCallbackUrl,
+            .deviceConfigUrl         = response.deviceConfigUrl         != "" ? response.deviceConfigUrl         : jwtData->deviceConfigUrl,
+            .validateCACert          = response.validateCACert,
+            .deviceId                = response.deviceId                != 0  ? response.deviceId                : jwtData->deviceId,
+            .wsStreamUrl             = response.wsStreamUrl             != "" ? response.wsStreamUrl             : jwtData->wsStreamUrl,
+            .cameraHttpUrl           = response.cameraHttpUrl           != "" ? response.cameraHttpUrl           : jwtData->cameraHttpUrl,
+        };
 
         tokenExp = getExpFromToken(response.mqttToken);
 
@@ -203,12 +207,15 @@ public:
         Serial.println(response.mqttToken);
 
         jwtData = new JwtToken{
-            .token = response.mqttToken,
-            .refreshToken = response.refreshToken,
+            .token                   = response.mqttToken,
+            .refreshToken            = response.refreshToken,
             .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl,
-            .deviceConfigUrl = response.deviceConfigUrl,
-            .validateCACert = response.validateCACert,
-            .deviceId = response.deviceId};
+            .deviceConfigUrl         = response.deviceConfigUrl,
+            .validateCACert          = response.validateCACert,
+            .deviceId                = response.deviceId,
+            .wsStreamUrl             = response.wsStreamUrl,
+            .cameraHttpUrl           = response.cameraHttpUrl,
+        };
 
         tokenExp = getExpFromToken(response.mqttToken);
         prefService.SetJwtToken(*jwtData);
