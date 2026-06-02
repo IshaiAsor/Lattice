@@ -113,6 +113,8 @@ jobs:
       matrix: ${{ fromJson(needs.generate-firmware-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
 
       - name: Cache PlatformIO
         uses: actions/cache@v4
@@ -133,7 +135,7 @@ jobs:
       - name: Build firmware for ${{ matrix.device-type }}
         run: |
           cd ESP32Code
-          pio run -e ${{ matrix.env-name }} -D DEVICE_VERSION_STR="${{ needs.generate-firmware-matrix.outputs.new_tag }}"
+          pio run -e ${{ matrix.env-name }}
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
