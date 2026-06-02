@@ -167,6 +167,7 @@ jobs:
             cp "$device_dir/firmware.bin" "firmware-staging/$device_name/"
           done
           cp ESP32Code/Dockerfile.firmware firmware-staging/Dockerfile
+          cp ESP32Code/entrypoint.sh firmware-staging/entrypoint.sh
           ls -la firmware-staging/
 
       - name: Set up Docker Buildx

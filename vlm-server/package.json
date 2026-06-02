@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node --loader ts-node/esm server.ts",
-    "dev": "ts-node --esm server.ts",
+    "start": "tsx server.ts",
+    "dev": "tsx watch server.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -25,7 +25,7 @@
     "@types/sharp": "^0.31.1",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "4.1.8",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
 }
