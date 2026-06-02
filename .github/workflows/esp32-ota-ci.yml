@@ -7,20 +7,53 @@ on:
       - 'ESP32Code/**'
 
 jobs:
-  # Build all production firmware configurations in parallel
+  generate-firmware-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate firmware matrix from platformio.ini
+        id: set-matrix
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+
+          text = open('ESP32Code/platformio.ini', encoding='utf-8').read()
+          matrix = {'include': []}
+
+          for line in text.splitlines():
+              match = re.match(r'^\[env:([^\]]+)\]', line)
+              if match:
+                  env_name = match.group(1).strip()
+                  if env_name.endswith('-prod'):
+                      device_type = env_name.replace('-prod', '').replace('_', '-')
+                      matrix['include'].append({
+                          'env-name': env_name,
+                          'device-type': device_type,
+                      })
+
+          matrix_json = json.dumps(matrix)
+          print(matrix_json)
+          with open('matrix.json', 'w', encoding='utf-8') as f:
+              f.write(matrix_json)
+          print(f'matrix<<EOF\n{matrix_json}\nEOF')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f'matrix<<EOF\n{matrix_json}\nEOF\n')
+          PY
+
+      - name: Debug generated matrix
+        run: |
+          cat matrix.json
+
   build-firmware-matrix:
+    needs: generate-firmware-matrix
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        include:
-          - env-name: esp32s3_mini-prod
-            device-type: ESP32S3_Mini
-          - env-name: 4d_systems_esp32s3_gen4_r8n16-prod
-            device-type: ESP32S3_MultiSocket
-          - env-name: esp32wrover_e-prod
-            device-type: ESP32S3_Wrover
-          - env-name: freenove_wrover_cam-prod
-            device-type: ESP32_WroverCam
+      matrix: ${{ fromJson(needs.generate-firmware-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -123,4 +156,3 @@ jobs:
               -F "releaseNotes=Multi-device build v$VERSION" \
               -F "firmware=@$firmware_file"
           done
-
