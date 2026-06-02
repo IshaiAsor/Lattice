@@ -1,0 +1,7 @@
+# Docker image used only to package the built ESP32 firmware binary for Kargo promotion.
+FROM alpine:3.18
+ARG VERSION
+LABEL org.opencontainers.image.title="SmartHome ESP32 firmware"
+LABEL org.opencontainers.image.version=${VERSION}
+RUN mkdir -p /firmware
+COPY .pio/build/esp32s3_mini-prod/firmware.bin /firmware/
