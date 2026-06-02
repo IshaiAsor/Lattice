@@ -25,8 +25,8 @@
       "path": "prisma",
     },
     {
-      "name": "LVM Server",
-      "path": "lvm-server",
+      "name": "VLM Server",
+      "path": "vlm-server",
     },
   ],
   "settings": {

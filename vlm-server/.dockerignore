@@ -1,0 +1,4 @@
+node_modules
+training/
+npm-debug.log
+.claude

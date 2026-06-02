@@ -90,11 +90,11 @@
     {
         "type": "node",
         "request": "launch",
-        "name": "Debug LVM Server",
-        "runtimeExecutable": "${workspaceFolder:LVM Server}/node_modules/.bin/ts-node-esm.cmd",
+        "name": "Debug VLM Server",
+        "runtimeExecutable": "${workspaceFolder:VLM Server}/node_modules/.bin/ts-node-esm.cmd",
         "runtimeArgs": [],
-        "program": "${workspaceFolder:LVM Server}/server.ts",
-        "cwd": "${workspaceFolder:LVM Server}",
+        "program": "${workspaceFolder:VLM Server}/server.ts",
+        "cwd": "${workspaceFolder:VLM Server}",
         "sourceMaps": true,
         "envFile": "${workspaceFolder:Project Root}/.env",
         "skipFiles": ["<node_internals>/**"]
@@ -102,9 +102,9 @@
     {
         "type": "debugpy",
         "request": "launch",
-        "name": "Train LVM Server Model",
-        "program": "${workspaceFolder:LVM Server}/training/train.py",
-        "cwd": "${workspaceFolder:LVM Server}",
+        "name": "Train VLM Server Model",
+        "program": "${workspaceFolder:VLM Server}/training/train.py",
+        "cwd": "${workspaceFolder:VLM Server}",
         "console": "integratedTerminal",
         "args": []
     },
