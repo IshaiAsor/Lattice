@@ -1,13 +1,13 @@
-name: Build and Push Hydro Vision Image
+name: Build and Push LVM Server Image
 
 on:
   push:
     branches: [ "main", "master" ]
     paths:
-      - 'hydro-vision-service/**'
+      - 'lvm-server/**'
 
 jobs:
-  build-and-push-hydro-vision:
+  build-and-push-lvm-server:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -36,14 +36,14 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
 
-      - name: Build and push Hydro Vision Image
+      - name: Build and push LVM Server Image
         uses: docker/build-push-action@v5
         with:
-          context: ./hydro-vision-service
+          context: ./lvm-server
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/ishaiasor/smarthome-hydro-vision:${{ steps.tag_version.outputs.new_tag }}
-            ghcr.io/ishaiasor/smarthome-hydro-vision:latest
+            ghcr.io/ishaiasor/smarthome-lvm-server:${{ steps.tag_version.outputs.new_tag }}
+            ghcr.io/ishaiasor/smarthome-lvm-server:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
