@@ -74,7 +74,7 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
 
-      - name: Update DEVICE_VERSION in platformio.ini
+      - name: Update DEVICE_VERSION_STR in platformio.ini
         if: github.actor != 'github-actions'
         run: |
           VERSION="${{ steps.tag_version.outputs.new_tag }}"
@@ -84,7 +84,7 @@ jobs:
 
           path = Path('ESP32Code/platformio.ini')
           text = path.read_text(encoding='utf-8')
-          new_text = re.sub(r'(-D\s*DEVICE_VERSION\s*=\s*")[^"]*(")', rf'\1{VERSION}\2', text)
+          new_text = re.sub(r'(-D\s*DEVICE_VERSION_STR\s*=\s*")[^"]*(")', rf'\1{VERSION}\2', text)
           path.write_text(new_text, encoding='utf-8')
           PY
 
@@ -92,7 +92,7 @@ jobs:
             git config user.name "github-actions"
             git config user.email "github-actions@github.com"
             git add ESP32Code/platformio.ini
-            git commit -m "chore: update PlatformIO DEVICE_VERSION to ${VERSION}"
+            git commit -m "chore: update PlatformIO DEVICE_VERSION_STR to ${VERSION}"
             git push
           else
             echo "platformio.ini already contains ${VERSION}"
@@ -128,7 +128,7 @@ jobs:
       - name: Build firmware for ${{ matrix.device-type }}
         run: |
           cd ESP32Code
-          pio run -e ${{ matrix.env-name }} -D DEVICE_VERSION="${{ needs.generate-firmware-matrix.outputs.new_tag }}"
+          pio run -e ${{ matrix.env-name }} -D DEVICE_VERSION_STR="${{ needs.generate-firmware-matrix.outputs.new_tag }}"
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
