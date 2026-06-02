@@ -37,6 +37,7 @@ const server = http.createServer(app);
 wsStreamService.init(server);
 socketService.init(server);
 
+// Pre-parser debug logging
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] DEBUG: ${req.method} ${req.url}`);
   next();

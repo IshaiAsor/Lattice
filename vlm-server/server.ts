@@ -16,7 +16,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = 3000;
 
-
 // --- Default ONNX adapter (lettuce model, backwards compat) ---
 const lettuceClasses = JSON.parse(
   readFileSync(path.join(__dirname, 'models', 'lettuce', 'classes.json'), 'utf8')
