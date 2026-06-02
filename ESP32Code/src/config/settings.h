@@ -5,6 +5,7 @@
 #ifndef DEVICE_VERSION_STR
 #error "DEVICE_VERSION_STR must be defined in build_flags (e.g. -D DEVICE_VERSION_STR=\"V1.0.0\")"
 #endif
+
 const char DEVICE_TYPE[] = DEVICE_TYPE_STR;
 const char DEVICE_VERSION[] = DEVICE_VERSION_STR;
 const char COMMAND_TOPIC[] = "users/%{userid}/devices/%{deviceid}/%{version}/command/#";
