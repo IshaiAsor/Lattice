@@ -62,6 +62,7 @@ jobs:
           context: ESP32Code
           file: ESP32Code/Dockerfile.firmware
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/ishaiasor/smarthome-firmware:${{ steps.tag_version.outputs.new_tag }}
             ghcr.io/ishaiasor/smarthome-firmware:latest
