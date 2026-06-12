@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit, OnDestroy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { DeviceView } from 'src/app/services/device.mgmt.service';
+// DeviceView removed — devices are UserDevice from models/index.ts
 import { ProvisioningService, ProvisioningStep, ProvisioningProgress } from 'src/app/services/provisioning.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -22,7 +22,7 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
 
 constructor(
     public dialogRef: MatDialogRef<MgmtDeviceRegisterComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: DeviceView,
+    @Inject(MAT_DIALOG_DATA) public data: unknown,
     private provisioningService: ProvisioningService
   ) {}
 
@@ -36,7 +36,7 @@ constructor(
         this.currentStep = progress.step;
         this.provisioningSteps.push(progress);
         if(progress.step === ProvisioningStep.PROVISIONING_COMPLETE)
-        this.dialogRef.close();
+        this.dialogRef.close({ registered: true });
       });
   }
 

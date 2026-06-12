@@ -27,8 +27,8 @@
 #include "services/BleNotificationService.h"
 #include "services/ProvisioningCallbacks.h"
 #include "services/DateTimeSyncService.h"
-#include "actions/commands/OnboardLedCommandAction.h"
-extern OnboardLedAction onboardLed;
+#include "actions/DynamicDeviceActionsService.h"
+#include "services/DeviceRegistrationService.h"
 
 class ProvisioningBleService
 {
@@ -37,27 +37,41 @@ private:
     BleNotificationService *bleNotificationService;
     DateTimeSyncService *dateTimeSyncService;
     WiFiManager *wm;
-    PreferencesManagerService *prefService;
     JwtService *jwtService;
     MqttService *mqttService;
+    DeviceRegistrationService *deviceRegistrationService;
 
 public:
     ProvisioningBleService(
         BleNotificationService *bleNotificationService,
         DateTimeSyncService *dateTimeSyncService,
         WiFiManager *wm,
-        PreferencesManagerService *prefService,
         JwtService *jwtService,
-        MqttService *mqttService)
+        MqttService *mqttService,
+        DeviceRegistrationService *deviceRegistrationService)
     {
         this->bleNotificationService = bleNotificationService;
         this->dateTimeSyncService = dateTimeSyncService;
         this->wm = wm;
-        this->prefService = prefService;
         this->jwtService = jwtService;
         this->mqttService = mqttService;
+        this->deviceRegistrationService = deviceRegistrationService;
     }
     ~ProvisioningBleService() {}
+
+    void exitProvisioningMode(ResponseType type, const char *message)
+    {
+        if (type == ResponseType::PROVISIONING_SUCCESSFUL)
+        {
+            onboardLed.execute("green");
+        }
+        else
+        {
+            onboardLed.execute("red");
+        }
+        delay(2000);
+        ESP.restart();
+    }
 
     void HandleProvisioning(char *payload)
     {
@@ -113,38 +127,47 @@ public:
         }
         dateTimeSyncService->syncTime();
         // Step 3: Request provisioning token from server
-        Serial.println("Requesting permanent MQTT token from provisioning server...");
+        Serial.println("Requesting temporary MQTT token from provisioning server...");
 
-        bleNotificationService->NotifyBleDevice(ResponseType::REQUESTING_PROVISIONING_TOKEN, "OK: Requesting token...");
+        bleNotificationService->NotifyBleDevice(ResponseType::REQUESTING_PROVISIONING_TOKEN, "OK: Requesting temp token...");
 
-        char deviceID[13];
-        uint64_t mac = ESP.getEfuseMac();
-        snprintf(deviceID, sizeof(deviceID), "%012llX", mac);
-        Serial.print("Device ID: ");
-        Serial.println(deviceID);
+        // char deviceID[13];
+        // uint64_t mac = ESP.getEfuseMac();
+        // snprintf(deviceID, sizeof(deviceID), "%012llX", mac);
+        // Serial.print("Device ID: ");
+        // Serial.println(deviceID);
 
         // Step 4: Exchange tokens with server (Step 1: Register)
-        Serial.println("Requesting temporary MQTT token from provisioning server...");
-        bleNotificationService->NotifyBleDevice(ResponseType::EXCHANGING_TOKENS_WITH_SERVER, "OK: Requesting temp token...");
+        // Serial.println("Requesting temporary MQTT token from provisioning server...");
+        // bleNotificationService->NotifyBleDevice(ResponseType::EXCHANGING_TOKENS_WITH_SERVER, "OK: Requesting temp token...");
 
-        String registrationId;
-        String finalizeUrl;
-        JwtToken *tempJwtData = jwtService->RequestTempJwtToken(pData, pData.provisioningToken, registrationId, finalizeUrl);
+        // Build capabilities payload in a scoped block so the JsonDocument heap
+        // allocation is freed before the TLS handshake (which needs ~32 KB contiguous).
+        // String capJson;
+        // {
+        //     JsonDocument capDoc;
+        //     DynamicDeviceActionsService::serializeCapabilities(capDoc.to<JsonArray>());
+        //     serializeJson(capDoc, capJson);
+        // } // capDoc destroyed here — its heap pool returned before the POST
 
-        if (tempJwtData == nullptr)
-        {
-            Serial.println("Failed to request temporary JWT token.");
-            bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_FAILED, "Failed to get temp token from server.");
-            return;
-        }
+        // String registrationId;
+        // String finalizeUrl;
+        // JwtToken *tempJwtData = jwtService->RequestTempJwtToken(pData, pData.provisioningToken, registrationId, finalizeUrl, capJson);
+        // capJson.clear(); // free String buffer; no longer needed after POST
+
+        // if (tempJwtData == nullptr)
+        // {
+        //     Serial.println("Failed to request temporary JWT token.");
+        //     bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_FAILED, "Failed to get temp token from server.");
+        //     return;
+        // }
 
         MqttCredentials mqttCreds;
-        mqttCreds.server = pData.server;
+        mqttCreds.server = pData.mqttServer;
         mqttCreds.port = pData.mqttPort;
         mqttCreds.validateCACert = pData.validateCACert;
-        mqttCreds.clientId = WiFi.macAddress(); // Use MAC for temp clientid
+        mqttCreds.clientId = pData.clientId; // Use MAC for temp clientid
         mqttCreds.userId = pData.userId;
-
         // Note: We don't save to preferences yet, just use in memory
         //  mqttService->updateCredentials(mqttCreds, tempJwtData->token);
 
@@ -155,20 +178,38 @@ public:
         Serial.println("Testing MQTT connection with temp token...");
         bleNotificationService->NotifyBleDevice(ResponseType::TESTING_MQTT_CONNECTION, "OK: Testing MQTT...");
         delay(300); // let the BLE notification flush before stack teardown
-        
+        BLEDevice::deinit(true);
+        delay(200);
 
-        if (!mqttService->testMqtt(&mqttCreds, tempJwtData))
+        if (!mqttService->testMqtt(&mqttCreds, pData.provisioningToken))
         {
             Serial.println("MQTT connection failed. Restarting to retry provisioning...");
             onboardLed.execute("red");
+            bleNotificationService->NotifyBleDevice(ResponseType::MQTT_ERROR, "FAIL: MQTT connection failed with temp token.");
             delay(2000);
             ESP.restart();
         }
 
-        Serial.println("MQTT connection successful! Finalizing registration...");
-        JwtToken *permanentJwtData = jwtService->FinalizeRegistration(finalizeUrl, registrationId, pData.validateCACert);
+        Serial.println("MQTT test connection successful! Finalizing registration...");
+        bleNotificationService->NotifyBleDevice(ResponseType::MQTT_CONNECTION_SUCCESSFUL, "OK: MQTT Connection Successful. Finalizing registration...");
+delay(200);
 
-        if (permanentJwtData == nullptr)
+        // Build capabilities payload
+        // String capJson;
+        // {
+        //     JsonDocument capDoc;
+        //     DynamicDeviceActionsService::serializeCapabilities(capDoc.to<JsonArray>());
+        //     serializeJson(capDoc, capJson);
+        // } // capDoc destroyed here — its heap pool returned before the POST
+
+        // String registrationId;
+        // String finalizeUrl;
+        // JwtToken *tempJwtData = jwtService->RequestTempJwtToken(pData, pData.provisioningToken, registrationId, finalizeUrl, capJson);
+        // capJson.clear(); // free String buffer; no longer needed after POST
+
+        bool finalizationSuccess = deviceRegistrationService->FinalizeRegistration(pData);
+
+        if (!finalizationSuccess)
         {
             Serial.println("Finalization failed. Restarting to retry provisioning...");
             onboardLed.execute("red");
@@ -176,8 +217,8 @@ public:
             ESP.restart();
         }
 
-        mqttCreds.clientId = String(permanentJwtData->deviceId);
-        prefService->SaveMqttServerCredentials(mqttCreds);
+        // mqttCreds.clientId = String(permanentJwtData->deviceId);
+        // prefService->SaveMqttServerCredentials(mqttCreds);
 
         Serial.println("Provisioning successful and finalized!");
         bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_SUCCESSFUL, "OK: Provisioning Complete");

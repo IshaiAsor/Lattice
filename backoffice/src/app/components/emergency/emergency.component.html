@@ -1,0 +1,193 @@
+<div class="page-container">
+  <div class="page-header">
+    <h2>Emergency Rules</h2>
+    <div class="tab-group">
+      <button mat-stroked-button [class.active-tab]="activeTab() === 'rules'"  (click)="switchTab('rules')">
+        <mat-icon>shield</mat-icon> Rules
+      </button>
+      <button mat-stroked-button [class.active-tab]="activeTab() === 'events'" (click)="switchTab('events')">
+        <mat-icon>history</mat-icon> Events
+      </button>
+    </div>
+    <button mat-stroked-button (click)="exportConfig()"><mat-icon>file_download</mat-icon> Export</button>
+    <button mat-stroked-button (click)="emFileInput.click()"><mat-icon>file_upload</mat-icon> Import</button>
+    <input #emFileInput type="file" accept=".json" hidden (change)="importConfig(emFileInput.files![0]); emFileInput.value=''">
+    @if (activeTab() === 'rules') {
+      <button mat-raised-button color="primary" (click)="openCreate()">
+        <mat-icon>add</mat-icon> New Rule
+      </button>
+    }
+  </div>
+
+  <!-- ── Rules tab ─────────────────────────────────────────────────── -->
+  @if (activeTab() === 'rules') {
+
+    @if (showForm()) {
+      <div class="rule-form lattice-card">
+        <h3>{{ editRule() ? 'Edit Rule' : 'New Rule' }}</h3>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Rule name</mat-label>
+          <input matInput [(ngModel)]="formName" />
+        </mat-form-field>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Source scope</mat-label>
+            <mat-select [(ngModel)]="formSourceScope">
+              @for (s of scopes; track s) { <mat-option [value]="s">{{ s }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+
+          @if (formSourceScope === 'capability') {
+            <mat-form-field appearance="outline">
+              <mat-label>Source capability</mat-label>
+              <input matInput [(ngModel)]="formSourceCap" placeholder="e.g. TEMPERATURE" />
+            </mat-form-field>
+          }
+          @if (formSourceScope === 'instance') {
+            <mat-form-field appearance="outline">
+              <mat-label>Source action</mat-label>
+              <mat-select [(ngModel)]="formSourceAction">
+                @for (a of userActions; track a.id) {
+                  <mat-option [value]="a.id.toString()">{{ a.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+          @if (formSourceScope === 'group') {
+            <mat-form-field appearance="outline">
+              <mat-label>Source group</mat-label>
+              <mat-select [(ngModel)]="formSourceGroup">
+                @for (g of userGroups; track g.id) {
+                  <mat-option [value]="g.id.toString()">{{ g.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline" style="width:100px">
+            <mat-label>Operator</mat-label>
+            <mat-select [(ngModel)]="formOperator">
+              @for (op of operators; track op) { <mat-option [value]="op">{{ op }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Threshold</mat-label>
+            <input matInput [(ngModel)]="formThreshold" placeholder="e.g. 35" />
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Target scope</mat-label>
+            <mat-select [(ngModel)]="formTargetScope">
+              @for (s of scopes; track s) { <mat-option [value]="s">{{ s }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+
+          @if (formTargetScope === 'capability') {
+            <mat-form-field appearance="outline">
+              <mat-label>Target capability</mat-label>
+              <input matInput [(ngModel)]="formTargetCap" placeholder="e.g. FAN" />
+            </mat-form-field>
+          }
+          @if (formTargetScope === 'instance') {
+            <mat-form-field appearance="outline">
+              <mat-label>Target action</mat-label>
+              <mat-select [(ngModel)]="formTargetAction">
+                @for (a of userActions; track a.id) {
+                  <mat-option [value]="a.id.toString()">{{ a.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+          @if (formTargetScope === 'group') {
+            <mat-form-field appearance="outline">
+              <mat-label>Target group</mat-label>
+              <mat-select [(ngModel)]="formTargetGroup">
+                @for (g of userGroups; track g.id) {
+                  <mat-option [value]="g.id.toString()">{{ g.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
+
+          <mat-form-field appearance="outline">
+            <mat-label>Target state</mat-label>
+            <input matInput [(ngModel)]="formTargetState" placeholder="e.g. on" />
+          </mat-form-field>
+        </div>
+
+        <div class="form-actions">
+          <button mat-button (click)="cancelForm()">Cancel</button>
+          <button mat-raised-button color="primary" [disabled]="!formName || !formThreshold || !formTargetState" (click)="saveRule()">
+            {{ editRule() ? 'Update' : 'Create' }}
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (rules.length === 0 && !showForm()) {
+      <div class="empty-state">
+        <mat-icon>shield</mat-icon>
+        <p>No emergency rules yet. Create one to automatically respond to threshold breaches.</p>
+      </div>
+    }
+
+    <div class="rules-list">
+      @for (rule of rules; track rule.id) {
+        <div class="rule-card lattice-card" [class.disabled]="!rule.enabled">
+          <div class="rule-accent"></div>
+          <div class="rule-body">
+            <div class="rule-header">
+              <span class="rule-name">{{ rule.name }}</span>
+              @if (rule.source_blueprint_id) {
+                <span class="blueprint-chip">blueprint</span>
+              }
+              <span class="spacer"></span>
+              <mat-slide-toggle [checked]="rule.enabled" (change)="toggle(rule)" color="primary" />
+            </div>
+            <div class="rule-detail">
+              <span class="detail-label">If</span>
+              <span class="detail-value">{{ sourceSummary(rule) }} {{ rule.operator }} {{ rule.threshold }}</span>
+            </div>
+            <div class="rule-detail">
+              <span class="detail-label">Then</span>
+              <span class="detail-value">{{ targetSummary(rule) }}</span>
+            </div>
+          </div>
+          <div class="rule-actions">
+            <button mat-icon-button (click)="openEdit(rule)" [title]="'Edit rule'"><mat-icon>edit</mat-icon></button>
+            <button mat-icon-button color="warn" (click)="delete(rule)" [title]="'Delete rule'"><mat-icon>delete</mat-icon></button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ── Events tab ─────────────────────────────────────────────────── -->
+  @if (activeTab() === 'events') {
+    @if (events.length === 0) {
+      <div class="empty-state">
+        <mat-icon>history</mat-icon>
+        <p>No emergency events recorded yet.</p>
+      </div>
+    }
+
+    <div class="events-list">
+      @for (ev of events; track ev.id) {
+        <div class="event-row lattice-card">
+          <mat-icon class="event-icon">warning</mat-icon>
+          <div class="event-body">
+            <span class="event-rule">{{ ev.rule?.name ?? 'Rule #' + ev.emergency_rule_id }}</span>
+            <span class="event-value">Value: {{ ev.value }}</span>
+          </div>
+          <span class="event-time">{{ firedAt(ev) }}</span>
+        </div>
+      }
+    </div>
+  }
+</div>

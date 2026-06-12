@@ -1,32 +1,50 @@
 import db from '../config/db';
-import type { EmergencyRule, EmergencyEvent } from '@prisma/client';
+import { EmergencyRule, EmergencyEvent, RuleActionScope } from '@lattice/prisma-client';
 
 export type EmergencyRuleFull = EmergencyRule & {
-  sensor_action: { action_name: string };
+  source_action: { name: string } | null;
 };
 
 export type CreateEmergencyRuleInput = {
   user_id: number;
   name: string;
-  user_device_action_id: number;
+  source_scope?: RuleActionScope;
+  source_user_action_id?: number | null;
+  source_capability?: string | null;
+  source_group_id?: number | null;
   operator: string;
-  threshold_value: string;
-  target_action_id?: number;
-  target_state?: string;
+  threshold: string;
+  target_scope?: RuleActionScope;
+  target_user_action_id?: number | null;
+  target_capability?: string | null;
+  target_group_id?: number | null;
+  target_state?: string | null;
 };
 
 class EmergencyRepository {
   async getByUserId(userId: number): Promise<EmergencyRuleFull[]> {
     return db.emergencyRule.findMany({
       where: { user_id: userId },
-      include: { sensor_action: { select: { action_name: true } } },
+      include: { source_action: { select: { name: true } } },
       orderBy: { created_at: 'asc' },
     }) as Promise<EmergencyRuleFull[]>;
   }
 
-  async getEnabledByActionId(actionId: number): Promise<EmergencyRule[]> {
+  /** Instance-scoped lookup (hot path — called from device-gateway). */
+  async getEnabledBySourceActionId(actionId: number): Promise<EmergencyRule[]> {
+    return db.emergencyRule.findMany({ where: { source_user_action_id: actionId, enabled: true } });
+  }
+
+  /** Matches both instance (by actionId) AND capability-scoped rules. */
+  async getEnabledMatching(actionId: number, capability: string): Promise<EmergencyRule[]> {
     return db.emergencyRule.findMany({
-      where: { user_device_action_id: actionId, enabled: true },
+      where: {
+        enabled: true,
+        OR: [
+          { source_user_action_id: actionId },
+          { source_scope: 'capability', source_capability: capability },
+        ],
+      },
     });
   }
 
@@ -42,8 +60,8 @@ class EmergencyRepository {
     await db.emergencyRule.deleteMany({ where: { id, user_id: userId } });
   }
 
-  async logEvent(ruleId: number, triggeredValue: string): Promise<EmergencyEvent> {
-    return db.emergencyEvent.create({ data: { emergency_rule_id: ruleId, triggered_value: triggeredValue } });
+  async logEvent(ruleId: number, value: string, traceId?: string): Promise<EmergencyEvent> {
+    return db.emergencyEvent.create({ data: { emergency_rule_id: ruleId, value, trace_id: traceId } });
   }
 
   async getRecentEvents(userId: number, limit = 50): Promise<EmergencyEvent[]> {

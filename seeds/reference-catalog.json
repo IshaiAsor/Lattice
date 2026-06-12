@@ -1,0 +1,200 @@
+{
+  "_comment": "Lattice Platform — Reference Catalog (Phase 10 seed). Import via Admin UI: /admin/catalog → Import Catalog.",
+  "version": "1",
+  "exported_at": "2026-06-04T00:00:00.000Z",
+  "models": [
+    {
+      "model_key": "esp32s3_mini",
+      "version": "v2",
+      "display_name": "ESP32-S3 Mini",
+      "actions": [
+        {
+          "action_key": "temperature",
+          "capability": "TEMPERATURE",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "sensor1",
+          "telemetry_interval_ms": 2000,
+          "params": {},
+          "pins": [{ "pinNumber": 7, "pinMode": "INPUT" }],
+          "google_trait_keys": ["action.devices.traits.TemperatureSetting"]
+        },
+        {
+          "action_key": "humidity",
+          "capability": "HUMIDITY",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "humidity",
+          "telemetry_interval_ms": 2000,
+          "params": {},
+          "pins": [{ "pinNumber": 21, "pinMode": "INPUT" }, { "pinNumber": 22, "pinMode": "INPUT" }],
+          "google_trait_keys": []
+        },
+        {
+          "action_key": "air_temp",
+          "capability": "AIR_TEMPERATURE",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "air_temp",
+          "telemetry_interval_ms": 2000,
+          "params": {},
+          "pins": [{ "pinNumber": 21, "pinMode": "INPUT" }, { "pinNumber": 22, "pinMode": "INPUT" }],
+          "google_trait_keys": ["action.devices.traits.TemperatureSetting"]
+        },
+        {
+          "action_key": "water_level",
+          "capability": "WATER_LEVEL",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "water_level",
+          "telemetry_interval_ms": 5000,
+          "params": {},
+          "pins": [{ "pinNumber": 6, "pinMode": "INPUT" }],
+          "google_trait_keys": ["action.devices.traits.WaterLevel"]
+        },
+        {
+          "action_key": "ph_level",
+          "capability": "PH_LEVEL",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "ph_level",
+          "telemetry_interval_ms": 5000,
+          "params": {},
+          "pins": [{ "pinNumber": 8, "pinMode": "INPUT" }],
+          "google_trait_keys": ["action.devices.traits.PhLevel"]
+        },
+        {
+          "action_key": "tds_level",
+          "capability": "TDS_LEVEL",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "tds_level",
+          "telemetry_interval_ms": 5000,
+          "params": {},
+          "pins": [{ "pinNumber": 9, "pinMode": "INPUT" }],
+          "google_trait_keys": ["action.devices.traits.TdsLevel"]
+        },
+        {
+          "action_key": "co2_level",
+          "capability": "CO2_LEVEL",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "co2_level",
+          "telemetry_interval_ms": 5000,
+          "params": {},
+          "pins": [{ "pinNumber": 11, "pinMode": "INPUT" }, { "pinNumber": 12, "pinMode": "OUTPUT" }],
+          "google_trait_keys": ["action.devices.traits.CO2Level"]
+        },
+        {
+          "action_key": "outlet1",
+          "capability": "OUTLET",
+          "google_action_type_key": "action.devices.types.OUTLET",
+          "mqtt_type": "command",
+          "mqtt_name": "outlet1",
+          "telemetry_interval_ms": null,
+          "params": { "values": ["on", "off", "0", "1"] },
+          "pins": [{ "pinNumber": 4, "pinMode": "OUTPUT" }],
+          "google_trait_keys": ["action.devices.traits.OnOff"]
+        },
+        {
+          "action_key": "fan1",
+          "capability": "FAN",
+          "google_action_type_key": "action.devices.types.FAN",
+          "mqtt_type": "command",
+          "mqtt_name": "fan1",
+          "telemetry_interval_ms": null,
+          "params": { "values": ["on", "off"], "range": { "min": 0, "max": 100 } },
+          "pins": [
+            { "pinNumber": 5, "pinMode": "OUTPUT" },
+            { "pinNumber": 18, "pinMode": "OUTPUT" },
+            { "pinNumber": 19, "pinMode": "OUTPUT" }
+          ],
+          "google_trait_keys": ["action.devices.traits.OnOff", "action.devices.traits.FanSpeed"]
+        },
+        {
+          "action_key": "dimmer1",
+          "capability": "LIGHT_DIMMER",
+          "google_action_type_key": "action.devices.types.LIGHT",
+          "mqtt_type": "command",
+          "mqtt_name": "dimmer1",
+          "telemetry_interval_ms": null,
+          "params": { "values": ["on", "off"], "range": { "min": 0, "max": 100 } },
+          "pins": [{ "pinNumber": 17, "pinMode": "OUTPUT" }],
+          "google_trait_keys": ["action.devices.traits.OnOff", "action.devices.traits.Brightness"]
+        }
+      ]
+    },
+    {
+      "model_key": "esp32s3_cam",
+      "version": "v2",
+      "display_name": "ESP32-S3 Camera Module",
+      "actions": [
+        {
+          "action_key": "camera",
+          "capability": "LIVE_STREAM",
+          "google_action_type_key": "action.devices.types.CAMERA",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "camera",
+          "telemetry_interval_ms": 333,
+          "params": {},
+          "pins": [],
+          "google_trait_keys": ["action.devices.traits.CameraStream"]
+        },
+        {
+          "action_key": "temperature",
+          "capability": "TEMPERATURE",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "sensor1",
+          "telemetry_interval_ms": 2000,
+          "params": {},
+          "pins": [{ "pinNumber": 7, "pinMode": "INPUT" }],
+          "google_trait_keys": ["action.devices.traits.TemperatureSetting"]
+        },
+        {
+          "action_key": "humidity",
+          "capability": "HUMIDITY",
+          "google_action_type_key": "action.devices.types.SENSOR",
+          "mqtt_type": "telemetry",
+          "mqtt_name": "humidity",
+          "telemetry_interval_ms": 2000,
+          "params": {},
+          "pins": [{ "pinNumber": 21, "pinMode": "INPUT" }, { "pinNumber": 22, "pinMode": "INPUT" }],
+          "google_trait_keys": []
+        }
+      ]
+    }
+  ],
+  "ml_models": [
+    {
+      "kind": "llm",
+      "name": "rule_generator",
+      "version": "1.0",
+      "description": "Generic AI rule generator — converts a goal description into automation rules using available device capabilities",
+      "config": {
+        "endpoint": "http://localhost:11434/api/generate",
+        "model_id": "qwen2.5vl:7b"
+      }
+    },
+    {
+      "kind": "llm",
+      "name": "qwen2.5vl",
+      "version": "7b",
+      "description": "Qwen2.5-VL 7B — reasoning model: receives sensor context and detections, returns decision",
+      "config": {
+        "endpoint": "http://localhost:11434/api/generate",
+        "model_id": "qwen2.5vl:7b"
+      }
+    },
+    {
+      "kind": "vlm",
+      "name": "visual-inspector",
+      "version": "1.0",
+      "description": "YOLO-based visual inspection model for camera frames",
+      "config": {
+        "endpoint": "http://localhost:11434/api/generate",
+        "model_id": "yolo11n"
+      }
+    }
+  ]
+}

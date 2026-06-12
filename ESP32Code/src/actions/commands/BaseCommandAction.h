@@ -55,7 +55,8 @@ protected:
             Serial.println("Executing valid action: " + action);
             executeValidAction(action);
             state = action;
-            prefService.SaveActionState((char *)actionName.c_str(), (char *)action.c_str());
+            ActionState newState(actionName, state);
+            prefService.SaveActionState(newState);
             if (durationMs > 0)
             {
                 _durationMs    = durationMs;
@@ -74,9 +75,6 @@ protected:
     }
 
     virtual void executeValidAction(String action) = 0;
-
-private:
-    PreferencesManagerService prefService;
 
 public:
     String actionName;
@@ -106,9 +104,12 @@ public:
     // Restores the last saved state from NVS. Call once after initPins() on boot.
     void loadState()
     {
-        String lastState = prefService.LoadActionState((char *)actionName.c_str());
-        if (lastState.length() > 0)
-            applyAction(lastState);
+        ActionState *lastState = prefService.LoadActionState();
+        if (lastState)
+        {
+            applyAction(lastState->state);
+            delete lastState;
+        }
     }
 
     // Fires auto-off when the duration timer expires.

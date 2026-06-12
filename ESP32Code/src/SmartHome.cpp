@@ -52,10 +52,11 @@ PreferencesManagerService prefService;
 JwtService jwtService;
 DateTimeSyncService dateTimeSyncService;
 BleServer bleServer;
+DeviceRegistrationService deviceRegistrationService;
 MqttService mqttService(espClient, jwtService);
 BleNotificationService bleNotificationService(&bleServer, &bleResponseQueue);
 ProvisioningCallbacks provisioningCallbacks(&bleNotificationService, &provisioningQueue);
-ProvisioningBleService provisioningBleService(&bleNotificationService, &dateTimeSyncService, &wm, &prefService, &jwtService, &mqttService);
+ProvisioningBleService provisioningBleService(&bleNotificationService, &dateTimeSyncService, &wm, &jwtService, &mqttService, &deviceRegistrationService);
 BLECharacteristic *pCharacteristic;
 DynamicDeviceActionsService deviceActionsService;
 extern OnboardLedAction onboardLed;
@@ -172,9 +173,9 @@ void setup()
       dateTimeSyncService.syncTime();
 
       JwtToken *jwtData = jwtService.GetCurrentJwtToken();
-      MqttCredentials *creds = prefService.LoadMqttServerCredentials();
-
-      if (jwtData && jwtData->deviceConfigUrl.isEmpty())
+      MqttCredentials *creds = prefService.LoadMqttCredentials();
+      DeviceConfig *deviceConfig = prefService.LoadDeviceConfig();
+      if (!jwtData || !creds || !deviceConfig || deviceConfig->deviceConfigUrl.isEmpty())
       {
         Serial.println("Device config URL missing — re-provisioning required.");
         if (PROVISION_ON_ERROR)
@@ -186,7 +187,8 @@ void setup()
           onboardLed.execute("red");
         }
       }
-      else if (!creds || !jwtData || !mqttService.testMqtt(creds, jwtData))
+      else if (!creds || !jwtData || !deviceConfig ||
+        !mqttService.testMqtt(creds, jwtData->token))
       {
         Serial.println("MQTT test failed after WiFi connected. Entering provisioning mode...");
         if (PROVISION_ON_ERROR)
@@ -201,7 +203,7 @@ void setup()
       else
       {
         // Load device actions from server — no fallback; restart if unavailable
-        if (!deviceActionsService.loadFromServer(jwtData))
+        if (!deviceActionsService.loadFromServer(jwtData,deviceConfig))
         {
           Serial.println("[Config] Failed to load device configuration. Restarting in 5s...");
           onboardLed.execute("red");

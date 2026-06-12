@@ -1,28 +1,43 @@
 import { Component, DestroyRef, HostListener, inject, OnInit } from '@angular/core';
-import { DeviceActionView } from 'src/app/services/device.mgmt.service';
-import { iconForDeviceType, hasTrait, COLOR_OPTIONS } from 'src/app/utils/device-type.utils';
-import { DeviceSocketService } from 'src/app/services/device.socket.service';
-import { ActionGroupView, DashboardItem, UserActionsService } from 'src/app/services/user.actions.service';
-import { SHARED_MATERIAL } from 'src/app/shared-ui';
+import { forkJoin } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
+import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop';
+import { SHARED_MATERIAL } from 'src/app/shared-ui';
+import { DeviceSocketService } from 'src/app/services/device.socket.service';
+import { UserActionsService } from 'src/app/services/user.actions.service';
 import { GroupTileComponent } from '../group-tile/group-tile.component';
 import { CameraDisplayComponent } from '../camera-display/camera-display.component';
 import { GroupBottomSheetComponent } from '../group-bottom-sheet/group-bottom-sheet.component';
-import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop';
-import { forkJoin } from 'rxjs';
+import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
+import { controlTypeFor, iconForCapability, unitFor, ControlType, COLOR_OPTIONS } from 'src/app/utils/device-type.utils';
+import type { UserAction, UserActionGroup } from 'src/app/models';
 
-// Dial geometry constants
-const CX = 60, CY = 52, R = 36;
-const START_ANGLE = 225;
-const TOTAL_SWEEP = 270;
+export interface DashboardAction extends UserAction {
+  _controlType: ControlType;
+  _icon: string;
+  _unit: string;
+}
 
-function toSvgPt(angleDeg: number) {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: CX + R * Math.cos(rad), y: CY - R * Math.sin(rad) };
+export interface DashboardGroup {
+  group: UserActionGroup;
+  actions: DashboardAction[];
+}
+
+export interface DashboardItem {
+  kind: 'action' | 'group';
+  sortOrder: number;
+  action?: DashboardAction;
+  dashGroup?: DashboardGroup;
+}
+
+// ── SVG arc dial constants ────────────────────────────────────────────────────
+const CX = 60, CY = 52, R = 36, START = 225, SWEEP = 270;
+function toSvgPt(deg: number) {
+  const r = (deg * Math.PI) / 180;
+  return { x: CX + R * Math.cos(r), y: CY - R * Math.sin(r) };
 }
 
 @Component({
@@ -32,93 +47,110 @@ function toSvgPt(angleDeg: number) {
   styleUrl: './user-dashboard.css',
 })
 export class UserDashboard implements OnInit {
-  userActionsService = inject(UserActionsService);
-  socketService = inject(DeviceSocketService);
-  destroyRef = inject(DestroyRef);
-  dialog = inject(MatDialog);
-  snackBar = inject(MatSnackBar);
-  bottomSheet = inject(MatBottomSheet);
+  private actionsService = inject(UserActionsService);
+  private socketService  = inject(DeviceSocketService);
+  private destroyRef     = inject(DestroyRef);
+  private dialog         = inject(MatDialog);
+  private snackBar       = inject(MatSnackBar);
+  private bottomSheet    = inject(MatBottomSheet);
 
   items: DashboardItem[] = [];
   isDragging = false;
   draggingIndex = -1;
   groupDropTargetIndex: number | null = null;
 
+  private groups: UserActionGroup[] = [];
   private lastPointerPos = { x: 0, y: 0 };
   private draggingActionId: number | null = null;
 
+  colorOptions = COLOR_OPTIONS;
+  controlTypeFor = controlTypeFor;
+
   @HostListener('document:pointerup')
-  onDocumentPointerUp() { this.draggingActionId = null; }
+  onPointerUp() { this.draggingActionId = null; }
 
   ngOnInit(): void {
-    this.loadActions();
+    this.load();
 
-    this.socketService
-      .onActionStateUpdate()
+    this.socketService.onActionStateUpdate()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((data) => {
-        const action = this.findAction(data.actionId);
-        if (action) action.state = data.state;
+      .subscribe(({ actionId, state }) => {
+        const a = this.findAction(actionId);
+        if (a) a.state = state;
       });
 
-    this.socketService
-      .onDeviceOnlineStatusChange()
+    this.socketService.onDeviceStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((res: any) => {
-        const { deviceId, state } = res as { deviceId: number; state: boolean };
-        this.items
-          .filter(i => i.kind === 'action')
-          .map(i => i.action!)
-          .filter(a => a.deviceId === deviceId)
-          .forEach(a => a.online = state);
+      .subscribe(({ deviceId, online }) => {
+        for (const item of this.items) {
+          if (item.kind === 'action' && item.action!.user_device_id === deviceId) {
+            item.action!.user_device!.online = online;
+          } else if (item.kind === 'group') {
+            item.dashGroup!.actions
+              .filter(a => a.user_device_id === deviceId)
+              .forEach(a => { if (a.user_device) a.user_device.online = online; });
+          }
+        }
       });
   }
 
-  private loadActions() {
-    this.userActionsService
-      .getUserActions()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((actions) => { this.items = this.buildItems(actions); });
-  }
-
-  private reloadActions() {
-    this.userActionsService.getUserActions().subscribe(actions => {
-      this.items = this.buildItems(actions);
+  private load(): void {
+    forkJoin({
+      actions: this.actionsService.getUserActions(),
+      groups:  this.actionsService.getGroups(),
+    }).subscribe(({ actions, groups }) => {
+      this.groups = groups;
+      this.items = this.buildItems(actions as DashboardAction[], groups);
     });
   }
 
-  private buildItems(actions: DeviceActionView[]): DashboardItem[] {
-    const groupMap = new Map<string, DeviceActionView[]>();
-    const result: DashboardItem[] = [];
+  private reload(): void { this.load(); }
+
+  private enrich(a: UserAction): DashboardAction {
+    const cap = a.action_def?.capability;
+    return Object.assign(a as DashboardAction, {
+      _controlType: controlTypeFor(cap),
+      _icon:        iconForCapability(cap),
+      _unit:        unitFor(cap),
+    });
+  }
+
+  private buildItems(raw: UserAction[], groups: UserActionGroup[]): DashboardItem[] {
+    const actions = raw.map(a => this.enrich(a));
+    const groupMap = new Map<number, DashboardAction[]>();
+    const standalone: DashboardItem[] = [];
 
     for (const a of actions) {
-      if (!a.groupName) {
-        result.push({ kind: 'action', sortOrder: a.sortOrder ?? 0, action: a });
-      } else {
-        const arr = groupMap.get(a.groupName) ?? [];
+      if (a.user_action_group_id != null) {
+        const arr = groupMap.get(a.user_action_group_id) ?? [];
         arr.push(a);
-        groupMap.set(a.groupName, arr);
+        groupMap.set(a.user_action_group_id, arr);
+      } else {
+        standalone.push({ kind: 'action', sortOrder: a.sort_order, action: a });
       }
     }
 
-    for (const [name, members] of groupMap) {
-      result.push({
-        kind: 'group',
-        sortOrder: Math.min(...members.map(m => m.sortOrder ?? 0)),
-        group: {
-          name,
-          previewTypes: members.slice(0, 4).map(m => m.googleType?.value ?? null),
-          actions: members,
-        },
+    const groupItems: DashboardItem[] = groups
+      .filter(g => groupMap.has(g.id))
+      .map(g => {
+        const members = groupMap.get(g.id)!;
+        return {
+          kind: 'group' as const,
+          sortOrder: Math.min(...members.map(m => m.sort_order)),
+          dashGroup: { group: g, actions: members },
+        };
       });
-    }
 
-    return result.sort((a, b) => a.sortOrder - b.sortOrder);
+    return [...standalone, ...groupItems].sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
-  private findAction(actionId: number): DeviceActionView | undefined {
+  private findAction(id: number): DashboardAction | undefined {
     for (const item of this.items) {
-      if (item.kind === 'action' && item.action!.id === actionId) return item.action;
+      if (item.kind === 'action' && item.action!.id === id) return item.action;
+      if (item.kind === 'group') {
+        const found = item.dashGroup!.actions.find(a => a.id === id);
+        if (found) return found;
+      }
     }
     return undefined;
   }
@@ -126,213 +158,147 @@ export class UserDashboard implements OnInit {
   itemTrackId(item: DashboardItem): string {
     return item.kind === 'action'
       ? `action-${item.action!.id}`
-      : `group-${item.group!.name}`;
+      : `group-${item.dashGroup!.group.id}`;
   }
 
-  // ── Drag lifecycle ───────────────────────────────────────────────
+  // ── Drag lifecycle ────────────────────────────────────────────────────────
 
-  onDragStarted(index: number) {
-    this.isDragging = true;
-    this.draggingIndex = index;
+  onDragStarted(i: number)  { this.isDragging = true; this.draggingIndex = i; }
+  onDragEnded()             { this.isDragging = false; this.draggingIndex = -1; this.groupDropTargetIndex = null; }
+
+  onDragMoved(e: CdkDragMove) {
+    this.lastPointerPos = { x: e.pointerPosition.x, y: e.pointerPosition.y };
+    this.groupDropTargetIndex = this.cardAt(this.lastPointerPos.x, this.lastPointerPos.y);
   }
 
-  onDragEnded() {
-    this.isDragging = false;
-    this.draggingIndex = -1;
-    this.groupDropTargetIndex = null;
-  }
-
-  // ── Group hover detection (works because CDK sorting is disabled) ──
-  // No timer — directly track which card the pointer is over.
-  // Sorting is disabled so cards don't transform; getBoundingClientRect is accurate.
-
-  onDragMoved(event: CdkDragMove) {
-    this.lastPointerPos = { x: event.pointerPosition.x, y: event.pointerPosition.y };
-    this.groupDropTargetIndex = this.cardIndexAtPoint(this.lastPointerPos.x, this.lastPointerPos.y);
-  }
-
-  // Returns the index of the card whose bounding rect contains (px, py), excluding the dragged card.
-  // Safe to call at drop time because sorting is disabled — no CSS transforms shift rects.
-  private cardIndexAtPoint(px: number, py: number): number | null {
-    const wrappers = document.querySelectorAll<HTMLElement>('.device-card-wrapper[data-item-index]');
-    for (const w of Array.from(wrappers)) {
-      if (w.classList.contains('cdk-drag-preview')) continue;
-      const idx = +w.getAttribute('data-item-index')!;
+  private cardAt(px: number, py: number): number | null {
+    const els = document.querySelectorAll<HTMLElement>('.device-card-wrapper[data-item-index]');
+    for (const el of Array.from(els)) {
+      if (el.classList.contains('cdk-drag-preview')) continue;
+      const idx = +el.getAttribute('data-item-index')!;
       if (idx === this.draggingIndex) continue;
-      const r = w.getBoundingClientRect();
-      if (r.width === 0) continue; // CDK hides original with display:none → zero rect
-      if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) return idx;
+      const r = el.getBoundingClientRect();
+      if (r.width && px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) return idx;
     }
     return null;
   }
 
-  // Computes where the dragged item should land for a plain reorder.
-  // Needed because cdkDropListSortingDisabled makes event.currentIndex === event.previousIndex.
-  private reorderIndex(px: number, py: number, draggedIdx: number): number {
+  private reorderTarget(px: number, py: number, from: number): number {
     const cards: { idx: number; cx: number; cy: number }[] = [];
-
-    document.querySelectorAll<HTMLElement>('.device-card-wrapper[data-item-index]')
-      .forEach(w => {
-        if (w.classList.contains('cdk-drag-preview')) return;
-        const idx = +w.getAttribute('data-item-index')!;
-        if (idx === draggedIdx) return;
-        const r = w.getBoundingClientRect();
-        if (r.width === 0) return;
-        cards.push({ idx, cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
-      });
-
-    // Sort into reading order (top→bottom, left→right within a row)
+    document.querySelectorAll<HTMLElement>('.device-card-wrapper[data-item-index]').forEach(el => {
+      if (el.classList.contains('cdk-drag-preview')) return;
+      const idx = +el.getAttribute('data-item-index')!;
+      if (idx === from) return;
+      const r = el.getBoundingClientRect();
+      if (!r.width) return;
+      cards.push({ idx, cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
+    });
     cards.sort((a, b) => Math.abs(a.cy - b.cy) < 155 ? a.cx - b.cx : a.cy - b.cy);
-
     for (const c of cards) {
       const sameRow = Math.abs(py - c.cy) < 155;
-      const before = sameRow ? px < c.cx : py < c.cy;
-      if (before) {
-        // Adjust for the gap left by removing draggedIdx
-        return c.idx <= draggedIdx ? c.idx : c.idx - 1;
-      }
+      if (sameRow ? px < c.cx : py < c.cy) return c.idx <= from ? c.idx : c.idx - 1;
     }
-
     return this.items.length - 1;
   }
 
-  // ── Drop ─────────────────────────────────────────────────────────
-
-  drop(event: CdkDragDrop<DashboardItem[]>) {
-    // Re-check pointer position at drop time (lastPointerPos = final cdkDragMoved position).
-    // This is more reliable than groupDropTargetIndex which resets on any pointer movement.
-    const targetIdx = this.cardIndexAtPoint(this.lastPointerPos.x, this.lastPointerPos.y);
+  drop(event: CdkDragDrop<DashboardItem[]>): void {
+    const target = this.cardAt(this.lastPointerPos.x, this.lastPointerPos.y);
     this.groupDropTargetIndex = null;
 
-    if (targetIdx !== null) {
-      this.handleGroupDrop(this.items[event.previousIndex], this.items[targetIdx]);
+    if (target !== null) {
+      this.handleGroupDrop(this.items[event.previousIndex], this.items[target]);
     } else {
-      // cdkDropListSortingDisabled → currentIndex === previousIndex, so compute manually
-      const to = this.reorderIndex(this.lastPointerPos.x, this.lastPointerPos.y, event.previousIndex);
+      const to = this.reorderTarget(this.lastPointerPos.x, this.lastPointerPos.y, event.previousIndex);
       moveItemInArray(this.items, event.previousIndex, to);
       this.saveOrder();
     }
   }
 
-  private handleGroupDrop(draggedItem: DashboardItem, targetItem: DashboardItem) {
-    let groupName: string;
+  private handleGroupDrop(dragged: DashboardItem, target: DashboardItem): void {
+    if (dragged.kind !== 'action') return;
+    const draggedAction = dragged.action!;
 
-    if (targetItem.kind === 'group') {
-      groupName = targetItem.group!.name;
+    if (target.kind === 'group') {
+      // Add to existing group
+      this.actionsService.setActionGroup(draggedAction.id, target.dashGroup!.group.id)
+        .subscribe(() => this.reload());
     } else {
-      const existingNames = new Set(
-        this.items.filter(i => i.kind === 'group').map(i => i.group!.name)
-      );
-      groupName = 'Group';
-      let n = 2;
-      while (existingNames.has(groupName)) groupName = `Group ${n++}`;
-    }
-
-    const calls = [this.userActionsService.setActionGroup(draggedItem.action!.id, groupName)];
-    if (targetItem.kind === 'action') {
-      calls.push(this.userActionsService.setActionGroup(targetItem.action!.id, groupName));
-    }
-
-    forkJoin(calls).subscribe(() => {
-      this.userActionsService.getUserActions().subscribe(actions => {
-        this.items = this.buildItems(actions);
-        this.saveOrder();
+      // Create a new group from these two actions
+      this.actionsService.createGroup({ name: 'Group' }).subscribe(newGroup => {
+        const targetAction = target.action!;
+        forkJoin([
+          this.actionsService.setActionGroup(draggedAction.id, newGroup.id),
+          this.actionsService.setActionGroup(targetAction.id, newGroup.id),
+        ]).subscribe(() => this.reload());
       });
-    });
+    }
   }
 
-  private saveOrder() {
-    const orderedIds: number[] = [];
+  private saveOrder(): void {
+    const ids: number[] = [];
     for (const item of this.items) {
-      if (item.kind === 'action') orderedIds.push(item.action!.id);
-      else orderedIds.push(...item.group!.actions.map(a => a.id));
+      if (item.kind === 'action') ids.push(item.action!.id);
+      else ids.push(...item.dashGroup!.actions.map(a => a.id));
     }
-    this.userActionsService.reorderActions(orderedIds).subscribe();
+    this.actionsService.reorderActions(ids).subscribe();
   }
 
-  // ── Connected drop-list IDs (one per group item) ─────────────────
+  // ── Group actions ─────────────────────────────────────────────────────────
 
-  get allGroupTargetIds(): string[] {
-    return this.items
-      .map((item, i) => item.kind === 'group' ? `group-drop-${i}` : null)
-      .filter((id): id is string => id !== null);
+  openGroup(dg: DashboardGroup): void {
+    this.bottomSheet.open(GroupBottomSheetComponent, { data: { dashGroup: dg } })
+      .afterDismissed().subscribe((reload: boolean) => { if (reload) this.reload(); });
   }
 
-  onGroupOverlayDrop(event: CdkDragDrop<DashboardItem[]>, i: number) {
-    const draggedItem: DashboardItem = event.item.data;
-    const targetItem = this.items[i];
-    if (draggedItem?.kind === 'action' && targetItem?.kind === 'group') {
-      this.handleGroupDrop(draggedItem, targetItem);
-    }
-  }
-
-  // ── Group actions ────────────────────────────────────────────────
-
-  openGroup(group: ActionGroupView) {
-    const ref = this.bottomSheet.open(GroupBottomSheetComponent, { data: { group } });
-    ref.afterDismissed().subscribe((needsReload: boolean) => {
-      if (needsReload) this.reloadActions();
-    });
-  }
-
-  renameGroup(group: ActionGroupView) {
-    const existingNames = new Set(
-      this.items.filter(i => i.kind === 'group' && i.group!.name !== group.name).map(i => i.group!.name)
-    );
-    const ref = this.dialog.open(RenameActionDialogComponent, {
+  renameGroup(dg: DashboardGroup): void {
+    this.dialog.open(RenameActionDialogComponent, {
       width: '320px',
-      data: { name: group.name, title: 'Rename Group' },
-    });
-    ref.afterClosed().subscribe((newName: string | undefined) => {
-      if (!newName || newName === group.name) return;
-      if (existingNames.has(newName)) {
-        this.snackBar.open('A group with that name already exists', 'Close', { duration: 2500 });
-        return;
-      }
-      forkJoin(group.actions.map(a => this.userActionsService.setActionGroup(a.id, newName)))
-        .subscribe(() => {
-          this.snackBar.open('Group renamed', 'Close', { duration: 2000 });
-          this.reloadActions(); // rebuild items with new references so signal inputs re-fire
-        });
+      data: { name: dg.group.name, title: 'Rename Group' },
+    }).afterClosed().subscribe((name: string) => {
+      if (!name || name === dg.group.name) return;
+      this.actionsService.updateGroup(dg.group.id, { name })
+        .subscribe(() => { dg.group.name = name; this.snackBar.open('Group renamed', 'OK', { duration: 2000 }); });
     });
   }
 
-  ungroupAll(group: ActionGroupView) {
-    forkJoin(group.actions.map(a => this.userActionsService.setActionGroup(a.id, null)))
-      .subscribe(() => this.reloadActions());
+  ungroupAll(dg: DashboardGroup): void {
+    forkJoin(dg.actions.map(a => this.actionsService.setActionGroup(a.id, null)))
+      .subscribe(() => this.actionsService.deleteGroup(dg.group.id).subscribe(() => this.reload()));
   }
 
-  // ── Device type icon + trait helpers ─────────────────────────────
+  // ── Action controls ───────────────────────────────────────────────────────
 
-  iconForType = iconForDeviceType;
-  hasTrait = hasTrait;
-  colorOptions = COLOR_OPTIONS;
-
-  // ── Action card actions ──────────────────────────────────────────
-
-  changeActionState(action: DeviceActionView, actionState: unknown) {
-    this.socketService.publishActionState(action.id, String(actionState));
+  dispatchState(action: DashboardAction, state: string): void {
+    action.state = state;
+    this.socketService.dispatchAction({
+      actionId:     action.id,
+      userDeviceId: action.user_device_id,
+      mqttType:     action.action_def?.mqtt_type ?? '',
+      mqttName:     action.action_def?.mqtt_name ?? '',
+      state,
+    });
   }
 
-  renameAction(action: DeviceActionView) {
-    const ref = this.dialog.open(RenameActionDialogComponent, {
+  renameAction(action: DashboardAction): void {
+    this.dialog.open(RenameActionDialogComponent, {
       width: '320px',
       data: { name: action.name },
-    });
-    ref.afterClosed().subscribe((newName: string | undefined) => {
-      if (!newName) return;
-      this.userActionsService.updateUserAction({ ...action, name: newName }).subscribe(() => {
-        action.name = newName;
-        this.snackBar.open('Action renamed', 'Close', { duration: 2000 });
-      });
+    }).afterClosed().subscribe((name: string) => {
+      if (!name) return;
+      this.actionsService.updateAction(action.id, { name })
+        .subscribe(() => { action.name = name; this.snackBar.open('Action renamed', 'OK', { duration: 2000 }); });
     });
   }
 
-  // ── Arc dial ────────────────────────────────────────────────────
+  // ── Helpers exposed to template ───────────────────────────────────────────
+  iconForCapability = iconForCapability;
+
+  isOnline(action: DashboardAction): boolean { return action.user_device?.online ?? false; }
+
+  // ── Arc dial ──────────────────────────────────────────────────────────────
 
   dialTrackPath(): string {
-    const s = toSvgPt(START_ANGLE);
-    const e = toSvgPt(START_ANGLE - TOTAL_SWEEP);
+    const s = toSvgPt(START), e = toSvgPt(START - SWEEP);
     return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 1 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
   }
 
@@ -340,47 +306,37 @@ export class UserDashboard implements OnInit {
     const v = Math.max(0, Math.min(100, Number(value) || 0));
     if (v <= 0) return '';
     if (v >= 100) return this.dialTrackPath();
-    const s = toSvgPt(START_ANGLE);
-    const e = toSvgPt(START_ANGLE - (v / 100) * TOTAL_SWEEP);
-    const largeArc = (v / 100) * TOTAL_SWEEP > 180 ? 1 : 0;
-    return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 ${largeArc} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
+    const s = toSvgPt(START), e = toSvgPt(START - (v / 100) * SWEEP);
+    return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 ${(v / 100) * SWEEP > 180 ? 1 : 0} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
   }
 
   dialThumbPt(value: unknown) {
-    const v = Math.max(0, Math.min(100, Number(value) || 0));
-    return toSvgPt(START_ANGLE - (v / 100) * TOTAL_SWEEP);
+    return toSvgPt(START - (Math.max(0, Math.min(100, Number(value) || 0)) / 100) * SWEEP);
   }
 
-  onDialPointerDown(event: PointerEvent, action: DeviceActionView) {
+  onDialPointerDown(event: PointerEvent, action: DashboardAction): void {
     event.preventDefault();
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
     this.draggingActionId = action.id;
-    this.applyDialEvent(event, action);
+    this.applyDial(event, action);
   }
 
-  onDialPointerMove(event: PointerEvent, action: DeviceActionView) {
+  onDialPointerMove(event: PointerEvent, action: DashboardAction): void {
     if (this.draggingActionId !== action.id) return;
-    this.applyDialEvent(event, action);
+    this.applyDial(event, action);
   }
 
-  private applyDialEvent(event: PointerEvent, action: DeviceActionView) {
+  private applyDial(event: PointerEvent, action: DashboardAction): void {
     const svg = event.currentTarget as SVGSVGElement;
     const pt = svg.createSVGPoint();
-    pt.x = event.clientX;
-    pt.y = event.clientY;
+    pt.x = event.clientX; pt.y = event.clientY;
     const sp = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-
-    const dx = sp.x - CX;
-    const dy = -(sp.y - CY);
-    let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    let angle = (Math.atan2(-(sp.y - CY), sp.x - CX) * 180) / Math.PI;
     if (angle < 0) angle += 360;
-
-    let sweep = START_ANGLE - angle;
+    let sweep = START - angle;
     if (sweep < 0) sweep += 360;
-    if (sweep > TOTAL_SWEEP) sweep = sweep > TOTAL_SWEEP + (360 - TOTAL_SWEEP) / 2 ? 0 : TOTAL_SWEEP;
-
-    const v = Math.round((sweep / TOTAL_SWEEP) * 100);
-    action.state = v;
-    this.changeActionState(action, String(v));
+    if (sweep > SWEEP) sweep = sweep > SWEEP + (360 - SWEEP) / 2 ? 0 : SWEEP;
+    const v = Math.round((sweep / SWEEP) * 100);
+    this.dispatchState(action, String(v));
   }
 }

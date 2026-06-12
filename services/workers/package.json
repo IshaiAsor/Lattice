@@ -1,0 +1,32 @@
+{
+  "name": "@lattice/workers",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build":            "tsc",
+    "dev:ingest":       "ts-node -r tsconfig-paths/register ingest/index.ts",
+    "dev:automation":   "ts-node -r tsconfig-paths/register automation/index.ts",
+    "dev:pipeline":     "ts-node -r tsconfig-paths/register pipeline/index.ts",
+    "start:ingest":     "node dist/ingest/index.js",
+    "start:automation": "node dist/automation/index.js",
+    "start:pipeline":   "node dist/pipeline/index.js"
+  },
+  "dependencies": {
+    "@lattice/logger":          "*",
+    "@lattice/otel":            "*",
+    "@lattice/prisma-client":   "*",
+    "@lattice/queue":           "*",
+    "@socket.io/redis-emitter": "^5.1.0",
+    "dotenv":                   "^17.3.1",
+    "ioredis":                  "^5.6.1",
+    "node-cron":                "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node":      "^25.9.0",
+    "@types/node-cron": "^3.0.11",
+    "nodemon":          "^3.0.1",
+    "ts-node":          "^10.9.2",
+    "tsconfig-paths":   "^4.2.0",
+    "typescript":       "^5.9.3"
+  }
+}

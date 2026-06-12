@@ -1,0 +1,18 @@
+[wokwi]
+version = 1
+firmware = ".pio/build/esp32s3_mini-wokwi/firmware.bin"
+elf = ".pio/build/esp32s3_mini-wokwi/firmware.elf"
+
+# esp32s3_mini-wokwi is identical to esp32s3_mini-test but with
+# ARDUINO_USB_CDC_ON_BOOT=0 so Serial routes through UART0 (visible in Wokwi).
+#
+# To simulate other environments, replace the two paths above and rebuild:
+#   esp32s3_mini-test/prod      → .pio/build/esp32s3_mini-test/firmware.{bin,elf}
+#   4d_systems_*-test/prod      → .pio/build/4d_systems_esp32s3_gen4_r8n16-test/firmware.{bin,elf}
+#   esp32wrover_e-test/prod     → .pio/build/esp32wrover_e-test/firmware.{bin,elf}
+#                                  (also change diagram.json board type to board-esp32-devkit-v1)
+#   esp32s3_cam-test/prod       → .pio/build/esp32s3_cam-test/firmware.{bin,elf}
+
+[net]
+ssid = "Wokwi-GUEST"
+password = ""

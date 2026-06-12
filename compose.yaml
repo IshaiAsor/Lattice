@@ -48,6 +48,11 @@ services:
     volumes:
       - ./certs:/opt/emqx/etc/certs:ro
       - ./acl.conf:/opt/emqx/etc/acl.conf
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
 
   # PostgreSQL Database
   postgres:
@@ -78,6 +83,11 @@ services:
       timeout: 5s
       retries: 5
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
 
   # Adminer (Database Management Tool)
   adminer:
@@ -104,12 +114,41 @@ services:
       --maxmemory 256mb
       --maxmemory-policy volatile-lru
       --appendonly yes
-      --user ${REDIS_USER} on ">${REDIS_PASSWORD}" ~* +@all
+      --requirepass ${REDIS_PASSWORD}
     ports:
       - '6379:6379'
     volumes:
       - redis_data:/data
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+
+  # RabbitMQ — message broker for inter-service queues (action.dispatch, telemetry.arrived, etc.)
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq
+    ports:
+      - '5672:5672' # AMQP
+      - '15672:15672' # Management UI — http://localhost:15672 (guest/guest)
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
 
   # OTA Manager Service
   ota-manager:
@@ -131,8 +170,13 @@ services:
     depends_on:
       - emqx
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
-  # VLM Server — plant health AI inference
+  # VLM Server — AI inference
   vlm-server:
     build:
       context: ./vlm-server
@@ -140,6 +184,11 @@ services:
     ports:
       - '3002:3000'
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
   # Prisma migrations — run once on first setup or after schema changes:
   #   docker compose run --rm migrate
@@ -159,18 +208,129 @@ services:
         condition: service_healthy
     profiles:
       - migrate
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
   # Regenerate Prisma client after schema changes (run from host, not inside Docker):
   #   docker compose run --rm generate
   generate:
     build:
       context: ./prisma
-      dockerfile: Dockerfile     
+      dockerfile: Dockerfile
     command: npx prisma generate
     profiles:
       - generate
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: hydro_ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+  #     interval: 15s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 30s
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '4.0'
+  #         memory: 10G
+  #       reservations:
+  #         memory: 512M
+
+  # ollama-setup:
+  #   image: ollama/ollama:latest
+  #   container_name: hydro_ollama_setup
+  #   depends_on:
+  #     ollama:
+  #       condition: service_healthy
+  #   restart: "no"
+  #   entrypoint: [""]
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '1.0'
+  #         memory: 512M
+  #   # This script runs once, configures the main server, and exits cleanly.
+  #   command: |
+  #     sh -c "
+  #     export OLLAMA_HOST=ollama:11434;
+
+  #     echo 'Pulling base model (this may take a few minutes)...';
+  #     ollama pull qwen2.5vl:7b;
+
+  #     echo 'Writing strict Modelfile constraints...';
+  #     cat << 'EOF' > /tmp/Modelfile
+  #     FROM qwen2.5vl:7b
+  #     PARAMETER temperature 0.0
+  #     PARAMETER num_ctx 8192
+  #     SYSTEM \"\"\"You are an expert, highly reliable hydroponic AI controller.
+  #     Your only job is to analyze telemetry and vision data, diagnose plant stress, and output physical relay commands.
+  #     You do not converse. You do not explain your feelings.
+  #     You MUST return your response using exactly this JSON schema and nothing else:
+  #     {
+  #         \"diagnosis\": \"A short string explaining the health of the plant and system\",
+  #         \"action\": \"A specific string command like 'maintain', 'dose_ph', or 'trigger_cooling'\"
+  #     }\"\"\"
+  #     EOF
+
+  #     echo 'Compiling hydro-brain...';
+  #     ollama create hydro-brain -f /tmp/Modelfile;
+  #     echo 'hydro-brain is active and ready for API calls!';
+  #     "
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama_service
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   restart: unless-stopped
+
+  # # 2. Automated Model Downloader
+  # ollama-model-puller:
+  #   image: curlimages/curl:latest
+  #   container_name: model_puller
+  #   depends_on:
+  #     - ollama
+  #   # Waits for the API to boot, then pulls the model
+  #   command: >
+  #     sh -c "
+  #     echo 'Waiting for Ollama API...';
+  #     while ! curl -s http://ollama:11434/api/tags > /dev/null; do sleep 1; done;
+  #     echo 'Ollama is up! Downloading llama3.2...';
+  #     curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"llama3.2\"}';
+  #     echo 'Model ready!';"
+
+  ollama:
+    # 1. Point to your custom pre-baked Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    container_name: ollama_service
+    # 2. Force the port to bind directly to your Windows loopback adapter
+    ports:
+      - '127.0.0.1:11434:11434'
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
 volumes:
+  # This prevents you from having to re-download the 7B model if the container restarts
+  ollama_data:
   emqx-data:
   pg-data:
   redis_data:
+  rabbitmq_data:

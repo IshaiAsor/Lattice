@@ -26,7 +26,6 @@ class DeviceConfigurationResponse : public JsonModel
 {
 public:
     std::vector<ActionConfig> actions;
-    bool parsed = false;
 
     void fromJson(JsonVariantConst src) override
     {
@@ -51,7 +50,6 @@ public:
 
             actions.push_back(ac);
         }
-        parsed = !actions.empty();
     }
 
     void toJson(JsonVariant) const override {}

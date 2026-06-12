@@ -1,7 +1,7 @@
 import { Component, input, output } from '@angular/core';
-import { ActionGroupView } from 'src/app/services/user.actions.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
-import { iconForDeviceType } from 'src/app/utils/device-type.utils';
+import { iconForCapability } from 'src/app/utils/device-type.utils';
+import type { DashboardGroup } from '../user-dashboard/user-dashboard';
 
 @Component({
   selector: 'app-group-tile',
@@ -11,10 +11,14 @@ import { iconForDeviceType } from 'src/app/utils/device-type.utils';
   styleUrl: './group-tile.component.css',
 })
 export class GroupTileComponent {
-  group = input.required<ActionGroupView>();
-  expand = output<void>();
-  rename = output<void>();
-  ungroupAll = output<void>();
+  dashGroup   = input.required<DashboardGroup>();
+  expand      = output<void>();
+  rename      = output<void>();
+  ungroupAll  = output<void>();
 
-  iconForType = iconForDeviceType;
+  iconForCapability = iconForCapability;
+
+  get previewCaps(): (string | undefined)[] {
+    return this.dashGroup().actions.slice(0, 4).map(a => a.action_def?.capability);
+  }
 }

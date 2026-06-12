@@ -7,6 +7,9 @@
 #include "actions/ActionPinsSetup.h"
 #include "esp_camera.h"
 #include "services/LiveStreamService.h"
+#ifdef MOCK_CAMERA
+#include "mocks/mock_camera_frame.h"
+#endif
 
 // Defined in SmartHome.cpp
 extern LiveStreamService wsCaptureService;
@@ -32,6 +35,11 @@ private:
 
     void initCamera()
     {
+#ifdef MOCK_CAMERA
+        _cameraReady = true;
+        Serial.println("[Camera] MOCK_CAMERA: skipping hardware init (TakePicture)");
+        return;
+#endif
         camera_config_t config;
         config.ledc_channel = LEDC_CHANNEL_0;
         config.ledc_timer   = LEDC_TIMER_0;
@@ -132,6 +140,11 @@ protected:
             return "";
         }
 
+#ifdef MOCK_CAMERA
+        wsCaptureService.sendFrame(MOCK_FRAME_BYTES, MOCK_FRAME_LEN);
+        Serial.printf("[Camera] Mock frame sent (%u bytes) via /ws/capture\n", (unsigned)MOCK_FRAME_LEN);
+        return "";
+#else
         camera_fb_t *fb = esp_camera_fb_get();
         if (!fb)
         {
@@ -144,6 +157,7 @@ protected:
         esp_camera_fb_return(fb);
 
         return "";  // delivery via WebSocket, not MQTT
+#endif
     }
 
 public:

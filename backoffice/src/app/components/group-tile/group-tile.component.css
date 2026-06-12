@@ -5,50 +5,44 @@
   display: flex;
 }
 
-.material-symbols-outlined {
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 24;
-}
-
 .group-tile {
   flex: 1;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f3f4ff;
-  border: 1px solid #c5cae9;
-  border-left: none;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
   box-sizing: border-box;
   cursor: pointer;
-  transition: background 0.15s;
-  border-radius: 0 12px 12px 0;
+  transition: background 0.15s, box-shadow 0.15s;
 }
 
-.group-tile:hover { background: #eef0fb; }
+.group-tile:hover {
+  background: var(--surface);
+  box-shadow: var(--card-shadow-hover);
+}
 
 .group-header {
   display: flex;
   align-items: center;
   padding: 10px 6px 8px 12px;
   gap: 6px;
-  border-bottom: 1px solid #e8eaf6;
+  border-bottom: 1px solid var(--border);
 }
 
 .group-folder-icon {
-  font-size: 18px;
-  width: 18px;
-  height: 18px;
-  color: #5c6bc0;
+  font-size: 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  color: var(--primary);
   flex-shrink: 0;
 }
 
 .group-name {
-  font-size: 13px;
+  font-size: 0.8rem;
   font-weight: 500;
-  color: #212121;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -58,9 +52,9 @@
 .header-spacer { flex: 1; }
 
 .group-count {
-  font-size: 11px;
+  font-size: 0.68rem;
   color: #fff;
-  background: #5c6bc0;
+  background: var(--primary);
   border-radius: 10px;
   padding: 0 6px;
   line-height: 18px;
@@ -74,17 +68,14 @@
   flex-shrink: 0;
 }
 
-.card-menu-btn mat-icon {
-  font-size: 16px;
-  color: #9e9e9e;
-}
+.card-menu-btn mat-icon { font-size: 16px; color: var(--text-muted); }
 
 .icon-grid {
   flex: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 20px;
+  padding: 16px;
   align-content: center;
   justify-content: center;
 }
@@ -93,20 +84,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  background: #e8eaf6;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(var(--primary), 0.1);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
-.icon-cell.empty {
-  grid-column: 1 / -1;
-  grid-row: 1 / -1;
-  width: 72px;
-  height: 72px;
-}
+.icon-cell mat-icon { color: var(--primary); font-size: 22px !important; }
 
-.icon-cell .material-symbols-outlined {
-  font-size: 28px;
-  color: #5c6bc0;
-}
+.icon-cell.empty { width: 64px; height: 64px; }

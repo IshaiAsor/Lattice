@@ -1,35 +1,27 @@
 <div class="group-tile" (click)="expand.emit()">
-    <div class="group-header">
-        <mat-icon class="group-folder-icon">folder</mat-icon>
-        <span class="group-name">{{ group().name }}</span>
-        <span class="header-spacer"></span>
-        <span class="group-count">{{ group().actions.length }}</span>
-        <button mat-icon-button [matMenuTriggerFor]="groupMenu" class="card-menu-btn"
+  <div class="group-header">
+    <mat-icon class="group-folder-icon">folder</mat-icon>
+    <span class="group-name">{{ dashGroup().group.name }}</span>
+    <span class="header-spacer"></span>
+    <span class="group-count">{{ dashGroup().actions.length }}</span>
+    <button mat-icon-button [matMenuTriggerFor]="groupMenu" class="card-menu-btn"
             (click)="$event.stopPropagation()">
-            <mat-icon>more_vert</mat-icon>
-        </button>
-        <mat-menu #groupMenu="matMenu">
-            <button mat-menu-item (click)="rename.emit()">
-                <mat-icon>edit</mat-icon>
-                <span>Rename</span>
-            </button>
-            <button mat-menu-item (click)="ungroupAll.emit()">
-                <mat-icon>folder_open</mat-icon>
-                <span>Ungroup</span>
-            </button>
-        </mat-menu>
-    </div>
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #groupMenu="matMenu">
+      <button mat-menu-item (click)="rename.emit()"><mat-icon>edit</mat-icon>Rename</button>
+      <button mat-menu-item (click)="ungroupAll.emit()"><mat-icon>folder_open</mat-icon>Ungroup</button>
+    </mat-menu>
+  </div>
 
-    <div class="icon-grid">
-        @for (typeValue of group().previewTypes; track $index) {
-        <div class="icon-cell">
-            <span class="material-symbols-outlined">{{ iconForType(typeValue) }}</span>
-        </div>
-        }
-        @if (group().previewTypes.length === 0) {
-        <div class="icon-cell empty">
-            <span class="material-symbols-outlined">folder</span>
-        </div>
-        }
-    </div>
+  <div class="icon-grid">
+    @for (cap of previewCaps; track $index) {
+      <div class="icon-cell">
+        <mat-icon>{{ iconForCapability(cap) }}</mat-icon>
+      </div>
+    }
+    @if (previewCaps.length === 0) {
+      <div class="icon-cell empty"><mat-icon>folder</mat-icon></div>
+    }
+  </div>
 </div>

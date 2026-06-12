@@ -1,0 +1,29 @@
+{
+  "name": "iot-smart-home",
+  "version": "1.0.0",
+  "workspaces": [
+    "backend",
+    "ml-router",
+    "workers",
+    "lattice/*",
+    "@lattice/*",
+    "services/*",
+    "packages/*"
+  ],
+  "description": "Google assistant to esp32 comm demo",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IshaiAsor/SmartHome.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/IshaiAsor/SmartHome/issues"
+  },
+  "homepage": "https://github.com/IshaiAsor/SmartHome#readme"
+}

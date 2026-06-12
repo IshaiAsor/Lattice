@@ -25,6 +25,22 @@
       "path": "prisma",
     },
     {
+      "name": "Device Gateway",
+      "path": "services/device-gateway",
+    },
+    {
+      "name": "Google Home",
+      "path": "services/google-home",
+    },
+    {
+      "name": "ML Router",
+      "path": "ml-router",
+    },
+    {
+      "name": "Workers",
+      "path": "services/workers",
+    },
+    {
       "name": "VLM Server",
       "path": "vlm-server",
     },

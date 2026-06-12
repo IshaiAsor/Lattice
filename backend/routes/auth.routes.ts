@@ -1,38 +1,29 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
 import { loginService } from '../services/login.service';
 import { exceptionHandler } from '../middlewares/exception.middleware';
-import { JwtPurpose } from '../services/jwt.service';
 import { authRateLimiter } from '../middlewares/rate.limiter.middleware';
 
 const router = express.Router();
 router.use(exceptionHandler);
 
-router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
+const getIp = (req: express.Request): string => {
+  const fwd = req.headers['x-forwarded-for'];
+  if (Array.isArray(fwd)) return fwd[0];
+  return (fwd ?? req.socket.remoteAddress ?? 'unknown') as string;
+};
+
+router.post('/login', authRateLimiter, async (req, res) => {
   const { username, password } = req.body;
-  let ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  if (Array.isArray(ipAddress)) {
-    ipAddress = ipAddress[0];
-  }
-  const authResult = await loginService.loginWithCredentials(username, password, ipAddress || 'unknown', JwtPurpose.app_usage);
-  if (authResult) {
-    return res.json(authResult.token);
-  } else {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
+  const result = await loginService.loginWithCredentials(username, password, getIp(req));
+  if (result) return res.json(result.token);
+  return res.status(401).json({ error: 'Invalid credentials' });
 });
 
 router.post('/google', authRateLimiter, async (req, res) => {
   const { code } = req.body;
-  let ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  if (Array.isArray(ipAddress)) {
-    ipAddress = ipAddress[0];
-  }
-  var authResult = await loginService.loginWithGoogle(code, ipAddress || 'unknown', JwtPurpose.app_usage);
-  if (authResult) {
-    return res.json(authResult.token);
-  } else {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
+  if (!code) return res.status(400).json({ error: 'code is required' });
+  const token = await loginService.loginWithGoogle(code, getIp(req));
+  res.json(token);
 });
 
 export default router;

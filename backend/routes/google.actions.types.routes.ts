@@ -1,16 +1,13 @@
-import express, { Request, Response } from 'express';
-import { googleActionsTypesService } from '../services/google.actions.types.service';
+import express from 'express';
 import { verifyToken } from '../middlewares/auth.middleware';
-import { exceptionHandler } from '../middlewares/exception.middleware';
 import { JwtPurpose } from '../services/jwt.service';
+import { catalogRepository } from '../dal/catalog.repository';
 
 const router = express.Router();
 router.use(verifyToken(JwtPurpose.app_usage));
-router.use(exceptionHandler);
 
-router.get('/', async (req: Request, res: Response) => {
-  const types = await googleActionsTypesService.getGoogleActionTypes();
-  res.json(types);
+router.get('/', async (_req, res) => {
+  res.json(await catalogRepository.listGoogleActionTypes());
 });
 
 export default router;

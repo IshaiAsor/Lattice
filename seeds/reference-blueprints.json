@@ -1,0 +1,183 @@
+{
+  "_comment": "Lattice Platform — Reference Blueprints (Phase 10 seed). Import via Admin UI: /admin/blueprints → Import. Requires reference-catalog.json to be imported first (device models and ML models must exist).",
+  "version": "1",
+  "exported_at": "2026-06-04T00:00:00.000Z",
+  "blueprints": [
+    {
+      "name": "Lattice Reference Setup v1",
+      "description": "Full-stack reference blueprint: controller + camera module, sensor analysis pipeline, threshold-based automation, emergency safeguards.",
+      "category": "reference",
+      "status": "draft",
+      "slots": [
+        {
+          "model_key": "esp32s3_mini",
+          "version": "v2",
+          "role": "controller",
+          "min_count": 1,
+          "max_count": null,
+          "sort_order": 1
+        },
+        {
+          "model_key": "esp32s3_cam",
+          "version": "v2",
+          "role": "camera",
+          "min_count": 0,
+          "max_count": 1,
+          "sort_order": 2
+        }
+      ],
+      "action_groups": [
+        {
+          "blueprint_device_slot_id": null,
+          "name": "Actuators",
+          "description": "All controllable outputs",
+          "icon": "settings_input_component",
+          "color": "#3d6ee0",
+          "sort_order": 1
+        },
+        {
+          "blueprint_device_slot_id": null,
+          "name": "Sensors",
+          "description": "Environmental sensor readings",
+          "icon": "sensors",
+          "color": "#2ecc71",
+          "sort_order": 2
+        }
+      ],
+      "pipelines": [
+        {
+          "name": "Sensor Analysis",
+          "enabled": false,
+          "trigger_kind": "telemetry",
+          "trigger_capability": "TEMPERATURE",
+          "trigger_config": null,
+          "stages": [
+            {
+              "position": 1,
+              "stage_kind": "sensor_digest",
+              "ml_model_kind": null,
+              "ml_model_name": null,
+              "component_version": null,
+              "config": null
+            },
+            {
+              "position": 2,
+              "stage_kind": "llm",
+              "ml_model_kind": "llm",
+              "ml_model_name": "qwen2.5vl",
+              "component_version": null,
+              "config": null
+            },
+            {
+              "position": 3,
+              "stage_kind": "command_exec",
+              "ml_model_kind": null,
+              "ml_model_name": null,
+              "component_version": null,
+              "config": null
+            }
+          ]
+        },
+        {
+          "name": "Visual Inspection",
+          "enabled": false,
+          "trigger_kind": "schedule",
+          "trigger_capability": null,
+          "trigger_config": { "cron": "0 */4 * * *" },
+          "stages": [
+            {
+              "position": 1,
+              "stage_kind": "vlm",
+              "ml_model_kind": "vlm",
+              "ml_model_name": "visual-inspector",
+              "component_version": null,
+              "config": null
+            },
+            {
+              "position": 2,
+              "stage_kind": "sensor_digest",
+              "ml_model_kind": null,
+              "ml_model_name": null,
+              "component_version": null,
+              "config": null
+            },
+            {
+              "position": 3,
+              "stage_kind": "llm",
+              "ml_model_kind": "llm",
+              "ml_model_name": "qwen2.5vl",
+              "component_version": null,
+              "config": null
+            },
+            {
+              "position": 4,
+              "stage_kind": "command_exec",
+              "ml_model_kind": null,
+              "ml_model_name": null,
+              "component_version": null,
+              "config": null
+            }
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "name": "High Temperature — Activate Fan",
+          "match": "AND",
+          "cooldown_sec": 120,
+          "enabled": true,
+          "conditions": [
+            { "kind": "threshold", "params": { "capability": "TEMPERATURE", "operator": ">", "value": 28 } }
+          ],
+          "actions": [
+            { "kind": "set_state", "capability": "FAN", "target_state": "on", "blueprint_pipeline_id": null, "delay_sec": 0 }
+          ]
+        },
+        {
+          "name": "Temperature Normal — Fan Off",
+          "match": "AND",
+          "cooldown_sec": 120,
+          "enabled": true,
+          "conditions": [
+            { "kind": "threshold", "params": { "capability": "TEMPERATURE", "operator": "<", "value": 24 } }
+          ],
+          "actions": [
+            { "kind": "set_state", "capability": "FAN", "target_state": "off", "blueprint_pipeline_id": null, "delay_sec": 0 }
+          ]
+        },
+        {
+          "name": "Lights Off at Midnight",
+          "match": "AND",
+          "cooldown_sec": 0,
+          "enabled": true,
+          "conditions": [
+            { "kind": "schedule", "params": { "cron": "0 0 * * *" } }
+          ],
+          "actions": [
+            { "kind": "set_state", "capability": "LIGHT_DIMMER", "target_state": "off", "blueprint_pipeline_id": null, "delay_sec": 0 }
+          ]
+        }
+      ],
+      "emergency_rules": [
+        {
+          "name": "Critical Temp — Emergency Fan",
+          "source_capability": "TEMPERATURE",
+          "operator": ">",
+          "threshold": "35",
+          "target_capability": "FAN",
+          "target_state": "on",
+          "enabled": true
+        },
+        {
+          "name": "Critical Temp — Cut Power",
+          "source_capability": "TEMPERATURE",
+          "operator": ">",
+          "threshold": "40",
+          "target_capability": "OUTLET",
+          "target_state": "off",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

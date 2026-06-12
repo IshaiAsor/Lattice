@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { JwtPurpose, jwtService } from '../services/jwt.service';
+import { createLogger } from '@lattice/logger';
+
+const log = createLogger('api:auth');
 
 declare global {
   namespace Express {
@@ -12,14 +15,12 @@ declare global {
 export const verifyToken = (purpose: JwtPurpose) => {
   return (req: Request, res: Response, next: NextFunction) => {
     let token = '';
-    
-    // 1. Try Authorization Header
+
     const authHeader = req.headers.authorization;
     if (authHeader) {
       token = authHeader.split(' ')[1];
     }
-    
-    // 2. Try Request Body (Intelligent detection)
+
     if (!token && req.body) {
       let bodyData = req.body;
       if (typeof bodyData === 'string') {
@@ -27,42 +28,33 @@ export const verifyToken = (purpose: JwtPurpose) => {
         try {
           const parsed = JSON.parse(bodyData);
           if (parsed && typeof parsed === 'object') bodyData = parsed;
-        } catch (e) {}
+        } catch {}
       }
 
       if (typeof bodyData === 'string' && (bodyData.startsWith('ey') || bodyData.startsWith('"ey'))) {
         token = bodyData;
-        if (token.startsWith('"') && token.endsWith('"')) {
-            token = token.substring(1, token.length - 1);
-        }
-      } else if (bodyData && bodyData.provisioningToken) {
+        if (token.startsWith('"') && token.endsWith('"')) token = token.slice(1, -1);
+      } else if (bodyData?.provisioningToken) {
         token = bodyData.provisioningToken.trim();
       }
     }
-    
-    // 3. Try Query Parameter (last resort)
-    if (!token && req.query && req.query.token) {
+
+    if (!token && req.query?.token) {
       token = req.query.token as string;
     }
 
     if (!token) {
-      console.log(`[AUTH] ❌ Failure: No token found for purpose ${purpose}. URL: ${req.url}`);
-      console.log(`[AUTH] DEBUG: Headers: ${JSON.stringify(req.headers)}`);
-      console.log(`[AUTH] DEBUG: Body Type: ${typeof req.body}`);
+      log.warn({ purpose, url: req.url }, 'auth failed: no token');
       return res.sendStatus(401);
     }
 
-    try {
-      let decoded = jwtService.verifyToken(token, purpose);
-      if (!decoded.valid) {
-        console.log(`[AUTH] ❌ Failure: JWT verification failed for purpose ${purpose}`);
-        return res.sendStatus(403);
-      }
-      req.user = decoded.decoded;
-      next();
-    } catch (err) {
-      console.log(`[AUTH] ❌ Exception during JWT validation: ${err}`);
+    const decoded = jwtService.verifyToken(token, purpose);
+    if (!decoded.valid) {
+      log.warn({ purpose, url: req.url, err: decoded.err }, 'auth failed: invalid token');
       return res.sendStatus(403);
     }
+
+    req.user = decoded.decoded;
+    next();
   };
 };

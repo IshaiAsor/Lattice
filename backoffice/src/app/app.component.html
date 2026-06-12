@@ -1,68 +1,119 @@
-<nav class="navbar">
+<mat-sidenav-container class="shell-container">
 
-  <!-- Brand -->
-  <a class="nav-brand" routerLink="/">
-    <mat-icon class="brand-icon">hub</mat-icon>
-    <span class="brand-text">SmartHome</span>
-  </a>
+  <!-- ── Mobile side drawer ─────────────────────────────────────── -->
+  <mat-sidenav #drawer [opened]="drawerOpen()" mode="over" position="start"
+               (closedStart)="closeDrawer()" class="mobile-drawer">
+    <div class="drawer-header">
+      <mat-icon class="brand-icon">hub</mat-icon>
+      <span class="brand-text">Lattice</span>
+    </div>
+    <mat-divider />
 
-  <!-- Nav links (authenticated only) -->
-  @if (authService.getCurrentUser(); as user) {
-    <div class="nav-sep"></div>
-    <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">
-      <mat-icon>dashboard</mat-icon>
-      <span>Dashboard</span>
-    </a>
-    <a class="nav-link" routerLink="/mgmt/devices" routerLinkActive="active">
-      <mat-icon>device_hub</mat-icon>
-      <span>Devices</span>
-    </a>
-    <a class="nav-link" routerLink="/rules" routerLinkActive="active">
-      <mat-icon>auto_awesome</mat-icon>
-      <span>Rules</span>
-    </a>
-    @if (user.role === 'admin') {
-      <a class="nav-link" routerLink="/admin/device-config" routerLinkActive="active">
-        <mat-icon>settings_suggest</mat-icon>
-        <span>Device Config</span>
-      </a>
-    }
-  }
-
-  <div class="spacer"></div>
-
-  <!-- Right: authenticated / guest -->
-  @if (authService.getCurrentUser(); as user) {
-    <div class="user-section">
-      <span class="user-name">{{ user.username }}</span>
-      <button mat-icon-button [matMenuTriggerFor]="profileMenu" class="profile-btn" disableRipple>
-        @if (user.profileImage) {
-          <img [src]="user.profileImage" class="nav-profile-pic" alt="Profile picture">
-        } @else {
-          <mat-icon>account_circle</mat-icon>
+    @if (authService.getCurrentUser(); as user) {
+      <mat-nav-list>
+        <a mat-list-item routerLink="/dashboard"     routerLinkActive="drawer-active" (click)="closeDrawer()"><mat-icon>dashboard</mat-icon> Dashboard</a>
+        <a mat-list-item routerLink="/mgmt/devices"  routerLinkActive="drawer-active" (click)="closeDrawer()"><mat-icon>devices</mat-icon> Devices</a>
+        <a mat-list-item routerLink="/rules"         routerLinkActive="drawer-active" (click)="closeDrawer()"><mat-icon>auto_awesome</mat-icon> Rules</a>
+        <a mat-list-item routerLink="/emergency"     routerLinkActive="drawer-active" (click)="closeDrawer()"><mat-icon>warning</mat-icon> Emergency</a>
+        <a mat-list-item routerLink="/pipelines"     routerLinkActive="drawer-active" (click)="closeDrawer()"><mat-icon>account_tree</mat-icon> Pipelines</a>
+        <a mat-list-item routerLink="/blueprints"    routerLinkActive="drawer-active" (click)="closeDrawer()"><mat-icon>layers</mat-icon> Blueprints</a>
+        @if (user.role === 'admin') {
+          <mat-divider />
+          <p class="drawer-section-label">Admin</p>
+          <a mat-list-item routerLink="/admin/catalog"    routerLinkActive="drawer-active" (click)="closeDrawer()"><mat-icon>category</mat-icon> Catalog</a>
+          <a mat-list-item routerLink="/admin/blueprints" routerLinkActive="drawer-active" (click)="closeDrawer()"><mat-icon>build</mat-icon> Blueprint Builder</a>
         }
+      </mat-nav-list>
+      <mat-divider />
+      <div class="drawer-footer">
+        <span class="drawer-user">{{ user.username }}</span>
+        <button mat-stroked-button (click)="exportMyConfig(); closeDrawer()">
+          <mat-icon>download</mat-icon>Export
+        </button>
+        @if (user.role === 'admin') {
+          <button mat-stroked-button (click)="exportSystemConfig(); closeDrawer()">
+            <mat-icon>admin_panel_settings</mat-icon>System
+          </button>
+        }
+        <button mat-stroked-button (click)="logout()">Logout</button>
+      </div>
+    }
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+
+    <!-- ── Top navbar ───────────────────────────────────────────── -->
+    <nav class="navbar">
+      <!-- Hamburger (mobile only) -->
+      <button mat-icon-button class="hamburger-btn" (click)="toggleDrawer()" aria-label="Menu">
+        <mat-icon>menu</mat-icon>
       </button>
+
+      <!-- Brand -->
+      <a class="nav-brand" routerLink="/">
+        <mat-icon class="brand-icon">hub</mat-icon>
+        <span class="brand-text">Lattice</span>
+      </a>
+
+      <!-- Desktop nav links -->
+      @if (authService.getCurrentUser(); as user) {
+        <div class="nav-links">
+          <a class="nav-link" routerLink="/dashboard"    routerLinkActive="active"><mat-icon>dashboard</mat-icon><span>Dashboard</span></a>
+          <a class="nav-link" routerLink="/mgmt/devices" routerLinkActive="active"><mat-icon>devices</mat-icon><span>Devices</span></a>
+          <a class="nav-link" routerLink="/rules"        routerLinkActive="active"><mat-icon>auto_awesome</mat-icon><span>Rules</span></a>
+          <a class="nav-link" routerLink="/emergency"    routerLinkActive="active"><mat-icon>warning</mat-icon><span>Emergency</span></a>
+          <a class="nav-link" routerLink="/pipelines"    routerLinkActive="active"><mat-icon>account_tree</mat-icon><span>Pipelines</span></a>
+          <a class="nav-link" routerLink="/blueprints"   routerLinkActive="active"><mat-icon>layers</mat-icon><span>Blueprints</span></a>
+          @if (user.role === 'admin') {
+            <button mat-button [matMenuTriggerFor]="adminMenu" class="nav-link admin-btn">
+              <mat-icon>settings</mat-icon><span>Admin</span><mat-icon class="chevron">expand_more</mat-icon>
+            </button>
+            <mat-menu #adminMenu="matMenu">
+              <a mat-menu-item routerLink="/admin/catalog"><mat-icon>category</mat-icon>Catalog</a>
+              <a mat-menu-item routerLink="/admin/blueprints"><mat-icon>build</mat-icon>Blueprint Builder</a>
+            </mat-menu>
+          }
+        </div>
+      }
+
+      <div class="spacer"></div>
+
+      <!-- Theme toggle -->
+      <button mat-icon-button (click)="themeService.toggle()" [attr.aria-label]="isDark ? 'Switch to light theme' : 'Switch to dark theme'" class="theme-btn">
+        <mat-icon>{{ isDark ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      </button>
+
+      <!-- Profile / sign-in -->
+      @if (authService.getCurrentUser(); as user) {
+        <button mat-icon-button [matMenuTriggerFor]="profileMenu" class="profile-btn" aria-label="Profile menu">
+          @if (user.profileImage) {
+            <img [src]="user.profileImage" class="nav-profile-pic" alt="Profile">
+          } @else {
+            <mat-icon>account_circle</mat-icon>
+          }
+        </button>
+        <mat-menu #profileMenu="matMenu">
+          <div class="profile-menu-header">
+            <span class="profile-name">{{ user.username }}</span>
+            <span class="profile-email">{{ user.email }}</span>
+          </div>
+          <mat-divider />
+          <button mat-menu-item (click)="exportMyConfig()"><mat-icon>download</mat-icon>Export My Config</button>
+          @if (user.role === 'admin') {
+            <button mat-menu-item (click)="exportSystemConfig()"><mat-icon>admin_panel_settings</mat-icon>Export System Config</button>
+          }
+          <mat-divider />
+          <button mat-menu-item (click)="logout()"><mat-icon>logout</mat-icon>Logout</button>
+        </mat-menu>
+      } @else {
+        <a class="nav-link" routerLink="/login"><mat-icon>login</mat-icon><span>Sign in</span></a>
+      }
+    </nav>
+
+    <!-- ── Page content ─────────────────────────────────────────── -->
+    <div class="page-container">
+      <router-outlet />
     </div>
 
-    <mat-menu #profileMenu="matMenu">
-      <button mat-menu-item>
-        <mat-icon>person</mat-icon>
-        <span>My Profile</span>
-      </button>
-      <button mat-menu-item (click)="logout()">
-        <mat-icon>logout</mat-icon>
-        <span>Logout</span>
-      </button>
-    </mat-menu>
-  } @else {
-    <a class="nav-link" routerLink="/login">
-      <mat-icon>login</mat-icon>
-      <span>Sign in</span>
-    </a>
-  }
-
-</nav>
-
-<div class="page-container">
-  <router-outlet></router-outlet>
-</div>
+  </mat-sidenav-content>
+</mat-sidenav-container>

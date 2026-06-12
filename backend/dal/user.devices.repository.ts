@@ -1,79 +1,98 @@
 import db from '../config/db';
-import { UserDevice, Device } from '@prisma/client';
+import { UserDevice, UserDeviceModel, UserActionDef, UserAction } from '@lattice/prisma-client';
 
-export type UserDeviceWithDevice = UserDevice & {
-  device: Device;
-};
+export type UserDeviceWithModel = UserDevice & { device_model: UserDeviceModel };
 
 class UserDevicesRepository {
-
-  async getUserDevices(userId: number): Promise<UserDeviceWithDevice[]> {
-    return await db.userDevice.findMany({
+  async getByUserId(userId: number): Promise<UserDeviceWithModel[]> {
+    return db.userDevice.findMany({
       where: { user_id: userId },
-      include: { device: true }
-    }) as UserDeviceWithDevice[];
-  }
-
-  async getByMacId(macId: string): Promise<UserDeviceWithDevice> {
-    const device = await db.userDevice.findUnique({
-      where: { mac_id: macId },
-      include: { device: true }
-    });
-    if (!device) {
-      throw new Error('Device not found');
-    }
-    return device as UserDeviceWithDevice;
-  }
-
-  async getById(id: number): Promise<UserDeviceWithDevice> {
-    const device = await db.userDevice.findUnique({
-      where: { id },
-      include: { device: true }
-    });
-    if (!device) {
-      throw new Error('Device not found');
-    }
-    return device as UserDeviceWithDevice;
-  }
-
-  async updateDeviceOnlineStatus(userId: number, id: number, deviceOnlineStatus: boolean) {
-    return await db.userDevice.update({
-      where: { id, user_id: userId },
-      data: {
-        online: deviceOnlineStatus,
-        last_online_date: new Date()
-      }
+      include: { device_model: true },
+      orderBy: { created_at: 'asc' },
     });
   }
 
-  async insertDevice(device: any): Promise<UserDevice> {
-    return await db.userDevice.create({
-      data: {
-        device_type_id: device.device_type_id,
-        user_id: device.user_id,
-        mac_id: device.mac_id,
-        name: device.name,
-        online: false
-      }
+  async getById(id: number): Promise<UserDeviceWithModel> {
+    return db.userDevice.findUniqueOrThrow({ where: { id }, include: { device_model: true } });
+  }
+
+  async getByMacId(macId: string): Promise<UserDeviceWithModel> {
+    return db.userDevice.findUniqueOrThrow({ where: { mac_id: macId }, include: { device_model: true } });
+  }
+
+  /** Type-scoped: devices whose snapshot model has the given model_key. */
+  async getByModelKeyForUser(userId: number, modelKey: string): Promise<UserDeviceWithModel[]> {
+    return db.userDevice.findMany({
+      where: { user_id: userId, device_model: { model_key: modelKey } },
+      include: { device_model: true },
     });
   }
 
-  async deleteDevice(id: number, userId: number) {
-    return await db.userDevice.delete({
-      where: { id, user_id: userId }
+  /** Find an unbound placeholder (mac_id starts with 'unbound:'). */
+  async getUnboundByModelKey(userId: number, modelKey: string): Promise<UserDevice | null> {
+    return db.userDevice.findFirst({
+      where: { user_id: userId, device_model: { model_key: modelKey }, mac_id: { startsWith: 'unbound:' } },
     });
   }
 
-  async updateDevice(userId: number, id: number, updates: any) {
-    // Filter out fields that are not in the database if necessary
-    const { id: _, user_id: __, device: ___, ...data } = updates;
-    return await db.userDevice.update({
-      where: { id, user_id: userId },
-      data: {
-        ...data,
-        updated_at: new Date()
-      }
+  async insert(data: {
+    user_id: number;
+    user_device_model_id: number;
+    mac_id: string;
+    name: string;
+    source_blueprint_id?: number | null;
+  }): Promise<UserDevice> {
+    return db.userDevice.create({ data });
+  }
+
+  async bindPlaceholder(id: number, macId: string): Promise<UserDevice> {
+    return db.userDevice.update({ where: { id }, data: { mac_id: macId, online: false, updated_at: new Date() } });
+  }
+
+  async updateOnlineStatus(id: number, online: boolean): Promise<void> {
+    await db.userDevice.update({ where: { id }, data: { online, last_seen_at: new Date(), updated_at: new Date() } });
+  }
+
+  async update(userId: number, id: number, data: Partial<Pick<UserDevice, 'name'>>): Promise<UserDevice> {
+    return db.userDevice.update({ where: { id, user_id: userId }, data: { ...data, updated_at: new Date() } });
+  }
+
+  async delete(id: number, userId: number): Promise<void> {
+    await db.userDevice.delete({ where: { id, user_id: userId } });
+  }
+
+  /** Return UserActionDef rows for a device's model that have no active UserAction for that device yet. */
+  async getPendingDefs(deviceId: number): Promise<UserActionDef[]> {
+    const device = await db.userDevice.findUniqueOrThrow({
+      where: { id: deviceId },
+      select: { user_device_model_id: true },
     });
+    return db.userActionDef.findMany({
+      where: {
+        user_device_model_id: device.user_device_model_id,
+        actions: { none: { user_device_id: deviceId } },
+      },
+    });
+  }
+
+  /** Create UserAction rows for selected defs on a device. Returns the created rows. */
+  async activateCapabilities(
+    deviceId: number,
+    items: { user_action_def_id: number; name: string; user_action_group_id?: number | null }[],
+  ): Promise<UserAction[]> {
+    return Promise.all(
+      items.map((item, i) =>
+        db.userAction.create({
+          data: {
+            user_device_id: deviceId,
+            user_action_def_id: item.user_action_def_id,
+            name: item.name,
+            user_action_group_id: item.user_action_group_id ?? null,
+            sort_order: i + 1,
+          },
+        }),
+      ),
+    );
   }
 }
 

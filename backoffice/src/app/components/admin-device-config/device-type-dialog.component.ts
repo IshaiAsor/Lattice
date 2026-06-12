@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
-import { AdminDeviceType } from 'src/app/services/admin.device.config.service';
+import type { DeviceModel } from 'src/app/models';
 
 @Component({
   selector: 'app-device-type-dialog',
@@ -12,16 +12,16 @@ import { AdminDeviceType } from 'src/app/services/admin.device.config.service';
     <mat-dialog-content>
       <form [formGroup]="form" class="dialog-form">
         <mat-form-field appearance="outline">
-          <mat-label>Type (e.g. OUTLET)</mat-label>
-          <input matInput formControlName="type" />
+          <mat-label>Model key (e.g. esp32s3_mini)</mat-label>
+          <input matInput formControlName="model_key" />
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>Version (e.g. 1.0)</mat-label>
           <input matInput formControlName="version" />
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Default Name</mat-label>
-          <input matInput formControlName="default_name" />
+          <mat-label>Display name</mat-label>
+          <input matInput formControlName="display_name" />
         </mat-form-field>
       </form>
     </mat-dialog-content>
@@ -35,12 +35,12 @@ import { AdminDeviceType } from 'src/app/services/admin.device.config.service';
 export class DeviceTypeDialogComponent {
   private fb = inject(FormBuilder);
   private dialogRef = inject(MatDialogRef<DeviceTypeDialogComponent>);
-  data: AdminDeviceType | null = inject(MAT_DIALOG_DATA);
+  data: DeviceModel | null = inject(MAT_DIALOG_DATA);
 
   form = this.fb.group({
-    type: [this.data?.type ?? '', Validators.required],
-    version: [this.data?.version ?? '', Validators.required],
-    default_name: [this.data?.default_name ?? '', Validators.required],
+    model_key:    [this.data?.model_key    ?? '', Validators.required],
+    version:      [this.data?.version      ?? '', Validators.required],
+    display_name: [this.data?.display_name ?? '', Validators.required],
   });
 
   save() {

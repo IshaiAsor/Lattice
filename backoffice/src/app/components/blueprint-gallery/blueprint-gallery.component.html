@@ -1,0 +1,78 @@
+<div class="page-header">
+  <h1>Blueprint Gallery</h1>
+  <p class="hint">Apply a blueprint to instantly configure devices, pipelines, and automation rules.</p>
+</div>
+
+@if (loading) { <mat-progress-bar mode="indeterminate" /> }
+
+<div class="blueprint-grid">
+  @for (bp of blueprints; track bp.id) {
+    <div class="bp-card lattice-card" [class.bp-expanded]="selected()?.id === bp.id">
+      <div class="bp-header">
+        <mat-icon class="bp-icon">layers</mat-icon>
+        <div class="bp-meta">
+          <span class="bp-name">{{ bp.name }}</span>
+          <span class="bp-version">v{{ bp.version }}
+            @if (bp.category) { · <span class="bp-cat">{{ bp.category }}</span> }
+          </span>
+        </div>
+      </div>
+
+      @if (bp.description) { <p class="bp-desc">{{ bp.description }}</p> }
+
+      <div class="bp-stats">
+        @if (bp.slots?.length)           { <span class="stat"><mat-icon>devices</mat-icon>{{ bp.slots!.length }} device slot(s)</span> }
+        @if (bp.pipelines?.length)       { <span class="stat"><mat-icon>account_tree</mat-icon>{{ bp.pipelines!.length }} pipeline(s)</span> }
+        @if (bp.rules?.length)           { <span class="stat"><mat-icon>bolt</mat-icon>{{ bp.rules!.length }} rule(s)</span> }
+        @if (bp.emergency_rules?.length) { <span class="stat"><mat-icon>warning</mat-icon>{{ bp.emergency_rules!.length }} emergency</span> }
+      </div>
+
+      <!-- Expanded detail -->
+      @if (selected()?.id === bp.id) {
+        <div class="bp-detail">
+          @if (selected()!.slots?.length) {
+            <p class="detail-section">Devices</p>
+            @for (s of selected()!.slots!; track s.id) {
+              <div class="detail-row"><mat-icon>developer_board</mat-icon> {{ s.role }} — {{ s.device_model?.display_name ?? '?' }} (min {{ s.min_count }})</div>
+            }
+          }
+          @if (selected()!.pipelines?.length) {
+            <p class="detail-section">Pipelines</p>
+            @for (p of selected()!.pipelines!; track p.id) {
+              <div class="detail-row"><mat-icon>account_tree</mat-icon> {{ p.name }}</div>
+            }
+          }
+          @if (selected()!.rules?.length) {
+            <p class="detail-section">Rules</p>
+            @for (r of selected()!.rules!; track r.id) {
+              <div class="detail-row"><mat-icon>bolt</mat-icon> {{ r.name }}</div>
+            }
+          }
+          @if (selected()!.emergency_rules?.length) {
+            <p class="detail-section">Emergency rules</p>
+            @for (e of selected()!.emergency_rules!; track e.id) {
+              <div class="detail-row"><mat-icon>warning</mat-icon> {{ e.name }}</div>
+            }
+          }
+        </div>
+      }
+
+      <div class="bp-actions">
+        <button mat-stroked-button (click)="view(bp)">
+          {{ selected()?.id === bp.id ? 'Collapse' : 'View' }}
+        </button>
+        <button mat-flat-button (click)="derive(bp, $event)" [disabled]="deriving() === bp.id">
+          <mat-icon>add_circle_outline</mat-icon>
+          {{ deriving() === bp.id ? 'Applying…' : 'Derive' }}
+        </button>
+      </div>
+    </div>
+  }
+</div>
+
+@if (!loading && blueprints.length === 0) {
+  <div class="empty-state">
+    <mat-icon>layers</mat-icon>
+    <p>No published blueprints yet. Admins can create them in Blueprint Builder.</p>
+  </div>
+}

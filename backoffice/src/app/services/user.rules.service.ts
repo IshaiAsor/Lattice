@@ -1,55 +1,35 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
+import type { Rule, RuleCondition, RuleAction } from '../models';
 
-export interface RuleConditionDto {
-  condition_type: 'device_state' | 'threshold' | 'schedule' | 'device_status';
-  parameters: Record<string, unknown>;
-}
+export type { Rule, RuleCondition, RuleAction };
 
-export interface RuleActionDto {
-  user_device_action_id: number;
-  target_state: string;
-  delay_seconds: number;
-}
-
-export interface CreateRuleDto {
+export interface CreateRulePayload {
   name: string;
-  condition_operator: 'AND' | 'OR';
-  cooldown_seconds: number;
-  conditions: RuleConditionDto[];
-  actions: RuleActionDto[];
-}
-
-export interface UserRuleView extends CreateRuleDto {
-  id: number;
-  enabled: boolean;
-  last_triggered: string | null;
+  match: 'AND' | 'OR';
+  cooldown_sec: number;
+  conditions: Omit<RuleCondition, 'id'>[];
+  actions: Omit<RuleAction, 'id'>[];
 }
 
 @Injectable({ providedIn: 'root' })
 export class UserRulesService {
-  private apiUrl = `${environment.apiUrl}/api/rules`;
-  http = inject(HttpClient);
+  private readonly base = `${environment.apiUrl}/api`;
+  private http = inject(HttpClient);
 
-  getRules(): Observable<UserRuleView[]> {
-    return this.http.get<UserRuleView[]>(this.apiUrl);
-  }
+  // ── Rules ─────────────────────────────────────────────────────────────────
+  getRules()                                       { return this.http.get<Rule[]>(`${this.base}/rules`); }
+  createRule(payload: CreateRulePayload)           { return this.http.post<Rule>(`${this.base}/rules`, payload); }
+  updateRule(id: number, p: CreateRulePayload)     { return this.http.put<void>(`${this.base}/rules/${id}`, p); }
+  toggleRule(id: number, enabled: boolean)         { return this.http.patch<void>(`${this.base}/rules/${id}/toggle`, { enabled }); }
+  deleteRule(id: number)                           { return this.http.delete<void>(`${this.base}/rules/${id}`); }
 
-  createRule(rule: CreateRuleDto): Observable<UserRuleView> {
-    return this.http.post<UserRuleView>(this.apiUrl, rule);
-  }
+  // ── AI rules ──────────────────────────────────────────────────────────────
+  aiGenerate(goal: string, context?: string)       { return this.http.post<{ rules: CreateRulePayload[] }>(`${this.base}/ai/rules/generate`, { goal, context }); }
+  aiApply(rules: CreateRulePayload[])              { return this.http.post<void>(`${this.base}/ai/rules/apply`, { rules }); }
+  aiList()                                         { return this.http.get<Rule[]>(`${this.base}/ai/rules`); }
+  aiClear()                                        { return this.http.delete<{ deleted: number }>(`${this.base}/ai/rules`); }
 
-  updateRule(id: number, rule: CreateRuleDto): Observable<void> {
-    return this.http.put<void>(`${this.apiUrl}/${id}`, rule);
-  }
-
-  deleteRule(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/${id}`);
-  }
-
-  toggleRule(id: number, enabled: boolean): Observable<void> {
-    return this.http.patch<void>(`${this.apiUrl}/${id}/toggle`, { enabled });
-  }
+  importRules(data: unknown)                       { return this.http.post<{ imported: number }>(`${this.base}/rules/import`, data); }
 }

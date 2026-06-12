@@ -1,0 +1,30 @@
+.page-header { margin-bottom: 20px; }
+.page-header h1 { margin: 0 0 4px; font-size: 1.5rem; font-weight: 600; color: var(--text); }
+.hint { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+
+.blueprint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+
+.bp-card { padding: 18px; display: flex; flex-direction: column; gap: 12px; transition: box-shadow 0.2s; }
+.bp-card.bp-expanded { box-shadow: var(--card-shadow-hover); }
+
+.bp-header { display: flex; align-items: flex-start; gap: 12px; }
+.bp-icon   { color: var(--primary); font-size: 32px !important; width: 32px !important; height: 32px !important; margin-top: 2px; }
+.bp-meta   { display: flex; flex-direction: column; }
+.bp-name   { font-weight: 600; font-size: 1rem; color: var(--text); }
+.bp-version{ font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+.bp-cat    { font-style: italic; }
+.bp-desc   { margin: 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+
+.bp-stats  { display: flex; flex-wrap: wrap; gap: 8px; }
+.stat      { display: flex; align-items: center; gap: 4px; font-size: 0.78rem; color: var(--text-muted); background: var(--surface-alt); padding: 2px 8px; border-radius: var(--radius-chip); }
+.stat mat-icon { font-size: 14px !important; width: 14px !important; height: 14px !important; }
+
+.bp-detail { background: var(--surface-alt); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.detail-section { margin: 8px 0 2px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+.detail-row { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-muted); }
+.detail-row mat-icon { font-size: 14px !important; width: 14px !important; height: 14px !important; }
+
+.bp-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; gap: 12px; color: var(--text-muted); }
+.empty-state mat-icon { font-size: 48px; width: 48px; height: 48px; opacity: 0.4; }

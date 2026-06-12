@@ -1,0 +1,15 @@
+{
+  "name": "@lattice/queue",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "amqplib": "^0.10.7"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.7",
+    "@types/node": "^25.9.0",
+    "typescript": "^5.9.3"
+  }
+}

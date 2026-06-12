@@ -1,127 +1,381 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
     {
-        "name": "Attach",
-        "port": 9229,
-        "request": "attach",
-        "skipFiles": [
-            "<node_internals>/**"
-        ],
-        "type": "node"
+      "type": "node",
+      "request": "launch",
+      "name": "Nodemon TypeScript",
+      "runtimeExecutable": "nodemon",
+      "cwd": "${workspaceFolder}/ml-router",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "runtimeArgs": [
+        "--watch",
+        ".",
+        "--ext",
+        "ts,json",
+        "--exec",
+        "npx ts-node -r tsconfig-paths/register index.ts"
+      ],
+      "restart": true,
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder:Project Root}/.env"
     },
     {
-        "name": "Start SSH Tunnel",
-        "type": "node",
-        "request": "launch",
-        "preLaunchTask": "ssh-postgres-tunnel",
-        "runtimeExecutable": "node",
-        "runtimeArgs": [
-            "-e",
-            "console.log('✅ SSH tunnel task started in the background.');"
-        ]
+      "name": "Attach",
+      "port": 9229,
+      "request": "attach",
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ],
+      "type": "node"
     },
     {
-        "type": "node",
-        "request": "launch",
-        "name": "Debug DB Seed (ts-node)",
-        "runtimeArgs": [
-            "-r",
-            "ts-node/register"
-        ],
-        "program": "${workspaceFolder:Prisma}/seed.ts",
-        "cwd": "${workspaceFolder:Prisma}",
-        "outFiles": ["${workspaceFolder:Prisma}/**/*.js"],
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "env": {
-            "TS_NODE_PROJECT": "${workspaceFolder:Prisma}/tsconfig.json"
-        },
-        "skipFiles": ["<node_internals>/**"]
+      "name": "Open Cluster Tunnels",
+      "type": "node",
+      "request": "launch",
+      "preLaunchTask": "open-cluster-tunnels",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "-e",
+        "console.log('✅ Cluster tunnels script started.');"
+      ]
     },
     {
-        "type": "node",
-        "request": "launch",
-        "name": "Debug Backend (ts-node)",
-        "runtimeArgs": [
-            "-r",
-            "ts-node/register"
-        ],
-        "program": "${workspaceFolder:Backend API}/index.ts",
-        "cwd": "${workspaceFolder:Backend API}",
-        "outFiles": ["${workspaceFolder:Backend API}/**/*.js"],
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "env": {
-            "TS_NODE_PROJECT": "${workspaceFolder:Backend API}/tsconfig.json"
-        },
-        "skipFiles": ["<node_internals>/**"]
+      "name": "Start SSH Tunnel",
+      "type": "node",
+      "request": "launch",
+      "preLaunchTask": "ssh-postgres-tunnel",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "-e",
+        "console.log('✅ SSH tunnel task started in the background.');"
+      ]
     },
     {
-        "type": "node",
-        "request": "launch",
-        "name": "Debug Backend (compiled)",
-        "program": "${workspaceFolder:Backend API}/dist/index.js",
-        "cwd": "${workspaceFolder:Backend API}",
-        "preLaunchTask": "pre-debug-compiled",
-        "outFiles": ["${workspaceFolder:Backend API}/dist/**/*.js"],
-        "skipFiles": ["<node_internals>/**"]
+      "type": "node",
+      "request": "launch",
+      "name": "Debug DB Seed (ts-node)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require",
+        "ts-node/register"
+      ],
+      "program": "${workspaceFolder:Prisma}/seed.ts",
+      "cwd": "${workspaceFolder:Prisma}",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder:Prisma}/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "sourceMaps": true,
+      "smartStep": true,
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ]
     },
     {
-        "name": "Debug FrontEnd (Chrome)",
-        "type": "pwa-chrome",
-        "request": "launch",
-        "url": "http://localhost:4200",
-        "webRoot": "${workspaceFolder:Backoffice UI}",
-        "preLaunchTask": "serve-backoffice"
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Backend (ts-node)",
+      "preLaunchTask": "kill-port-3000",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register"
+      ],
+      "program": "${workspaceFolder:Backend API}/index.ts",
+      "cwd": "${workspaceFolder:Backend API}",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "PORT": "3000",
+        "TS_NODE_PROJECT": "${workspaceFolder:Backend API}/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true",
+        "TS_NODE_IGNORE": "node_modules[/\\\\]"
+      },
+      "sourceMaps": true,
+      "smartStep": true,
+      "console": "integratedTerminal",
+      "resolveSourceMapLocations": [
+        "${workspaceFolder:Backend API}/**",
+        "!**/node_modules/**",
+        "!**/generated/**"
+      ],
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**",
+        "**/generated/**"
+      ]
     },
     {
-        "type": "platformio-debug",
-        "request": "launch",
-        "name": "ESP32: PIO Debug (test)",
-        "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-test/firmware.elf",
-        "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-test",
-        "projectDir": "${workspaceFolder:ESP32 Firmware}",
-        "cwd": "${workspaceFolder:ESP32 Firmware}",
-        "preLaunchTask": "PlatformIO: Build (ESP32Code)",
-        "internalConsoleOptions": "openOnSessionStart"
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Backend (compiled)",
+      "program": "${workspaceFolder:Backend API}/dist/index.js",
+      "cwd": "${workspaceFolder:Backend API}",
+      "preLaunchTask": "pre-debug-compiled",
+      "outFiles": [
+        "${workspaceFolder:Backend API}/dist/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
     },
     {
-        "type": "node",
-        "request": "launch",
-        "name": "Debug VLM Server",
-        "runtimeExecutable": "${workspaceFolder:VLM Server}/node_modules/.bin/tsx",
-        "runtimeArgs": [],
-        "program": "${workspaceFolder:VLM Server}/server.ts",
-        "cwd": "${workspaceFolder:VLM Server}",
-        "sourceMaps": true,
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "skipFiles": ["<node_internals>/**"]
+      "name": "Debug FrontEnd (Chrome)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:4200",
+      "webRoot": "${workspaceFolder:Backoffice UI}",
+      "preLaunchTask": "serve-backoffice"
     },
     {
-        "type": "debugpy",
-        "request": "launch",
-        "name": "Train VLM Server Model",
-        "program": "${workspaceFolder:VLM Server}/training/train.py",
-        "cwd": "${workspaceFolder:VLM Server}",
-        "console": "integratedTerminal",
-        "args": []
+      "type": "platformio-debug",
+      "request": "launch",
+      "name": "ESP32: PIO Debug (test)",
+      "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-test/firmware.elf",
+      "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-test",
+      "projectDir": "${workspaceFolder:ESP32 Firmware}",
+      "cwd": "${workspaceFolder:ESP32 Firmware}",
+      "preLaunchTask": "PlatformIO: Build (ESP32Code)",
+      "internalConsoleOptions": "openOnSessionStart"
     },
     {
-        "type": "platformio-debug",
-        "request": "launch",
-        "name": "ESP32: PIO Debug (prod)",
-        "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-prod/firmware.elf",
-        "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-prod",
-        "projectDir": "${workspaceFolder:ESP32 Firmware}",
-        "cwd": "${workspaceFolder:ESP32 Firmware}",
-        "internalConsoleOptions": "openOnSessionStart"
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Device Gateway (ts-node)",
+      "preLaunchTask": "kill-port-3004",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register"
+      ],
+      "program": "${workspaceFolder:Device Gateway}/index.ts",
+      "cwd": "${workspaceFolder:Device Gateway}",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "PORT": "3004",
+        "TS_NODE_PROJECT": "${workspaceFolder:Device Gateway}/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "sourceMaps": true,
+      "smartStep": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder:Device Gateway}/**",
+        "!**/node_modules/**",
+        "!**/generated/**"
+      ],
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**",
+        "**/generated/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Google Home (ts-node)",
+      "preLaunchTask": "kill-port-3003",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register"
+      ],
+      "program": "${workspaceFolder:Google Home}/index.ts",
+      "cwd": "${workspaceFolder:Google Home}",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "PORT": "3003",
+        "TS_NODE_PROJECT": "${workspaceFolder:Google Home}/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "sourceMaps": true,
+      "smartStep": true,
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug ML Router (ts-node)",
+      "preLaunchTask": "kill-port-3002",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register"
+      ],
+      "program": "${workspaceFolder:ML Router}/index.ts",
+      "cwd": "${workspaceFolder:ML Router}",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "PORT": "3002",
+        "TS_NODE_PROJECT": "${workspaceFolder:ML Router}/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "sourceMaps": true,
+      "smartStep": true,
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker: Ingest (ts-node)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register"
+      ],
+      "program": "${workspaceFolder:Workers}/ingest/index.ts",
+      "cwd": "${workspaceFolder:Workers}",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder:Workers}/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "sourceMaps": true,
+      "smartStep": true,
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker: Automation (ts-node)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register"
+      ],
+      "program": "${workspaceFolder:Workers}/automation/index.ts",
+      "cwd": "${workspaceFolder:Workers}",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder:Workers}/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "sourceMaps": true,
+      "smartStep": true,
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Worker: Pipeline (ts-node)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register"
+      ],
+      "program": "${workspaceFolder:Workers}/pipeline/index.ts",
+      "cwd": "${workspaceFolder:Workers}",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder:Workers}/tsconfig.json",
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "sourceMaps": true,
+      "smartStep": true,
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug VLM Server",
+      "runtimeExecutable": "${workspaceFolder:VLM Server}/node_modules/.bin/tsx",
+      "runtimeArgs": [],
+      "program": "${workspaceFolder:VLM Server}/server.ts",
+      "cwd": "${workspaceFolder:VLM Server}",
+      "sourceMaps": true,
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "debugpy",
+      "request": "launch",
+      "name": "Train VLM Server Model",
+      "program": "${workspaceFolder:VLM Server}/training/train.py",
+      "cwd": "${workspaceFolder:VLM Server}",
+      "console": "integratedTerminal",
+      "args": []
+    },
+    {
+      "type": "platformio-debug",
+      "request": "launch",
+      "name": "ESP32: PIO Debug (prod)",
+      "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-prod/firmware.elf",
+      "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-prod",
+      "projectDir": "${workspaceFolder:ESP32 Firmware}",
+      "cwd": "${workspaceFolder:ESP32 Firmware}",
+      "internalConsoleOptions": "openOnSessionStart"
     }
-    ],    "compounds": [
+  ],
+  "compounds": [
     {
-        "name": "Full Stack Debug (ts-node)",
-        "configurations": ["Debug Backend (ts-node)", "Debug FrontEnd (Chrome)"]
+      "name": "Full Stack Debug (ts-node)",
+      "configurations": [
+        "Debug Backend (ts-node)",
+        "Debug FrontEnd (Chrome)"
+      ]
+    },
+    {
+      "name": "All Backend Services (ts-node)",
+      "configurations": [
+        "Debug Backend (ts-node)",
+        "Debug Device Gateway (ts-node)",
+        "Debug Google Home (ts-node)",
+        "Debug ML Router (ts-node)",
+        "Debug Worker: Ingest (ts-node)",
+        "Debug Worker: Automation (ts-node)",
+        "Debug Worker: Pipeline (ts-node)"
+      ]
+    },
+    {
+      "name": "Full Stack + All Services (ts-node)",
+      "configurations": [
+        "Debug Backend (ts-node)",
+        "Debug Device Gateway (ts-node)",
+        "Debug Google Home (ts-node)",
+        "Debug ML Router (ts-node)",
+        "Debug Worker: Ingest (ts-node)",
+        "Debug Worker: Automation (ts-node)",
+        "Debug Worker: Pipeline (ts-node)",
+        "Debug FrontEnd (Chrome)"
+      ]
     }
-    ]
+  ]
 }

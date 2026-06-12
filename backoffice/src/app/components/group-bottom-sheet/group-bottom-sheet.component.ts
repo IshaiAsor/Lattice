@@ -1,26 +1,21 @@
 import { Component, DestroyRef, HostListener, inject, OnInit } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
-import { iconForDeviceType, hasTrait, COLOR_OPTIONS } from 'src/app/utils/device-type.utils';
-import { ActionGroupView } from 'src/app/services/user.actions.service';
-import { UserActionsService } from 'src/app/services/user.actions.service';
-import { DeviceActionView } from 'src/app/services/device.mgmt.service';
-import { DeviceSocketService } from 'src/app/services/device.socket.service';
-import { SHARED_MATERIAL } from 'src/app/shared-ui';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { forkJoin } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CdkDragEnd, CdkDragMove } from '@angular/cdk/drag-drop';
+import { SHARED_MATERIAL } from 'src/app/shared-ui';
+import { UserActionsService } from 'src/app/services/user.actions.service';
+import { DeviceSocketService } from 'src/app/services/device.socket.service';
+import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
+import { controlTypeFor, iconForCapability, unitFor, COLOR_OPTIONS } from 'src/app/utils/device-type.utils';
+import type { DashboardAction, DashboardGroup } from '../user-dashboard/user-dashboard';
 
-// Dial geometry constants (duplicated from user-dashboard for standalone use)
-const CX = 60, CY = 52, R = 36;
-const START_ANGLE = 225;
-const TOTAL_SWEEP = 270;
-
-function toSvgPt(angleDeg: number) {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: CX + R * Math.cos(rad), y: CY - R * Math.sin(rad) };
+const CX = 60, CY = 52, R = 36, START = 225, SWEEP = 270;
+function toSvgPt(deg: number) {
+  const r = (deg * Math.PI) / 180;
+  return { x: CX + R * Math.cos(r), y: CY - R * Math.sin(r) };
 }
 
 @Component({
@@ -31,163 +26,121 @@ function toSvgPt(angleDeg: number) {
   styleUrl: './group-bottom-sheet.component.css',
 })
 export class GroupBottomSheetComponent implements OnInit {
-  private sheetRef = inject(MatBottomSheetRef<GroupBottomSheetComponent>);
-  data: { group: ActionGroupView } = inject(MAT_BOTTOM_SHEET_DATA);
-  private userActionsService = inject(UserActionsService);
-  private socketService = inject(DeviceSocketService);
-  private destroyRef = inject(DestroyRef);
-  private snackBar = inject(MatSnackBar);
-  dialog = inject(MatDialog);
+  private sheetRef     = inject(MatBottomSheetRef<GroupBottomSheetComponent>);
+  private actionsSvc   = inject(UserActionsService);
+  private socketSvc    = inject(DeviceSocketService);
+  private destroyRef   = inject(DestroyRef);
+  private snackBar     = inject(MatSnackBar);
+  private dialog       = inject(MatDialog);
+  data: { dashGroup: DashboardGroup } = inject(MAT_BOTTOM_SHEET_DATA);
 
-  actions: DeviceActionView[] = [];
+  actions: DashboardAction[] = [];
   dragUpActive = false;
   private draggingActionId: number | null = null;
 
-  iconForType = iconForDeviceType;
-  hasTrait = hasTrait;
-  colorOptions = COLOR_OPTIONS;
+  iconForCapability = iconForCapability;
+  controlTypeFor    = controlTypeFor;
+  unitFor           = unitFor;
+  colorOptions      = COLOR_OPTIONS;
 
   @HostListener('document:pointerup')
-  onDocumentPointerUp() { this.draggingActionId = null; }
+  onPointerUp() { this.draggingActionId = null; }
 
-  ngOnInit() {
-    this.actions = [...this.data.group.actions];
+  ngOnInit(): void {
+    this.actions = [...this.data.dashGroup.actions];
 
-    this.socketService.onActionStateUpdate()
+    this.socketSvc.onActionStateUpdate()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((data) => {
-        const action = this.actions.find(a => a.id === data.actionId);
-        if (action) action.state = data.state;
+      .subscribe(({ actionId, state }) => {
+        const a = this.actions.find(x => x.id === actionId);
+        if (a) a.state = state;
       });
 
-    this.socketService.onDeviceOnlineStatusChange()
+    this.socketSvc.onDeviceStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((res: any) => {
-        const { deviceId, state } = res as { deviceId: number; state: boolean };
-        this.actions.filter(a => a.deviceId === deviceId).forEach(a => a.online = state);
+      .subscribe(({ deviceId, online }) => {
+        this.actions.filter(a => a.user_device_id === deviceId)
+          .forEach(a => { if (a.user_device) a.user_device.online = online; });
       });
   }
 
-  onCardDragMoved(event: CdkDragMove) {
-    this.dragUpActive = event.distance.y < -80;
-  }
+  isOnline(a: DashboardAction): boolean { return a.user_device?.online ?? false; }
 
-  onCardDragEnded(event: CdkDragEnd, action: DeviceActionView) {
-    const draggedUp = event.distance.y < -80;
-    event.source.reset();
+  onCardDragMoved(e: CdkDragMove)              { this.dragUpActive = e.distance.y < -80; }
+  onCardDragEnded(e: CdkDragEnd, a: DashboardAction) {
+    const up = e.distance.y < -80;
+    e.source.reset();
     this.dragUpActive = false;
-    if (draggedUp) this.removeFromGroup(action);
+    if (up) this.removeFromGroup(a);
   }
 
-  changeActionState(action: DeviceActionView, actionState: unknown) {
-    this.socketService.publishActionState(action.id, String(actionState));
-  }
-
-  openCameraFullscreen(action: DeviceActionView) {
-    if (!action.state) return;
-    const win = window.open();
-    win?.document.write(`<img src="data:image/jpeg;base64,${action.state}" style="max-width:100%;max-height:100vh;">`);
-  }
-
-  renameAction(action: DeviceActionView) {
-    const ref = this.dialog.open(RenameActionDialogComponent, {
-      width: '320px',
-      data: { name: action.name },
+  dispatchState(action: DashboardAction, state: string): void {
+    action.state = state;
+    this.socketSvc.dispatchAction({
+      actionId:     action.id,
+      userDeviceId: action.user_device_id,
+      mqttType:     action.action_def?.mqtt_type ?? '',
+      mqttName:     action.action_def?.mqtt_name ?? '',
+      state,
     });
-    ref.afterClosed().subscribe((newName: string | undefined) => {
-      if (!newName) return;
-      this.userActionsService.updateUserAction({ ...action, name: newName }).subscribe(() => {
-        action.name = newName;
-        this.snackBar.open('Action renamed', 'Close', { duration: 2000 });
+  }
+
+  renameAction(action: DashboardAction): void {
+    this.dialog.open(RenameActionDialogComponent, { width: '320px', data: { name: action.name } })
+      .afterClosed().subscribe((name: string) => {
+        if (!name) return;
+        this.actionsSvc.updateAction(action.id, { name })
+          .subscribe(() => { action.name = name; this.snackBar.open('Renamed', 'OK', { duration: 2000 }); });
       });
-    });
   }
 
-  removeFromGroup(action: DeviceActionView) {
+  removeFromGroup(action: DashboardAction): void {
     const remaining = this.actions.filter(a => a.id !== action.id);
-
-    if (remaining.length === 0) {
-      // Last item: clear group_name on the removed one too
-      this.userActionsService.setActionGroup(action.id, null).subscribe(() => {
-        this.sheetRef.dismiss(true);
-      });
+    if (remaining.length <= 1) {
+      const all = remaining.length === 1 ? [action, remaining[0]] : [action];
+      forkJoin(all.map(a => this.actionsSvc.setActionGroup(a.id, null)))
+        .subscribe(() => {
+          if (remaining.length === 0) this.sheetRef.dismiss(true);
+          else this.actionsSvc.deleteGroup(this.data.dashGroup.group.id)
+            .subscribe(() => this.sheetRef.dismiss(true));
+        });
       return;
     }
-
-    if (remaining.length === 1) {
-      // Only 1 left after removal: dissolve the group entirely
-      forkJoin([
-        this.userActionsService.setActionGroup(action.id, null),
-        this.userActionsService.setActionGroup(remaining[0].id, null),
-      ]).subscribe(() => {
-        this.sheetRef.dismiss(true);
-      });
-      return;
-    }
-
-    this.userActionsService.setActionGroup(action.id, null).subscribe(() => {
-      this.actions = remaining;
-      this.sheetRef.dismiss(true);
-    });
+    this.actionsSvc.setActionGroup(action.id, null)
+      .subscribe(() => { this.actions = remaining; this.sheetRef.dismiss(true); });
   }
 
-  close() {
-    this.sheetRef.dismiss(false);
-  }
+  close(): void { this.sheetRef.dismiss(false); }
 
-  // ── Arc dial ────────────────────────────────────────────────────
-
+  // ── Arc dial ──────────────────────────────────────────────────────────────
   dialTrackPath(): string {
-    const s = toSvgPt(START_ANGLE);
-    const e = toSvgPt(START_ANGLE - TOTAL_SWEEP);
+    const s = toSvgPt(START), e = toSvgPt(START - SWEEP);
     return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 1 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
   }
-
   dialActivePath(value: unknown): string {
     const v = Math.max(0, Math.min(100, Number(value) || 0));
-    if (v <= 0) return '';
-    if (v >= 100) return this.dialTrackPath();
-    const s = toSvgPt(START_ANGLE);
-    const e = toSvgPt(START_ANGLE - (v / 100) * TOTAL_SWEEP);
-    const largeArc = (v / 100) * TOTAL_SWEEP > 180 ? 1 : 0;
-    return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 ${largeArc} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
+    if (v <= 0) return ''; if (v >= 100) return this.dialTrackPath();
+    const s = toSvgPt(START), e = toSvgPt(START - (v / 100) * SWEEP);
+    return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 ${(v / 100) * SWEEP > 180 ? 1 : 0} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
   }
+  dialThumbPt(value: unknown) { return toSvgPt(START - (Math.max(0, Math.min(100, Number(value) || 0)) / 100) * SWEEP); }
 
-  dialThumbPt(value: unknown) {
-    const v = Math.max(0, Math.min(100, Number(value) || 0));
-    return toSvgPt(START_ANGLE - (v / 100) * TOTAL_SWEEP);
+  onDialPointerDown(e: PointerEvent, a: DashboardAction): void {
+    e.preventDefault();
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    this.draggingActionId = a.id;
+    this.applyDial(e, a);
   }
+  onDialPointerMove(e: PointerEvent, a: DashboardAction): void { if (this.draggingActionId === a.id) this.applyDial(e, a); }
 
-  onDialPointerDown(event: PointerEvent, action: DeviceActionView) {
-    event.preventDefault();
-    (event.currentTarget as Element).setPointerCapture(event.pointerId);
-    this.draggingActionId = action.id;
-    this.applyDialEvent(event, action);
-  }
-
-  onDialPointerMove(event: PointerEvent, action: DeviceActionView) {
-    if (this.draggingActionId !== action.id) return;
-    this.applyDialEvent(event, action);
-  }
-
-  private applyDialEvent(event: PointerEvent, action: DeviceActionView) {
-    const svg = event.currentTarget as SVGSVGElement;
-    const pt = svg.createSVGPoint();
-    pt.x = event.clientX;
-    pt.y = event.clientY;
+  private applyDial(e: PointerEvent, a: DashboardAction): void {
+    const svg = e.currentTarget as SVGSVGElement;
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
     const sp = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-
-    const dx = sp.x - CX;
-    const dy = -(sp.y - CY);
-    let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    let angle = (Math.atan2(-(sp.y - CY), sp.x - CX) * 180) / Math.PI;
     if (angle < 0) angle += 360;
-
-    let sweep = START_ANGLE - angle;
-    if (sweep < 0) sweep += 360;
-    if (sweep > TOTAL_SWEEP) sweep = sweep > TOTAL_SWEEP + (360 - TOTAL_SWEEP) / 2 ? 0 : TOTAL_SWEEP;
-
-    const v = Math.round((sweep / TOTAL_SWEEP) * 100);
-    action.state = v;
-    this.changeActionState(action, String(v));
+    let sweep = START - angle; if (sweep < 0) sweep += 360;
+    if (sweep > SWEEP) sweep = sweep > SWEEP + (360 - SWEEP) / 2 ? 0 : SWEEP;
+    this.dispatchState(a, String(Math.round((sweep / SWEEP) * 100)));
   }
 }

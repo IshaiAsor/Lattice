@@ -16,7 +16,6 @@ private:
     const char *root_ca = certificate_root;
     WiFiClientSecure &espClient;
     PubSubClient *client = nullptr;
-    PreferencesManagerService prefService;
     JwtService &jwtService;
     JwtToken *jwtData = nullptr;
     MqttCredentials *creds = nullptr;
@@ -45,10 +44,24 @@ public:
         return client->connected();
     }
 
-    bool testMqtt(MqttCredentials *creds, JwtToken *token)
+    bool testMqtt(MqttCredentials *creds, String provisioningToken)
     {
-        WiFiClientSecure testClient;
         Serial.println("Attempting to connect to MQTT... ");
+        Serial.print("Server: ");
+        Serial.println(creds->server);
+        Serial.print(" Port: ");
+        Serial.println(creds->port);
+        Serial.print("Client ID: ");
+        Serial.println(creds->clientId);
+        Serial.print("User ID: ");
+        Serial.println(creds->userId);
+        Serial.print("Token: ");
+        Serial.println(provisioningToken);
+        Serial.print("validateCACert: ");
+        Serial.println(creds->validateCACert);
+        Serial.println("Setting up MQTT client with provided credentials...");
+
+        WiFiClientSecure testClient;
         if (!creds->validateCACert)
         {
             testClient.setInsecure();
@@ -59,11 +72,11 @@ public:
         }
         testClient.setHandshakeTimeout(10000);
         PubSubClient testPubSubClient(testClient);
-#ifdef HAS_CAMERA
-        testPubSubClient.setBufferSize(65535);
-#else
+// #ifdef HAS_CAMERA
+//         testPubSubClient.setBufferSize(65535);
+// #else
         testPubSubClient.setBufferSize(2048);
-#endif
+// #endif
         testPubSubClient.setKeepAlive(10);
         testPubSubClient.setServer(creds->server.c_str(), creds->port);
 
@@ -73,7 +86,7 @@ public:
 
         while (!testPubSubClient.connected() && attempt < max_attempts)
         {
-            if (testPubSubClient.connect(creds->clientId.c_str(), creds->userId.c_str(), token->token.c_str()))
+            if (testPubSubClient.connect(creds->clientId.c_str(), creds->userId.c_str(), provisioningToken.c_str()))
             {
                 Serial.println("connected");
             }
@@ -116,7 +129,7 @@ public:
         if (creds == nullptr)
         {
             Serial.println("No MQTT credentials available. Cannot connect to MQTT.");
-            creds = prefService.LoadMqttServerCredentials();
+            creds = prefService.LoadMqttCredentials();
 
             if (!creds)
             {

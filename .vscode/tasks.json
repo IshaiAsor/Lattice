@@ -18,9 +18,31 @@
       "label": "kill-old-tunnel",
       "type": "shell",
       "command": "npx -y kill-port 5432",
-      "presentation": {
-        "reveal": "silent"
-      }
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "kill-port-3000",
+      "type": "shell",
+      "command": "npx -y kill-port 3000",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "kill-port-3002",
+      "type": "shell",
+      "command": "npx -y kill-port 3002",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "kill-port-3003",
+      "type": "shell",
+      "command": "npx -y kill-port 3003",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "kill-port-3004",
+      "type": "shell",
+      "command": "npx -y kill-port 3004",
+      "presentation": { "reveal": "silent" }
     },
     {
       "label": "ssh-postgres-tunnel",
@@ -70,6 +92,66 @@
           }
         }
       }
+    },
+    {
+      "label": "open-cluster-tunnels",
+      "type": "shell",
+      "command": "powershell -ExecutionPolicy Bypass -File C:\\Projects\\open_cluster_tunnels.ps1",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always"
+      },
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": ".",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "."
+        }
+      }
+    },
+    {
+      "label": "build-device-gateway",
+      "type": "shell",
+      "command": "npx tsc -p tsconfig.json",
+      "options": { "cwd": "${workspaceFolder:Device Gateway}" },
+      "group": "build",
+      "presentation": { "reveal": "always" },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build-google-home",
+      "type": "shell",
+      "command": "npx tsc -p tsconfig.json",
+      "options": { "cwd": "${workspaceFolder:Google Home}" },
+      "group": "build",
+      "presentation": { "reveal": "always" },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build-ml-router",
+      "type": "shell",
+      "command": "npx tsc -p tsconfig.json",
+      "options": { "cwd": "${workspaceFolder:ML Router}" },
+      "group": "build",
+      "presentation": { "reveal": "always" },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "build-workers",
+      "type": "shell",
+      "command": "npx tsc -p tsconfig.json",
+      "options": { "cwd": "${workspaceFolder:Workers}" },
+      "group": "build",
+      "presentation": { "reveal": "always" },
+      "problemMatcher": ["$tsc"]
     },
     {
       "type": "PlatformIO",

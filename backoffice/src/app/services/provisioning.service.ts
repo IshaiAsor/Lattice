@@ -39,6 +39,15 @@ export interface ProvisioningProgress {
   timestamp: number;
 }
 
+export interface ProvisionPayload {
+  server: string;
+  mqttPort: number;
+  userId: string;
+  provisioningToken: string;
+  validateCACert: boolean;
+  provisioningCallbackUrl: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -116,12 +125,13 @@ export class ProvisioningService {
             switchMap((char) =>
               this.handleCharacteristic(
                 char,
-                result.userId,
-                result.provisioningToken,
-                result.server,
-                result.mqttPort,
-                result.provisioningCallbackUrl,
-                result.validateCACert
+                  // result.userId,
+                  // result.provisioningToken,
+                  // result.server,
+                  // result.mqttPort,
+                  // result.provisioningCallbackUrl,
+                  // result.validateCACert
+                 result
               )
             ),
           ),
@@ -131,12 +141,13 @@ export class ProvisioningService {
 
   private handleCharacteristic(
     char: BluetoothRemoteGATTCharacteristic,
-    userId: string,
-    token: string,
-    server: string,
-    mqttPort: number,
-    provisioningCallbackUrl: string,
-    validateCACert: boolean
+    // userId: string,
+    // token: string,
+    // server: string,
+    // mqttPort: number,
+    // provisioningCallbackUrl: string,
+    // validateCACert: boolean,
+    payload: any 
   ): Observable<string> {
     return new Observable<string>((subscriber) => {
       const listener = (event: any) => {
@@ -173,16 +184,16 @@ export class ProvisioningService {
       char
         .startNotifications()
         .then(() => {
-          const payload = JSON.stringify({
-            server: server,
-            mqttPort: mqttPort,
-            userId: userId,
-            provisioningToken: token,
-            validateCACert: validateCACert,
-            provisioningCallbackUrl: provisioningCallbackUrl,
-          });
+          // const payload = JSON.stringify({
+          //   server: server,
+          //   mqttPort: mqttPort,
+          //   userId: userId,
+          //   provisioningToken: token,
+          //   validateCACert: validateCACert,
+          //   provisioningCallbackUrl: provisioningCallbackUrl,
+          // });
           console.log('Writing to characteristic with payload:', payload);
-          return char.writeValue(new TextEncoder().encode(payload));
+          return char.writeValue(new TextEncoder().encode(JSON.stringify(payload)));
         })
         .catch((error) => subscriber.error(error));
 

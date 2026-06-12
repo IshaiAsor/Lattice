@@ -1,12 +1,13 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { forkJoin, switchMap, of } from 'rxjs';
+import { forkJoin, Observable } from 'rxjs';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
-import { UserRulesService, UserRuleView } from 'src/app/services/user.rules.service';
+import { UserRulesService, CreateRulePayload } from 'src/app/services/user.rules.service';
+import { downloadJson, readJsonFile } from 'src/app/utils/import-export.utils';
 import { UserActionsService } from 'src/app/services/user.actions.service';
-import { DeviceActionView, DeviceMgmtService, DeviceView } from 'src/app/services/device.mgmt.service';
 import { RuleEditorDialogComponent } from '../rule-editor-dialog/rule-editor-dialog.component';
+import type { Rule, UserAction, UserActionGroup } from 'src/app/models';
 
 @Component({
   selector: 'app-rules',
@@ -15,101 +16,127 @@ import { RuleEditorDialogComponent } from '../rule-editor-dialog/rule-editor-dia
   styleUrl: './rules.component.css',
 })
 export class RulesComponent implements OnInit {
-  rulesService = inject(UserRulesService);
-  actionsService = inject(UserActionsService);
-  deviceMgmtService = inject(DeviceMgmtService);
-  dialog = inject(MatDialog);
-  snackBar = inject(MatSnackBar);
+  private rulesSvc   = inject(UserRulesService);
+  private actionsSvc = inject(UserActionsService);
+  private dialog     = inject(MatDialog);
+  private snackBar   = inject(MatSnackBar);
 
-  rules: UserRuleView[] = [];
-  userActions: DeviceActionView[] = [];
-  userDevices: DeviceView[] = [];
-  actionsLoaded = false;
+  rules: Rule[] = [];
+  userActions: UserAction[]       = [];
+  userGroups:  UserActionGroup[]  = [];
+
+  // ── AI assistant ───────────────────────────────────────────────────────
+  aiGoal      = signal('');
+  aiPreview   = signal<CreateRulePayload[] | null>(null);
+  aiLoading   = signal(false);
+  aiError     = signal('');
 
   ngOnInit(): void {
-    this.loadRules();
+    this.load();
     forkJoin({
-      actions: this.actionsService.getUserActions(),
-      devices: this.deviceMgmtService.getDevices(),
-    }).subscribe(({ actions, devices }) => {
+      actions: this.actionsSvc.getUserActions(),
+      groups:  this.actionsSvc.getGroups(),
+    }).subscribe(({ actions, groups }) => {
       this.userActions = actions;
-      this.userDevices = devices;
-      this.actionsLoaded = true;
+      this.userGroups  = groups;
     });
   }
 
-  loadRules(): void {
-    this.rulesService.getRules().subscribe((rules) => {
-      this.rules = rules;
+  private load(): void {
+    this.rulesSvc.getRules().subscribe(rules => this.rules = rules);
+  }
+
+  openEditor(rule?: Rule): void {
+    this.dialog.open(RuleEditorDialogComponent, {
+      width: '680px', maxWidth: '95vw', maxHeight: '90vh',
+      data: { rule, actions: this.userActions, groups: this.userGroups },
+    }).afterClosed().subscribe((payload: CreateRulePayload | undefined) => {
+      if (!payload) return;
+      const call$: Observable<unknown> = rule
+        ? this.rulesSvc.updateRule(rule.id, payload)
+        : this.rulesSvc.createRule(payload);
+      call$.subscribe(() => {
+        this.snackBar.open(rule ? 'Rule updated' : 'Rule created', 'OK', { duration: 2000 });
+        this.load();
+      });
     });
   }
 
-  openEditor(rule?: UserRuleView): void {
-    const data$ = (this.userActions.length && this.userDevices.length)
-      ? of({ actions: this.userActions, devices: this.userDevices })
-      : forkJoin({ actions: this.actionsService.getUserActions(), devices: this.deviceMgmtService.getDevices() });
+  toggle(rule: Rule): void {
+    this.rulesSvc.toggleRule(rule.id, !rule.enabled).subscribe(() => rule.enabled = !rule.enabled);
+  }
 
-    data$.pipe(
-      switchMap(({ actions, devices }) => {
-        this.userActions = actions;
-        this.userDevices = devices;
-        this.actionsLoaded = true;
-        const dialogRef = this.dialog.open(RuleEditorDialogComponent, {
-          width: '640px',
-          maxHeight: '90vh',
-          data: { rule, actions, devices },
-        });
-        return dialogRef.afterClosed();
-      })
-    ).subscribe((result) => {
-      if (!result) return;
-      if (rule) {
-        this.rulesService.updateRule(rule.id, result).subscribe(() => {
-          this.snackBar.open('Rule updated', 'Close', { duration: 2000 });
-          this.loadRules();
-        });
-      } else {
-        this.rulesService.createRule(result).subscribe(() => {
-          this.snackBar.open('Rule created', 'Close', { duration: 2000 });
-          this.loadRules();
-        });
-      }
+  delete(rule: Rule): void {
+    this.rulesSvc.deleteRule(rule.id).subscribe(() => {
+      this.rules = this.rules.filter(r => r.id !== rule.id);
+      this.snackBar.open('Rule deleted', 'OK', { duration: 2000 });
     });
   }
 
-  toggle(rule: UserRuleView): void {
-    this.rulesService.toggleRule(rule.id, !rule.enabled).subscribe(() => {
-      rule.enabled = !rule.enabled;
-    });
+  conditionSummary(rule: Rule): string {
+    return rule.conditions.map(c => {
+      const p = c.params as any;
+      if (c.kind === 'schedule') return `At ${p.cron ?? p.time ?? '?'}`;
+      if (c.kind === 'threshold') return `${p.capability ?? '?'} ${p.operator} ${p.value}`;
+      if (c.kind === 'device_status') return `device ${p.status}`;
+      return c.kind;
+    }).join(` ${rule.match} `);
   }
 
-  delete(rule: UserRuleView): void {
-    this.rulesService.deleteRule(rule.id).subscribe(() => {
-      this.rules = this.rules.filter((r) => r.id !== rule.id);
-      this.snackBar.open('Rule deleted', 'Close', { duration: 2000 });
-    });
-  }
-
-  conditionSummary(rule: UserRuleView): string {
-    return rule.conditions.map((c) => {
-      const p = c.parameters as any;
-      if (c.condition_type === 'schedule') return `At ${p.time}`;
-      if (c.condition_type === 'device_state' || c.condition_type === 'device_status') {
-        const device = this.userDevices.find((d) => d.id === p.user_device_id);
-        const name = device?.deviceName ?? `Device #${p.user_device_id}`;
-        return `${name} is ${p.value ?? p.status}`;
-      }
-      const action = this.userActions.find((a) => a.id === p.user_device_action_id);
-      const name = action ? `${action.deviceName} · ${action.name}` : `Action #${p.user_device_action_id}`;
-      return `${name} ${p.operator} ${p.value}`;
-    }).join(` ${rule.condition_operator} `);
-  }
-
-  actionSummary(rule: UserRuleView): string {
-    return rule.actions.map((a) => {
-      const action = this.userActions.find((ua) => ua.id === a.user_device_action_id);
-      const name = action?.name ?? `Action #${a.user_device_action_id}`;
-      return `Set ${name} → ${a.target_state}`;
+  actionSummary(rule: Rule): string {
+    return rule.actions.map(a => {
+      if (a.kind === 'run_pipeline') return `Run pipeline`;
+      const target = a.user_action_id ? `action #${a.user_action_id}`
+                   : a.capability      ? a.capability
+                   : a.group_id        ? `group #${a.group_id}`
+                   : '?';
+      return `${target} → ${a.target_state ?? '?'}`;
     }).join(', ');
+  }
+
+  isAiRule(rule: Rule): boolean { return rule.name.startsWith('[AI]'); }
+
+  // ── AI assistant methods ───────────────────────────────────────────────
+  generateAi(): void {
+    if (!this.aiGoal().trim()) return;
+    this.aiLoading.set(true); this.aiError.set(''); this.aiPreview.set(null);
+    this.rulesSvc.aiGenerate(this.aiGoal()).subscribe({
+      next:  r   => { this.aiPreview.set(r.rules); this.aiLoading.set(false); },
+      error: err => { this.aiError.set(err.error?.error ?? 'Generation failed'); this.aiLoading.set(false); },
+    });
+  }
+
+  applyAi(): void {
+    const rules = this.aiPreview();
+    if (!rules?.length) return;
+    this.rulesSvc.aiApply(rules).subscribe(() => {
+      this.snackBar.open('AI rules applied', 'OK', { duration: 2000 });
+      this.aiPreview.set(null); this.aiGoal.set('');
+      this.load();
+    });
+  }
+
+  clearAi(): void {
+    this.rulesSvc.aiClear().subscribe(r => {
+      this.snackBar.open(`Cleared ${r.deleted} AI rules`, 'OK', { duration: 2000 });
+      this.load();
+    });
+  }
+
+  // ── Export / Import ────────────────────────────────────────────────────────
+
+  exportConfig(): void {
+    this.rulesSvc.getRules().subscribe(rules =>
+      downloadJson('lattice-rules.json', { version: '1', exported_at: new Date().toISOString(), rules })
+    );
+  }
+
+  importConfig(file: File): void {
+    readJsonFile(file).then(data => {
+      this.rulesSvc.importRules(data).subscribe({
+        next: r => { this.snackBar.open(`Imported ${r.imported} rule(s)`, 'OK', { duration: 3000 }); this.load(); },
+        error: () => this.snackBar.open('Import failed', 'OK', { duration: 3000 }),
+      });
+    }).catch(() => this.snackBar.open('Invalid JSON file', 'OK', { duration: 3000 }));
   }
 }

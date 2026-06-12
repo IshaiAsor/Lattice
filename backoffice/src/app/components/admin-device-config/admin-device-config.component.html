@@ -1,109 +1,121 @@
-<div class="page-layout">
-
-  <!-- Left panel: device types -->
-  <div class="panel left-panel">
-    <div class="panel-header">
-      <h2>Device Types</h2>
-      <button mat-mini-fab color="primary" (click)="openDeviceTypeDialog()" matTooltip="Add device type">
-        <mat-icon>add</mat-icon>
-      </button>
-    </div>
-
-    <mat-nav-list>
-      @for (device of deviceTypes; track device.id) {
-        <mat-list-item
-          [class.selected]="selectedDevice?.id === device.id"
-          (click)="selectDevice(device)">
-          <div class="device-item">
-            <div class="device-info">
-              <span class="device-type">{{ device.type }}</span>
-              <span class="device-version">v{{ device.version }}</span>
-            </div>
-            <div class="device-actions" (click)="$event.stopPropagation()">
-              <button mat-icon-button matTooltip="Edit" (click)="openDeviceTypeDialog(device)">
-                <mat-icon>edit</mat-icon>
-              </button>
-              <button mat-icon-button color="warn" matTooltip="Delete" (click)="deleteDeviceType(device)">
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-          </div>
-        </mat-list-item>
-      }
-      @if (deviceTypes.length === 0) {
-        <p class="empty-hint">No device types yet. Click + to add one.</p>
-      }
-    </mat-nav-list>
-  </div>
-
-  <!-- Right panel: actions -->
-  <div class="panel right-panel">
-    @if (selectedDevice) {
-      <div class="panel-header">
-        <h2>Actions — {{ selectedDevice.type }} v{{ selectedDevice.version }}</h2>
-        <button mat-mini-fab color="primary" (click)="openActionDialog()" matTooltip="Add action">
-          <mat-icon>add</mat-icon>
-        </button>
-      </div>
-
-      @if (loading) {
-        <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-      }
-
-      <div class="action-grid">
-        @for (action of actions; track action.id) {
-          <mat-card class="action-card">
-            <mat-card-header>
-              <mat-card-title>{{ action.default_name }}</mat-card-title>
-              <mat-card-subtitle>
-                <span class="chip" [class.telemetry]="action.mqtt_action_type === 'telemetry'">
-                  {{ action.mqtt_action_type }}
-                </span>
-                <span class="mqtt-name">{{ action.mqtt_action_name }}</span>
-              </mat-card-subtitle>
-            </mat-card-header>
-            <mat-card-content>
-              <div class="meta-row">
-                <span class="label">Implementation</span>
-                <span>{{ action.implementation_type }}</span>
-              </div>
-              <div class="meta-row">
-                <span class="label">Pins</span>
-                <span>{{ pinsLabel(action) }}</span>
-              </div>
-              @if (action.google_type_id) {
-                <div class="meta-row">
-                  <span class="label">Google Type</span>
-                  <span>{{ googleTypeName(action.google_type_id) }}</span>
-                </div>
-              }
-              @if (action.google_trait_ids.length) {
-                <div class="meta-row">
-                  <span class="label">Traits</span>
-                  <span>{{ googleTraitNames(action.google_trait_ids) }}</span>
-                </div>
-              }
-            </mat-card-content>
-            <mat-card-actions align="end">
-              <button mat-button (click)="openActionDialog(action)">
-                <mat-icon>edit</mat-icon> Edit
-              </button>
-              <button mat-button color="warn" (click)="deleteAction(action)">
-                <mat-icon>delete</mat-icon> Delete
-              </button>
-            </mat-card-actions>
-          </mat-card>
-        }
-        @if (!loading && actions.length === 0) {
-          <p class="empty-hint">No actions yet. Click + to add one.</p>
-        }
-      </div>
-    } @else {
-      <div class="no-selection">
-        <mat-icon>touch_app</mat-icon>
-        <p>Select a device type to manage its actions</p>
-      </div>
-    }
-  </div>
-
+<div class="ie-toolbar">
+  <button mat-stroked-button (click)="exportConfig()"><mat-icon>file_download</mat-icon> Export Catalog</button>
+  <button mat-stroked-button (click)="catalogFileInput.click()"><mat-icon>file_upload</mat-icon> Import Catalog</button>
+  <input #catalogFileInput type="file" accept=".json" hidden (change)="importConfig(catalogFileInput.files![0]); catalogFileInput.value=''">
 </div>
+
+<mat-tab-group class="catalog-tabs">
+
+  <!-- ── Device Models tab ──────────────────────────────────────────────── -->
+  <mat-tab label="Device Models">
+    <div class="page-layout">
+
+      <!-- Left panel: models list -->
+      <div class="panel left-panel">
+        <div class="panel-header">
+          <h2>Device Models</h2>
+          <button mat-icon-button (click)="openModelDialog()" matTooltip="Add model">
+            <mat-icon>add</mat-icon>
+          </button>
+        </div>
+        <mat-nav-list>
+          @for (m of models; track m.id) {
+            <mat-list-item [class.selected]="selectedModel?.id === m.id" (click)="selectModel(m)">
+              <div class="device-item">
+                <div class="device-info">
+                  <span class="device-type">{{ m.display_name }}</span>
+                  <span class="device-version">v{{ m.version }}</span>
+                </div>
+                <div class="device-actions" (click)="$event.stopPropagation()">
+                  <button mat-icon-button matTooltip="Edit" (click)="openModelDialog(m)"><mat-icon>edit</mat-icon></button>
+                  <button mat-icon-button matTooltip="Delete" (click)="deleteModel(m)"><mat-icon>delete_outline</mat-icon></button>
+                </div>
+              </div>
+            </mat-list-item>
+          }
+          @if (models.length === 0) { <p class="empty-hint">No models yet.</p> }
+        </mat-nav-list>
+      </div>
+
+      <!-- Right panel: actions -->
+      <div class="panel right-panel">
+        @if (selectedModel) {
+          <div class="panel-header">
+            <h2>Actions — {{ selectedModel.display_name }}</h2>
+            <button mat-icon-button (click)="openActionDialog()" matTooltip="Add action"><mat-icon>add</mat-icon></button>
+          </div>
+          @if (loading) { <mat-progress-bar mode="indeterminate" /> }
+          <div class="action-grid">
+            @for (action of actions; track action.id) {
+              <mat-card class="action-card lattice-card">
+                <mat-card-header>
+                  <mat-card-title>{{ action.action_key }}</mat-card-title>
+                  <mat-card-subtitle>
+                    <span class="chip" [class.telemetry]="action.mqtt_type === 'telemetry'">{{ action.mqtt_type }}</span>
+                    <span class="mqtt-name">{{ action.mqtt_name }}</span>
+                  </mat-card-subtitle>
+                </mat-card-header>
+                <mat-card-content>
+                  <div class="meta-row"><span class="label">Capability</span><span>{{ action.capability }}</span></div>
+                  <div class="meta-row"><span class="label">Pins</span><span>{{ pinsLabel(action) }}</span></div>
+                  @if (action.google_action_type_id) {
+                    <div class="meta-row"><span class="label">Google Type</span><span>{{ googleTypeName(action.google_action_type_id) }}</span></div>
+                  }
+                </mat-card-content>
+                <mat-card-actions align="end">
+                  <button mat-button (click)="openActionDialog(action)"><mat-icon>edit</mat-icon> Edit</button>
+                  <button mat-button class="delete-btn" (click)="deleteAction(action)"><mat-icon>delete_outline</mat-icon></button>
+                </mat-card-actions>
+              </mat-card>
+            }
+            @if (!loading && actions.length === 0) { <p class="empty-hint">No actions yet.</p> }
+          </div>
+        } @else {
+          <div class="no-selection">
+            <mat-icon>touch_app</mat-icon>
+            <p>Select a device model to manage its actions</p>
+          </div>
+        }
+      </div>
+
+    </div>
+  </mat-tab>
+
+  <!-- ── ML Models tab ──────────────────────────────────────────────────── -->
+  <mat-tab label="ML Models">
+    <div class="ml-tab-content">
+      <div class="panel-header">
+        <h2>ML Models</h2>
+        <button mat-icon-button (click)="openMlModelDialog()" matTooltip="Add ML model"><mat-icon>add</mat-icon></button>
+      </div>
+      <table mat-table [dataSource]="mlModels" class="lattice-card ml-table">
+        <ng-container matColumnDef="kind">
+          <th mat-header-cell *matHeaderCellDef>Kind</th>
+          <td mat-cell *matCellDef="let m"><span class="stage-chip" [class]="m.kind">{{ m.kind }}</span></td>
+        </ng-container>
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Name</th>
+          <td mat-cell *matCellDef="let m">{{ m.name }}</td>
+        </ng-container>
+        <ng-container matColumnDef="version">
+          <th mat-header-cell *matHeaderCellDef>Version</th>
+          <td mat-cell *matCellDef="let m" class="cell-muted">{{ m.version }}</td>
+        </ng-container>
+        <ng-container matColumnDef="description">
+          <th mat-header-cell *matHeaderCellDef>Description</th>
+          <td mat-cell *matCellDef="let m" class="cell-muted">{{ m.description ?? '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let m">
+            <button mat-icon-button (click)="deleteMlModel(m)" matTooltip="Delete"><mat-icon>delete_outline</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="['kind','name','version','description','actions']"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['kind','name','version','description','actions'];"></tr>
+      </table>
+      @if (mlModels.length === 0) { <p class="empty-hint" style="padding:16px">No ML models registered yet.</p> }
+    </div>
+  </mat-tab>
+
+</mat-tab-group>

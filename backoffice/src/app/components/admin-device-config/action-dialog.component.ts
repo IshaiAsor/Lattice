@@ -2,14 +2,14 @@ import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { AbstractControl, FormBuilder, FormGroup, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
-import { AdminDeviceAction } from 'src/app/services/admin.device.config.service';
+import type { ModelAction } from 'src/app/models';
 import { GoogleActionsTypesService, GoogleActionType } from 'src/app/services/google.actions.types.service';
 import { GoogleActionsTraitsService, GoogleActionTrait } from 'src/app/services/google.actions.traits.service';
 import { Subscription } from 'rxjs';
 
 export interface ActionDialogData {
-  action: AdminDeviceAction | null;
-  usedPins: Map<number, string>; // GPIO number → mqtt_action_name of the action using it
+  action: ModelAction | null;
+  usedPins: Map<number, string>; // GPIO number → mqtt_name of the action using it
 }
 
 export const IMPLEMENTATION_TYPES = [
@@ -115,13 +115,13 @@ function pinInUseValidator(usedPins: Map<number, string>): ValidatorFn {
       <form [formGroup]="form" class="dialog-form">
 
         <mat-form-field appearance="outline">
-          <mat-label>Default Name</mat-label>
-          <input matInput formControlName="default_name" />
+          <mat-label>Action Key (e.g. TemperatureAction)</mat-label>
+          <input matInput formControlName="action_key" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>MQTT Action Name</mat-label>
-          <input matInput formControlName="mqtt_action_name" placeholder="e.g. outlet1, temp_sensor"
+          <mat-label>MQTT Name</mat-label>
+          <input matInput formControlName="mqtt_name" placeholder="e.g. outlet1, temp_sensor"
                  (input)="onMqttNameInput()" />
           @if (!mqttNameUserEdited && !data) {
             <mat-hint>Auto-derived from Default Name</mat-hint>
@@ -133,7 +133,7 @@ function pinInUseValidator(usedPins: Map<number, string>): ValidatorFn {
 
         <mat-form-field appearance="outline">
           <mat-label>Implementation Type</mat-label>
-          <mat-select formControlName="implementation_type">
+          <mat-select formControlName="capability">
             @for (t of implTypes; track t.value) {
               <mat-option [value]="t.value">{{ t.label }}</mat-option>
             }
@@ -142,8 +142,8 @@ function pinInUseValidator(usedPins: Map<number, string>): ValidatorFn {
 
         <div class="readonly-row">
           <span class="label">MQTT Type</span>
-          <span class="chip" [class.telemetry]="form.get('mqtt_action_type')?.value === 'telemetry'">
-            {{ form.get('mqtt_action_type')?.value }}
+          <span class="chip" [class.telemetry]="form.get('mqtt_type')?.value === 'telemetry'">
+            {{ form.get('mqtt_type')?.value }}
           </span>
           <span class="muted">(auto-set by implementation type)</span>
         </div>
@@ -188,7 +188,7 @@ function pinInUseValidator(usedPins: Map<number, string>): ValidatorFn {
         }
 
         <!-- ── Telemetry Interval ── -->
-        @if (form.get('mqtt_action_type')?.value === 'telemetry') {
+        @if (form.get('mqtt_type')?.value === 'telemetry') {
           <mat-form-field appearance="outline">
             <mat-label>Read Interval (ms)</mat-label>
             <input matInput type="number" formControlName="telemetry_interval_ms" min="0" />
@@ -212,19 +212,19 @@ function pinInUseValidator(usedPins: Map<number, string>): ValidatorFn {
         <p class="section-label">Google Home</p>
         <mat-form-field appearance="outline">
           <mat-label>Google Action Type</mat-label>
-          <mat-select formControlName="google_type_id">
+          <mat-select formControlName="google_action_type_id">
             @for (t of googleTypes; track t.id) {
               <mat-option [value]="t.id">{{ t.name }}</mat-option>
             }
           </mat-select>
-          @if (form.get('google_type_id')?.hasError('required')) {
+          @if (form.get('google_action_type_id')?.hasError('required')) {
             <mat-error>Google Action Type is required</mat-error>
           }
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Google Traits</mat-label>
-          <mat-select formControlName="google_trait_ids" multiple>
+          <mat-select formControlName="trait_ids" multiple>
             @for (t of googleTraits; track t.id) {
               <mat-option [value]="t.id">{{ t.name }}</mat-option>
             }
@@ -267,7 +267,7 @@ export class ActionDialogComponent implements OnInit, OnDestroy {
   private fb = inject(FormBuilder);
   private dialogRef = inject(MatDialogRef<ActionDialogComponent>);
   dialogData: ActionDialogData = inject(MAT_DIALOG_DATA);
-  get data(): AdminDeviceAction | null { return this.dialogData.action; }
+  get data(): ModelAction | null { return this.dialogData.action; }
   private typesService = inject(GoogleActionsTypesService);
   private traitsService = inject(GoogleActionsTraitsService);
   private subs = new Subscription();
@@ -299,13 +299,13 @@ export class ActionDialogComponent implements OnInit, OnDestroy {
   pinForm: FormGroup = this.fb.group({});
 
   form = this.fb.group({
-    default_name:          [this.data?.default_name ?? '', Validators.required],
-    mqtt_action_name:      [this.data?.mqtt_action_name ?? '', [Validators.required, Validators.pattern(/^[a-z0-9_]+$/)]],
-    mqtt_action_type:      [{ value: this.data?.mqtt_action_type ?? 'command', disabled: true }],
-    implementation_type:   [this.data?.implementation_type ?? '', Validators.required],
+    action_key:            [this.data?.action_key ?? '', Validators.required],
+    mqtt_name:             [this.data?.mqtt_name ?? '', [Validators.required, Validators.pattern(/^[a-z0-9_]+$/)]],
+    mqtt_type:             [{ value: this.data?.mqtt_type ?? 'command', disabled: true }],
+    capability:            [this.data?.capability ?? '', Validators.required],
     telemetry_interval_ms: [this.data?.telemetry_interval_ms ?? null, [Validators.min(0), Validators.max(3_600_000)]],
-    google_type_id:        [this.data?.google_type_id ?? null, Validators.required],
-    google_trait_ids:      [this.data?.google_trait_ids ?? []],
+    google_action_type_id: [this.data?.google_action_type_id ?? null, Validators.required],
+    trait_ids:             [([] as number[])],
   });
 
   ngOnInit() {
@@ -314,27 +314,27 @@ export class ActionDialogComponent implements OnInit, OnDestroy {
     });
     this.traitsService.getGoogleActionTraits().subscribe(t => {
       this.googleTraits = t;
-      this.updateCompatibleTraits(this.data?.implementation_type ?? '');
+      this.updateCompatibleTraits(this.data?.capability ?? '');
     });
 
-    const initType = this.data?.implementation_type ?? '';
+    const initType = this.data?.capability ?? '';
     this.rebuildPinForm(initType);
 
     if (!this.data) {
       this.subs.add(
-        this.form.get('default_name')!.valueChanges.subscribe(name => {
+        this.form.get('action_key')!.valueChanges.subscribe(name => {
           if (this.mqttNameUserEdited) return;
           const derived = (name ?? '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-          this.form.get('mqtt_action_name')!.setValue(derived, { emitEvent: false });
+          this.form.get('mqtt_name')!.setValue(derived, { emitEvent: false });
         })
       );
     }
 
     this.subs.add(
-      this.form.get('implementation_type')!.valueChanges.subscribe(implType => {
+      this.form.get('capability')!.valueChanges.subscribe(implType => {
         this.rebuildPinForm(implType ?? '');
         const entry = this.implTypes.find(t => t.value === implType);
-        this.form.get('mqtt_action_type')!.setValue(entry?.actionType ?? 'command');
+        this.form.get('mqtt_type')!.setValue(entry?.actionType ?? 'command');
         this.updateCompatibleTraits(implType ?? '');
       })
     );
@@ -347,7 +347,7 @@ export class ActionDialogComponent implements OnInit, OnDestroy {
     this.currentBlueprint = slots;
     const controls: Record<string, any> = {};
     slots.forEach((slot, i) => {
-      const existing = this.data?.pins?.[i]?.pinNumber ?? null;
+      const existing = (this.data?.pins as any)?.[i]?.pinNumber ?? null;
       controls[slot.key] = [existing, [Validators.required, Validators.min(1), Validators.max(48), pinInUseValidator(this.dialogData.usedPins)]];
     });
     this.pinForm = this.fb.group(controls, { validators: slots.length > 1 ? noDuplicatePinsValidator : [] });
@@ -356,7 +356,7 @@ export class ActionDialogComponent implements OnInit, OnDestroy {
   private updateCompatibleTraits(implType: string) {
     const compatible = this.COMPATIBLE_TRAITS[implType] ?? [];
     this.compatibleTraitNames = this.googleTraits
-      .filter(t => compatible.includes(t.value))
+      .filter(t => compatible.includes((t as any).key ?? (t as any).value))
       .map(t => t.name);
   }
 
@@ -373,15 +373,15 @@ export class ActionDialogComponent implements OnInit, OnDestroy {
       pinNumber: Number(this.pinForm.value[slot.key]),
       pinMode: slot.mode,
     }));
-    const result: Omit<AdminDeviceAction, 'id' | 'device_id'> = {
-      default_name:          v.default_name!,
-      mqtt_action_name:      v.mqtt_action_name!,
-      mqtt_action_type:      v.mqtt_action_type!,
-      implementation_type:   v.implementation_type!,
+    const result = {
+      action_key:            v.action_key!,
+      capability:            v.capability!,
+      mqtt_name:             v.mqtt_name!,
+      mqtt_type:             v.mqtt_type!,
       pins,
       telemetry_interval_ms: v.telemetry_interval_ms ?? null,
-      google_type_id:        v.google_type_id ?? null,
-      google_trait_ids:      v.google_trait_ids ?? [],
+      google_action_type_id: v.google_action_type_id ?? null,
+      trait_ids:             v.trait_ids ?? [],
     };
     this.dialogRef.close(result);
   }

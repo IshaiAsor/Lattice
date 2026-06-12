@@ -1,0 +1,206 @@
+{
+  "_comment": "Lattice Platform — Reference User Config (Phase 10 seed). All scopes are capability-based (portable across users). Import: Rules page → Import, Emergency page → Import, Pipelines page → Import.",
+  "version": "1",
+  "exported_at": "2026-06-04T00:00:00.000Z",
+  "rules": [
+    {
+      "name": "High Temperature Alert — Activate Fan",
+      "match": "AND",
+      "cooldown_sec": 120,
+      "enabled": true,
+      "conditions": [
+        {
+          "kind": "threshold",
+          "params": { "capability": "TEMPERATURE", "operator": ">", "value": 28 }
+        }
+      ],
+      "actions": [
+        {
+          "kind": "set_state",
+          "scope": "capability",
+          "capability": "FAN",
+          "target_state": "on",
+          "delay_sec": 0
+        }
+      ]
+    },
+    {
+      "name": "Temperature Normal — Turn Off Fan",
+      "match": "AND",
+      "cooldown_sec": 120,
+      "enabled": true,
+      "conditions": [
+        {
+          "kind": "threshold",
+          "params": { "capability": "TEMPERATURE", "operator": "<", "value": 24 }
+        }
+      ],
+      "actions": [
+        {
+          "kind": "set_state",
+          "scope": "capability",
+          "capability": "FAN",
+          "target_state": "off",
+          "delay_sec": 0
+        }
+      ]
+    },
+    {
+      "name": "Scheduled Lights Off at Midnight",
+      "match": "AND",
+      "cooldown_sec": 0,
+      "enabled": true,
+      "conditions": [
+        {
+          "kind": "schedule",
+          "params": { "cron": "0 0 * * *" }
+        }
+      ],
+      "actions": [
+        {
+          "kind": "set_state",
+          "scope": "capability",
+          "capability": "LIGHT_DIMMER",
+          "target_state": "off",
+          "delay_sec": 0
+        }
+      ]
+    },
+    {
+      "name": "Daily Inspection Pipeline — Run at Noon",
+      "match": "AND",
+      "cooldown_sec": 0,
+      "enabled": false,
+      "conditions": [
+        {
+          "kind": "schedule",
+          "params": { "cron": "0 12 * * *" }
+        }
+      ],
+      "actions": [
+        {
+          "kind": "run_pipeline",
+          "scope": "capability",
+          "capability": null,
+          "pipeline_id": null,
+          "delay_sec": 0
+        }
+      ]
+    }
+  ],
+  "emergency_rules": [
+    {
+      "name": "Critical Temperature — Emergency Fan On",
+      "source_scope": "capability",
+      "source_capability": "TEMPERATURE",
+      "source_user_action_id": null,
+      "source_group_id": null,
+      "operator": ">",
+      "threshold": "35",
+      "target_scope": "capability",
+      "target_capability": "FAN",
+      "target_user_action_id": null,
+      "target_group_id": null,
+      "target_state": "on",
+      "enabled": true
+    },
+    {
+      "name": "Critical Temperature — Emergency Outlet Off",
+      "source_scope": "capability",
+      "source_capability": "TEMPERATURE",
+      "source_user_action_id": null,
+      "source_group_id": null,
+      "operator": ">",
+      "threshold": "40",
+      "target_scope": "capability",
+      "target_capability": "OUTLET",
+      "target_user_action_id": null,
+      "target_group_id": null,
+      "target_state": "off",
+      "enabled": true
+    }
+  ],
+  "pipelines": [
+    {
+      "name": "Sensor Analysis Pipeline",
+      "enabled": false,
+      "trigger_kind": "telemetry",
+      "trigger_capability": "TEMPERATURE",
+      "trigger_config": null,
+      "stages": [
+        {
+          "position": 1,
+          "stage_kind": "sensor_digest",
+          "ml_model_id": null,
+          "ml_model_kind": null,
+          "ml_model_name": null,
+          "component_version": null,
+          "config": null
+        },
+        {
+          "position": 2,
+          "stage_kind": "llm",
+          "ml_model_id": null,
+          "ml_model_kind": "llm",
+          "ml_model_name": "qwen2.5vl",
+          "component_version": null,
+          "config": null
+        },
+        {
+          "position": 3,
+          "stage_kind": "command_exec",
+          "ml_model_id": null,
+          "ml_model_kind": null,
+          "ml_model_name": null,
+          "component_version": null,
+          "config": null
+        }
+      ]
+    },
+    {
+      "name": "Visual Inspection Pipeline",
+      "enabled": false,
+      "trigger_kind": "schedule",
+      "trigger_capability": null,
+      "trigger_config": { "cron": "0 */4 * * *" },
+      "stages": [
+        {
+          "position": 1,
+          "stage_kind": "vlm",
+          "ml_model_id": null,
+          "ml_model_kind": "vlm",
+          "ml_model_name": "visual-inspector",
+          "component_version": null,
+          "config": null
+        },
+        {
+          "position": 2,
+          "stage_kind": "sensor_digest",
+          "ml_model_id": null,
+          "ml_model_kind": null,
+          "ml_model_name": null,
+          "component_version": null,
+          "config": null
+        },
+        {
+          "position": 3,
+          "stage_kind": "llm",
+          "ml_model_id": null,
+          "ml_model_kind": "llm",
+          "ml_model_name": "qwen2.5vl",
+          "component_version": null,
+          "config": null
+        },
+        {
+          "position": 4,
+          "stage_kind": "command_exec",
+          "ml_model_id": null,
+          "ml_model_kind": null,
+          "ml_model_name": null,
+          "component_version": null,
+          "config": null
+        }
+      ]
+    }
+  ]
+}

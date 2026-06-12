@@ -1,54 +1,97 @@
-<div class="header">
-  <h1>Rules</h1>
-  <button mat-raised-button color="primary" (click)="openEditor()" [disabled]="!actionsLoaded">
-    <mat-icon>add</mat-icon>
-    New Rule
-  </button>
+<div class="page-header">
+  <h1>Automation Rules</h1>
+  <div class="header-actions">
+    <button mat-stroked-button (click)="exportConfig()"><mat-icon>file_download</mat-icon> Export</button>
+    <button mat-stroked-button (click)="rulesFileInput.click()"><mat-icon>file_upload</mat-icon> Import</button>
+    <input #rulesFileInput type="file" accept=".json" hidden (change)="importConfig(rulesFileInput.files![0]); rulesFileInput.value=''">
+    <button mat-flat-button (click)="openEditor()"><mat-icon>add</mat-icon>New Rule</button>
+  </div>
 </div>
 
-@if (rules.length === 0) {
-  <div class="empty-state">
-    <mat-icon class="empty-icon">auto_awesome</mat-icon>
-    <p>No rules yet. Create one to automate your devices.</p>
-  </div>
-}
-
 @for (rule of rules; track rule.id) {
-  <mat-card class="rule-card" [class.disabled]="!rule.enabled">
-    <div class="rule-card-header">
-      <mat-icon class="rule-icon">bolt</mat-icon>
+  <div class="rule-card lattice-card" [class.rule-disabled]="!rule.enabled">
+    <div class="rule-header">
+      <mat-icon class="rule-icon" [class.ai-icon]="isAiRule(rule)">
+        {{ isAiRule(rule) ? 'auto_awesome' : 'bolt' }}
+      </mat-icon>
       <span class="rule-name">{{ rule.name }}</span>
       <span class="header-spacer"></span>
-      <mat-slide-toggle
-        [checked]="rule.enabled"
-        (change)="toggle(rule)"
-        [matTooltip]="rule.enabled ? 'Enabled' : 'Disabled'">
-      </mat-slide-toggle>
+      <mat-slide-toggle [checked]="rule.enabled" (change)="toggle(rule)"
+                        [matTooltip]="rule.enabled ? 'Enabled' : 'Disabled'" />
       <button mat-icon-button (click)="openEditor(rule)" matTooltip="Edit">
         <mat-icon>edit</mat-icon>
       </button>
       <button mat-icon-button (click)="delete(rule)" matTooltip="Delete" class="delete-btn">
-        <mat-icon>delete</mat-icon>
+        <mat-icon>delete_outline</mat-icon>
       </button>
     </div>
 
     <div class="rule-flow">
-      <div class="rule-conditions">
-        <span class="flow-label">IF</span>
+      <div class="rule-part">
+        <span class="flow-label if">IF</span>
         <span class="flow-text">{{ conditionSummary(rule) }}</span>
       </div>
       <mat-icon class="flow-arrow">arrow_forward</mat-icon>
-      <div class="rule-actions">
+      <div class="rule-part">
         <span class="flow-label then">THEN</span>
         <span class="flow-text">{{ actionSummary(rule) }}</span>
       </div>
     </div>
 
-    @if (rule.last_triggered) {
+    @if (rule.last_fired_at) {
       <div class="rule-footer">
         <mat-icon class="footer-icon">schedule</mat-icon>
-        Last triggered: {{ rule.last_triggered | date:'short' }}
+        Last fired: {{ rule.last_fired_at | date:'short' }}
       </div>
     }
-  </mat-card>
+  </div>
 }
+
+@if (rules.length === 0) {
+  <div class="empty-state">
+    <mat-icon>auto_awesome</mat-icon>
+    <p>No rules yet. Create one to automate your devices.</p>
+  </div>
+}
+
+<!-- ── AI assistant ───────────────────────────────────────────────────────── -->
+<div class="ai-panel lattice-card">
+  <div class="ai-header">
+    <mat-icon>auto_awesome</mat-icon>
+    <span>AI rule assistant</span>
+    @if (rules.some(isAiRule)) {
+      <button mat-button class="ai-clear-btn" (click)="clearAi()" matTooltip="Remove AI rules">
+        Clear AI rules
+      </button>
+    }
+  </div>
+  <mat-form-field appearance="outline" class="ai-input">
+    <mat-label>Describe your goal</mat-label>
+    <input matInput [value]="aiGoal()" (input)="aiGoal.set($any($event.target).value)"
+           placeholder="e.g. keep temperature stable and flush when needed"
+           (keyup.enter)="generateAi()" />
+  </mat-form-field>
+  <div class="ai-actions">
+    <button mat-flat-button (click)="generateAi()" [disabled]="aiLoading() || !aiGoal().trim()">
+      <mat-icon>{{ aiLoading() ? 'hourglass_empty' : 'psychology' }}</mat-icon>
+      Generate
+    </button>
+    @if (aiPreview()) {
+      <button mat-stroked-button (click)="applyAi()">
+        <mat-icon>check</mat-icon>Apply {{ aiPreview()!.length }} rule(s)
+      </button>
+    }
+  </div>
+  @if (aiError()) { <p class="ai-error">{{ aiError() }}</p> }
+  @if (aiPreview()?.length) {
+    <div class="ai-preview">
+      @for (r of aiPreview()!; track r.name) {
+        <div class="ai-preview-rule">
+          <mat-icon>bolt</mat-icon>
+          <span>{{ r.name }}</span>
+          <span class="ai-preview-sum">{{ r.conditions.length }} condition(s) → {{ r.actions.length }} action(s)</span>
+        </div>
+      }
+    </div>
+  }
+</div>

@@ -89,7 +89,7 @@ export const renderAuthPage = (
     <script>
       window.onload = function () {
         const client = google.accounts.oauth2.initCodeClient({
-          client_id: '${config.googleSignIn.signInClientId}',
+          client_id: '${config.google.signInClientId}',
           scope: 'email profile',
           ux_mode: 'popup',
           callback: (response) => {

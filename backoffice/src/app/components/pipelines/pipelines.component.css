@@ -1,0 +1,112 @@
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.page-header h2 { margin: 0; font-size: 1.4rem; color: var(--text); flex: 1; }
+.header-actions { display: flex; gap: 8px; }
+
+.pipelines-list { display: flex; flex-direction: column; gap: 12px; }
+
+.pipeline-card {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+.pipeline-card.disabled { opacity: 0.55; }
+
+.pipeline-accent {
+  width: 4px;
+  background: var(--primary);
+  flex-shrink: 0;
+  border-radius: var(--radius-card) 0 0 var(--radius-card);
+}
+.pipeline-card.disabled .pipeline-accent { background: var(--offline); }
+
+.pipeline-body { flex: 1; padding: 14px 16px; }
+
+.pipeline-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.pipeline-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+
+.trigger-chip {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+  background: rgba(61,110,224,0.1);
+  color: var(--primary);
+}
+.spacer { flex: 1; }
+
+.stages-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.stage-arrow { font-size: 16px; color: var(--text-dim); }
+
+.stage-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.stage-chip.vlm    { background: rgba(124,58,237,0.15); color: var(--stage-vlm); }
+.stage-chip.digest { background: rgba(8,145,178,0.15);  color: var(--stage-digest); }
+.stage-chip.llm    { background: rgba(37,99,235,0.15);  color: var(--stage-llm); }
+.stage-chip.exec   { background: rgba(217,119,6,0.15);  color: var(--stage-exec); }
+
+.no-stages { font-size: 0.8rem; color: var(--text-dim); }
+
+/* ── Runs panel ──────────────────────────────────────────────────── */
+.runs-panel { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.no-runs { color: var(--text-dim); font-size: 0.85rem; margin: 0; }
+
+.run-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 0.85rem;
+}
+.run-icon         { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
+.run-icon.completed { color: var(--online); }
+.run-icon.failed    { color: var(--error); }
+.run-icon.running   { color: var(--warning); }
+
+.run-id     { color: var(--text-dim); min-width: 36px; }
+.run-status { font-weight: 500; color: var(--text); }
+.run-time   { color: var(--text-muted); flex: 1; }
+.run-dur    { color: var(--text-dim); font-size: 0.8rem; }
+
+/* ── Pipeline actions ────────────────────────────────────────────── */
+.pipeline-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4px 8px;
+  gap: 4px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.empty-state mat-icon { font-size: 48px; width: 48px; height: 48px; }
+.empty-state p { margin: 0; font-size: 0.95rem; max-width: 400px; }

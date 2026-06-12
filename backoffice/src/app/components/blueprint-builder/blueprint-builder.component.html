@@ -1,0 +1,215 @@
+<div class="page-container builder-layout">
+
+  <!-- ── Left: blueprint list ─────────────────────────────────────── -->
+  <div class="bp-list-panel">
+    <div class="panel-header">
+      <h2>Blueprints</h2>
+      <button mat-icon-button (click)="showNewForm.set(true)" title="New blueprint"><mat-icon>add</mat-icon></button>
+    </div>
+    <div class="ie-toolbar">
+      <button mat-stroked-button class="ie-btn" (click)="exportConfig()"><mat-icon>file_download</mat-icon></button>
+      <button mat-stroked-button class="ie-btn" (click)="bpFileInput.click()"><mat-icon>file_upload</mat-icon></button>
+      <input #bpFileInput type="file" accept=".json" hidden (change)="importConfig(bpFileInput.files![0]); bpFileInput.value=''">
+    </div>
+
+    @if (showNewForm()) {
+      <div class="new-form lattice-card">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Name</mat-label>
+          <input matInput [(ngModel)]="newName" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Category (optional)</mat-label>
+          <input matInput [(ngModel)]="newCategory" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Description (optional)</mat-label>
+          <textarea matInput [(ngModel)]="newDesc" rows="2"></textarea>
+        </mat-form-field>
+        <div class="form-actions">
+          <button mat-button (click)="cancelNew()">Cancel</button>
+          <button mat-raised-button color="primary" [disabled]="!newName" (click)="create()">Create</button>
+        </div>
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="loading-row"><mat-progress-bar mode="indeterminate" /></div>
+    } @else if (blueprints.length === 0) {
+      <p class="empty-hint">No blueprints yet. Create one above.</p>
+    }
+
+    @for (bp of blueprints; track bp.id) {
+      <div class="bp-item" [class.selected]="selected()?.id === bp.id" (click)="select(bp)">
+        <div class="bp-item-main">
+          <span class="bp-item-name">{{ bp.name }}</span>
+          <span class="bp-status-chip" [class.published]="bp.status === 'published'">{{ bp.status }}</span>
+        </div>
+        @if (bp.category) {
+          <span class="bp-category">{{ bp.category }}</span>
+        }
+        <div class="bp-item-actions">
+          @if (bp.status === 'draft') {
+            <button mat-icon-button (click)="publish(bp, $event)" [disabled]="publishing() === bp.id" title="Publish">
+              <mat-icon>publish</mat-icon>
+            </button>
+          }
+          <button mat-icon-button color="warn" (click)="delete(bp, $event)" title="Delete"><mat-icon>delete</mat-icon></button>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- ── Right: blueprint editor ──────────────────────────────────── -->
+  <div class="bp-editor">
+    @if (!selected()) {
+      <div class="editor-empty">
+        <mat-icon>layers</mat-icon>
+        <p>Select a blueprint to edit</p>
+      </div>
+    } @else {
+      <div class="editor-content">
+        <div class="editor-header">
+          <h3>{{ selected()!.name }}</h3>
+          @if (selected()!.description) {
+            <p class="bp-desc">{{ selected()!.description }}</p>
+          }
+        </div>
+
+        <!-- ── Device Slots ────────────────────────────────── -->
+        <section class="editor-section lattice-card">
+          <div class="section-header">
+            <h4><mat-icon>devices</mat-icon> Device Slots</h4>
+            <button mat-icon-button (click)="showSlotForm.set(true)" title="Add slot"><mat-icon>add</mat-icon></button>
+          </div>
+
+          @if (showSlotForm()) {
+            <div class="inline-form">
+              <mat-form-field appearance="outline">
+                <mat-label>Device model</mat-label>
+                <mat-select [(ngModel)]="slotModelId">
+                  @for (m of deviceModels; track m.id) {
+                    <mat-option [value]="m.id.toString()">{{ m.display_name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Role</mat-label>
+                <input matInput [(ngModel)]="slotRole" placeholder="e.g. controller" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" style="width:80px">
+                <mat-label>Min</mat-label>
+                <input matInput type="number" [(ngModel)]="slotMin" min="1" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" style="width:80px">
+                <mat-label>Max</mat-label>
+                <input matInput type="number" [(ngModel)]="slotMax" placeholder="∞" />
+              </mat-form-field>
+              <button mat-stroked-button (click)="cancelSlot()">Cancel</button>
+              <button mat-raised-button color="primary" [disabled]="!slotModelId || !slotRole" (click)="addSlot()">Add</button>
+            </div>
+          }
+
+          @if (!selected()!.slots?.length) {
+            <p class="section-empty">No slots defined.</p>
+          }
+          @for (slot of selected()!.slots; track slot.id) {
+            <div class="slot-row">
+              <mat-icon>memory</mat-icon>
+              <div class="slot-info">
+                <span class="slot-model">{{ modelName(slot.device_model_id) }}</span>
+                <span class="slot-role">{{ slot.role }}</span>
+                <span class="slot-count">{{ slot.min_count }}{{ slot.max_count ? '–' + slot.max_count : '+' }} devices</span>
+              </div>
+              <button mat-icon-button color="warn" (click)="deleteSlot(slot.id)"><mat-icon>delete</mat-icon></button>
+            </div>
+          }
+        </section>
+
+        <!-- ── Pipelines ───────────────────────────────────── -->
+        <section class="editor-section lattice-card">
+          <div class="section-header">
+            <h4><mat-icon>account_tree</mat-icon> Pipelines</h4>
+            <button mat-icon-button (click)="showPipelineForm.set(true)" title="Add pipeline"><mat-icon>add</mat-icon></button>
+          </div>
+
+          @if (showPipelineForm()) {
+            <div class="inline-form">
+              <mat-form-field appearance="outline">
+                <mat-label>Name</mat-label>
+                <input matInput [(ngModel)]="pipeName" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Trigger</mat-label>
+                <mat-select [(ngModel)]="pipeTrigger">
+                  @for (k of triggerKinds; track k) { <mat-option [value]="k">{{ k }}</mat-option> }
+                </mat-select>
+              </mat-form-field>
+              @if (pipeTrigger === 'telemetry') {
+                <mat-form-field appearance="outline">
+                  <mat-label>Trigger capability</mat-label>
+                  <input matInput [(ngModel)]="pipeTriggerCap" />
+                </mat-form-field>
+              }
+              <button mat-stroked-button (click)="cancelPipeline()">Cancel</button>
+              <button mat-raised-button color="primary" [disabled]="!pipeName" (click)="addPipeline()">Add</button>
+            </div>
+          }
+
+          @if (!selected()!.pipelines?.length) {
+            <p class="section-empty">No pipelines defined.</p>
+          }
+          @for (pipe of selected()!.pipelines; track pipe.id) {
+            <div class="pipeline-block">
+              <div class="pipeline-header">
+                <span class="pipeline-name">{{ pipe.name }}</span>
+                <span class="trigger-chip">{{ pipe.trigger_kind }}{{ pipe.trigger_capability ? ' · ' + pipe.trigger_capability : '' }}</span>
+                <button mat-icon-button (click)="openAddStage(pipe.id)" title="Add stage" style="margin-left:auto"><mat-icon>add</mat-icon></button>
+                <button mat-icon-button color="warn" (click)="deletePipeline(pipe.id)"><mat-icon>delete</mat-icon></button>
+              </div>
+              <div class="stages-row">
+                @for (stage of pipe.stages; track stage.id; let last = $last) {
+                  <div class="stage-chip {{ stageColor(stage.stage_kind) }}">
+                    {{ stage.stage_kind }}
+                    @if (stage.ml_model_id) { <span class="stage-ml">{{ mlModelLabel(stage.ml_model_id) }}</span> }
+                    <button mat-icon-button class="stage-del" (click)="deleteStage(pipe.id, stage.id!)"><mat-icon>close</mat-icon></button>
+                  </div>
+                  @if (!last) { <mat-icon class="stage-arrow">arrow_forward</mat-icon> }
+                }
+              </div>
+
+              @if (showStageForm() && stagePipeId() === pipe.id) {
+                <div class="inline-form stage-form">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Stage kind</mat-label>
+                    <mat-select [(ngModel)]="stageKind">
+                      @for (k of stageKinds; track k) { <mat-option [value]="k">{{ k }}</mat-option> }
+                    </mat-select>
+                  </mat-form-field>
+                  @if (stageKind === 'vlm' || stageKind === 'llm') {
+                    <mat-form-field appearance="outline">
+                      <mat-label>ML model</mat-label>
+                      <mat-select [(ngModel)]="stageMlId">
+                        <mat-option value="">None</mat-option>
+                        @for (m of mlModels; track m.id) {
+                          <mat-option [value]="m.id.toString()">{{ m.name }} ({{ m.kind }})</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  }
+                  <mat-form-field appearance="outline">
+                    <mat-label>Version</mat-label>
+                    <input matInput [(ngModel)]="stageVersion" placeholder="optional" />
+                  </mat-form-field>
+                  <button mat-stroked-button (click)="showStageForm.set(false)">Cancel</button>
+                  <button mat-raised-button color="primary" (click)="addStage()">Add</button>
+                </div>
+              }
+            </div>
+          }
+        </section>
+
+      </div>
+    }
+  </div>
+</div>

@@ -79,16 +79,14 @@ public:
             if (strcmp(action, "reprovision") == 0 || strcmp(action, "soft-reset") == 0)
             {
                 Serial.println("[MQTT] Soft reset: clearing IoT credentials and restarting...");
-                PreferencesManagerService p;
-                p.ClearCredentials();
+                prefService.ClearCredentials();
                 ESP.restart();
                 return;
             }
             if (strcmp(action, "hard-reset") == 0)
             {
                 Serial.println("[MQTT] Hard reset: erasing all NVS data and restarting...");
-                PreferencesManagerService p;
-                p.ClearAllCredentials();
+                prefService.ClearAllCredentials();
                 ESP.restart();
                 return;
             }

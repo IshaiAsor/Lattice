@@ -61,6 +61,7 @@ public:
         Serial.print("Payload:");
         Serial.println(payloadString);
 
+        httpClient.setTimeout(10000); // Set timeout to 10 seconds for potentially long operations
         int httpResponseCode = httpClient.POST(payloadString);
 
         if (httpResponseCode == 200)
@@ -75,6 +76,17 @@ public:
             if (error)
             {
                 Serial.print("Failed to parse JSON response: ");
+                Serial.println("Response body:");
+                Serial.println(responseBody);
+                Serial.println("Payload:");
+                Serial.println(payloadString);
+                Serial.println("URL:");
+                Serial.println(url);
+                Serial.println("Token:");
+                Serial.println(token);
+                Serial.println("ValidateCACert:");
+                Serial.println(validateCACert);
+                Serial.println("HTTP Response Code:");
                 Serial.println(error.c_str());
                 httpClient.end();
                 return TOut(); 

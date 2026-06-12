@@ -211,7 +211,7 @@ public:
         }
     }
 
-    bool loadFromServer(JwtToken* jwtData)
+    bool loadFromServer(JwtToken* jwtData, DeviceConfig* deviceConfig)
     {
         if (!jwtData || jwtData->token.isEmpty())
         {
@@ -219,22 +219,22 @@ public:
             return false;
         }
 
-        if (jwtData->deviceConfigUrl.isEmpty())
+        if (!deviceConfig || deviceConfig->deviceConfigUrl.isEmpty())
         {
             Serial.println("[Config] No device config URL in JWT storage — re-provisioning required.");
             return false;
         }
 
-        Serial.println("[Config] Fetching from: " + jwtData->deviceConfigUrl);
+        Serial.println("[Config] Fetching from: " + deviceConfig->deviceConfigUrl);
 
         HttpJsonClientService<EmptyJsonModel, DeviceConfigurationResponse> http;
         DeviceConfigurationResponse resp = http.GetJson(
-            jwtData->deviceConfigUrl, jwtData->token, jwtData->validateCACert);
+            deviceConfig->deviceConfigUrl, jwtData->token, deviceConfig->validateCACert);
 
-        if (!resp.parsed)
+        if (resp.actions.empty())
         {
-            Serial.println("[Config] Server response invalid or empty.");
-            return false;
+            Serial.println("[Config] No actions configured for this device yet.");
+            return true; // Not a failure — just no actions configured yet.
         }
 
         _cmdActions.clear();
@@ -254,27 +254,23 @@ public:
             }
         }
 
-        if (_cmdActions.empty() && _telActions.empty())
-        {
-            Serial.println("[Config] Factory produced no actions.");
-            return false;
-        }
-
         _ownedByServer = true;
-        Serial.printf("[Config] Loaded %d cmd + %d tel actions from server.\n",
-            _cmdActions.size(), _telActions.size());
+        Serial.printf("[Config] Loaded %d cmd + %d tel actions from server%s.\n",
+            _cmdActions.size(), _telActions.size(),
+            (_cmdActions.empty() && _telActions.empty()) ? " (no actions configured yet)" : "");
 
 #ifdef HAS_CAMERA
         for (const ActionConfig& ac : resp.actions)
         {
+            DeviceConfig* config = prefService.LoadDeviceConfig();
             if (ac.mqtt_action_type != "telemetry") continue;
             if (ac.implementation_type == "LiveStreamAction")
-                liveStreamService.begin(jwtData->deviceConfigUrl, jwtData->token, jwtData->validateCACert, root_ca);
+                liveStreamService.begin(config->deviceConfigUrl, jwtData->token, config->validateCACert, root_ca);
             else if (ac.implementation_type == "TakePictureAction")
-                wsCaptureService.begin(jwtData->deviceConfigUrl, jwtData->token, jwtData->validateCACert, root_ca, "/ws/capture");
+                wsCaptureService.begin(config->wsStreamUrl, jwtData->token, config->validateCACert, root_ca, "/ws/capture");
             else if (ac.implementation_type == "TakePictureHttpAction" ||
                      ac.implementation_type == "LiveStreamHttpAction")
-                httpFrameService.begin(jwtData->deviceConfigUrl, jwtData->token, jwtData->validateCACert, root_ca);
+                httpFrameService.begin(config->cameraHttpUrl, jwtData->token, config->validateCACert, root_ca);
         }
 #endif
 
@@ -285,5 +281,56 @@ public:
     size_t                getDeviceActionsCount()    { return _cmdActions.size(); }
     BaseTelemetryAction** getTelemetryActions()      { return _telActions.data(); }
     size_t                getTelemetryActionsCount() { return _telActions.size(); }
+
+    // Serialize all capabilities this firmware build supports into a JSON array for provisioning.
+    // Each entry describes a capability with its Google Home metadata and pin interface hints.
+    static void serializeCapabilities(JsonArray arr)
+    {
+        struct CapDef {
+            const char* capability;
+            const char* action_key;
+            const char* mqtt_type;
+            const char* google_action_type;
+            const char* google_traits[4];  // null-terminated, up to 3 traits
+            const char* pin_types[3];      // null-terminated, up to 2 pin types
+        };
+
+        static const CapDef caps[] = {
+            { "TEMPERATURE", "temperature", "telemetry", "action.devices.types.SENSOR",
+              {"action.devices.traits.TemperatureSetting", "action.devices.traits.HumiditySetting", nullptr, nullptr}, {"1wire", nullptr, nullptr} },
+            { "HUMIDITY", "humidity", "telemetry", "action.devices.types.SENSOR",
+              {"action.devices.traits.HumiditySetting", nullptr, nullptr, nullptr}, {"i2c", nullptr, nullptr} },
+            { "AIR_TEMP", "air_temp", "telemetry", "action.devices.types.SENSOR",
+              {"action.devices.traits.TemperatureSetting", nullptr, nullptr, nullptr}, {"i2c", nullptr, nullptr} },
+            { "WATER_LEVEL", "water_level", "telemetry", "action.devices.types.SENSOR",
+              {"action.devices.traits.WaterLevel", nullptr, nullptr, nullptr}, {"adc", nullptr, nullptr} },
+            { "PH_LEVEL", "ph_level", "telemetry", "action.devices.types.SENSOR",
+              {"action.devices.traits.PhLevel", nullptr, nullptr, nullptr}, {"adc", nullptr, nullptr} },
+            { "TDS_LEVEL", "tds_level", "telemetry", "action.devices.types.SENSOR",
+              {"action.devices.traits.TdsLevel", nullptr, nullptr, nullptr}, {"adc", nullptr, nullptr} },
+            { "CO2_LEVEL", "co2_level", "telemetry", "action.devices.types.SENSOR",
+              {"action.devices.traits.CO2Level", nullptr, nullptr, nullptr}, {"uart", nullptr, nullptr} },
+            { "ON_OFF", "outlet", "command", "action.devices.types.OUTLET",
+              {"action.devices.traits.OnOff", "action.devices.traits.LockUnlock", "action.devices.traits.StartStop", nullptr}, {"digital_out", nullptr, nullptr} },
+            { "MOTOR", "motor", "command", "action.devices.types.FAN",
+              {"action.devices.traits.OnOff", "action.devices.traits.FanSpeed", "action.devices.traits.StartStop", nullptr}, {"digital_out", "pwm", nullptr} },
+            { "BRIGHTNESS", "light", "command", "action.devices.types.LIGHT",
+              {"action.devices.traits.OnOff", "action.devices.traits.Brightness", nullptr, nullptr}, {"pwm", nullptr, nullptr} },
+        };
+
+        for (const CapDef& cap : caps) {
+            JsonObject obj = arr.add<JsonObject>();
+            obj["capability"]         = cap.capability;
+            obj["action_key"]         = cap.action_key;
+            obj["mqtt_type"]          = cap.mqtt_type;
+            obj["google_action_type"] = cap.google_action_type;
+            JsonArray traits = obj["google_traits"].to<JsonArray>();
+            for (int i = 0; cap.google_traits[i] != nullptr; i++)
+                traits.add(cap.google_traits[i]);
+            JsonArray pins = obj["pin_types"].to<JsonArray>();
+            for (int i = 0; cap.pin_types[i] != nullptr; i++)
+                pins.add(cap.pin_types[i]);
+        }
+    }
 
 };

@@ -1,63 +1,44 @@
-import express, { Request, Response } from 'express';
-import { verifyToken } from '../middlewares/auth.middleware'; // Assuming an auth middleware exists
-import { provisioningService } from '../services/provisioning.service';
+import express from 'express';
+import { verifyToken } from '../middlewares/auth.middleware';
 import { exceptionHandler } from '../middlewares/exception.middleware';
-import { JwtPurpose } from '../services/jwt.service';
+import { JwtPurpose, jwtService } from '../services/jwt.service';
+import config from '../config/env.config';
+
 const router = express.Router();
+router.use(verifyToken(JwtPurpose.app_usage));
 router.use(exceptionHandler);
 
-router.get('/provision-token', verifyToken(JwtPurpose.app_usage), async (req: Request, res: Response) => {
-  const userId = (req as any).user?.id;
+/**
+ * GET /api/provisioning/provision-token
+ *
+ * Returns everything the Angular UI needs to send to an ESP32 via BLE:
+ *  - MQTT broker connection details
+ *  - A short-lived provisioning JWT (device uses it as Bearer token when
+ *    calling provisioningCallbackUrl on the device-gateway)
+ *  - The device-gateway base URL (device calls /api/provision/register then /api/provision/complete)
+ */
+router.get('/provision-token', async (req, res) => {
+  const userId = req.user.id;
 
-  if (!userId) {
-    return res.status(401).send('User not authenticated');
-  }
-  let token = await provisioningService.GenerateProvisioningToken(userId);
-  res.send(token);
+  const provisioningToken = jwtService.generateToken(
+    { id: userId },
+    JwtPurpose.device_provisioning,
+  );
+
+
+
+  res.json({
+    userId:                 String(userId),
+    clientId: userId +'_provisioning',  // For MQTT client ID — must be unique per device
+    provisioningToken,
+    mqttServer:                 config.mqtt.server,
+    mqttPort:               config.mqtt.port,
+   validateCACert:         config.mqtt.validateCert,
+    // wsStreamUrl:            `${config.gatewayUrl}/api/stream`,
+    // cameraHttpUrl:          `${config.gatewayUrl}/api/camera/frame`,
+    // deviceConfigUrl:        `${config.gatewayUrl}/api/config`,
+    finalizeCallbackUrl:    `${config.gatewayUrl}/api/provision/register`,
+  });
 });
 
-router.post('/register-device', verifyToken(JwtPurpose.device_provisioning),async (req: Request, res: Response) => {
-  let bodyData = req.body;
-  if (typeof bodyData === 'string') {
-    try {
-      const parsed = JSON.parse(bodyData.trim());
-      if (parsed && typeof parsed === 'object') bodyData = parsed;
-    } catch (e) {}
-  }
-
-  let provisioningToken = '';
-  if (typeof bodyData === 'string' && (bodyData.startsWith('ey') || bodyData.startsWith('"ey'))) {
-    provisioningToken = bodyData.trim();
-    if (provisioningToken.startsWith('"') && provisioningToken.endsWith('"')) {
-        provisioningToken = provisioningToken.substring(1, provisioningToken.length - 1);
-    }
-  } else {
-    provisioningToken = bodyData.provisioningToken;
-    if (provisioningToken) provisioningToken = provisioningToken.trim();
-  }
-
-  const deviceType = bodyData.deviceType || req.query.deviceType;
-  const deviceId = bodyData.deviceId || req.query.deviceId;
-  const macAddress = bodyData.macAddress || req.query.macAddress;
-  const version = bodyData.version || req.query.version;
-  const userId = req.user.userId;
-
-  let permanentToken = await provisioningService.registerDevice(userId, provisioningToken, deviceType as string, deviceId, macAddress as string, version as string);
-  res.json(permanentToken);
-});
-
-router.post('/finalize-registration', async (req: Request, res: Response) => {
-  const registrationId = req.body.registrationId;
-  if (!registrationId) {
-    return res.status(400).send('Missing registrationId');
-  }
-  let result = await provisioningService.finalizeRegistration(registrationId);
-  res.json(result);
-});
-
-router.post('/refresh-token', verifyToken(JwtPurpose.device_usage_refresh), async (req: Request, res: Response) => {
-  const refreshToken = req.body.refreshToken;
-  var result = await provisioningService.RefreshMqttToken(refreshToken);
-  res.json(result);
-});
 export default router;

@@ -17,6 +17,13 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle'; // Fix 1
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { MatSliderModule } from '@angular/material/slider'; // Fix 2
 import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatTableModule } from '@angular/material/table';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatBadgeModule } from '@angular/material/badge';
 export const SHARED_MATERIAL = [
     CommonModule,
     FormsModule,
@@ -39,4 +46,11 @@ export const SHARED_MATERIAL = [
     DragDropModule,
     MatSliderModule , // Fix 2
     MatBottomSheetModule,
+    MatSidenavModule,
+    MatDividerModule,
+    MatChipsModule,
+    MatTableModule,
+    MatTabsModule,
+    MatExpansionModule,
+    MatBadgeModule,
 ] as const;

@@ -1,0 +1,36 @@
+{
+  "name": "@lattice/google-home",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev":   "nodemon --exec ts-node -r tsconfig-paths/register index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@lattice/logger":        "*",
+    "@lattice/otel":          "*",
+    "@lattice/prisma-client": "*",
+    "@lattice/queue":         "*",
+    "actions-on-google":     "^3.0.0",
+    "body-parser":           "^2.2.2",
+    "cors":                  "^2.8.6",
+    "dotenv":                "^17.3.1",
+    "express":               "^5.2.1",
+    "express-rate-limit":    "^8.5.2",
+    "google-auth-library":   "^10.6.1",
+    "ioredis":               "^5.6.1",
+    "jsonwebtoken":          "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/cors":         "^2.8.12",
+    "@types/express":      "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node":         "^25.9.0",
+    "nodemon":             "^3.0.1",
+    "ts-node":             "^10.9.2",
+    "tsconfig-paths":      "^4.2.0",
+    "typescript":          "^5.9.3"
+  }
+}

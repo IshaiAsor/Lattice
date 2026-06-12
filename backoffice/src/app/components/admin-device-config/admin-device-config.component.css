@@ -1,3 +1,10 @@
+.ie-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0 4px;
+  flex-wrap: wrap;
+}
+
 .page-layout {
   display: flex;
   height: calc(100vh - 64px);

@@ -1,30 +1,22 @@
-import { usersRepository } from '../dal/user.repository';
+import { userRepository } from '../dal/user.repository';
 import bcrypt from 'bcrypt';
 
-export class UsersService {
-  async GetUserInfo(userId: any) {
-
-    const user = await usersRepository.getById(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
+class UsersService {
+  async getUserInfo(userId: number) {
+    const user = await userRepository.getById(userId);
+    if (!user) throw new Error('User not found');
     return {
       username: user.full_name,
       email: user.email,
-      role: user.user_role,
+      role: user.role,
       user_type: user.user_type,
       profileImage: user.profile_picture_url,
-
     };
   }
-  async validateUser(username: string, pass: string) {
-    const user = await usersRepository.findByUsername(username);
-    if (user && user.password) {
-      const isMatch = await bcrypt.compare(pass, user.password);
-      if (isMatch) {
-        return user;
-      }
-    }
+
+  async validateUser(username: string, password: string) {
+    const user = await userRepository.findByUsername(username);
+    if (user?.password && await bcrypt.compare(password, user.password)) return user;
     return null;
   }
 }

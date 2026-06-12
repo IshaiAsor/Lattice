@@ -1,9 +1,11 @@
-<div class="header">
-    <h1>Dashboard</h1>
+<div class="page-header">
+  <h1>Dashboard</h1>
 </div>
-<div class="card-grid" cdkDropList cdkDropListOrientation="mixed" cdkDropListSortingDisabled
+
+<div class="tile-grid" cdkDropList cdkDropListOrientation="mixed" cdkDropListSortingDisabled
      (cdkDropListDropped)="drop($event)">
-    @for (item of items; track itemTrackId(item); let i = $index) {
+
+  @for (item of items; track itemTrackId(item); let i = $index) {
     <div class="device-card-wrapper" cdkDrag [cdkDragData]="item"
          [attr.data-item-index]="i"
          [class.group-hover]="groupDropTargetIndex === i"
@@ -11,174 +13,109 @@
          (cdkDragMoved)="onDragMoved($event)"
          (cdkDragEnded)="onDragEnded()">
 
-        <div class="drag-rail" cdkDragHandle>
-            <div class="drag-rail-dots">
-                <span></span><span></span><span></span>
-                <span></span><span></span><span></span>
-            </div>
+      <div class="drag-rail" cdkDragHandle>
+        <div class="drag-rail-dots">
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
         </div>
+      </div>
 
-        @if (item.kind === 'action') {
-        <div class="device-card" [ngClass]="item.action!.online ? 'card-enabled' : 'card-disabled'">
-            <div class="card-header">
-                <span class="material-symbols-outlined device-icon">
-                    {{ iconForType(item.action!.googleType?.value) }}
-                </span>
-                <span class="card-name">{{ item.action!.name }}</span>
-                <span class="header-spacer"></span>
-                <span class="status-dot" [class.online]="item.action!.online" [class.offline]="!item.action!.online"
-                    [matTooltip]="item.action!.online ? 'Online' : 'Offline'"></span>
-                <button mat-icon-button [matMenuTriggerFor]="actionMenu" class="card-menu-btn">
-                    <mat-icon>more_vert</mat-icon>
-                </button>
-                <mat-menu #actionMenu="matMenu">
-                    <button mat-menu-item (click)="renameAction(item.action!)">
-                        <mat-icon>edit</mat-icon>
-                        <span>Rename</span>
-                    </button>
-                </mat-menu>
-            </div>
+      <!-- ── Action tile ─────────────────────────────────────────────── -->
+      @if (item.kind === 'action') {
+        <div class="device-card lattice-card" [class.card-offline]="!isOnline(item.action!)">
 
-            <div class="card-content">
-                @if (!item.action!.online) {
-                <div class="offline-overlay">
-                    <mat-icon>wifi_off</mat-icon>
-                    <span>Offline</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.OnOff')) {
-                <div class="control-onoff">
-                    <button class="power-btn" [class.on]="item.action!.state === 'on'"
-                        (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
+          <div class="card-header">
+            <mat-icon class="device-icon">{{ iconForCapability(item.action!.action_def?.capability) }}</mat-icon>
+            <span class="card-name">{{ item.action!.name }}</span>
+            <span class="header-spacer"></span>
+            <span class="status-dot" [class.online]="isOnline(item.action!)" [class.offline]="!isOnline(item.action!)"
+                  [matTooltip]="isOnline(item.action!) ? 'Online' : 'Offline'"></span>
+            <button mat-icon-button [matMenuTriggerFor]="actionMenu" class="card-menu-btn">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #actionMenu="matMenu">
+              <button mat-menu-item (click)="renameAction(item.action!)"><mat-icon>edit</mat-icon>Rename</button>
+            </mat-menu>
+          </div>
+
+          <div class="card-content">
+            @if (!isOnline(item.action!)) {
+              <div class="offline-overlay">
+                <mat-icon>wifi_off</mat-icon>
+                <span>Offline</span>
+              </div>
+            }
+
+            <!-- on/off toggle -->
+            @if (item.action!._controlType === 'onoff') {
+              <div class="control-onoff">
+                <button class="power-btn" [class.on]="item.action!.state === 'on'"
+                        (click)="dispatchState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
                         [matTooltip]="item.action!.state === 'on' ? 'Turn off' : 'Turn on'">
-                        <mat-icon>power_settings_new</mat-icon>
-                    </button>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.LockUnlock')) {
-                <div class="control-onoff">
-                    <button class="power-btn" [class.on]="item.action!.state === 'lock'"
-                        (click)="changeActionState(item.action!, item.action!.state === 'lock' ? 'unlock' : 'lock')"
-                        [matTooltip]="item.action!.state === 'lock' ? 'Unlock' : 'Lock'">
-                        <mat-icon>{{ item.action!.state === 'lock' ? 'lock' : 'lock_open' }}</mat-icon>
-                    </button>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.OpenClose')) {
-                <div class="control-onoff">
-                    <button class="power-btn" [class.on]="item.action!.state === 'on'"
-                        (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
-                        [matTooltip]="item.action!.state === 'on' ? 'Close' : 'Open'">
-                        <mat-icon>{{ item.action!.state === 'on' ? 'expand_less' : 'expand_more' }}</mat-icon>
-                    </button>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.StartStop')) {
-                <div class="control-onoff">
-                    <button class="power-btn" [class.on]="item.action!.state === 'on'"
-                        (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
-                        [matTooltip]="item.action!.state === 'on' ? 'Stop' : 'Start'">
-                        <mat-icon>{{ item.action!.state === 'on' ? 'stop' : 'play_arrow' }}</mat-icon>
-                    </button>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.ArmDisarm')) {
-                <div class="control-onoff">
-                    <button class="power-btn" [class.on]="item.action!.state === 'arm'"
-                        (click)="changeActionState(item.action!, item.action!.state === 'arm' ? 'disarm' : 'arm')"
-                        [matTooltip]="item.action!.state === 'arm' ? 'Disarm' : 'Arm'">
-                        <mat-icon>{{ item.action!.state === 'arm' ? 'shield' : 'shield_with_heart' }}</mat-icon>
-                    </button>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.FanSpeed') ||
-                     hasTrait(item.action!, 'action.devices.traits.Brightness')) {
-                <svg class="speed-dial" viewBox="-8 -8 136 96"
-                    (pointerdown)="onDialPointerDown($event, item.action!)"
-                    (pointermove)="onDialPointerMove($event, item.action!)">
-                    <path class="dial-track" [attr.d]="dialTrackPath()" />
-                    <path class="dial-active" [attr.d]="dialActivePath($any(item.action!.state) || 0)" />
-                    <circle class="dial-thumb" [attr.cx]="dialThumbPt($any(item.action!.state) || 0).x"
-                        [attr.cy]="dialThumbPt($any(item.action!.state) || 0).y" r="7" />
-                    <text x="60" y="48" text-anchor="middle" dominant-baseline="middle" class="dial-value">{{
-                        $any(item.action!.state) || 0 }}<tspan font-size="11" fill="#9e9e9e" dy="-3">%</tspan></text>
-                    <text x="60" y="62" text-anchor="middle" class="dial-unit">
-                        {{ hasTrait(item.action!, 'action.devices.traits.Brightness') ? 'brightness' : 'speed' }}
-                    </text>
-                </svg>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.TemperatureSetting')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
-                    <span class="sensor-unit">°C</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.HumiditySetting')) {
-                <div class="sensor-display">
-                    <mat-icon class="sensor-icon">humidity_high</mat-icon>
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-0' }}</span>
-                    <span class="sensor-unit">%</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.WaterLevel')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
-                    <span class="sensor-unit">%</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.PhLevel')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-2' }}</span>
-                    <span class="sensor-unit">pH</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.TdsLevel')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
-                    <span class="sensor-unit">ppm</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.CO2Level')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-0' }}</span>
-                    <span class="sensor-unit">ppm</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.ColorSetting')) {
-                <div class="color-controls">
-                    @for (color of colorOptions; track color) {
-                    <button class="color-chip" [class.active]="item.action!.state === color"
-                        [ngClass]="'color-' + color"
-                        [matTooltip]="color"
-                        (click)="changeActionState(item.action!, color)">
-                    </button>
-                    }
-                </div>
-                }
-                @if (item.action!.googleType?.value === 'action.devices.types.CAMERA' ||
-                     item.action!.googleType?.value === 'action.devices.types.DOORBELL') {
-                <app-camera-display [action]="item.action!"></app-camera-display>
-                }
-            </div>
+                  <mat-icon>power_settings_new</mat-icon>
+                </button>
+              </div>
+            }
+
+            <!-- arc dial (dimmer / fan speed) -->
+            @if (item.action!._controlType === 'dimmer') {
+              <svg class="speed-dial" viewBox="-8 -8 136 96"
+                   (pointerdown)="onDialPointerDown($event, item.action!)"
+                   (pointermove)="onDialPointerMove($event, item.action!)">
+                <path class="dial-track" [attr.d]="dialTrackPath()" />
+                <path class="dial-active" [attr.d]="dialActivePath(item.action!.state || 0)" />
+                <circle class="dial-thumb" [attr.cx]="dialThumbPt(item.action!.state || 0).x"
+                        [attr.cy]="dialThumbPt(item.action!.state || 0).y" r="7" />
+                <text x="60" y="48" text-anchor="middle" dominant-baseline="middle" class="dial-value">
+                  {{ item.action!.state || 0 }}<tspan font-size="11" fill="var(--text-muted)" dy="-3">%</tspan>
+                </text>
+                <text x="60" y="62" text-anchor="middle" class="dial-unit">brightness</text>
+              </svg>
+            }
+
+            <!-- sensor read-only -->
+            @if (['temp','humidity','level','ph','tds','co2','value'].includes(item.action!._controlType)) {
+              <div class="sensor-display">
+                <mat-icon class="sensor-icon">{{ iconForCapability(item.action!.action_def?.capability) }}</mat-icon>
+                <span class="sensor-value">{{ item.action!.state ?? '—' }}</span>
+                <span class="sensor-unit">{{ item.action!._unit }}</span>
+              </div>
+            }
+
+            <!-- camera -->
+            @if (item.action!._controlType === 'camera') {
+              <app-camera-display [action]="item.action!" />
+            }
+          </div>
 
         </div>
-        } @else {
+
+      <!-- ── Group tile ──────────────────────────────────────────────── -->
+      } @else {
         <app-group-tile
-            [group]="item.group!"
-            (expand)="openGroup(item.group!)"
-            (rename)="renameGroup(item.group!)"
-            (ungroupAll)="ungroupAll(item.group!)">
-        </app-group-tile>
-        }
+          [dashGroup]="item.dashGroup!"
+          (expand)="openGroup(item.dashGroup!)"
+          (rename)="renameGroup(item.dashGroup!)"
+          (ungroupAll)="ungroupAll(item.dashGroup!)" />
+      }
 
-        @if (groupDropTargetIndex === i) {
+      @if (groupDropTargetIndex === i) {
         <div class="group-drop-hint">
-            <mat-icon>create_new_folder</mat-icon>
-            <span>Drop to group</span>
+          <mat-icon>create_new_folder</mat-icon>
+          <span>Drop to group</span>
         </div>
-        }
+      }
 
-        <div *cdkDragPlaceholder class="drag-placeholder"></div>
+      <div *cdkDragPlaceholder class="drag-placeholder"></div>
     </div>
-    }
+  }
+
 </div>
+
+@if (items.length === 0) {
+  <div class="empty-state">
+    <mat-icon>devices</mat-icon>
+    <p>No devices yet. Derive a Blueprint to get started.</p>
+    <a mat-stroked-button routerLink="/blueprints"><mat-icon>layers</mat-icon> Browse Blueprints</a>
+  </div>
+}

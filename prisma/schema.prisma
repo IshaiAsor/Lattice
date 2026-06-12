@@ -1,148 +1,74 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Lattice Platform — schema v2.2
+// Added: blueprint_action_groups, user_action_groups, group scope on rules/emergency,
+//        trace_id on PipelineRun + EmergencyEvent
+// Tiers: CATALOG (admin templates) → BLUEPRINT (admin packages) → USER (independent copies)
+// Generic versioned ML pipeline replaces hard-coded VLM/LLM paths.
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../backend/node_modules/.prisma/client"
+  output   = "../packages/prisma-client/src/generated"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-// Enable the pgcrypto extension for bcrypt hashing (managed via DB but Prisma can see it)
-// Prisma doesn't directly manage extensions in the schema but we'll include it in the migration
+// ─── Enums ───────────────────────────────────────────────────────────────────
 
-model GoogleActionType {
-  id         Int            @id @default(autoincrement())
-  name       String         @db.VarChar(255)
-  value      String         @unique @db.VarChar(255)
-  created_at DateTime?      @default(now()) @db.Timestamp(6)
-  device_action_types      DeviceActionType[]
-
-  @@map("google_action_types")
+enum BlueprintStatus {
+  draft
+  published
 }
 
-model GoogleDeviceTrait {
-  id               Int               @id @default(autoincrement())
-  name             String            @db.VarChar(255)
-  value            String            @unique @db.VarChar(255)
-  valid_parameters Json?
-  created_at       DateTime?         @default(now()) @db.Timestamp(6)
-  action_type_traits ActionTypeTrait[]
-
-  @@map("google_device_traits")
+enum StageKind {
+  vlm
+  sensor_digest
+  llm
+  command_exec
 }
 
-model DeviceActionType {
-  id             Int              @id @default(autoincrement())
-  description    String           @db.VarChar(255)
-  google_type_id Int
-  google_type    GoogleActionType @relation(fields: [google_type_id], references: [id], onDelete: Cascade)
-
-  @@map("device_action_types")
+enum TriggerKind {
+  telemetry
+  schedule
+  rule
 }
 
-model Device {
-  id           Int           @id @default(autoincrement())
-  type         String?       @db.VarChar(255)
-  version      String?       @db.VarChar(255)
-  default_name String        @unique @db.VarChar(255)
-  created_at   DateTime?     @default(now()) @db.Timestamp(6)
-  updated_at   DateTime?     @default(now()) @db.Timestamp(6)
-  device_actions DeviceAction[]
-  user_devices   UserDevice[]
-
-  @@map("devices")
+enum RuleActionKind {
+  set_state
+  run_pipeline
 }
 
-model DeviceAction {
-  id                  Int               @id @default(autoincrement())
-  device_id           Int
-  default_name        String            @db.VarChar(255)
-  google_type_id      Int
-  mqtt_action_type    String?           @db.VarChar(255)
-  mqtt_action_name    String?           @db.VarChar(255)
-  implementation_type           String            @db.VarChar(64)
-  valid_parameters              Json?
-  pins                          Json?
-  telemetry_interval_ms         Int?
-  device              Device            @relation(fields: [device_id], references: [id], onDelete: Cascade)
-  action_type_traits  ActionTypeTrait[]
-  user_device_actions UserDeviceAction[]
-
-  @@unique([device_id, default_name])
-  @@map("device_actions")
+enum RuleActionScope {
+  instance
+  capability
+  group
 }
 
-model ActionTypeTrait {
-  id                     Int          @id @default(autoincrement())
-  device_action_type_id  Int
-  google_trait_id        Int
-  device_action          DeviceAction @relation(fields: [device_action_type_id], references: [id], onDelete: Cascade)
-  google_trait           GoogleDeviceTrait @relation(fields: [google_trait_id], references: [id], onDelete: Cascade)
-
-  @@unique([device_action_type_id, google_trait_id])
-  @@map("action_type_traits")
-}
+// ─── Identity ────────────────────────────────────────────────────────────────
 
 model User {
-  id                  Int               @id @default(autoincrement())
-  user_type           Int               @default(0)
-  user_role           String            @default("user") @db.VarChar(50)
-  user_name           String?           @unique @db.VarChar(255)
-  password            String?           @db.VarChar(255)
-  google_id           String?           @unique @db.VarChar(255)
-  email               String            @unique @db.VarChar(255)
-  full_name           String?           @db.VarChar(255)
+  id                  Int       @id @default(autoincrement())
+  user_type           Int       @default(0)
+  role                String    @default("user") @db.VarChar(50)
+  user_name           String?   @unique @db.VarChar(255)
+  password            String?   @db.VarChar(255)
+  google_id           String?   @unique @db.VarChar(255)
+  email               String    @unique @db.VarChar(255)
+  full_name           String?   @db.VarChar(255)
   profile_picture_url String?
-  created_at          DateTime?         @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime?         @default(now()) @db.Timestamptz(6)
-  user_devices        UserDevice[]
-  user_login_audit    UserLoginAudit[]
-  user_rules          UserRule[]
-  vlm_models          VlmModel[]
-  emergency_rules     EmergencyRule[]
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+
+  device_models   UserDeviceModel[]
+  devices         UserDevice[]
+  rules           Rule[]
+  emergency_rules EmergencyRule[]
+  pipelines       Pipeline[]
+  blueprints      Blueprint[]
+  derived         UserBlueprint[]
+  login_audit     UserLoginAudit[]
 
   @@map("users")
-}
-
-model UserDevice {
-  id                 Int                @id @default(autoincrement())
-  device_type_id     Int
-  user_id            Int
-  mac_id             String             @unique @db.VarChar(255)
-  name               String             @db.VarChar(255)
-  online             Boolean?           @default(false)
-  last_online_date   DateTime?          @default(now()) @db.Timestamp(6)
-  created_at         DateTime?          @default(now()) @db.Timestamp(6)
-  updated_at         DateTime?          @default(now()) @db.Timestamp(6)
-  device             Device             @relation(fields: [device_type_id], references: [id], onDelete: Cascade)
-  user               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  user_device_actions UserDeviceAction[]
-
-  @@map("user_devices")
-}
-
-model UserDeviceAction {
-  id             Int        @id @default(autoincrement())
-  user_device_id Int
-  action_id      Int
-  action_name    String     @db.VarChar(255)
-  current_state  String?    @db.Text
-  sort_order     Int        @default(0)
-  group_name     String?    @db.VarChar(255)
-  created_at     DateTime?  @default(now()) @db.Timestamp(6)
-  updated_at     DateTime?  @default(now()) @db.Timestamp(6)
-  user_device    UserDevice @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
-  action         DeviceAction @relation(fields: [action_id], references: [id], onDelete: Cascade)
-  rule_actions   UserRuleAction[]
-  device_vlm_config DeviceVlmConfig?
-  sensor_history    SensorHistory[]
-  emergency_source  EmergencyRule[]  @relation("EmergencySource")
-  emergency_target  EmergencyRule[]  @relation("EmergencyTarget")
-
-  @@map("user_device_actions")
 }
 
 model UserLoginAudit {
@@ -165,114 +91,379 @@ model MqttUser {
   @@map("mqtt_user")
 }
 
-model UserRule {
-  id                 Int                 @id @default(autoincrement())
-  user_id            Int
-  name               String              @db.VarChar(255)
-  enabled            Boolean             @default(true)
-  condition_operator String              @default("AND") @db.VarChar(3)
-  cooldown_seconds   Int                 @default(60)
-  last_triggered     DateTime?           @db.Timestamp(6)
-  created_at         DateTime?           @default(now()) @db.Timestamp(6)
-  updated_at         DateTime?           @default(now()) @db.Timestamp(6)
-  user               User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  conditions         UserRuleCondition[]
-  actions            UserRuleAction[]
+// ─── Capability vocab (Google) ───────────────────────────────────────────────
 
-  @@map("user_rules")
+model GoogleActionType {
+  id            Int           @id @default(autoincrement())
+  key           String        @unique @db.VarChar(255)
+  name          String        @db.VarChar(255)
+  created_at    DateTime?     @default(now()) @db.Timestamp(6)
+  model_actions ModelAction[]
+
+  @@map("google_action_types")
 }
 
-model UserRuleCondition {
-  id             Int      @id @default(autoincrement())
+model GoogleTrait {
+  id          Int                @id @default(autoincrement())
+  key         String             @unique @db.VarChar(255)
+  name        String             @db.VarChar(255)
+  params      Json?
+  created_at  DateTime?          @default(now()) @db.Timestamp(6)
+  model_links ModelActionTrait[]
+
+  @@map("google_traits")
+}
+
+// ─── CATALOG (admin templates) ───────────────────────────────────────────────
+
+model DeviceModel {
+  id           Int                  @id @default(autoincrement())
+  model_key    String?              @db.VarChar(255)
+  version      String?              @db.VarChar(255)
+  display_name String               @unique @db.VarChar(255)
+  created_at   DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at   DateTime?            @default(now()) @db.Timestamp(6)
+  actions      ModelAction[]
+  slots        BlueprintDeviceSlot[]
+
+  @@map("device_models")
+}
+
+model ModelAction {
+  id                    Int                @id @default(autoincrement())
+  device_model_id       Int
+  action_key            String             @db.VarChar(255)
+  capability            String             @db.VarChar(64)
+  google_action_type_id Int
+  mqtt_type             String?            @db.VarChar(255)
+  mqtt_name             String?            @db.VarChar(255)
+  params                Json?
+  pins                  Json?
+  telemetry_interval_ms Int?
+  device_model          DeviceModel        @relation(fields: [device_model_id], references: [id], onDelete: Cascade)
+  google_action_type    GoogleActionType   @relation(fields: [google_action_type_id], references: [id], onDelete: Cascade)
+  traits                ModelActionTrait[]
+
+  @@unique([device_model_id, action_key])
+  @@map("model_actions")
+}
+
+model ModelActionTrait {
+  id              Int         @id @default(autoincrement())
+  model_action_id Int
+  google_trait_id Int
+  model_action    ModelAction @relation(fields: [model_action_id], references: [id], onDelete: Cascade)
+  google_trait    GoogleTrait @relation(fields: [google_trait_id], references: [id], onDelete: Cascade)
+
+  @@unique([model_action_id, google_trait_id])
+  @@map("model_action_traits")
+}
+
+// ─── ML REGISTRY (admin, global — service-routed by kind+name+version) ───────
+
+model MlModel {
+  id            Int                    @id @default(autoincrement())
+  kind          String                 @db.VarChar(20)   // "vlm", "llm", etc.
+  name          String                 @db.VarChar(255)
+  version       String                 @db.VarChar(50)
+  description   String?                @db.Text
+  config        Json?
+  created_at    DateTime?              @default(now()) @db.Timestamp(6)
+  pipeline_stages          PipelineStage[]
+  blueprint_pipeline_stages BlueprintPipelineStage[]
+
+  @@unique([kind, name, version])
+  @@map("ml_models")
+}
+
+// ─── BLUEPRINT (admin packages, versioned) ───────────────────────────────────
+
+model Blueprint {
+  id           Int             @id @default(autoincrement())
+  name         String          @db.VarChar(255)
+  description  String?         @db.Text
+  category     String?         @db.VarChar(100)
+  created_by   Int
+  status       BlueprintStatus @default(draft)
+  version      Int             @default(1)
+  created_at   DateTime?       @default(now()) @db.Timestamp(6)
+  updated_at   DateTime?       @default(now()) @db.Timestamp(6)
+  creator         User                     @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  slots           BlueprintDeviceSlot[]
+  rules           BlueprintRule[]
+  emergency_rules BlueprintEmergencyRule[]
+  pipelines       BlueprintPipeline[]
+  action_groups   BlueprintActionGroup[]
+  derived         UserBlueprint[]
+
+  @@map("blueprints")
+}
+
+model BlueprintDeviceSlot {
+  id              Int         @id @default(autoincrement())
+  blueprint_id    Int
+  device_model_id Int
+  role            String      @db.VarChar(255)
+  min_count       Int         @default(1)
+  max_count       Int?
+  sort_order      Int         @default(0)
+  blueprint     Blueprint              @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  device_model  DeviceModel            @relation(fields: [device_model_id], references: [id], onDelete: Restrict)
+  action_groups BlueprintActionGroup[]
+
+  @@map("blueprint_device_slots")
+}
+
+model BlueprintRule {
+  id           Int       @id @default(autoincrement())
+  blueprint_id Int
+  name         String    @db.VarChar(255)
+  match        String    @default("AND") @db.VarChar(3)
+  cooldown_sec Int       @default(60)
+  enabled      Boolean   @default(true)
+  blueprint    Blueprint @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  conditions   BlueprintRuleCondition[]
+  actions      BlueprintRuleAction[]
+
+  @@map("blueprint_rules")
+}
+
+model BlueprintRuleCondition {
+  id                Int           @id @default(autoincrement())
+  blueprint_rule_id Int
+  kind              String        @db.VarChar(30)
+  params            Json
+  rule              BlueprintRule @relation(fields: [blueprint_rule_id], references: [id], onDelete: Cascade)
+
+  @@map("blueprint_rule_conditions")
+}
+
+model BlueprintRuleAction {
+  id                       Int            @id @default(autoincrement())
+  blueprint_rule_id        Int
+  kind                     RuleActionKind @default(set_state)
+  capability               String?        @db.VarChar(64)
+  target_state             String?        @db.VarChar(255)
+  blueprint_pipeline_id    Int?
+  delay_sec                Int            @default(0)
+  rule                     BlueprintRule     @relation(fields: [blueprint_rule_id], references: [id], onDelete: Cascade)
+  blueprint_pipeline       BlueprintPipeline? @relation(fields: [blueprint_pipeline_id], references: [id], onDelete: SetNull)
+
+  @@map("blueprint_rule_actions")
+}
+
+model BlueprintEmergencyRule {
+  id                Int       @id @default(autoincrement())
+  blueprint_id      Int
+  name              String    @db.VarChar(255)
+  source_capability String    @db.VarChar(64)
+  operator          String    @db.VarChar(5)
+  threshold         String    @db.VarChar(100)
+  target_capability String?   @db.VarChar(64)
+  target_state      String?   @db.VarChar(255)
+  enabled           Boolean   @default(true)
+  blueprint         Blueprint @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+
+  @@map("blueprint_emergency_rules")
+}
+
+// Blueprint pipeline: ordered stages cloned into user pipelines on derive
+
+model BlueprintPipeline {
+  id               Int         @id @default(autoincrement())
+  blueprint_id     Int
+  name             String      @db.VarChar(255)
+  enabled          Boolean     @default(true)
+  trigger_kind     TriggerKind @default(telemetry)
+  trigger_capability String?   @db.VarChar(64)
+  trigger_config   Json?
+  blueprint        Blueprint   @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  stages           BlueprintPipelineStage[]
+  rule_actions     BlueprintRuleAction[]
+
+  @@map("blueprint_pipelines")
+}
+
+model BlueprintPipelineStage {
+  id                   Int               @id @default(autoincrement())
+  blueprint_pipeline_id Int
+  position             Int
+  stage_kind           StageKind
+  ml_model_id          Int?
+  component_version    String?           @db.VarChar(50)
+  config               Json?
+  pipeline             BlueprintPipeline @relation(fields: [blueprint_pipeline_id], references: [id], onDelete: Cascade)
+  ml_model             MlModel?          @relation(fields: [ml_model_id], references: [id], onDelete: Restrict)
+
+  @@map("blueprint_pipeline_stages")
+}
+
+// ─── USER-OWNED definitions (independent snapshot) ───────────────────────────
+
+model UserDeviceModel {
+  id                  Int       @id @default(autoincrement())
+  user_id             Int
+  source_blueprint_id Int?
+  source_model_id     Int?
+  model_key           String?   @db.VarChar(255)
+  version             String?   @db.VarChar(255)
+  display_name        String    @db.VarChar(255)
+  created_at          DateTime? @default(now()) @db.Timestamp(6)
+  updated_at          DateTime? @default(now()) @db.Timestamp(6)
+  user        User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  action_defs UserActionDef[]
+  devices     UserDevice[]
+
+  @@map("user_device_models")
+}
+
+model UserActionDef {
+  id                    Int             @id @default(autoincrement())
+  user_device_model_id  Int
+  source_action_id      Int?
+  action_key            String          @db.VarChar(255)
+  capability            String          @db.VarChar(64)
+  google_action_type_id Int
+  mqtt_type             String?         @db.VarChar(255)
+  mqtt_name             String?         @db.VarChar(255)
+  params                Json?
+  pins                  Json?
+  telemetry_interval_ms Int?
+  device_model UserDeviceModel     @relation(fields: [user_device_model_id], references: [id], onDelete: Cascade)
+  traits       UserActionDefTrait[]
+  actions      UserAction[]
+
+  @@unique([user_device_model_id, action_key])
+  @@map("user_action_defs")
+}
+
+model UserActionDefTrait {
+  id                 Int           @id @default(autoincrement())
+  user_action_def_id Int
+  google_trait_id    Int
+  action_def         UserActionDef @relation(fields: [user_action_def_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_action_def_id, google_trait_id])
+  @@map("user_action_def_traits")
+}
+
+// ─── USER instances ──────────────────────────────────────────────────────────
+
+model UserDevice {
+  id                   Int             @id @default(autoincrement())
+  user_id              Int
+  user_device_model_id Int
+  source_blueprint_id  Int?
+  mac_id               String?         @unique @db.VarChar(255)
+  name                 String          @db.VarChar(255)
+  online               Boolean?        @default(false)
+  last_seen_at         DateTime?       @default(now()) @db.Timestamp(6)
+  created_at           DateTime?       @default(now()) @db.Timestamp(6)
+  updated_at           DateTime?       @default(now()) @db.Timestamp(6)
+  user         User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  device_model UserDeviceModel @relation(fields: [user_device_model_id], references: [id], onDelete: Cascade)
+  actions      UserAction[]
+  action_groups UserActionGroup[]
+
+  @@map("user_devices")
+}
+
+model UserAction {
+  id                  Int            @id @default(autoincrement())
+  user_device_id      Int
+  user_action_def_id  Int
+  user_action_group_id Int?
+  name                String         @db.VarChar(255)
+  state               String?        @db.Text
+  sort_order          Int            @default(0)
+  created_at          DateTime?      @default(now()) @db.Timestamp(6)
+  updated_at          DateTime?      @default(now()) @db.Timestamp(6)
+  user_device   UserDevice     @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+  action_def    UserActionDef  @relation(fields: [user_action_def_id], references: [id], onDelete: Cascade)
+  action_group  UserActionGroup? @relation(fields: [user_action_group_id], references: [id], onDelete: SetNull)
+  rule_targets       RuleAction[]
+  emergency_source   EmergencyRule[] @relation("EmSource")
+  emergency_target   EmergencyRule[] @relation("EmTarget")
+  pipeline_triggers  PipelineRun[]
+  readings           SensorReading[]
+
+  @@map("user_actions")
+}
+
+// ─── USER automation ─────────────────────────────────────────────────────────
+
+model Rule {
+  id                  Int             @id @default(autoincrement())
+  user_id             Int
+  source_blueprint_id Int?
+  name                String          @db.VarChar(255)
+  match               String          @default("AND") @db.VarChar(3)
+  cooldown_sec        Int             @default(60)
+  enabled             Boolean         @default(true)
+  last_fired_at       DateTime?       @db.Timestamp(6)
+  created_at          DateTime?       @default(now()) @db.Timestamp(6)
+  updated_at          DateTime?       @default(now()) @db.Timestamp(6)
+  user       User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  conditions RuleCondition[]
+  actions    RuleAction[]
+
+  @@map("rules")
+}
+
+model RuleCondition {
+  id      Int    @id @default(autoincrement())
+  rule_id Int
+  // kind: schedule | device_status | threshold | vlm_result | vlm_decision | pipeline_result
+  kind    String @db.VarChar(30)
+  params  Json
+  rule    Rule   @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+
+  @@map("rule_conditions")
+}
+
+model RuleAction {
+  id             Int             @id @default(autoincrement())
   rule_id        Int
-  condition_type String   @db.VarChar(20)
-  parameters     Json
-  rule           UserRule @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+  kind           RuleActionKind  @default(set_state)
+  scope          RuleActionScope @default(instance)
+  user_action_id Int?
+  capability     String?         @db.VarChar(64)
+  group_id       Int?
+  target_state   String?         @db.VarChar(255)
+  pipeline_id    Int?
+  delay_sec      Int             @default(0)
+  rule        Rule             @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+  user_action UserAction?      @relation(fields: [user_action_id], references: [id], onDelete: Cascade)
+  action_group UserActionGroup? @relation(fields: [group_id], references: [id], onDelete: SetNull)
+  pipeline    Pipeline?        @relation(fields: [pipeline_id], references: [id], onDelete: SetNull)
 
-  @@map("user_rule_conditions")
-}
-
-model UserRuleAction {
-  id                    Int              @id @default(autoincrement())
-  rule_id               Int
-  user_device_action_id Int
-  target_state          String           @db.VarChar(255)
-  delay_seconds         Int              @default(0)
-  rule                  UserRule         @relation(fields: [rule_id], references: [id], onDelete: Cascade)
-  user_device_action    UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
-
-  @@map("user_rule_actions")
-}
-
-model VlmModel {
-  id              Int               @id @default(autoincrement())
-  user_id         Int
-  name            String            @db.VarChar(100)
-  type            String            @default("onnx_local") @db.VarChar(50)
-  endpoint_url    String            @db.VarChar(500)
-  config          Json?
-  created_at      DateTime          @default(now()) @db.Timestamp(6)
-  user            User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  device_configs  DeviceVlmConfig[]
-
-  @@map("vlm_models")
-}
-
-model DeviceVlmConfig {
-  id                    Int              @id @default(autoincrement())
-  user_device_action_id Int              @unique
-  vlm_model_id          Int
-  enabled               Boolean          @default(true)
-  analysis_interval_sec Int              @default(30)
-  last_analyzed_at      DateTime?        @db.Timestamp(6)
-  user_device_action    UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
-  vlm_model             VlmModel         @relation(fields: [vlm_model_id], references: [id], onDelete: Cascade)
-  vlm_analysis_logs     VlmAnalysisLog[]
-
-  @@map("device_vlm_configs")
-}
-
-model SensorHistory {
-  id                    Int              @id @default(autoincrement())
-  user_device_action_id Int
-  value                 String           @db.VarChar(255)
-  recorded_at           DateTime         @default(now()) @db.Timestamp(6)
-  user_device_action    UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
-
-  @@index([user_device_action_id, recorded_at])
-  @@map("sensor_history")
-}
-
-model VlmAnalysisLog {
-  id                   Int      @id @default(autoincrement())
-  device_vlm_config_id Int
-  device_vlm_config    DeviceVlmConfig @relation(fields: [device_vlm_config_id], references: [id], onDelete: Cascade)
-  input_image_hash     String?  @db.VarChar(64)
-  input_detections     Json
-  input_sensors        Json?
-  llm_prompt           String?  @db.Text
-  llm_response         String?  @db.Text
-  decision             String?  @db.VarChar(255)
-  created_at           DateTime @default(now()) @db.Timestamp(6)
-
-  @@map("vlm_analysis_logs")
+  @@map("rule_actions")
 }
 
 model EmergencyRule {
-  id                    Int               @id @default(autoincrement())
-  user_id               Int
-  name                  String            @db.VarChar(255)
-  user_device_action_id Int
-  operator              String            @db.VarChar(5)
-  threshold_value       String            @db.VarChar(100)
-  target_action_id      Int?
-  target_state          String?           @db.VarChar(255)
-  enabled               Boolean           @default(true)
-  created_at            DateTime          @default(now()) @db.Timestamp(6)
-  user                  User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  sensor_action         UserDeviceAction  @relation("EmergencySource", fields: [user_device_action_id], references: [id], onDelete: Cascade)
-  target_action         UserDeviceAction? @relation("EmergencyTarget", fields: [target_action_id], references: [id], onDelete: SetNull)
-  events                EmergencyEvent[]
+  id                      Int        @id @default(autoincrement())
+  user_id                 Int
+  source_blueprint_id     Int?
+  name                    String     @db.VarChar(255)
+  source_scope            RuleActionScope @default(instance)
+  source_user_action_id   Int?
+  source_capability       String?         @db.VarChar(64)
+  source_group_id         Int?
+  operator                String          @db.VarChar(5)
+  threshold               String          @db.VarChar(100)
+  target_scope            RuleActionScope @default(instance)
+  target_user_action_id   Int?
+  target_capability       String?         @db.VarChar(64)
+  target_group_id         Int?
+  target_state            String?         @db.VarChar(255)
+  enabled                 Boolean         @default(true)
+  created_at              DateTime?       @default(now()) @db.Timestamp(6)
+  user           User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  source_action  UserAction?      @relation("EmSource", fields: [source_user_action_id], references: [id], onDelete: Cascade)
+  target_action  UserAction?      @relation("EmTarget", fields: [target_user_action_id], references: [id], onDelete: SetNull)
+  source_group   UserActionGroup? @relation("EmSourceGroup", fields: [source_group_id], references: [id], onDelete: SetNull)
+  target_group   UserActionGroup? @relation("EmTargetGroup", fields: [target_group_id], references: [id], onDelete: SetNull)
+  events         EmergencyEvent[]
 
   @@map("emergency_rules")
 }
@@ -280,9 +471,139 @@ model EmergencyRule {
 model EmergencyEvent {
   id                Int           @id @default(autoincrement())
   emergency_rule_id Int
-  triggered_value   String        @db.VarChar(255)
+  value             String        @db.VarChar(255)
+  trace_id          String?       @db.VarChar(36)
   fired_at          DateTime      @default(now()) @db.Timestamp(6)
   rule              EmergencyRule @relation(fields: [emergency_rule_id], references: [id], onDelete: Cascade)
 
   @@map("emergency_events")
+}
+
+// ─── USER pipelines (generic versioned processing chains) ────────────────────
+
+model Pipeline {
+  id                 Int         @id @default(autoincrement())
+  user_id            Int
+  source_blueprint_id Int?
+  name               String      @db.VarChar(255)
+  enabled            Boolean     @default(true)
+  trigger_kind       TriggerKind @default(telemetry)
+  trigger_capability String?     @db.VarChar(64)
+  trigger_config     Json?
+  created_at         DateTime?   @default(now()) @db.Timestamp(6)
+  user         User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  stages       PipelineStage[]
+  runs         PipelineRun[]
+  rule_actions RuleAction[]
+
+  @@map("pipelines")
+}
+
+model PipelineStage {
+  id                Int       @id @default(autoincrement())
+  pipeline_id       Int
+  position          Int
+  stage_kind        StageKind
+  ml_model_id       Int?
+  component_version String?   @db.VarChar(50)
+  config            Json?
+  pipeline Pipeline @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
+  ml_model MlModel? @relation(fields: [ml_model_id], references: [id], onDelete: Restrict)
+
+  @@map("pipeline_stages")
+}
+
+model PipelineRun {
+  id                      Int       @id @default(autoincrement())
+  pipeline_id             Int
+  trigger_user_action_id  Int?
+  trace_id                String?   @db.VarChar(36)
+  status                  String    @db.VarChar(20)
+  input                   Json?
+  output                  Json?
+  started_at              DateTime  @default(now()) @db.Timestamp(6)
+  finished_at             DateTime? @db.Timestamp(6)
+  pipeline       Pipeline    @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
+  trigger_action UserAction? @relation(fields: [trigger_user_action_id], references: [id], onDelete: SetNull)
+  stage_runs     PipelineRunStage[]
+
+  @@map("pipeline_runs")
+}
+
+model PipelineRunStage {
+  id              Int         @id @default(autoincrement())
+  pipeline_run_id Int
+  position        Int
+  stage_kind      StageKind
+  component       String?     @db.VarChar(255)
+  version         String?     @db.VarChar(50)
+  input           Json?
+  output          Json?
+  duration_ms     Int?
+  created_at      DateTime    @default(now()) @db.Timestamp(6)
+  pipeline_run PipelineRun @relation(fields: [pipeline_run_id], references: [id], onDelete: Cascade)
+
+  @@map("pipeline_run_stages")
+}
+
+// ─── History & derivation ────────────────────────────────────────────────────
+
+model SensorReading {
+  id             Int        @id @default(autoincrement())
+  user_action_id Int
+  value          String     @db.VarChar(255)
+  recorded_at    DateTime   @default(now()) @db.Timestamp(6)
+  user_action    UserAction @relation(fields: [user_action_id], references: [id], onDelete: Cascade)
+
+  @@index([user_action_id, recorded_at])
+  @@map("sensor_readings")
+}
+
+model UserBlueprint {
+  id           Int       @id @default(autoincrement())
+  user_id      Int
+  blueprint_id Int
+  version      Int
+  derived_at   DateTime  @default(now()) @db.Timestamp(6)
+  user      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  blueprint Blueprint @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, blueprint_id])
+  @@map("user_blueprints")
+}
+
+// ─── Action grouping ─────────────────────────────────────────────────────────
+
+model UserActionGroup {
+  id                  Int       @id @default(autoincrement())
+  user_device_id      Int
+  user_id             Int
+  source_blueprint_id Int?
+  name                String    @db.VarChar(255)
+  description         String?   @db.Text
+  icon                String?   @db.VarChar(50)
+  color               String?   @db.VarChar(20)
+  sort_order          Int       @default(0)
+  user_device  UserDevice @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+  actions      UserAction[]
+  rule_actions RuleAction[]
+  em_source    EmergencyRule[] @relation("EmSourceGroup")
+  em_target    EmergencyRule[] @relation("EmTargetGroup")
+
+  @@map("user_action_groups")
+}
+
+model BlueprintActionGroup {
+  id                     Int                 @id @default(autoincrement())
+  blueprint_id           Int
+  blueprint_device_slot_id Int
+  name                   String              @db.VarChar(255)
+  description            String?             @db.Text
+  icon                   String?             @db.VarChar(50)
+  color                  String?             @db.VarChar(20)
+  sort_order             Int                 @default(0)
+  blueprint     Blueprint           @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  device_slot   BlueprintDeviceSlot @relation(fields: [blueprint_device_slot_id], references: [id], onDelete: Cascade)
+
+  @@map("blueprint_action_groups")
 }

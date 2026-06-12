@@ -1,64 +1,37 @@
-import { createClient, RedisClientType } from 'redis';
+import IORedis from 'ioredis';
 import config from '../config/env.config';
+import { createLogger } from '@lattice/logger';
 
-class RedisService {
-  // 1. Hold the single instance of the class
-  private static instance: RedisService;
-  
-  // 2. Keep the actual Redis client private so other files can't mess with it
-  private client: RedisClientType;
+const log = createLogger('api:valkey');
 
-  // 3. Private constructor prevents 'new RedisService()' from being called outside
-  private constructor() {
-    
-    this.client = createClient({ url: config.redis.url });
+// Shared Valkey client used by google.routes for OAuth code storage.
+// (This service will move to google-home-service in Phase 6.)
+class ValkeyService {
+  private client: IORedis;
 
-    this.client.on('error', (err) => console.error('❌ Redis Error:', err.message));
-    this.client.on('connect', () => console.log('🔒 Redis Connected!'));
+  constructor() {
+    this.client = new IORedis(config.valkey.url, {
+      username: config.valkey.username,
+      password: config.valkey.password,
+      lazyConnect: true,
+    });
+    this.client.on('error', (err) => log.error(err, 'Valkey error'));
   }
 
-  // 4. The only way to get the service instance
-  public static getInstance(): RedisService {
-    if (!RedisService.instance) {
-      RedisService.instance = new RedisService();
-    }
-    return RedisService.instance;
+  async setTempData(key: string, value: unknown, ttlInSeconds: number): Promise<void> {
+    const str = typeof value === 'string' ? value : JSON.stringify(value);
+    await this.client.set(key, str, 'EX', ttlInSeconds);
   }
 
-  // --- PUBLIC API METHODS ---
-
-  public async connect(): Promise<void> {
-    if (!this.client.isOpen) {
-      await this.client.connect();
-    }
-  }
-
-  public async setTempData(key: string, value: any, ttlInSeconds: number): Promise<void> {
-    const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-    await this.client.set(key, stringValue, { EX: ttlInSeconds });
-  }
-
-  public async getTempData<T>(key: string): Promise<T | null> {
+  async getTempData<T>(key: string): Promise<T | null> {
     const data = await this.client.get(key);
     if (!data) return null;
-
-    try {
-      return JSON.parse(data) as T;
-    } catch {
-      return data as unknown as T;
-    }
+    try { return JSON.parse(data) as T; } catch { return data as unknown as T; }
   }
 
-  public async deleteTempData(key: string): Promise<void> {
+  async deleteTempData(key: string): Promise<void> {
     await this.client.del(key);
-  }
-
-  // Optional: A safe way to gracefully shut down the connection
-  public async disconnect(): Promise<void> {
-    if (this.client.isOpen) {
-      await this.client.quit();
-    }
   }
 }
 
-export const redisService = RedisService.getInstance();
+export const redisService = new ValkeyService();

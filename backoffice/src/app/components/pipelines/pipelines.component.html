@@ -1,0 +1,78 @@
+<div class="page-container">
+  <div class="page-header">
+    <h2>Pipelines</h2>
+    <div class="header-actions">
+      <button mat-stroked-button (click)="exportConfig()"><mat-icon>file_download</mat-icon> Export</button>
+      <button mat-stroked-button (click)="pipeFileInput.click()"><mat-icon>file_upload</mat-icon> Import</button>
+      <input #pipeFileInput type="file" accept=".json" hidden (change)="importConfig(pipeFileInput.files![0]); pipeFileInput.value=''">
+    </div>
+  </div>
+
+  @if (pipelines.length === 0) {
+    <div class="empty-state">
+      <mat-icon>account_tree</mat-icon>
+      <p>No pipelines yet. Pipelines are created via Blueprint derive or the Admin Blueprint Builder.</p>
+    </div>
+  }
+
+  <div class="pipelines-list">
+    @for (p of pipelines; track p.id) {
+      <div class="pipeline-card lattice-card" [class.disabled]="!p.enabled">
+        <div class="pipeline-accent"></div>
+        <div class="pipeline-body">
+          <div class="pipeline-header">
+            <span class="pipeline-name">{{ p.name }}</span>
+            <span class="trigger-chip">{{ p.trigger_kind }}{{ p.trigger_capability ? ' · ' + p.trigger_capability : '' }}</span>
+            <span class="spacer"></span>
+            <mat-slide-toggle [checked]="p.enabled" (change)="toggle(p)" color="primary" />
+          </div>
+
+          <!-- Stage chips -->
+          <div class="stages-row">
+            @for (stage of p.stages; track stage.id; let last = $last) {
+              <span class="stage-chip {{ stageColor(stage.stage_kind) }}">
+                {{ stage.stage_kind }}
+              </span>
+              @if (!last) { <mat-icon class="stage-arrow">arrow_forward</mat-icon> }
+            }
+            @if (!p.stages.length) {
+              <span class="no-stages">No stages</span>
+            }
+          </div>
+
+          <!-- Runs panel -->
+          @if (showRuns() === p.id) {
+            <div class="runs-panel">
+              @if (!runs()[p.id]?.length) {
+                <p class="no-runs">No runs yet.</p>
+              }
+              @for (run of runs()[p.id]; track run.id) {
+                <div class="run-row">
+                  <mat-icon [class]="'run-icon ' + run.status">{{ runIcon(run.status) }}</mat-icon>
+                  <span class="run-id">#{{ run.id }}</span>
+                  <span class="run-status">{{ run.status }}</span>
+                  <span class="run-time">{{ run.started_at | date:'short' }}</span>
+                  @if (run.finished_at) {
+                    <span class="run-dur">{{ runDuration(run) }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="pipeline-actions">
+          <button mat-icon-button (click)="trigger(p)" [disabled]="triggering() === p.id" title="Trigger now">
+            <mat-icon>play_arrow</mat-icon>
+          </button>
+          <button mat-icon-button (click)="toggleRuns(p)" title="Run history">
+            <mat-icon>{{ showRuns() === p.id ? 'expand_less' : 'history' }}</mat-icon>
+          </button>
+          <button mat-icon-button color="warn" (click)="delete(p)" title="Delete">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+</div>

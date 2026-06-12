@@ -1,61 +1,35 @@
 import db from '../config/db';
-import bcrypt from 'bcrypt';
-import { User } from '@prisma/client';
+import { User } from '@lattice/prisma-client';
 
-export type UserEntity = User;
-
-export class UsersRepository {
-  async getById(id: number): Promise<UserEntity | null> {
-    return await db.user.findUnique({
-      where: { id }
-    });
+class UserRepository {
+  async findByEmail(email: string): Promise<User | null> {
+    return db.user.findUnique({ where: { email } });
   }
 
-  async findByEmail(email: string): Promise<UserEntity | null> {
-    return await db.user.findUnique({
-      where: { email }
-    });
+  async findByUsername(userName: string): Promise<User | null> {
+    return db.user.findUnique({ where: { user_name: userName } });
   }
 
-  async findByGoogleId(googleId: string): Promise<UserEntity | null> {
-    return await db.user.findUnique({
-      where: { google_id: googleId }
-    });
+  async findByGoogleId(googleId: string): Promise<User | null> {
+    return db.user.findUnique({ where: { google_id: googleId } });
   }
 
-  async findByUsername(username: string): Promise<UserEntity | null> {
-    return await db.user.findUnique({
-      where: { user_name: username }
-    });
+  async getById(id: number): Promise<User | null> {
+    return db.user.findUnique({ where: { id } });
   }
 
-  async createGoogleUser(userRole: string, googleId: string, email: string, fullName: string, profilePictureUrl: string) {
-    return await db.user.create({
-      data: {
-        user_type: 1,
-        user_role: userRole,
-        google_id: googleId,
-        email: email,
-        full_name: fullName,
-        profile_picture_url: profilePictureUrl
-      }
-    });
+  async createGoogleUser(data: {
+    google_id: string;
+    email: string;
+    full_name?: string | null;
+    profile_picture_url?: string | null;
+  }): Promise<User> {
+    return db.user.create({ data });
   }
 
-  async createRegularUser(userRole: string, username: string, password: string, email: string) {
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    return await db.user.create({
-      data: {
-        user_type: 0,
-        user_role: userRole,
-        user_name: username,
-        password: hashedPassword,
-        email: email
-      }
-    });
+  async logLogin(userId: number, ipAddress?: string): Promise<void> {
+    await db.userLoginAudit.create({ data: { user_id: userId, ip_address: ipAddress } });
   }
 }
 
-export const usersRepository = new UsersRepository();
+export const userRepository = new UserRepository();
