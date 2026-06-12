@@ -1,0 +1,107 @@
+name: Backoffice CI/CD
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backoffice/**'
+      - '.github/workflows/backoffice.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'backoffice/**'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backoffice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backoffice/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backoffice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backoffice/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npx ng test --watch=false --browsers=ChromeHeadlessNoSandbox
+
+  build-push:
+    name: Build & Push
+    needs: [lint, test]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/ishaiasor/lattice-backoffice
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backoffice
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy (update GitOps)
+    needs: build-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: IshaiAsor/oci-k3s-gitops
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops
+      - name: Install kustomize
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+      - name: Update backoffice image tag
+        run: |
+          cd gitops/k8s/overlays/prod
+          kustomize edit set image ghcr.io/ishaiasor/lattice-backoffice=ghcr.io/ishaiasor/lattice-backoffice:${{ needs.build-push.outputs.image-tag }}
+      - name: Commit and push
+        run: |
+          cd gitops
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/overlays/prod/kustomization.yaml
+          git diff --cached --quiet || git commit -m "chore(backoffice): deploy ${{ needs.build-push.outputs.image-tag }}"
+          git push

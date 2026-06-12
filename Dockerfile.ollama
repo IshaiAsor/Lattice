@@ -1,0 +1,7 @@
+FROM ollama/ollama:latest
+
+# Start Ollama temporarily in the background and pull the model during build time
+RUN ollama serve & \
+    sleep 5 && \
+    # ollama pull llama3.2 && \
+    ollama pull qwen2.5vl:7b
