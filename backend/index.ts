@@ -44,11 +44,10 @@ app.use((req, _res, next) => {
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.text({ type: '*/*' })); // Catch everything else as text
 
 // Post-parser debug logging
 app.use((req, _res, next) => {
-  if (req.method === 'POST') {
+  if (req.method === 'POST' && !req.is('image/*')) {
     console.log(`[${new Date().toISOString()}] DEBUG: Parsed Body:`, JSON.stringify(req.body));
   }
   next();

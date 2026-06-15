@@ -268,7 +268,7 @@ public:
                 wsCaptureService.begin(jwtData->deviceConfigUrl, jwtData->token, jwtData->validateCACert, root_ca, "/ws/capture");
             else if (ac.implementation_type == "TakePictureHttpAction" ||
                      ac.implementation_type == "LiveStreamHttpAction")
-                httpFrameService.begin(jwtData->deviceConfigUrl, jwtData->token, jwtData->validateCACert, root_ca);
+                httpFrameService.begin(jwtData->cameraHttpUrl, jwtData->token, jwtData->validateCACert, root_ca);
         }
 #endif
 

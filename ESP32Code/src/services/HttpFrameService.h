@@ -38,7 +38,6 @@ private:
         }
 
         HTTPClient http;
-        http.setReuse(true);
 
         for (;;)
         {
