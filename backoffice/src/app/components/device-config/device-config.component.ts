@@ -30,7 +30,7 @@ export class DeviceConfigComponent implements OnInit {
   pinInputValues: Record<string, number | null> = {};
 
   editingActionId: number | null = null;
-  editName: string = '';
+  editName = '';
   editIntervalMs: number | null = null;
   editPinValues: Record<string, number | null> = {};
 

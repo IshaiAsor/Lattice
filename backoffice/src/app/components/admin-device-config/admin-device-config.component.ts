@@ -82,7 +82,6 @@ export class AdminDeviceConfigComponent implements OnInit {
     });
     this.service.getBlueprints(this.selectedDevice.id).subscribe({
       next: (blueprints) => { this.blueprints = blueprints; },
-      error: () => {},
     });
   }
 
