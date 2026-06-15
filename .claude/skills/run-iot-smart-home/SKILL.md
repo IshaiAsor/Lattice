@@ -143,13 +143,6 @@ Requires `OWNER_EMAIL`, `OWNER_PASSWORD`, and `OWNER_USERNAME` to be set in `.en
 docker compose --profile generate run --rm generate
 ```
 
-## Atlas Migrations (legacy)
-
-If using Atlas-based migrations, rehash the migration checksum after editing a migration file:
-```powershell
-docker compose run atlas-hash
-```
-
 ## OTA Firmware
 
 Place firmware `.bin` files in `firmware-storage/`. The OTA manager mounts this directory and serves firmware to devices over MQTT.
