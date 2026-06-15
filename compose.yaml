@@ -96,12 +96,12 @@ services:
       postgres:
         condition: service_healthy
 
-  # Redis Cache
+  # Valkey (Redis-compatible cache — drop-in replacement for Redis)
   cache:
-    image: redis:7-alpine
+    image: valkey/valkey:8-alpine
     container_name: redis_cache
     command: >
-      redis-server
+      valkey-server
       --maxmemory 256mb
       --maxmemory-policy volatile-lru
       --appendonly yes
@@ -110,6 +110,20 @@ services:
       - '6379:6379'
     volumes:
       - redis_data:/data
+    restart: always
+
+  # RabbitMQ message broker (for Lattice workers / pipeline)
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq
+    ports:
+      - '5672:5672'    # AMQP
+      - '15672:15672'  # Management UI → http://localhost:15672
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     restart: always
 
   # OTA Manager Service
@@ -178,3 +192,4 @@ volumes:
   emqx-data:
   pg-data:
   redis_data:
+  rabbitmq_data:
