@@ -152,6 +152,8 @@ model UserDeviceAction {
   user_device_id Int
   action_id      Int
   action_name           String     @db.VarChar(255)
+  mqtt_action_name      String     @db.VarChar(64)
+  pins                  Json?
   current_state         String?    @db.Text
   sort_order            Int        @default(0)
   group_name            String?    @db.VarChar(255)

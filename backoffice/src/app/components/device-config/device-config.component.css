@@ -167,6 +167,20 @@ mat-list-item.selected {
   font-family: monospace;
 }
 
+.mqtt-name {
+  font-size: 11px;
+  color: #888;
+  font-family: monospace;
+  margin-left: 6px;
+}
+
+.instance-count {
+  font-size: 11px;
+  color: #4caf50;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
 .meta-row {
   display: flex;
   gap: 8px;

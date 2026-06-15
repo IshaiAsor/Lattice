@@ -36,7 +36,7 @@ class ActionHubService {
 
     if (!options.skipMqttPublish) {
       const channel = (action.action.mqtt_action_type ?? 'command') as MqttChannel;
-      const actionName = action.action.mqtt_action_name ?? '';
+      const actionName = action.mqtt_action_name;
       const payload = JSON.stringify({ value: state, duration: options.duration ?? '*' });
       await mqttService.publish(userId, action.user_device_id, channel, actionName, payload);
     }

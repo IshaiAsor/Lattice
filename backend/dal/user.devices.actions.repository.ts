@@ -1,5 +1,5 @@
 import db from '../config/db';
-import { UserDeviceAction, DeviceAction, UserDevice } from '@prisma/client';
+import { UserDeviceAction, DeviceAction, UserDevice, Prisma } from '@prisma/client';
 
 export type UserDeviceActionWithAction = UserDeviceAction & { action: DeviceAction };
 export type UserDeviceActionWithActionAndDevice = UserDeviceAction & { action: DeviceAction; user_device: UserDevice };
@@ -36,12 +36,13 @@ class UserDevicesActionsRepository {
     );
   }
 
-  async insertAction(action: Pick<UserDeviceAction, 'user_device_id' | 'action_id' | 'action_name'> & { current_state?: string | null }) {
+  async insertAction(action: Pick<UserDeviceAction, 'user_device_id' | 'action_id' | 'action_name' | 'mqtt_action_name'> & { current_state?: string | null }) {
     return db.userDeviceAction.create({
       data: {
         user_device_id: action.user_device_id,
         action_id: action.action_id,
         action_name: action.action_name,
+        mqtt_action_name: action.mqtt_action_name,
         current_state: action.current_state,
       },
     });
@@ -58,11 +59,18 @@ class UserDevicesActionsRepository {
     }) as Promise<UserDeviceActionWithAction | null>;
   }
 
-  async updateAction(id: number, updates: Partial<UserDeviceAction>) {
-    const { id: _, user_device_id: __, ...data } = updates;
+  async updateAction(id: number, updates: {
+    action_name?: string;
+    mqtt_action_name?: string;
+    pins?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+    current_state?: string | null;
+    telemetry_interval_ms?: number | null;
+    sort_order?: number;
+    group_name?: string | null;
+  }) {
     return db.userDeviceAction.update({
       where: { id },
-      data: { ...data, updated_at: new Date() },
+      data: { ...updates, updated_at: new Date() },
     });
   }
 }

@@ -1,5 +1,4 @@
 import { userDevicesRepository } from '../dal/user.devices.repository';
-import { deviceStatusEnum } from '../common/deviceStatusEnum';
 import { devicesRepository } from '../dal/devices';
 import { deviceActionDefinitionRepository } from '../dal/device.actions.repository';
 import { userDevicesActionsRepository } from '../dal/user.devices.actions.repository';
@@ -8,11 +7,20 @@ import { googleActionTypesRepository } from '../dal/google.action.types.reposito
 import { googleTraitsRepository } from '../dal/google.action.traits.repository';
 import mqttService from './mqtt.service';
 import db from '../config/db';
+import { Prisma } from '@prisma/client';
 
 export interface PinSlot {
   key: string;
   label: string;
   mode: string;
+}
+
+export interface BlueprintInstanceView {
+  id: number;
+  name: string;
+  mqttName: string;
+  pins: { pinNumber: number; pinMode: string }[] | null;
+  intervalMs: number | null;
 }
 
 export interface BlueprintView {
@@ -24,11 +32,7 @@ export interface BlueprintView {
   mqtt_action_name: string;
   min_telemetry_interval_ms: number | null;
   configurable_pins: PinSlot[];
-  activated: boolean;
-  userDeviceActionId: number | null;
-  currentName: string | null;
-  currentPins: { pinNumber: number; pinMode: string }[] | null;
-  currentIntervalMs: number | null;
+  instances: BlueprintInstanceView[];
 }
 
 export interface DeviceView {
@@ -63,8 +67,9 @@ class DeviceMgmtService {
     const actionPromises = deviceActions.map(actionDef =>
       userDevicesActionsRepository.insertAction({
         user_device_id: newDevice.id,
-        action_name: actionDef.default_name,
         action_id: actionDef.id,
+        action_name: actionDef.default_name,
+        mqtt_action_name: actionDef.mqtt_action_name ?? actionDef.default_name,
       })
     );
     await Promise.all(actionPromises);
@@ -102,7 +107,10 @@ class DeviceMgmtService {
     ]);
 
     return blueprints.map(bp => {
-      const match = userActions.find(ua => ua.action.mqtt_action_name === bp.mqtt_action_name && ua.action.mqtt_action_type === bp.mqtt_action_type);
+      const matches = userActions.filter(
+        ua => ua.action.mqtt_action_name === bp.mqtt_action_name &&
+              ua.action.mqtt_action_type === bp.mqtt_action_type
+      );
       return {
         id: bp.id,
         capability_key: bp.capability_key,
@@ -112,11 +120,13 @@ class DeviceMgmtService {
         mqtt_action_name: bp.mqtt_action_name,
         min_telemetry_interval_ms: bp.min_telemetry_interval_ms,
         configurable_pins: (bp.configurable_pins as any) ?? [],
-        activated: !!match,
-        userDeviceActionId: match?.id ?? null,
-        currentName: match?.action_name ?? null,
-        currentPins: match ? (match.action.pins as any) ?? null : null,
-        currentIntervalMs: match?.telemetry_interval_ms ?? null,
+        instances: matches.map(ua => ({
+          id: ua.id,
+          name: ua.action_name,
+          mqttName: ua.mqtt_action_name,
+          pins: (ua.pins ?? ua.action.pins ?? null) as { pinNumber: number; pinMode: string }[] | null,
+          intervalMs: ua.telemetry_interval_ms ?? null,
+        })),
       };
     });
   }
@@ -148,6 +158,7 @@ class DeviceMgmtService {
       .map(v => allTraits.find(t => t.value === v)?.id)
       .filter((id): id is number => id !== undefined);
 
+    // Upsert DeviceAction as a type template only (no pins — those live on the instance)
     const deviceAction = await db.deviceAction.upsert({
       where: { device_id_default_name: { device_id: blueprint.device_id, default_name: blueprint.label } },
       update: {
@@ -155,7 +166,6 @@ class DeviceMgmtService {
         mqtt_action_type: blueprint.mqtt_action_type,
         implementation_type: blueprint.implementation_type,
         google_type_id: googleTypeId,
-        pins: pins ? (pins as any) : (blueprint.configurable_pins ?? undefined),
         telemetry_interval_ms: blueprint.min_telemetry_interval_ms ?? undefined,
       },
       create: {
@@ -165,7 +175,6 @@ class DeviceMgmtService {
         mqtt_action_type: blueprint.mqtt_action_type,
         implementation_type: blueprint.implementation_type,
         google_type_id: googleTypeId,
-        pins: pins ? (pins as any) : (blueprint.configurable_pins ?? undefined),
         telemetry_interval_ms: blueprint.min_telemetry_interval_ms ?? undefined,
       },
     });
@@ -181,11 +190,21 @@ class DeviceMgmtService {
       });
     }
 
+    // Auto-generate a unique MQTT name per instance
+    const existingCount = await db.userDeviceAction.count({
+      where: { user_device_id: userDeviceId, action_id: deviceAction.id },
+    });
+    const instanceMqttName = existingCount === 0
+      ? blueprint.mqtt_action_name
+      : `${blueprint.mqtt_action_name}_${existingCount + 1}`;
+
     const userAction = await db.userDeviceAction.create({
       data: {
         user_device_id: userDeviceId,
         action_id: deviceAction.id,
         action_name: blueprint.label,
+        mqtt_action_name: instanceMqttName,
+        pins: pins ? (pins as any) : null,
         telemetry_interval_ms: telemetryIntervalMs ?? null,
       },
     });
@@ -208,14 +227,8 @@ class DeviceMgmtService {
     await userDevicesActionsRepository.updateAction(userActionId, {
       ...(updates.name !== undefined && { action_name: updates.name }),
       ...(updates.telemetryIntervalMs !== undefined && { telemetry_interval_ms: updates.telemetryIntervalMs }),
+      ...(updates.pins !== undefined && { pins: updates.pins as Prisma.InputJsonValue }),
     });
-
-    if (updates.pins !== undefined) {
-      await db.deviceAction.update({
-        where: { id: userAction.action_id },
-        data: { pins: updates.pins as any },
-      });
-    }
   }
 
   async deleteDevice(userId: number, deviceId: number) {

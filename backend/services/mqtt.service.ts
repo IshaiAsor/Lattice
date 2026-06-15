@@ -99,7 +99,7 @@ class MqttService {
       }
       let deviceActions = await userDevicesActionsRepository.getByDeviceId(device.id);
       
-    let action = deviceActions.find((a) => a.action.mqtt_action_name === actionName && a.action.mqtt_action_type === channel);
+    let action = deviceActions.find((a) => a.mqtt_action_name === actionName && a.action.mqtt_action_type === channel);
     if (!action)
     {
       console.log(`Action ${actionName} not found for device ${deviceId}`);

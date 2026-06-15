@@ -2,9 +2,14 @@ import { Component, inject, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
-import { DeviceMgmtService, DeviceView, BlueprintView, PinSlot } from 'src/app/services/device.mgmt.service';
+import { DeviceMgmtService, DeviceView, BlueprintView, BlueprintInstanceView, PinSlot } from 'src/app/services/device.mgmt.service';
 import { UserActionsService } from 'src/app/services/user.actions.service';
 import { AuthService } from 'src/app/services/auth.service';
+
+export interface ActiveInstance {
+  bp: BlueprintView;
+  instance: BlueprintInstanceView;
+}
 
 @Component({
   selector: 'app-device-config',
@@ -29,14 +34,18 @@ export class DeviceConfigComponent implements OnInit {
   intervalInputValue: number | null = null;
   pinInputValues: Record<string, number | null> = {};
 
-  editingActionId: number | null = null;
+  editingInstanceId: number | null = null;
   editName = '';
   editIntervalMs: number | null = null;
   editPinValues: Record<string, number | null> = {};
 
   get isAdmin(): boolean { return this.authService.getCurrentUser()?.role === 'admin'; }
-  get active(): BlueprintView[] { return this.blueprints.filter(b => b.activated); }
-  get available(): BlueprintView[] { return this.blueprints.filter(b => !b.activated); }
+
+  get activeInstances(): ActiveInstance[] {
+    return this.blueprints.flatMap(bp =>
+      bp.instances.map(instance => ({ bp, instance }))
+    );
+  }
 
   ngOnInit() {
     this.loadingDevices = true;
@@ -104,27 +113,26 @@ export class DeviceConfigComponent implements OnInit {
     });
   }
 
-  startEdit(bp: BlueprintView) {
-    if (bp.userDeviceActionId == null) return;
-    this.editingActionId = bp.userDeviceActionId;
-    this.editName = bp.currentName ?? bp.label;
-    this.editIntervalMs = bp.currentIntervalMs ?? (bp.min_telemetry_interval_ms ?? null);
+  startEdit(bp: BlueprintView, instance: BlueprintInstanceView) {
+    this.editingInstanceId = instance.id;
+    this.editName = instance.name;
+    this.editIntervalMs = instance.intervalMs ?? (bp.min_telemetry_interval_ms ?? null);
     this.editPinValues = {};
     const slots = this.pinSlots(bp);
     for (let i = 0; i < slots.length; i++) {
-      this.editPinValues[slots[i].key] = bp.currentPins?.[i]?.pinNumber ?? null;
+      this.editPinValues[slots[i].key] = instance.pins?.[i]?.pinNumber ?? null;
     }
   }
 
   cancelEdit() {
-    this.editingActionId = null;
+    this.editingInstanceId = null;
     this.editName = '';
     this.editIntervalMs = null;
     this.editPinValues = {};
   }
 
-  saveEdit(bp: BlueprintView) {
-    if (!this.selectedDevice || bp.userDeviceActionId == null) return;
+  saveEdit(bp: BlueprintView, instance: BlueprintInstanceView) {
+    if (!this.selectedDevice) return;
     const slots = this.pinSlots(bp);
     const pins = slots.map(slot => ({
       pinNumber: this.editPinValues[slot.key] as number,
@@ -133,7 +141,7 @@ export class DeviceConfigComponent implements OnInit {
     const deviceId = this.selectedDevice.id;
     this.deviceMgmtService.updateActivatedAction(
       deviceId,
-      bp.userDeviceActionId,
+      instance.id,
       {
         name: this.editName,
         ...(bp.mqtt_action_type === 'telemetry' && { telemetry_interval_ms: this.editIntervalMs }),
@@ -162,12 +170,12 @@ export class DeviceConfigComponent implements OnInit {
     return allPinsFilled && intervalOk;
   }
 
-  removeAction(bp: BlueprintView) {
-    if (bp.userDeviceActionId == null || !this.selectedDevice) return;
+  removeAction(bp: BlueprintView, instance: BlueprintInstanceView) {
+    if (!this.selectedDevice) return;
     const deviceId = this.selectedDevice.id;
-    this.userActionsService.deleteAction(bp.userDeviceActionId).subscribe({
+    this.userActionsService.deleteAction(instance.id).subscribe({
       next: () => {
-        this.snack.open(`${bp.label} removed — restarting device`, 'Close', { duration: 2500 });
+        this.snack.open(`${instance.name} removed — restarting device`, 'Close', { duration: 2500 });
         this.loadBlueprints();
         this.deviceMgmtService.restartDevice(deviceId).subscribe();
       },

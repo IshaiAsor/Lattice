@@ -81,6 +81,14 @@ export interface PinSlot {
   description?: string;
 }
 
+export interface BlueprintInstanceView {
+  id: number;
+  name: string;
+  mqttName: string;
+  pins: { pinNumber: number; pinMode: string }[] | null;
+  intervalMs: number | null;
+}
+
 export interface BlueprintView {
   id: number;
   capability_key: string;
@@ -90,11 +98,7 @@ export interface BlueprintView {
   mqtt_action_name: string;
   min_telemetry_interval_ms: number | null;
   configurable_pins: PinSlot[];
-  activated: boolean;
-  userDeviceActionId: number | null;
-  currentName: string | null;
-  currentPins: { pinNumber: number; pinMode: string }[] | null;
-  currentIntervalMs: number | null;
+  instances: BlueprintInstanceView[];
 }
 
 export interface DeviceView {

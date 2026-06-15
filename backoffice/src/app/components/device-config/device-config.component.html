@@ -63,23 +63,24 @@
 
       @if (blueprints.length > 0) {
 
-        <!-- Active actions -->
+        <!-- Active actions: one card per instance -->
         <p class="section-label">Active Actions</p>
-        @if (active.length === 0) {
+        @if (activeInstances.length === 0) {
           <p class="empty-hint">No actions activated yet.</p>
         }
         <div class="bp-grid">
-          @for (bp of active; track bp.id) {
-            <mat-card class="bp-card active-card" [class.editing]="editingActionId === bp.userDeviceActionId">
+          @for (item of activeInstances; track item.instance.id) {
+            <mat-card class="bp-card active-card" [class.editing]="editingInstanceId === item.instance.id">
               <mat-card-header>
-                <mat-card-title>{{ bp.currentName ?? bp.label }}</mat-card-title>
+                <mat-card-title>{{ item.instance.name }}</mat-card-title>
                 <mat-card-subtitle>
-                  <span class="chip" [class.telemetry]="bp.mqtt_action_type === 'telemetry'">{{ typeChip(bp) }}</span>
-                  <span class="impl-type">{{ bp.implementation_type }}</span>
+                  <span class="chip" [class.telemetry]="item.bp.mqtt_action_type === 'telemetry'">{{ typeChip(item.bp) }}</span>
+                  <span class="impl-type">{{ item.bp.implementation_type }}</span>
+                  <span class="mqtt-name">{{ item.instance.mqttName }}</span>
                 </mat-card-subtitle>
               </mat-card-header>
 
-              @if (editingActionId === bp.userDeviceActionId) {
+              @if (editingInstanceId === item.instance.id) {
                 <mat-card-content>
                   <!-- Name -->
                   <p class="input-section-label">Action Name</p>
@@ -89,9 +90,9 @@
                   </mat-form-field>
 
                   <!-- Pin inputs -->
-                  @if (pinSlots(bp).length > 0) {
+                  @if (pinSlots(item.bp).length > 0) {
                     <p class="input-section-label">Pin Assignment</p>
-                    @for (slot of pinSlots(bp); track slot.key) {
+                    @for (slot of pinSlots(item.bp); track slot.key) {
                       <mat-form-field appearance="outline" class="pin-field">
                         <mat-label>{{ slot.label }}</mat-label>
                         <input matInput type="number" min="1"
@@ -105,29 +106,29 @@
                   }
 
                   <!-- Interval -->
-                  @if (bp.mqtt_action_type === 'telemetry') {
+                  @if (item.bp.mqtt_action_type === 'telemetry') {
                     <p class="input-section-label">Polling Interval</p>
                     <mat-form-field appearance="outline" class="pin-field">
                       <mat-label>Interval (ms)</mat-label>
                       <input matInput type="number" [(ngModel)]="editIntervalMs"
-                        [min]="bp.min_telemetry_interval_ms ?? 0" />
-                      <mat-hint>Min: {{ bp.min_telemetry_interval_ms ?? 0 }} ms</mat-hint>
+                        [min]="item.bp.min_telemetry_interval_ms ?? 0" />
+                      <mat-hint>Min: {{ item.bp.min_telemetry_interval_ms ?? 0 }} ms</mat-hint>
                     </mat-form-field>
                   }
                 </mat-card-content>
               } @else {
-                @if (bp.min_telemetry_interval_ms || bp.currentIntervalMs) {
+                @if (item.bp.min_telemetry_interval_ms || item.instance.intervalMs) {
                   <mat-card-content>
-                    @if (bp.currentIntervalMs) {
+                    @if (item.instance.intervalMs) {
                       <div class="meta-row">
                         <span class="label">Interval</span>
-                        <span>{{ bp.currentIntervalMs }} ms</span>
+                        <span>{{ item.instance.intervalMs }} ms</span>
                       </div>
                     }
-                    @if (bp.min_telemetry_interval_ms) {
+                    @if (item.bp.min_telemetry_interval_ms) {
                       <div class="meta-row">
                         <span class="label">Min interval</span>
-                        <span>{{ bp.min_telemetry_interval_ms }} ms</span>
+                        <span>{{ item.bp.min_telemetry_interval_ms }} ms</span>
                       </div>
                     }
                   </mat-card-content>
@@ -135,16 +136,16 @@
               }
 
               <mat-card-actions align="end">
-                @if (editingActionId === bp.userDeviceActionId) {
+                @if (editingInstanceId === item.instance.id) {
                   <button mat-button (click)="cancelEdit()">Cancel</button>
                   <button mat-flat-button color="primary"
-                    [disabled]="!canSaveEdit(bp)"
-                    (click)="saveEdit(bp)">Save</button>
+                    [disabled]="!canSaveEdit(item.bp)"
+                    (click)="saveEdit(item.bp, item.instance)">Save</button>
                 } @else {
-                  <button mat-icon-button matTooltip="Edit" (click)="startEdit(bp)">
+                  <button mat-icon-button matTooltip="Edit" (click)="startEdit(item.bp, item.instance)">
                     <mat-icon>edit</mat-icon>
                   </button>
-                  <button mat-button color="warn" (click)="removeAction(bp)">
+                  <button mat-button color="warn" (click)="removeAction(item.bp, item.instance)">
                     <mat-icon>remove_circle_outline</mat-icon> Remove
                   </button>
                 }
@@ -153,19 +154,19 @@
           }
         </div>
 
-        <!-- Available capabilities -->
+        <!-- Available capabilities: always show all blueprints so user can add more instances -->
         <p class="section-label">Available Capabilities</p>
-        @if (available.length === 0) {
-          <p class="empty-hint">All capabilities are active.</p>
-        }
         <div class="bp-grid">
-          @for (bp of available; track bp.id) {
+          @for (bp of blueprints; track bp.id) {
             <mat-card class="bp-card" [class.expanded]="expandedBlueprintId === bp.id">
               <mat-card-header>
                 <mat-card-title>{{ bp.label }}</mat-card-title>
                 <mat-card-subtitle>
                   <span class="chip" [class.telemetry]="bp.mqtt_action_type === 'telemetry'">{{ typeChip(bp) }}</span>
                   <span class="impl-type">{{ bp.implementation_type }}</span>
+                  @if (bp.instances.length > 0) {
+                    <span class="instance-count">{{ bp.instances.length }} active</span>
+                  }
                 </mat-card-subtitle>
               </mat-card-header>
 
@@ -215,7 +216,8 @@
               <mat-card-actions align="end">
                 @if (expandedBlueprintId !== bp.id) {
                   <button mat-flat-button color="primary" (click)="startAdd(bp)">
-                    <mat-icon>add</mat-icon> Add
+                    <mat-icon>add</mat-icon>
+                    {{ bp.instances.length > 0 ? 'Add another' : 'Add' }}
                   </button>
                 } @else {
                   <button mat-button (click)="cancelAdd()">Cancel</button>
