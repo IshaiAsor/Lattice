@@ -11,6 +11,9 @@ COPY services/ml-router services/ml-router
 COPY tsconfig.base.json ./
 
 RUN npm ci
+# The lockfile was generated on Windows so it only contains the win32-x64 sharp binary.
+# Install the correct Linux binary for whatever arch this build is running on.
+RUN npm install --os=linux --cpu=$(uname -m | sed 's/aarch64/arm64/') sharp
 RUN npm run build -w @lattice/logger \
  && npm run build -w @lattice/otel \
  && npm run build -w @lattice/queue \
