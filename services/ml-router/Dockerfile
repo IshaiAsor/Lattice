@@ -8,7 +8,7 @@ COPY packages/queue  packages/queue
 COPY services/ml-router services/ml-router
 COPY tsconfig.base.json ./
 
-RUN npm ci --workspace=@lattice/ml-router
+RUN npm ci
 RUN npm run build -w @lattice/logger \
  && npm run build -w @lattice/otel \
  && npm run build -w @lattice/queue \
