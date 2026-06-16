@@ -90,23 +90,22 @@
         "internalConsoleOptions": "openOnSessionStart"
     },
     {
+        "name": "Debug ML Router (dev + hot reload)",
         "type": "node",
-        "request": "launch",
-        "name": "Debug VLM Server",
-        "runtimeExecutable": "${workspaceFolder:VLM Server}/node_modules/.bin/tsx",
-        "runtimeArgs": [],
-        "program": "${workspaceFolder:VLM Server}/server.ts",
-        "cwd": "${workspaceFolder:VLM Server}",
+        "request": "attach",
+        "port": 9230,
+        "restart": true,
+        "preLaunchTask": "start-ml-router-debug",
+        "skipFiles": ["<node_internals>/**"],
         "sourceMaps": true,
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "skipFiles": ["<node_internals>/**"]
+        "outFiles": ["${workspaceFolder:ML Router}/**/*.js"]
     },
     {
         "type": "debugpy",
         "request": "launch",
-        "name": "Train VLM Server Model",
-        "program": "${workspaceFolder:VLM Server}/training/train.py",
-        "cwd": "${workspaceFolder:VLM Server}",
+        "name": "Train ML Router Model",
+        "program": "${workspaceFolder:ML Router}/training/train.py",
+        "cwd": "${workspaceFolder:ML Router}",
         "console": "integratedTerminal",
         "args": []
     },
@@ -128,6 +127,10 @@
     {
         "name": "Full Stack Debug (ts-node)",
         "configurations": ["Debug Backend (ts-node)", "Debug FrontEnd (Chrome)"]
+    },
+    {
+        "name": "All Backend Services (dev)",
+        "configurations": ["Debug Backend (dev + hot reload)", "Debug ML Router (dev + hot reload)"]
     }
     ]
 }

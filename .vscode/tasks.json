@@ -100,6 +100,44 @@
       }
     },
     {
+      "label": "kill-ml-router-ports",
+      "type": "shell",
+      "command": "npx -y kill-port 9230 3002",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "build-ml-router-deps",
+      "type": "shell",
+      "command": "npm run build:libs",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}"
+      },
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "start-ml-router-debug",
+      "dependsOn": ["kill-ml-router-ports", "build-ml-router-deps"],
+      "dependsOrder": "sequence",
+      "type": "shell",
+      "command": "npx @dotenvx/dotenvx run -- npx nodemon --cwd services/ml-router --exec \"node --inspect=9230 -r ts-node/register\" --ext ts,json src/index.ts",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}",
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3002" }
+      },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": {
+        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "\\[nodemon\\]",
+          "endsPattern": "Debugger listening on"
+        }
+      }
+    },
+    {
       "type": "PlatformIO",
       "task": "Build",
       "problemMatcher": [

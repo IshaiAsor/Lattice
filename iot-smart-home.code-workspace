@@ -25,8 +25,8 @@
       "path": "prisma",
     },
     {
-      "name": "VLM Server",
-      "path": "vlm-server",
+      "name": "ML Router",
+      "path": "services/ml-router",
     },
   ],
   "settings": {
@@ -34,6 +34,7 @@
       "backend": true,
       "backoffice": true,
       "ESP32Code": true,
+      "services": true,
     },
   },
 }
