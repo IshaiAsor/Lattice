@@ -16,6 +16,15 @@ COPY prisma/package*.json ./
 RUN npm install
 COPY prisma/ ./
 
+# Build the local @lattice/jwt workspace package
+COPY tsconfig.base.json /app/tsconfig.base.json
+WORKDIR /app/packages/jwt
+COPY packages/jwt/package*.json ./
+RUN npm install
+COPY packages/jwt/src ./src
+COPY packages/jwt/tsconfig.json ./
+RUN npm run build
+
 WORKDIR /app/backend
 COPY backend/package*.json ./
 # Skip Prisma's postinstall (prisma generate) to avoid QEMU SIGILL on ARM64;
@@ -35,6 +44,9 @@ WORKDIR /app/backend
 COPY --from=backend-build /app/backend/dist ./dist
 COPY --from=backend-build /app/backend/node_modules ./node_modules
 COPY --from=backend-build /app/backend/package*.json ./
+# Copy jwt package so the node_modules symlink resolves at runtime
+COPY --from=backend-build /app/packages/jwt/dist /app/packages/jwt/dist
+COPY --from=backend-build /app/packages/jwt/package.json /app/packages/jwt/package.json
 COPY --from=ui-build /app/backoffice/dist/backoffice ./dist/public
 
 EXPOSE 3000
