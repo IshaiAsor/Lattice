@@ -7,7 +7,6 @@
  * The model is a YOLOv8-nano network exported to ONNX format, trained on
  * the lettuce-v1 dataset (5,170 images, Roboflow, CC BY 4.0).
  */
-
 import * as ort from 'onnxruntime-node';
 import sharp from 'sharp';
 
