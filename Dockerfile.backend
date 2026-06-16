@@ -47,6 +47,7 @@ COPY --from=backend-build /app/backend/package*.json ./
 # Copy jwt package so the node_modules symlink resolves at runtime
 COPY --from=backend-build /app/packages/jwt/dist /app/packages/jwt/dist
 COPY --from=backend-build /app/packages/jwt/package.json /app/packages/jwt/package.json
+COPY --from=backend-build /app/packages/jwt/node_modules /app/packages/jwt/node_modules
 COPY --from=ui-build /app/backoffice/dist/backoffice ./dist/public
 
 EXPOSE 3000
