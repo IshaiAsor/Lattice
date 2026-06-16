@@ -32,6 +32,7 @@ export interface RateLimitConfig {
 export interface EnvConfig {
   port: number;
   baseUrl: string;
+  deviceGatewayUrl: string;
   mqtt: MqttConfig;
   googleAuth: GoogleAuthConfig;
   googleSignIn: GoogleSignInConfig;
@@ -71,6 +72,9 @@ export interface OllamaConfig {
 
 const config: EnvConfig = {
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
+  // Where the device sends its provisioning callback — device-gateway, not the monolith.
+  // Falls back to BASE_URL if unset (legacy single-host behaviour).
+  deviceGatewayUrl: process.env.DEVICE_GATEWAY_URL || 'http://localhost:3004',
   port: +(process.env.PORT || 3000),
   mqtt: {
     serverName: process.env.MQTT_SERVER_NAME,

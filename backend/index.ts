@@ -15,10 +15,8 @@ import provisioningRoutes from './routes/provisioning.routes';
 import googleActionsTypesRoutes from './routes/google.actions.types.routes';
 import googleActionsTraitsRoutes from './routes/google.actions.traits.routes';
 import googleSmartHomeRoutes from './routes/google.smarthome.routes';
-import deviceConfigurationRoutes from './routes/device.configuration.routes';
 import userRulesRoutes from './routes/user.rules.routes';
 import adminDeviceConfigRoutes from './routes/admin.device.config.routes';
-import cameraRoutes from './routes/camera.routes';
 import vlmRoutes from './routes/vlm.routes';
 import emergencyRoutes from './routes/emergency.routes';
 import { rulesEngineService } from './services/rules.engine.service';
@@ -26,13 +24,12 @@ import { sensorHistoryRepository } from './dal/sensor.history.repository';
 import cron from 'node-cron';
 import http from 'http';
 import socketService from './services/socket.service';
-import wsStreamService from './services/ws.stream.service';
 import { redisService } from './services/redis.service';
 
 const app = express();
 app.set('trust proxy', 1); // trust Traefik ingress X-Forwarded-For header
 const server = http.createServer(app);
-wsStreamService.init(server);
+// Device config + camera intake (incl. the camera WS) moved to services/device-gateway.
 socketService.init(server);
 
 // Pre-parser debug logging
@@ -57,14 +54,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/mgmt/devices',  deviceMgmtRoutes);
 app.use('/api/mgmt/actions', actionsMgmtRoutes);
 app.use('/api/google', googleRoutes);
+// Only provision-token remains here (app-facing); /provision + /refresh-token moved to device-gateway.
 app.use('/api/provisioning', provisioningRoutes);
 app.use('/api/google/actions/types', googleActionsTypesRoutes);
 app.use('/api/google/actions/traits', googleActionsTraitsRoutes);
 app.use('/api/google/smarthome', googleSmartHomeRoutes);
-app.use('/api/device', deviceConfigurationRoutes);
 app.use('/api/rules', userRulesRoutes);
 app.use('/api/device-config', adminDeviceConfigRoutes);
-app.use('/api/camera', cameraRoutes);
 app.use('/api/vlm', vlmRoutes);
 app.use('/api/emergency', emergencyRoutes);
 
