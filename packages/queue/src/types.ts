@@ -44,6 +44,7 @@ export interface ActionDispatchPayload {
   deviceId: string;
   actionName: string;
   command: unknown;
+  firmwareVersion?: string;
 }
 
 export interface PipelineStagePayload {
@@ -63,4 +64,12 @@ export interface PipelineStageDonePayload {
   status: 'completed' | 'failed';
   output?: Record<string, unknown>;
   error?: string;
+}
+
+export interface OtaDispatchPayload {
+  deviceType: string;
+  version: string;
+  url: string;
+  releaseNotes?: string;
+  timestamp: string;
 }

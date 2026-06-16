@@ -138,6 +138,34 @@
       }
     },
     {
+      "label": "kill-mqtt-service-ports",
+      "type": "shell",
+      "command": "npx -y kill-port 9232 3005",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "start-mqtt-service-debug",
+      "dependsOn": ["kill-mqtt-service-ports", "build-ml-router-deps"],
+      "dependsOrder": "sequence",
+      "type": "shell",
+      "command": "npx @dotenvx/dotenvx run -- npx nodemon --cwd services/mqtt-service --exec \"node --inspect=9232 -r ts-node/register\" --ext ts,json src/index.ts",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}",
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3005" }
+      },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": {
+        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "\\[nodemon\\]",
+          "endsPattern": "Debugger listening on"
+        }
+      }
+    },
+    {
       "label": "kill-device-gateway-ports",
       "type": "shell",
       "command": "npx -y kill-port 9231 3004",

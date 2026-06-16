@@ -32,6 +32,10 @@
       "name": "Device Gateway",
       "path": "services/device-gateway",
     },
+    {
+      "name": "MQTT Service",
+      "path": "services/mqtt-service",
+    },
   ],
   "settings": {
     "files.exclude": {

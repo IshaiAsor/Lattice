@@ -112,6 +112,17 @@
         "outFiles": ["${workspaceFolder:Device Gateway}/**/*.js"]
     },
     {
+        "name": "Debug MQTT Service (dev + hot reload)",
+        "type": "node",
+        "request": "attach",
+        "port": 9232,
+        "restart": true,
+        "preLaunchTask": "start-mqtt-service-debug",
+        "skipFiles": ["<node_internals>/**"],
+        "sourceMaps": true,
+        "outFiles": ["${workspaceFolder:MQTT Service}/**/*.js"]
+    },
+    {
         "type": "debugpy",
         "request": "launch",
         "name": "Train ML Router Model",
@@ -141,7 +152,7 @@
     },
     {
         "name": "All Backend Services (dev)",
-        "configurations": ["Debug Backend (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)"]
+        "configurations": ["Debug Backend (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)", "Debug MQTT Service (dev + hot reload)"]
     }
     ]
 }

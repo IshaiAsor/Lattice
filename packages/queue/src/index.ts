@@ -16,6 +16,7 @@ export const RK = {
   PIPELINE_STAGE_SENSOR_DIGEST: 'pipeline.stage.sensor_digest',
   PIPELINE_STAGE_COMMAND_EXEC:  'pipeline.stage.command_exec',
   PIPELINE_STAGE_DONE:          'pipeline.stage.done.v1',
+  OTA_DISPATCH:                 'ota.dispatch',
 } as const;
 
 export type RoutingKey = (typeof RK)[keyof typeof RK];
@@ -35,6 +36,7 @@ export const QUEUES = {
   PIPELINE_STAGE_SENSOR_DIGEST: 'q.pipeline.stage.sensor_digest',
   PIPELINE_STAGE_COMMAND_EXEC:  'q.pipeline.stage.command_exec',
   PIPELINE_STAGE_DONE:          'q.pipeline.stage.done',
+  OTA_DISPATCH:                 'q.ota.dispatch',
   DLQ:                          'q.dlq',
 } as const;
 
@@ -62,6 +64,7 @@ const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.PIPELINE_STAGE_SENSOR_DIGEST, RK.PIPELINE_STAGE_SENSOR_DIGEST],
   [QUEUES.PIPELINE_STAGE_COMMAND_EXEC,  RK.PIPELINE_STAGE_COMMAND_EXEC],
   [QUEUES.PIPELINE_STAGE_DONE,          RK.PIPELINE_STAGE_DONE],
+  [QUEUES.OTA_DISPATCH,                 RK.OTA_DISPATCH],
 ];
 
 /**
