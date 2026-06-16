@@ -8,8 +8,9 @@ export interface ModelConfig {
   name: string;
   version: string;
   backend: ModelBackend;
-  modelFile?: string;   // onnx only
-  ollamaModel?: string; // ollama only
+  modelFile?: string;    // onnx only
+  ollamaModel?: string;  // ollama only
+  classes?: string[];    // label names indexed by class_id (onnx output)
 }
 
 export type ModelKey = `${string}/${string}/${string}`;

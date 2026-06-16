@@ -42,8 +42,10 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutp
     for (let i = 0; i < raw.length; i += stride) {
       const conf = raw[i + 4]!;
       if (conf < 0.25) continue;
+      const classId = Math.round(raw[i + 5]!);
+      const label = model.classes?.[classId] ?? String(classId);
       detections.push({
-        label: String(Math.round(raw[i + 5]!)),
+        label,
         confidence: conf,
         box: { x: raw[i]!, y: raw[i + 1]!, w: raw[i + 2]!, h: raw[i + 3]! },
       });

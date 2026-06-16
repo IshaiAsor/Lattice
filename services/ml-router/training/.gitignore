@@ -1,0 +1,11 @@
+# Dataset splits — images and labels are not committed.
+# Populate by moving or downloading the dataset locally (see datasets/*/data.yaml).
+datasets/*/train/
+datasets/*/valid/
+datasets/*/test/
+
+# Training run outputs (checkpoints, logs, confusion matrices, etc.)
+runs/
+
+# Pre-trained base weights (downloaded automatically by ultralytics on first run)
+*.pt

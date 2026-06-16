@@ -1,9 +1,9 @@
 ---
-name: run-iot-smart-home
-description: Start, stop, and check the full IoT smart home Docker Compose stack. Use when asked to run, start, stop, restart, or check the compose stack, infrastructure, services, EMQX, PostgreSQL, Redis, or the full stack.
+name: run-lattice
+description: Start, stop, and check the full Lattice Docker Compose stack. Use when asked to run, start, stop, restart, or check the compose stack, infrastructure, services, EMQX, PostgreSQL, Redis, or the full stack.
 ---
 
-# run-iot-smart-home Skill
+# run-lattice Skill
 
 Manages the IoT smart home Docker Compose stack defined in `compose.yaml` at the project root.
 
@@ -16,7 +16,7 @@ Manages the IoT smart home Docker Compose stack defined in `compose.yaml` at the
 
 ## Required `.env` Variables
 
-The following variables must be set in `iot-smart-home/.env`:
+The following variables must be set in `lattice/.env`:
 
 **Database (superuser)**
 - `DB_HOST`
@@ -91,7 +91,7 @@ EMQX depends on PostgreSQL being healthy before starting. Adminer also waits for
 
 ## Common Commands
 
-All commands must be run from `iot-smart-home/` (the project root).
+All commands must be run from `lattice/` (the project root).
 
 ### Start the full stack
 ```powershell

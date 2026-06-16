@@ -4,7 +4,8 @@
     "name": "yolo",
     "version": "v1",
     "backend": "onnx",
-    "modelFile": "yolo.onnx"
+    "modelFile": "yolo.onnx",
+    "classes": ["Belum Matang", "Matang", "Rusak"]
   },
   {
     "kind": "llm",
