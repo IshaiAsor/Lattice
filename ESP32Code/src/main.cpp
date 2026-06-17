@@ -86,7 +86,10 @@ void setup()
     delay(10);
 #endif
   Serial.println("Device Starting...");
-
+  Serial.print("Device Type: ");
+  Serial.println(DEVICE_TYPE);
+  Serial.print("Firmware Version: ");
+  Serial.println(DEVICE_VERSION);
 #ifdef BOARD_HAS_PSRAM
   if (psramFound())
   {
