@@ -32,6 +32,15 @@ class DeviceConfigurationService {
       include: { action: true },
     });
 
+    if(userDevice.device.version !== version) {
+      //todo : on v2.2 migrate device actions (after ota update) , get device new capabilities and update user actions accordingly (for now we just update device version, but in case of breaking changes in capabilities we need to update user actions as well)
+      db.device.update({
+        where: { id: userDevice.device_type_id },
+        data: { version },
+      });
+    }
+
+
     const actions: ActionConfigDto[] = userActions.map((ua) => ({
       mqtt_action_name:      ua.mqtt_action_name,
       implementation_type:   ua.action.implementation_type,

@@ -91,7 +91,7 @@ class ProvisioningService {
       mqttToken: token,
       refreshToken,
       refreshTokenCallbackUrl: `${env.DeviceGatewaybaseUrl}/api/provisioning/refresh-token`,
-      deviceConfigUrl: `${env.DeviceGatewaybaseUrl}/api/device/${encodeURIComponent(deviceVersion)}/configuration`,
+      deviceConfigUrl: `${env.DeviceGatewaybaseUrl}/api/device/configuration`,
       validateCACert: env.mqtt.validateCert,
       wsStreamUrl: env.DeviceGatewaybaseUrl,
       cameraHttpUrl: env.DeviceGatewaybaseUrl,

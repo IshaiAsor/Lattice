@@ -219,17 +219,19 @@ public:
             return false;
         }
 
+        String deviceConfigUrl = jwtData->deviceConfigUrl + "?deviceId=" + String(jwtData->deviceId) + "&version=" + String(DEVICE_VERSION);
+
         if (jwtData->deviceConfigUrl.isEmpty())
         {
             Serial.println("[Config] No device config URL in JWT storage — re-provisioning required.");
             return false;
         }
 
-        Serial.println("[Config] Fetching from: " + jwtData->deviceConfigUrl);
+        Serial.println("[Config] Fetching from: " + deviceConfigUrl);
 
         HttpJsonClientService<EmptyJsonModel, DeviceConfigurationResponse> http;
         DeviceConfigurationResponse resp = http.GetJson(
-            jwtData->deviceConfigUrl, jwtData->token, jwtData->validateCACert);
+            deviceConfigUrl, jwtData->token, jwtData->validateCACert);
 
         if (!resp.parsed)
         {
