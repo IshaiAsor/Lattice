@@ -7,7 +7,7 @@ export const env = {
 
   // Public base URL of device-gateway — embedded in provisioning responses so devices
   // call back to the gateway (config, refresh, camera) rather than the monolith.
-  baseUrl:      process.env['BASE_URL'] ?? 'http://localhost:3004',
+  DeviceGatewaybaseUrl:      process.env['DEVICE_GATEWAY_URL'] ?? 'http://localhost:3004',
 
   mqtt: {
     serverName:   process.env['MQTT_SERVER_NAME'] ?? 'localhost',

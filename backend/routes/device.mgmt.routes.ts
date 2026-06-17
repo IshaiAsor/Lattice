@@ -1,6 +1,6 @@
 import express from 'express';
 import { deviceMgmtService, BlueprintView } from '../services/device.mgmt.service';
-import mqttService from '../services/mqtt.service';
+import commandDispatch from '../services/command.dispatch.service';
 import { verifyToken } from '../middlewares/auth.middleware';
 import { exceptionHandler } from '../middlewares/exception.middleware';
 import { JwtPurpose } from '../services/jwt.service';
@@ -61,28 +61,28 @@ router.patch('/:deviceId/actions/:userActionId', async (req, res) => {
 router.post('/:deviceId/reprovision', async (req, res) => {
   const userId = req.user.id;
   const deviceId = parseInt(req.params.deviceId);
-  await mqttService.publish(userId, deviceId, 'command', 'reprovision');
+  await commandDispatch.publishCommand(userId, deviceId, 'reprovision', '');
   res.json({ message: 'Reprovision command sent' });
 });
 
 router.post('/:deviceId/soft-reset', async (req, res) => {
   const userId = req.user.id;
   const deviceId = parseInt(req.params.deviceId);
-  await mqttService.publish(userId, deviceId, 'command', 'soft-reset');
+  await commandDispatch.publishCommand(userId, deviceId, 'soft-reset', '');
   res.json({ message: 'Soft reset command sent' });
 });
 
 router.post('/:deviceId/hard-reset', async (req, res) => {
   const userId = req.user.id;
   const deviceId = parseInt(req.params.deviceId);
-  await mqttService.publish(userId, deviceId, 'command', 'hard-reset');
+  await commandDispatch.publishCommand(userId, deviceId, 'hard-reset', '');
   res.json({ message: 'Hard reset command sent' });
 });
 
 router.post('/:deviceId/restart', async (req, res) => {
   const userId = req.user.id;
   const deviceId = parseInt(req.params.deviceId);
-  await mqttService.publish(userId, deviceId, 'command', 'restart');
+  await commandDispatch.publishCommand(userId, deviceId, 'restart', '');
   res.json({ message: 'Restart command sent' });
 });
 

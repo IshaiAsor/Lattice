@@ -92,10 +92,23 @@
     {
         "name": "Debug ML Router (dev + hot reload)",
         "type": "node",
-        "request": "attach",
-        "port": 9230,
+        "request": "launch",
+        "cwd": "${workspaceFolder:Project Root}",
+        "runtimeExecutable": "npx",
+        "runtimeArgs": [
+            "@dotenvx/dotenvx", "run", "--",
+            "npx", "nodemon",
+            "--cwd", "services/ml-router",
+            "--exec", "node -r ts-node/register",
+            "--ext", "ts,json",
+            "src/index.ts"
+        ],
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3002" },
+        "console": "internalConsole",
+        "outputCapture": "std",
+        "autoAttachChildProcesses": true,
         "restart": true,
-        "preLaunchTask": "start-ml-router-debug",
+        "preLaunchTask": "prep-ml-router",
         "skipFiles": ["<node_internals>/**"],
         "sourceMaps": true,
         "outFiles": ["${workspaceFolder:ML Router}/**/*.js"]
@@ -103,10 +116,23 @@
     {
         "name": "Debug Device Gateway (dev + hot reload)",
         "type": "node",
-        "request": "attach",
-        "port": 9231,
+        "request": "launch",
+        "cwd": "${workspaceFolder:Project Root}",
+        "runtimeExecutable": "npx",
+        "runtimeArgs": [
+            "@dotenvx/dotenvx", "run", "--",
+            "npx", "nodemon",
+            "--cwd", "services/device-gateway",
+            "--exec", "node -r ts-node/register",
+            "--ext", "ts,json",
+            "src/index.ts"
+        ],
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3004" },
+        "console": "internalConsole",
+        "outputCapture": "std",
+        "autoAttachChildProcesses": true,
         "restart": true,
-        "preLaunchTask": "start-device-gateway-debug",
+        "preLaunchTask": "prep-device-gateway",
         "skipFiles": ["<node_internals>/**"],
         "sourceMaps": true,
         "outFiles": ["${workspaceFolder:Device Gateway}/**/*.js"]
@@ -114,10 +140,23 @@
     {
         "name": "Debug MQTT Service (dev + hot reload)",
         "type": "node",
-        "request": "attach",
-        "port": 9232,
+        "request": "launch",
+        "cwd": "${workspaceFolder:Project Root}",
+        "runtimeExecutable": "npx",
+        "runtimeArgs": [
+            "@dotenvx/dotenvx", "run", "--",
+            "npx", "nodemon",
+            "--cwd", "services/mqtt-service",
+            "--exec", "node -r ts-node/register",
+            "--ext", "ts,json",
+            "src/index.ts"
+        ],
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3005" },
+        "console": "internalConsole",
+        "outputCapture": "std",
+        "autoAttachChildProcesses": true,
         "restart": true,
-        "preLaunchTask": "start-mqtt-service-debug",
+        "preLaunchTask": "prep-mqtt-service",
         "skipFiles": ["<node_internals>/**"],
         "sourceMaps": true,
         "outFiles": ["${workspaceFolder:MQTT Service}/**/*.js"]
@@ -125,13 +164,73 @@
     {
         "name": "Debug Digest Service (dev + hot reload)",
         "type": "node",
-        "request": "attach",
-        "port": 9233,
+        "request": "launch",
+        "cwd": "${workspaceFolder:Project Root}",
+        "runtimeExecutable": "npx",
+        "runtimeArgs": [
+            "@dotenvx/dotenvx", "run", "--",
+            "npx", "nodemon",
+            "--cwd", "services/digest-service",
+            "--exec", "node -r ts-node/register",
+            "--ext", "ts,json",
+            "src/index.ts"
+        ],
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3006" },
+        "console": "internalConsole",
+        "outputCapture": "std",
+        "autoAttachChildProcesses": true,
         "restart": true,
-        "preLaunchTask": "start-digest-service-debug",
+        "preLaunchTask": "prep-digest-service",
         "skipFiles": ["<node_internals>/**"],
         "sourceMaps": true,
         "outFiles": ["${workspaceFolder:Digest Service}/**/*.js"]
+    },
+    {
+        "name": "Debug Socket Server (dev + hot reload)",
+        "type": "node",
+        "request": "launch",
+        "cwd": "${workspaceFolder:Project Root}",
+        "runtimeExecutable": "npx",
+        "runtimeArgs": [
+            "@dotenvx/dotenvx", "run", "--",
+            "npx", "nodemon",
+            "--cwd", "services/socket-server",
+            "--exec", "node -r ts-node/register",
+            "--ext", "ts,json",
+            "src/index.ts"
+        ],
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3007" },
+        "console": "internalConsole",
+        "outputCapture": "std",
+        "autoAttachChildProcesses": true,
+        "restart": true,
+        "preLaunchTask": "prep-socket-server",
+        "skipFiles": ["<node_internals>/**"],
+        "sourceMaps": true,
+        "outFiles": ["${workspaceFolder:Socket Server}/**/*.js"]
+    },
+    {
+        "name": "Debug OTA Manager (dev + hot reload)",
+        "type": "node",
+        "request": "launch",
+        "cwd": "${workspaceFolder:Project Root}",
+        "runtimeExecutable": "npx",
+        "runtimeArgs": [
+            "@dotenvx/dotenvx", "run", "--",
+            "npx", "nodemon",
+            "--cwd", "services/ota-manager",
+            "--exec", "node",
+            "--ext", "js,json",
+            "index.js"
+        ],
+        "env": { "PORT": "3001" },
+        "console": "internalConsole",
+        "outputCapture": "std",
+        "autoAttachChildProcesses": true,
+        "restart": true,
+        "preLaunchTask": "prep-ota-manager",
+        "skipFiles": ["<node_internals>/**"],
+        "outFiles": ["${workspaceFolder:OTA Manager}/**/*.js"]
     },
     {
         "type": "debugpy",
@@ -163,7 +262,7 @@
     },
     {
         "name": "All Backend Services (dev)",
-        "configurations": ["Debug Backend (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)", "Debug MQTT Service (dev + hot reload)", "Debug Digest Service (dev + hot reload)"]
+        "configurations": ["Debug Backend (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)", "Debug MQTT Service (dev + hot reload)", "Debug Digest Service (dev + hot reload)", "Debug Socket Server (dev + hot reload)", "Debug OTA Manager (dev + hot reload)"]
     }
     ]
 }

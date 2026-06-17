@@ -23,14 +23,13 @@ import { rulesEngineService } from './services/rules.engine.service';
 import { sensorHistoryRepository } from './dal/sensor.history.repository';
 import cron from 'node-cron';
 import http from 'http';
-import socketService from './services/socket.service';
 import { redisService } from './services/redis.service';
 
 const app = express();
 app.set('trust proxy', 1); // trust Traefik ingress X-Forwarded-For header
+// Real-time Socket.IO moved to services/socket-server (digest-service emits via the
+// Valkey adapter). Device config + camera intake moved to services/device-gateway.
 const server = http.createServer(app);
-// Device config + camera intake (incl. the camera WS) moved to services/device-gateway.
-socketService.init(server);
 
 // Pre-parser debug logging
 app.use((req, _res, next) => {

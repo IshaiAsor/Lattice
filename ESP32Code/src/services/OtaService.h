@@ -12,7 +12,7 @@ public:
     OtaService(const char* currentVersion, const char* deviceType, const char* rootCa)
         : _currentVersion(currentVersion), _deviceType(deviceType), _rootCa(rootCa) {}
 
-    void handleUpdateMessage(const char* payload) {
+    void handleUpdateMessage(const char* payload, const char* authToken = "") {
         JsonDocument doc;
         DeserializationError error = deserializeJson(doc, payload);
 
@@ -35,11 +35,16 @@ public:
             return;
         }
 
+        if (!authToken || !*authToken) {
+            Serial.println("OTA: No device token available — refusing to download unauthenticated.");
+            return;
+        }
+
         Serial.printf("OTA: Upgrading %s → %s\n", _currentVersion, newVersion);
         Serial.print("OTA: Downloading from: ");
         Serial.println(downloadUrl);
 
-        performUpdate(downloadUrl);
+        performUpdate(downloadUrl, authToken);
     }
 
 private:
@@ -62,17 +67,24 @@ private:
         return nPat > cPat;
     }
 
-    void performUpdate(const char* url) {
+    void performUpdate(const char* url, const char* authToken = "") {
         WiFiClientSecure client;
         client.setCACert(_rootCa);
 
         // Optional: set timeout for large downloads
-        client.setTimeout(12000); 
+        client.setTimeout(12000);
 
         Serial.println("OTA: Starting update process...");
-        
+
+        // Authenticate the download against the OTA manager with the device's JWT.
+        // HTTPUpdate has no setAuthorization(), so inject the header via the request callback.
+        String auth = (authToken && *authToken) ? (String("Bearer ") + authToken) : String();
+
         // This is a blocking call that will restart the ESP32 on success
-        t_httpUpdate_return ret = httpUpdate.update(client, url);
+        t_httpUpdate_return ret = httpUpdate.update(client, url, "", [auth](HTTPClient *http) {
+            if (auth.length())
+                http->addHeader("Authorization", auth);
+        });
 
         switch (ret) {
             case HTTP_UPDATE_FAILED:

@@ -105,7 +105,7 @@ services:
       --maxmemory 256mb
       --maxmemory-policy volatile-lru
       --appendonly yes
-      --user ${REDIS_USER} on ">${REDIS_PASSWORD}" ~* +@all
+      --user ${REDIS_USER} on ">${REDIS_PASSWORD}" ~* allchannels +@all
     ports:
       - '6379:6379'
     volumes:
@@ -129,25 +129,20 @@ services:
   # OTA Manager Service
   ota-manager:
     build:
-      context: ./ota-manager
+      context: .
+      dockerfile: services/ota-manager/Dockerfile
     container_name: ota-manager
     ports:
       - '3001:3000'
     environment:
       - PORT=3000
-      - MQTT_INTERNAL_HOST=emqx
-      - MQTT_SERVER_NAME=emqx
-      - MQTT_PORT=8883
-      - MQTT_CA_CERT_PATH=/app/certs/ca.pem
-      - MQTT_VALIDATE_CERT=false
-      - MQTT_APP_USERNAME=${MQTT_APP_USERNAME}
-      - MQTT_APP_PASSWORD=${MQTT_APP_PASSWORD}
       - FIRMWARE_PATH=/app/firmware
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - JWT_SECRET=${JWT_SECRET}
     volumes:
       - ./firmware-storage:/app/firmware
-      - ./certs:/app/certs:ro
     depends_on:
-      - emqx
+      - rabbitmq
     restart: always
 
   # Prisma migrations — run once on first setup or after schema changes:

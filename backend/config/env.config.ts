@@ -1,10 +1,8 @@
+// Only the broker coordinates the monolith hands a device during provisioning — it no
+// longer connects to MQTT itself (commands go via command.dispatch.service → RabbitMQ).
 export interface MqttConfig {
   serverName?: string;
-  internalHost?: string;
-  username?: string;
-  password?: string;
   port?: number;
-  caCertPath: string;
   validateCert?: boolean;
 }
 
@@ -33,6 +31,7 @@ export interface EnvConfig {
   port: number;
   baseUrl: string;
   deviceGatewayUrl: string;
+  rabbitmqUrl: string;
   mqtt: MqttConfig;
   googleAuth: GoogleAuthConfig;
   googleSignIn: GoogleSignInConfig;
@@ -76,13 +75,12 @@ const config: EnvConfig = {
   // Falls back to BASE_URL if unset (legacy single-host behaviour).
   deviceGatewayUrl: process.env.DEVICE_GATEWAY_URL || 'http://localhost:3004',
   port: +(process.env.PORT || 3000),
+  // RabbitMQ — the monolith publishes device commands to q.action.dispatch; the broker
+  // connection itself is owned by services/mqtt-service.
+  rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://localhost',
   mqtt: {
     serverName: process.env.MQTT_SERVER_NAME,
-    internalHost: process.env.MQTT_INTERNAL_HOST || process.env.MQTT_SERVER_NAME,
-    username: process.env.MQTT_APP_USERNAME,
-    password: process.env.MQTT_APP_PASSWORD,
     port: process.env.MQTT_PORT ? parseInt(process.env.MQTT_PORT) : 1883,
-    caCertPath: process.env.MQTT_CA_CERT_PATH || '',
     validateCert: process.env.MQTT_VALIDATE_CERT === 'true',
   },
   googleAuth: {

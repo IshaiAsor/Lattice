@@ -40,6 +40,14 @@
       "name": "Digest Service",
       "path": "services/digest-service",
     },
+    {
+      "name": "Socket Server",
+      "path": "services/socket-server",
+    },
+    {
+      "name": "OTA Manager",
+      "path": "services/ota-manager",
+    },
   ],
   "settings": {
     "files.exclude": {

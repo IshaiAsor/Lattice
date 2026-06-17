@@ -117,25 +117,8 @@
       "problemMatcher": ["$tsc"]
     },
     {
-      "label": "start-ml-router-debug",
-      "dependsOn": ["kill-ml-router-ports", "build-ml-router-deps"],
-      "dependsOrder": "sequence",
-      "type": "shell",
-      "command": "npx @dotenvx/dotenvx run -- npx nodemon --cwd services/ml-router --exec \"node --inspect=9230 -r ts-node/register\" --ext ts,json src/index.ts",
-      "options": {
-        "cwd": "${workspaceFolder:Project Root}",
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3002" }
-      },
-      "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated" },
-      "problemMatcher": {
-        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "\\[nodemon\\]",
-          "endsPattern": "Debugger listening on"
-        }
-      }
+      "label": "prep-ml-router",
+      "dependsOn": ["kill-ml-router-ports", "build-ml-router-deps"]
     },
     {
       "label": "kill-mqtt-service-ports",
@@ -145,25 +128,8 @@
       "problemMatcher": []
     },
     {
-      "label": "start-mqtt-service-debug",
-      "dependsOn": ["kill-mqtt-service-ports", "build-ml-router-deps"],
-      "dependsOrder": "sequence",
-      "type": "shell",
-      "command": "npx @dotenvx/dotenvx run -- npx nodemon --cwd services/mqtt-service --exec \"node --inspect=9232 -r ts-node/register\" --ext ts,json src/index.ts",
-      "options": {
-        "cwd": "${workspaceFolder:Project Root}",
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3005" }
-      },
-      "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated" },
-      "problemMatcher": {
-        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "\\[nodemon\\]",
-          "endsPattern": "Debugger listening on"
-        }
-      }
+      "label": "prep-mqtt-service",
+      "dependsOn": ["kill-mqtt-service-ports", "build-ml-router-deps"]
     },
     {
       "label": "kill-device-gateway-ports",
@@ -173,25 +139,8 @@
       "problemMatcher": []
     },
     {
-      "label": "start-device-gateway-debug",
-      "dependsOn": ["kill-device-gateway-ports", "build-ml-router-deps"],
-      "dependsOrder": "sequence",
-      "type": "shell",
-      "command": "npx @dotenvx/dotenvx run -- npx nodemon --cwd services/device-gateway --exec \"node --inspect=9231 -r ts-node/register\" --ext ts,json src/index.ts",
-      "options": {
-        "cwd": "${workspaceFolder:Project Root}",
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3004" }
-      },
-      "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated" },
-      "problemMatcher": {
-        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "\\[nodemon\\]",
-          "endsPattern": "Debugger listening on"
-        }
-      }
+      "label": "prep-device-gateway",
+      "dependsOn": ["kill-device-gateway-ports", "build-ml-router-deps"]
     },
     {
       "label": "kill-digest-service-ports",
@@ -201,25 +150,30 @@
       "problemMatcher": []
     },
     {
-      "label": "start-digest-service-debug",
-      "dependsOn": ["kill-digest-service-ports", "build-ml-router-deps"],
-      "dependsOrder": "sequence",
+      "label": "prep-digest-service",
+      "dependsOn": ["kill-digest-service-ports", "build-ml-router-deps"]
+    },
+    {
+      "label": "kill-socket-server-ports",
       "type": "shell",
-      "command": "npx @dotenvx/dotenvx run -- npx nodemon --cwd services/digest-service --exec \"node --inspect=9233 -r ts-node/register\" --ext ts,json src/index.ts",
-      "options": {
-        "cwd": "${workspaceFolder:Project Root}",
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3006" }
-      },
-      "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated" },
-      "problemMatcher": {
-        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "\\[nodemon\\]",
-          "endsPattern": "Debugger listening on"
-        }
-      }
+      "command": "npx -y kill-port 9235 3007",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "prep-socket-server",
+      "dependsOn": ["kill-socket-server-ports", "build-ml-router-deps"]
+    },
+    {
+      "label": "kill-ota-manager-ports",
+      "type": "shell",
+      "command": "npx -y kill-port 9234 3001",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "prep-ota-manager",
+      "dependsOn": ["kill-ota-manager-ports", "build-ml-router-deps"]
     },
     {
       "type": "PlatformIO",

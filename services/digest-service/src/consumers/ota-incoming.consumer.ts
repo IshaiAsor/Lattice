@@ -5,8 +5,9 @@ import { createLogger } from '@lattice/logger';
 
 const log = createLogger('digest-service:ota-incoming');
 
-// Permissive semver: MAJOR.MINOR.PATCH with optional -prerelease / +build.
-const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$/;
+// Permissive semver: optional leading v/V (the platform tags firmware as `vX.Y.Z`),
+// then MAJOR.MINOR.PATCH with optional -prerelease / +build.
+const SEMVER = /^[vV]?\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$/;
 
 export function otaIncomingConsumer(ch: Channel) {
   return async (payload: OtaIncomingPayload): Promise<void> => {

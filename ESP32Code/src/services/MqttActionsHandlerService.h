@@ -35,7 +35,25 @@ public:
             token = std::strtok(nullptr, "/");
         }
 
-        if (strcmp(parts[0], "ota") != 0 && parts.size() < 7)
+        if (parts.empty())
+            return;
+
+        String message;
+        message.reserve(length);
+        for (unsigned int i = 0; i < length; i++)
+            message += (char)payload[i];
+
+        // Handle OTA topic first — `ota/updates/<deviceType>` has only 3 parts, so this must run
+        // before we index parts[1/3/5/6] (which only exist on the 7-part command topic).
+        if (strcmp(parts[0], "ota") == 0)
+        {
+            // Authenticate the firmware download with the device's current JWT.
+            JwtToken *jwt = jwtService.GetCurrentJwtToken();
+            otaService->handleUpdateMessage(message.c_str(), jwt ? jwt->token.c_str() : "");
+            return;
+        }
+
+        if (parts.size() < 7)
         {
             Serial.printf("[MQTT] Unexpected topic format (%d parts) — ignoring\n", (int)parts.size());
             return;
@@ -54,18 +72,6 @@ public:
         Serial.println(actionType);
         Serial.print("Action: ");
         Serial.println(action);
-
-        String message;
-        message.reserve(length);
-        for (unsigned int i = 0; i < length; i++)
-            message += (char)payload[i];
-
-        // Handle OTA topic
-        if (strcmp(parts[0], "ota") == 0)
-        {
-            otaService->handleUpdateMessage(message.c_str());
-            return;
-        }
 
         if (strcmp(actionType, "status") == 0)
         {

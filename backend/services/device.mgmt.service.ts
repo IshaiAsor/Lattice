@@ -5,7 +5,7 @@ import { userDevicesActionsRepository } from '../dal/user.devices.actions.reposi
 import { blueprintsRepository } from '../dal/blueprints.repository';
 import { googleActionTypesRepository } from '../dal/google.action.types.repository';
 import { googleTraitsRepository } from '../dal/google.action.traits.repository';
-import mqttService from './mqtt.service';
+import commandDispatch from './command.dispatch.service';
 import db from '../config/db';
 import { Prisma } from '@prisma/client';
 
@@ -233,7 +233,7 @@ class DeviceMgmtService {
 
   async deleteDevice(userId: number, deviceId: number) {
     try {
-      await mqttService.publish(userId, deviceId, 'command', 'hard-reset');
+      await commandDispatch.publishCommand(userId, deviceId, 'hard-reset', '');
     } catch (err) {
       console.warn(`[DeviceMgmt] Could not send hard-reset before deleting device ${deviceId}:`, err);
     }

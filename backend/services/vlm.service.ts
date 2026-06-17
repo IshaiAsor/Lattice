@@ -5,7 +5,6 @@ import { vlmLogRepository } from '../dal/vlm.log.repository';
 import { sensorHistoryRepository } from '../dal/sensor.history.repository';
 import { userDevicesActionsRepository } from '../dal/user.devices.actions.repository';
 import { rulesEngineService } from './rules.engine.service';
-import socketService from './socket.service';
 import crypto from 'crypto';
 
 export interface VlmDetection {
@@ -53,7 +52,7 @@ class VlmService {
     if (!action) return;
 
     if (!action.current_state) {
-      socketService.publishVlmError(userId, { type: 'stale_frame', actionId, reason: 'No frame available' });
+      // TODO(F8/F11): surface vlm_error to the UI via the new stack.
       return;
     }
 
@@ -62,11 +61,7 @@ class VlmService {
       : Infinity;
 
     if (frameAge > cfg.analysis_interval_sec * 1.5) {
-      socketService.publishVlmError(userId, {
-        type: 'stale_frame',
-        actionId,
-        reason: `Frame is ${Math.round(frameAge)}s old (interval: ${cfg.analysis_interval_sec}s)`,
-      });
+      // TODO(F8/F11): surface vlm_error (stale frame) to the UI via the new stack.
       return;
     }
 

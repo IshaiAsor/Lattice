@@ -250,16 +250,7 @@ jobs:
             -t ghcr.io/ishaiasor/lattice-firmware:latest \
             $(printf 'ghcr.io/ishaiasor/lattice-firmware@sha256:%s ' *)
 
-      # - name: Upload firmware variants to OTA Manager
-      #   run: |
-      #     VERSION="${{ needs.generate-firmware-matrix.outputs.new_tag }}"
-      #     for device_dir in firmware-staging/*/; do
-      #       device_type=$(basename "$device_dir")
-      #       firmware_file="$device_dir/firmware.bin"
-      #       echo "Uploading $device_type firmware v$VERSION to OTA Manager..."
-      #       curl -X POST https://ota.iotiotstg.duckdns.org/release \
-      #         -F "deviceType=$device_type" \
-      #         -F "version=$VERSION" \
-      #         -F "releaseNotes=Multi-device build $VERSION" \
-      #         -F "firmware=@$firmware_file"
-      #     done
+      # Firmware distribution is GitOps-driven: Kargo promotes the lattice-firmware image
+      # (firmware-staging → firmware-prod), the ota-manager init container runs entrypoint.sh
+      # to write <version>.bin + latest.json, and the ota-manager republishes the retained
+      # ota/updates/<deviceType> messages on connect. No HTTP /release from CI.

@@ -39,6 +39,16 @@ export interface DeviceStateChangedPayload {
   timestamp: string;
 }
 
+// A UI client's request to change an action's state, addressed by UserDeviceAction id
+// (the only handle the UI has). digest resolves it to a device/action/version and a
+// concrete ActionDispatchPayload.
+export interface ActionRequestedPayload {
+  userId: string;
+  actionId: number;
+  value: unknown;      // desired state value (e.g. "on", "23.5")
+  duration?: string;   // command duration hint passed through to the device
+}
+
 export interface ActionDispatchPayload {
   userId: string;
   deviceId: string;

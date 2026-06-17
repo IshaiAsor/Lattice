@@ -1,7 +1,4 @@
-// Circular import with mqtt.service is intentional and safe — neither constructor calls the other.
-// Node.js resolves the cycle before any dispatch() calls occur at runtime.
-import mqttService, { MqttChannel } from './mqtt.service';
-import socketService from './socket.service';
+import commandDispatch from './command.dispatch.service';
 import { rulesEngineService } from './rules.engine.service';
 import { userDevicesActionsRepository } from '../dal/user.devices.actions.repository';
 import { sensorHistoryRepository } from '../dal/sensor.history.repository';
@@ -35,13 +32,9 @@ class ActionHubService {
     await userDevicesActionsRepository.updateState(actionId, state);
 
     if (!options.skipMqttPublish) {
-      const channel = (action.action.mqtt_action_type ?? 'command') as MqttChannel;
-      const actionName = action.mqtt_action_name;
-      const payload = JSON.stringify({ value: state, duration: options.duration ?? '*' });
-      await mqttService.publish(userId, action.user_device_id, channel, actionName, payload);
+      const command = { value: state, duration: options.duration ?? '*' };
+      await commandDispatch.publishCommand(userId, action.user_device_id, action.mqtt_action_name, command);
     }
-
-    socketService.publishActionStateUpdate(userId, actionId, state);
 
     // Record sensor history and check emergency rules for telemetry sources (non-camera)
     if (source === 'mqtt') {

@@ -28,12 +28,11 @@ export class MgmtDeviceListComponent implements OnInit {
     this.socketService
       .onDeviceOnlineStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((res: unknown) => {
-        const data = res as { deviceId: number; state: boolean };
+      .subscribe((data) => {
         console.log('Received device state update:', data);
         const device = this.devices?.find((e) => e.id == data.deviceId);
         if (device) {
-          device.online = data.state;
+          device.online = data.online;
         } else {
           console.log(`Device with id ${data.deviceId} not found`);
         }

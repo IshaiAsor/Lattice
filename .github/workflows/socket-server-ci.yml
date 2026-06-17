@@ -1,12 +1,13 @@
-name: Build and Push OTA Manager Image
+name: Build and Push Socket Server Image
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: ['master', 'v2.2']
     paths:
-      - 'services/ota-manager/**'
-      - 'packages/logger/**'
-      - '.github/workflows/ota-manager-ci.yml'
+      - 'services/socket-server/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'tsconfig.base.json'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,12 +24,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
       - name: Bump version and push tag
         id: tag_version
         uses: anothrNick/github-tag-action@1.64.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WITH_V: true
+          DEFAULT_BRANCH: master
           DEFAULT_BUMP: patch
 
   build:
@@ -59,10 +62,10 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./services/ota-manager/Dockerfile
+          file: services/socket-server/Dockerfile
           platforms: ${{ matrix.platform }}
           push: true
-          outputs: type=image,name=ghcr.io/ishaiasor/lattice-ota-manager,push-by-digest=true,name-canonical=true
+          outputs: type=image,name=ghcr.io/ishaiasor/lattice-socket-server,push-by-digest=true,name-canonical=true
           cache-from: type=gha,scope=${{ matrix.platform-pair }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform-pair }}
       - name: Export digest
@@ -73,7 +76,7 @@ jobs:
           touch "/tmp/digests/${DIGEST#sha256:}"
       - uses: actions/upload-artifact@v4
         with:
-          name: digests-ota-manager-${{ matrix.platform-pair }}
+          name: digests-socket-server-${{ matrix.platform-pair }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -92,13 +95,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
-          pattern: digests-ota-manager-*
+          pattern: digests-socket-server-*
           merge-multiple: true
       - uses: docker/setup-buildx-action@v3
       - name: Create and push manifest
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create \
-            -t ghcr.io/ishaiasor/lattice-ota-manager:${{ needs.prepare.outputs.new_tag }} \
-            -t ghcr.io/ishaiasor/lattice-ota-manager:latest \
-            $(printf 'ghcr.io/ishaiasor/lattice-ota-manager@sha256:%s ' *)
+            -t ghcr.io/ishaiasor/lattice-socket-server:${{ needs.prepare.outputs.new_tag }} \
+            -t ghcr.io/ishaiasor/lattice-socket-server:latest \
+            $(printf 'ghcr.io/ishaiasor/lattice-socket-server@sha256:%s ' *)

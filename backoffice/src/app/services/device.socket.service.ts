@@ -16,14 +16,14 @@ export class DeviceSocketService {
   private socket: Socket;
 
   constructor() {
-    this.socket = io(environment.apiUrl, {
+    this.socket = io(environment.socketUrl, {
       auth: {
         token: this.authService.getToken()
       }
     });
   }
 
-  onDeviceOnlineStatusChange(): Observable<unknown> {
+  onDeviceOnlineStatusChange(): Observable<{ deviceId: number, online: boolean }> {
     return new Observable((observer) => {
       this.socket.on('device_status_change', (data) => {
         observer.next(data);

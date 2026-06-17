@@ -12,6 +12,10 @@ export const RK = {
   PIPELINE_TRIGGER:             'pipeline.trigger',
   PIPELINE_RESULT:              'pipeline.result',
   DEVICE_STATE_CHANGED:         'device.state.changed',
+  // A UI client's intent to change an action's state, keyed by UserDeviceAction id.
+  // digest resolves it (→ device/version/mqtt name), writes optimistic state + echoes,
+  // then publishes ACTION_DISPATCH for the device.
+  ACTION_REQUESTED:             'action.requested',
   ACTION_DISPATCH:              'action.dispatch',
   PIPELINE_STAGE_SENSOR_DIGEST: 'pipeline.stage.sensor_digest',
   PIPELINE_STAGE_COMMAND_EXEC:  'pipeline.stage.command_exec',
@@ -33,6 +37,7 @@ export const QUEUES = {
   PIPELINE_TRIGGER:             'q.pipeline.trigger',
   PIPELINE_RESULT:              'q.pipeline.result',
   DEVICE_STATE_CHANGED:         'q.device.state.changed',
+  ACTION_REQUESTED:             'q.action.requested',
   ACTION_DISPATCH:              'q.action.dispatch',
   PIPELINE_STAGE_SENSOR_DIGEST: 'q.pipeline.stage.sensor_digest',
   PIPELINE_STAGE_COMMAND_EXEC:  'q.pipeline.stage.command_exec',
@@ -62,6 +67,7 @@ const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.PIPELINE_TRIGGER,             RK.PIPELINE_TRIGGER],
   [QUEUES.PIPELINE_RESULT,              RK.PIPELINE_RESULT],
   [QUEUES.DEVICE_STATE_CHANGED,         RK.DEVICE_STATE_CHANGED],
+  [QUEUES.ACTION_REQUESTED,             RK.ACTION_REQUESTED],
   [QUEUES.ACTION_DISPATCH,              RK.ACTION_DISPATCH],
   [QUEUES.PIPELINE_STAGE_SENSOR_DIGEST, RK.PIPELINE_STAGE_SENSOR_DIGEST],
   [QUEUES.PIPELINE_STAGE_COMMAND_EXEC,  RK.PIPELINE_STAGE_COMMAND_EXEC],

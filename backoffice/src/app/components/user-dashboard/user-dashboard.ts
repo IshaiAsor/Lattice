@@ -64,13 +64,12 @@ export class UserDashboard implements OnInit {
     this.socketService
       .onDeviceOnlineStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((res: unknown) => {
-        const { deviceId, state } = res as { deviceId: number; state: boolean };
+      .subscribe(({ deviceId, online }) => {
         this.items
           .filter(i => i.kind === 'action')
           .map(i => i.action!)
           .filter(a => a.deviceId === deviceId)
-          .forEach(a => a.online = state);
+          .forEach(a => a.online = online);
       });
   }
 
