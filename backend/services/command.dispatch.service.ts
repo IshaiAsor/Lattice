@@ -8,7 +8,12 @@ import { userDevicesRepository } from '../dal/user.devices.repository';
 // q.action.dispatch and mqtt-service forwards it to the device. Lazy single channel —
 // connects on first command so startup never blocks on RabbitMQ.
 let chPromise: ReturnType<typeof connect> | null = null;
-function channel() {
+async function channel() {
+  if (chPromise) {
+    // Ensure we don't return a permanently rejected promise if connection fails once
+    try { await chPromise; } catch { chPromise = null; }
+  }
+
   if (!chPromise) chPromise = connect(config.rabbitmqUrl);
   return chPromise;
 }
@@ -36,8 +41,8 @@ class CommandDispatchService {
       firmwareVersion,
     };
     const ch = await channel();
-    publish(ch, RK.ACTION_DISPATCH, payload);
-    console.log(`📤 [CommandDispatch] action.dispatch -> device ${deviceId}/${actionName}`);
+    await publish(ch, RK.ACTION_DISPATCH, payload);
+    console.log(`📤 [CommandDispatch] action.dispatch -> device ${deviceId} (Action: ${actionName})`);
   }
 }
 

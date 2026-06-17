@@ -25,6 +25,14 @@ COPY packages/jwt/src ./src
 COPY packages/jwt/tsconfig.json ./
 RUN npm run build
 
+# Build the local @lattice/queue workspace package
+WORKDIR /app/packages/queue
+COPY packages/queue/package*.json ./
+RUN npm install
+COPY packages/queue/src ./src
+COPY packages/queue/tsconfig.json ./
+RUN npm run build
+
 WORKDIR /app/backend
 COPY backend/package*.json ./
 # Skip Prisma's postinstall (prisma generate) to avoid QEMU SIGILL on ARM64;
@@ -48,6 +56,11 @@ COPY --from=backend-build /app/backend/package*.json ./
 COPY --from=backend-build /app/packages/jwt/dist /app/packages/jwt/dist
 COPY --from=backend-build /app/packages/jwt/package.json /app/packages/jwt/package.json
 COPY --from=backend-build /app/packages/jwt/node_modules /app/packages/jwt/node_modules
+
+# Copy queue package so the node_modules symlink resolves at runtime
+COPY --from=backend-build /app/packages/queue/dist /app/packages/queue/dist
+COPY --from=backend-build /app/packages/queue/package.json /app/packages/queue/package.json
+COPY --from=backend-build /app/packages/queue/node_modules /app/packages/queue/node_modules
 COPY --from=ui-build /app/backoffice/dist/backoffice ./dist/public
 
 EXPOSE 3000
