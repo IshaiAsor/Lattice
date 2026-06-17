@@ -65,6 +65,7 @@ export class UserDashboard implements OnInit {
           action.state = data.state;
           action.pending = false;        // confirmed by the device
           this.pendingPrevState.delete(data.actionId);
+          this.snackBar.open('Device confirmed the change', 'Close', { duration: 3000 });
         }
       });
 
