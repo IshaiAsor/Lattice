@@ -113,7 +113,6 @@ void setup()
     performFactoryReset();
   }
 
-  // Initialize the global onboardLed defined in DynamicDeviceActionsService.h
   onboardLed.initPins();
   onboardLed.execute("orange");
 
