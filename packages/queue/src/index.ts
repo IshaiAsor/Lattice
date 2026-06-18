@@ -81,13 +81,18 @@ const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.OTA_DISPATCH,                 RK.OTA_DISPATCH],
 ];
 
+function withHeartbeat(url: string, seconds = 60): string {
+  if (/[?&]heartbeat=/.test(url)) return url;
+  return url + (url.includes('?') ? '&' : '?') + `heartbeat=${seconds}`;
+}
+
 /**
  * Connect to RabbitMQ, assert the exchange topology and all static queues.
  * Call once at service startup; share the returned channel across the process.
  */
 export async function connect(url?: string): Promise<Channel> {
   const conn = await amqplib.connect(
-    url ?? process.env['RABBITMQ_URL'] ?? 'amqp://localhost',
+    withHeartbeat(url ?? process.env['RABBITMQ_URL'] ?? 'amqp://localhost'),
   );
   const ch = await conn.createChannel();
 
