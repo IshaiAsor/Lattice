@@ -5,14 +5,23 @@ on:
     branches: ["main", "master"]
     paths:
       - 'prisma/**'
-      - 'ESP32Code/platformio.ini'
+  # Firmware CI bumps platformio.ini via GITHUB_TOKEN, which doesn't trigger push events
+  # in other workflows. Use workflow_run instead so a successful firmware build always
+  # rebuilds the migrations image with fresh manifests baked in.
+  workflow_run:
+    workflows: ["ESP32 Firmware CI/CD"]
+    types: [completed]
+    branches: ["main", "master"]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref || github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 jobs:
   prepare:
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
