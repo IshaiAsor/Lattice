@@ -19,7 +19,7 @@ export function deviceStatusHandler(ch: Channel): MqttHandler {
         timestamp:  new Date().toISOString(),
       };
       publish(ch, RK.DEVICE_STATE_CHANGED, msg);
-      log.trace({ topic: parsed, msg }, 'device status received and forwarded');
+      log.debug({ topic: parsed, msg }, 'device status received and forwarded');
     },
   };
 }

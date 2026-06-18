@@ -26,7 +26,7 @@ export function deviceTelemetryHandler(ch: Channel): MqttHandler {
         timestamp:  new Date().toISOString(),
       };
       publish(ch, RK.TELEMETRY_ARRIVED, msg);
-      log.trace({ topic: parsed, msg }, 'telemetry received and forwarded');
+      log.debug({ topic: parsed, msg }, 'telemetry received and forwarded');
     },
   };
 }
