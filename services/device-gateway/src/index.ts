@@ -26,6 +26,18 @@ async function main() {
   // JSON for provisioning/config; the camera route applies its own raw() parser.
   app.use(express.json());
 
+  // CORS for browser UI (Angular backoffice on a different origin/subdomain).
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && env.allowedOrigins.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+    next();
+  });
+
   app.use(healthRouter);
   app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.use('/api/provisioning', provisioningRouter);

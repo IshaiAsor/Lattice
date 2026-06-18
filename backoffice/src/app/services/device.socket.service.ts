@@ -16,7 +16,9 @@ export class DeviceSocketService {
   private socket: Socket;
 
   constructor() {
-    this.socket = io(environment.socketUrl, {
+    const socketUrl = environment.socketUrl ||
+      (environment.production ? `${window.location.protocol}//socket.${window.location.hostname}` : '');
+    this.socket = io(socketUrl, {
       auth: {
         token: this.authService.getToken()
       }

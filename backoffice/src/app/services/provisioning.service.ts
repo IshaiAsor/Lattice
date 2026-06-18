@@ -52,7 +52,10 @@ export interface ProvisioningProgress {
 })
 export class ProvisioningService {
   private apiUrl = `${environment.apiUrl}`;
-  private gatewayUrl = `${environment.deviceGatewayUrl}`;
+  private get gatewayUrl(): string {
+    return environment.deviceGatewayUrl ||
+      (environment.production ? `${window.location.protocol}//device.${window.location.hostname}` : '');
+  }
   private provisioningProgress$ = new Subject<ProvisioningProgress>();
   private http = inject(HttpClient);
 

@@ -10,7 +10,10 @@ import { GoogleActionTrait } from './google.actions.traits.service';
 })
 export class DeviceMgmtService {
   private apiUrl = `${environment.apiUrl}`;
-  private gatewayUrl = `${environment.deviceGatewayUrl}`;
+  private get gatewayUrl(): string {
+    return environment.deviceGatewayUrl ||
+      (environment.production ? `${window.location.protocol}//device.${window.location.hostname}` : '');
+  }
   private http = inject(HttpClient);
 
   getDevices(): Observable<DeviceView[]> {
@@ -153,6 +156,7 @@ export interface DeviceActionView {
   // Transient UI flag: a command was sent and is awaiting the device's ack. Set on
   // action_state_pending, cleared on action_state_update / action_state_failed. Not persisted.
   pending?: boolean;
+  status: 'active' | 'deprecated';
 }
 
 export interface DeviceActionPinView {

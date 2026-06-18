@@ -70,7 +70,8 @@
               "buildTarget": "backoffice:build:production"
             },
             "development": {
-              "buildTarget": "backoffice:build:development"
+              "buildTarget": "backoffice:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

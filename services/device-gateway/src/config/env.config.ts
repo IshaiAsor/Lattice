@@ -10,6 +10,9 @@ export const env = {
   DeviceGatewaybaseUrl: process.env['DEVICE_GATEWAY_URL'] ?? 'http://localhost:3004',
   otaManagerUrl:        process.env['OTA_MANAGER_URL'] ?? 'http://localhost:3001',
 
+  // Comma-separated origins allowed to make cross-origin requests from the browser UI.
+  allowedOrigins: (process.env['ALLOWED_ORIGINS'] ?? 'http://localhost:4200').split(',').map(s => s.trim()),
+
   mqtt: {
     serverName:   process.env['MQTT_SERVER_NAME'] ?? 'localhost',
     port:         parseInt(process.env['MQTT_PORT'] ?? '8883', 10),

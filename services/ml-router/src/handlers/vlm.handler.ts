@@ -93,6 +93,18 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutp
     na = columnar ? dims[2]! : dims[1]!;
   }
 
+  // Diagnostic: log dims and sample raw values so layout issues are visible in service logs.
+  // Sample the "class score" field for the first anchor in each possible layout so the
+  // correct one (values in logit range ~-10..+10) is identifiable.
+  const sampleColumnar   = data[4 * na + 0];          // field-4 row, anchor 0
+  const sampleTransposed = data[0 * (4 + nc) + 4];    // anchor 0, field 4
+  console.log('[vlm]', JSON.stringify({
+    dims: Array.from(dims), nc, na, columnar,
+    dataLen: data.length,
+    sampleColumnar,    // should be a logit (~-10..10) if layout is columnar
+    sampleTransposed,  // should be a logit (~-10..10) if layout is transposed
+  }));
+
   function getVal(anchor: number, field: number): number {
     return columnar
       ? data[field * na + anchor]!
@@ -100,6 +112,9 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutp
   }
 
   // Class scores are raw logits — apply sigmoid before thresholding.
+  // If the model fuses sigmoid into the ONNX graph the scores will already be in [0,1]
+  // and applying sigmoid again flattens everything toward 0.7; if you see that, remove
+  // this call and use the raw score directly.
   const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
 
   const detections: Detection[] = [];
@@ -110,12 +125,15 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutp
       const score = sigmoid(getVal(a, 4 + c));
       if (score > bestScore) { bestScore = score; bestClass = c; }
     }
-    if (bestScore < CONF_THRESHOLD) continue;
+    // NaN arises from out-of-bounds reads (na slightly larger than actual anchor count).
+    if (!isFinite(bestScore) || bestScore < CONF_THRESHOLD) continue;
 
     const cx = getVal(a, 0);
     const cy = getVal(a, 1);
     const w  = getVal(a, 2);
     const h  = getVal(a, 3);
+    // Skip degenerate boxes — zero/negative w or h breaks IOU and produces garbage output.
+    if (!isFinite(cx) || !isFinite(cy) || w <= 0 || h <= 0) continue;
     detections.push({
       label: model.classes?.[bestClass] ?? String(bestClass),
       confidence: bestScore,
