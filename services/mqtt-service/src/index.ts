@@ -13,7 +13,7 @@ import { actionDispatchConsumer } from './consumers/action-dispatch.consumer';
 import { otaDispatchConsumer } from './consumers/ota-dispatch.consumer';
 import { healthRouter } from './routes/health.routes';
 
-initOTel('mqtt-service');
+const { metricsHandler } = initOTel('mqtt-service');
 const log = createLogger('mqtt-service');
 
 async function main() {
@@ -59,6 +59,7 @@ async function main() {
 
   const app = express();
   app.use(healthRouter);
+  app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.listen(env.port, () => log.info({ port: env.port }, 'mqtt-service listening'));
 }
 

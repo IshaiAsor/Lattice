@@ -12,7 +12,7 @@ import { initCameraStream } from './ws/camera-stream';
 import { exceptionMiddleware } from './middlewares/exception.middleware';
 
 // OTel must be initialised before any other imports that could create spans.
-initOTel('device-gateway');
+const { metricsHandler } = initOTel('device-gateway');
 
 const log = createLogger('device-gateway');
 
@@ -26,6 +26,7 @@ async function main() {
   app.use(express.json());
 
   app.use(healthRouter);
+  app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.use('/api/provisioning', provisioningRouter);
   app.use('/api/device', deviceConfigurationRouter);
   app.use('/api/camera', cameraRouter);

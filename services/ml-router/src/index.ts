@@ -8,7 +8,7 @@ import { inferRouter } from './routes/infer.routes';
 import { setupModelQueues } from './queue/setup';
 
 // OTel must be initialised before any other imports that could create spans.
-initOTel('ml-router');
+const { metricsHandler } = initOTel('ml-router');
 
 const log = createLogger('ml-router');
 
@@ -22,6 +22,7 @@ async function main() {
   const app = express();
   app.use(express.json({ limit: '20mb' }));
   app.use(healthRouter);
+  app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.use(inferRouter);
 
   app.listen(env.port, () => {

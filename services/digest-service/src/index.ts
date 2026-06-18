@@ -12,7 +12,7 @@ import { actionResultConsumer } from './consumers/action-result.consumer';
 import { otaIncomingConsumer } from './consumers/ota-incoming.consumer';
 import { healthRouter } from './routes/health.routes';
 
-initOTel('digest-service');
+const { metricsHandler } = initOTel('digest-service');
 const log = createLogger('digest-service');
 
 async function main() {
@@ -34,6 +34,7 @@ async function main() {
 
   const app = express();
   app.use(healthRouter);
+  app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.listen(env.port, () => log.info({ port: env.port }, 'digest-service listening'));
 }
 

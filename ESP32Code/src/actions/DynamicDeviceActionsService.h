@@ -101,7 +101,7 @@ private:
         Serial.printf("[Config] Command action '%s' (%s):\n",
                       ac.mqtt_action_name.c_str(), ac.implementation_type.c_str());
 
-        if (ac.implementation_type == "OutletAction")
+        if (ac.implementation_type == "OutletCommandAction")
         {
             if (!validateAndLogPins(ac, OutletCommandAction::blueprint())) return nullptr;
             logSupportedTraits(OutletCommandAction::supportedTraits());

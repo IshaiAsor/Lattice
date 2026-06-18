@@ -8,7 +8,7 @@ import { initSocket } from './socket/server';
 import { healthRouter } from './routes/health.routes';
 import { exceptionMiddleware } from './middlewares/exception.middleware';
 
-initOTel('socket-server');
+const { metricsHandler } = initOTel('socket-server');
 const log = createLogger('socket-server');
 
 async function main() {
@@ -17,6 +17,7 @@ async function main() {
 
   const app = express();
   app.use(healthRouter);
+  app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.use(exceptionMiddleware);
 
   const server = http.createServer(app);

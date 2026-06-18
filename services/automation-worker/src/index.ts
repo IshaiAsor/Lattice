@@ -9,7 +9,7 @@ import { rulesEvaluateConsumer } from './consumers/rules-evaluate.consumer';
 import { rulesEngine } from './services/rules.engine';
 import { healthRouter } from './routes/health.routes';
 
-initOTel('automation-worker');
+const { metricsHandler } = initOTel('automation-worker');
 const log = createLogger('automation-worker');
 
 async function main() {
@@ -27,6 +27,7 @@ async function main() {
 
   const app = express();
   app.use(healthRouter);
+  app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.listen(env.port, () => log.info({ port: env.port }, 'automation-worker listening'));
 }
 

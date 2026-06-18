@@ -1,5 +1,5 @@
 import { initOTel } from '@lattice/otel';
-initOTel('google-home');
+const { metricsHandler } = initOTel('google-home');
 
 import { createLogger } from '@lattice/logger';
 import { connect, consume, QUEUES } from '@lattice/queue';
@@ -27,6 +27,7 @@ async function main() {
   app.use(express.json());
 
   app.use('/health', healthRouter);
+  app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.use('/api/google', googleAuthRouter);
   app.use('/api/google/smarthome', createSmarthomeRouter(ch));
 
