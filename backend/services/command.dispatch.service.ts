@@ -8,13 +8,25 @@ import { userDevicesRepository } from '../dal/user.devices.repository';
 // q.action.dispatch and mqtt-service forwards it to the device. Lazy single channel —
 // connects on first command so startup never blocks on RabbitMQ.
 let chPromise: ReturnType<typeof connect> | null = null;
+
+function resetChannel() { chPromise = null; }
+
 async function channel() {
   if (chPromise) {
-    // Ensure we don't return a permanently rejected promise if connection fails once
+    // If the connection attempt itself failed, start fresh.
     try { await chPromise; } catch { chPromise = null; }
   }
 
-  if (!chPromise) chPromise = connect(config.rabbitmqUrl);
+  if (!chPromise) {
+    chPromise = connect(config.rabbitmqUrl).then((ch) => {
+      // Reset so the next call reconnects if the channel or its connection is closed.
+      ch.on('close', resetChannel);
+      ch.on('error', resetChannel);
+      (ch as any).connection?.on('close', resetChannel);
+      (ch as any).connection?.on('error', resetChannel);
+      return ch;
+    });
+  }
   return chPromise;
 }
 
@@ -40,8 +52,19 @@ class CommandDispatchService {
       command,
       firmwareVersion,
     };
-    const ch = await channel();
-    await publish(ch, RK.ACTION_DISPATCH, payload);
+    let ch = await channel();
+    try {
+      publish(ch, RK.ACTION_DISPATCH, payload);
+    } catch (err: any) {
+      // Channel closed between the health-check and the publish — reset and retry once.
+      if (err?.name === 'IllegalOperationError') {
+        resetChannel();
+        ch = await channel();
+        publish(ch, RK.ACTION_DISPATCH, payload);
+      } else {
+        throw err;
+      }
+    }
     console.log(`📤 [CommandDispatch] action.dispatch -> device ${deviceId} (Action: ${actionName})`);
   }
 }

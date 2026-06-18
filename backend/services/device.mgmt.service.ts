@@ -19,6 +19,7 @@ export interface BlueprintInstanceView {
   mqttName: string;
   pins: { pinNumber: number; pinMode: string }[] | null;
   intervalMs: number | null;
+  status: string;
 }
 
 export interface BlueprintView {
@@ -40,6 +41,8 @@ export interface DeviceView {
   lastOnlineDate?: Date;
   type: string;
   version: string;
+  current_firmware_version: string | null;
+  update_available: boolean;
 }
 
 class DeviceMgmtService {
@@ -78,7 +81,18 @@ class DeviceMgmtService {
   async getUserDevices(userId: number): Promise<DeviceView[]> {
     const devices = await userDevicesRepository.getUserDevices(userId);
 
+    // Resolve the latest catalog version per device type (one query per unique type).
+    const uniqueTypes = [...new Set(devices.map((d: any) => d.device.type as string))];
+    const latestVersions = new Map<string, string>();
+    await Promise.all(
+      uniqueTypes.map(async (type) => {
+        const latest = await db.device.findFirst({ where: { type }, orderBy: { created_at: 'desc' } });
+        if (latest) latestVersions.set(type, latest.version);
+      }),
+    );
+
     return devices.map((device: any) => {
+      const latestVersion = latestVersions.get(device.device.type) ?? device.device.version;
       return {
         id: device.id,
         deviceName: device.name,
@@ -86,6 +100,8 @@ class DeviceMgmtService {
         lastOnlineDate: device.last_online_date || undefined,
         type: device.device.type || '',
         version: device.device.version || '',
+        current_firmware_version: device.current_firmware_version ?? null,
+        update_available: device.device.version !== latestVersion,
       };
     });
   }
@@ -124,6 +140,7 @@ class DeviceMgmtService {
           mqttName: ua.mqtt_action_name,
           pins: (ua.pins ?? ua.action.pins ?? null) as { pinNumber: number; pinMode: string }[] | null,
           intervalMs: ua.telemetry_interval_ms ?? null,
+          status: ua.status,
         })),
       };
     });

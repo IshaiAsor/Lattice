@@ -177,8 +177,8 @@ services:
   #   docker compose run --rm migrate
   migrate:
     build:
-      context: ./prisma
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: prisma/Dockerfile
     environment:
       - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
       - MQTT_APP_USERNAME=${MQTT_APP_USERNAME}
@@ -196,8 +196,8 @@ services:
   #   docker compose run --rm generate
   generate:
     build:
-      context: ./prisma
-      dockerfile: Dockerfile     
+      context: .
+      dockerfile: prisma/Dockerfile
     command: npx prisma generate
     profiles:
       - generate

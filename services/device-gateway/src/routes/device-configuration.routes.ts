@@ -13,13 +13,12 @@ deviceConfigurationRouter.get(
   '/configuration',
   requireDeviceToken(JwtPurpose.device_usage),
   async (req, res) => {
-    const version = String(req.query.version);
-    const deviceId = String(req.query.deviceId);
-    if (!version || version === 'undefined' ||!deviceId || deviceId === 'undefined') {
-      res.status(400).json({ error: 'Missing version or deviceId in URL' });
+    const deviceId = req.device?.deviceId ?? req.query.deviceId;
+    if (!deviceId) {
+      res.status(400).json({ error: 'Missing deviceId' });
       return;
     }
-    const config = await deviceConfigurationService.getConfigurationForDevice(Number(deviceId), version);
+    const config = await deviceConfigurationService.getConfigurationForDevice(Number(deviceId));
     res.json(config);
   },
 );

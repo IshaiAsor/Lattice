@@ -8,10 +8,11 @@
 class OneDirectionalMotorAction : public BaseCommandAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::fan().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::fan().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::fan().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::fan().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::fan().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::fan(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::fan(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int in1PinNumber;
@@ -25,11 +26,6 @@ public:
         in1PinNumber = pins.size() > 0 ? pins[0].PIN_NUMBER : 0;
         in2PinNumber = pins.size() > 1 ? pins[1].PIN_NUMBER : 0;
         pwmPinNumber = pins.size() > 2 ? pins[2].PIN_NUMBER : 0;
-    }
-
-    void initPins() override
-    {
-        BaseCommandAction::initPins();
     }
 
     void executeValidAction(String action) override

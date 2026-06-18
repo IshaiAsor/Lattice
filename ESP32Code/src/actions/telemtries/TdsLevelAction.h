@@ -7,10 +7,11 @@
 class TdsLevelAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::tdsLevel().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::tdsLevel().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::tdsLevel().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::tdsLevel().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::tdsLevel().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::tdsLevel(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::tdsLevel(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int sensorPin;
@@ -21,8 +22,6 @@ public:
     {
         sensorPin = pins.empty() ? 0 : pins[0].PIN_NUMBER;
     }
-
-    void initPins() override {}
 
     String executeTelemetryAction() override
     {

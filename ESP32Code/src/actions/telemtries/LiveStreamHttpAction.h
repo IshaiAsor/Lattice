@@ -16,10 +16,11 @@ extern HttpFrameService httpFrameService;
 class LiveStreamHttpAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::cameraHttpStream().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::cameraHttpStream().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::cameraHttpStream().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::cameraHttpStream().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::cameraHttpStream().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::cameraHttpStream(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::cameraHttpStream(); }
+    static const char* implType()               { return capability().implType; }
 
 protected:
     String executeTelemetryAction() override

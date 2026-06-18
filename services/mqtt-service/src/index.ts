@@ -36,6 +36,8 @@ async function main() {
   log.info({ topics: SUBSCRIBE_TOPICS }, 'subscribed to MQTT topics');
 
   const ch = await connect(env.rabbitmqUrl);
+  ch.on('close', () => { log.error('RabbitMQ channel closed — exiting for restart'); process.exit(1); });
+  (ch as any).connection?.on('close', () => { log.error('RabbitMQ connection closed — exiting for restart'); process.exit(1); });
   log.info('RabbitMQ connected');
 
   const handlers = [

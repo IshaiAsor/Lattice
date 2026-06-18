@@ -96,29 +96,33 @@ private:
         Serial.printf("[Config]   Supported traits: %s\n", traitList.c_str());
     }
 
+    template<typename T>
+    BaseCommandAction* tryCreateCmd(const ActionConfig& ac)
+    {
+        if (strcmp(ac.implementation_type.c_str(), T::implType()) != 0) return nullptr;
+        if (!validateAndLogPins(ac, T::blueprint())) return nullptr;
+        logSupportedTraits(T::supportedTraits());
+        return new T(ac.mqtt_action_name, ac.pins);
+    }
+
+    template<typename T>
+    BaseTelemetryAction* tryCreateTel(const ActionConfig& ac, int interval)
+    {
+        if (strcmp(ac.implementation_type.c_str(), T::implType()) != 0) return nullptr;
+        if (!validateAndLogPins(ac, T::blueprint())) return nullptr;
+        logSupportedTraits(T::supportedTraits());
+        return new T(ac.mqtt_action_name, ac.pins, interval);
+    }
+
     BaseCommandAction* createCommandAction(const ActionConfig& ac)
     {
         Serial.printf("[Config] Command action '%s' (%s):\n",
                       ac.mqtt_action_name.c_str(), ac.implementation_type.c_str());
 
-        if (ac.implementation_type == "OutletCommandAction")
-        {
-            if (!validateAndLogPins(ac, OutletCommandAction::blueprint())) return nullptr;
-            logSupportedTraits(OutletCommandAction::supportedTraits());
-            return new OutletCommandAction(ac.mqtt_action_name, ac.pins);
-        }
-        if (ac.implementation_type == "OneDirectionalMotorAction")
-        {
-            if (!validateAndLogPins(ac, OneDirectionalMotorAction::blueprint())) return nullptr;
-            logSupportedTraits(OneDirectionalMotorAction::supportedTraits());
-            return new OneDirectionalMotorAction(ac.mqtt_action_name, ac.pins);
-        }
-        if (ac.implementation_type == "LightDimmerAction")
-        {
-            if (!validateAndLogPins(ac, LightDimmerAction::blueprint())) return nullptr;
-            logSupportedTraits(LightDimmerAction::supportedTraits());
-            return new LightDimmerAction(ac.mqtt_action_name, ac.pins);
-        }
+        if (auto* a = tryCreateCmd<OutletCommandAction>(ac))       return a;
+        if (auto* a = tryCreateCmd<OneDirectionalMotorAction>(ac)) return a;
+        if (auto* a = tryCreateCmd<LightDimmerAction>(ac))         return a;
+
         Serial.println("[Config] Unknown command type: " + ac.implementation_type);
         return nullptr;
     }
@@ -129,74 +133,20 @@ private:
         Serial.printf("[Config] Telemetry action '%s' (%s), interval: %d ms:\n",
                       ac.mqtt_action_name.c_str(), ac.implementation_type.c_str(), interval);
 
-        if (ac.implementation_type == "TemperatureAction")
-        {
-            if (!validateAndLogPins(ac, TemperatureAction::blueprint())) return nullptr;
-            logSupportedTraits(TemperatureAction::supportedTraits());
-            return new TemperatureAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "WaterLevelAction")
-        {
-            if (!validateAndLogPins(ac, WaterLevelAction::blueprint())) return nullptr;
-            logSupportedTraits(WaterLevelAction::supportedTraits());
-            return new WaterLevelAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "PhLevelAction")
-        {
-            if (!validateAndLogPins(ac, PhLevelAction::blueprint())) return nullptr;
-            logSupportedTraits(PhLevelAction::supportedTraits());
-            return new PhLevelAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "TdsLevelAction")
-        {
-            if (!validateAndLogPins(ac, TdsLevelAction::blueprint())) return nullptr;
-            logSupportedTraits(TdsLevelAction::supportedTraits());
-            return new TdsLevelAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "HumidityAction")
-        {
-            if (!validateAndLogPins(ac, HumidityAction::blueprint())) return nullptr;
-            logSupportedTraits(HumidityAction::supportedTraits());
-            return new HumidityAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "AirTemperatureAction")
-        {
-            if (!validateAndLogPins(ac, AirTemperatureAction::blueprint())) return nullptr;
-            logSupportedTraits(AirTemperatureAction::supportedTraits());
-            return new AirTemperatureAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "CO2LevelAction")
-        {
-            if (!validateAndLogPins(ac, CO2LevelAction::blueprint())) return nullptr;
-            logSupportedTraits(CO2LevelAction::supportedTraits());
-            return new CO2LevelAction(ac.mqtt_action_name, ac.pins, interval);
-        }
+        if (auto* a = tryCreateTel<TemperatureAction>(ac, interval))    return a;
+        if (auto* a = tryCreateTel<WaterLevelAction>(ac, interval))     return a;
+        if (auto* a = tryCreateTel<PhLevelAction>(ac, interval))        return a;
+        if (auto* a = tryCreateTel<TdsLevelAction>(ac, interval))       return a;
+        if (auto* a = tryCreateTel<HumidityAction>(ac, interval))       return a;
+        if (auto* a = tryCreateTel<AirTemperatureAction>(ac, interval)) return a;
+        if (auto* a = tryCreateTel<CO2LevelAction>(ac, interval))       return a;
 #ifdef HAS_CAMERA
-        if (ac.implementation_type == "TakePictureAction")
-        {
-            validateAndLogPins(ac, TakePictureAction::blueprint());
-            logSupportedTraits(TakePictureAction::supportedTraits());
-            return new TakePictureAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "LiveStreamAction")
-        {
-            validateAndLogPins(ac, LiveStreamAction::blueprint());
-            logSupportedTraits(LiveStreamAction::supportedTraits());
-            return new LiveStreamAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "TakePictureHttpAction")
-        {
-            validateAndLogPins(ac, TakePictureHttpAction::blueprint());
-            logSupportedTraits(TakePictureHttpAction::supportedTraits());
-            return new TakePictureHttpAction(ac.mqtt_action_name, ac.pins, interval);
-        }
-        if (ac.implementation_type == "LiveStreamHttpAction")
-        {
-            validateAndLogPins(ac, LiveStreamHttpAction::blueprint());
-            logSupportedTraits(LiveStreamHttpAction::supportedTraits());
-            return new LiveStreamHttpAction(ac.mqtt_action_name, ac.pins, interval);
-        }
+        if (auto* a = tryCreateTel<TakePictureAction>(ac, interval))     return a;
+        if (auto* a = tryCreateTel<LiveStreamAction>(ac, interval))      return a;
+        if (auto* a = tryCreateTel<TakePictureHttpAction>(ac, interval)) return a;
+        if (auto* a = tryCreateTel<LiveStreamHttpAction>(ac, interval))  return a;
 #endif
+
         Serial.println("[Config] Unknown telemetry type: " + ac.implementation_type);
         return nullptr;
     }

@@ -7,6 +7,7 @@ import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { MgmtDeviceEdit } from '../mgmt-device-edit/mgmt-device-edit';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DeviceUpdateDialogComponent } from '../device-update-dialog/device-update-dialog.component';
 
 @Component({
   imports: [SHARED_MATERIAL],
@@ -107,6 +108,16 @@ export class MgmtDeviceListComponent implements OnInit {
     this.deviceMgmtService.restartDevice(device.id).subscribe({
       next: () => this.snackBar.open('Restart command sent', 'close', { duration: 2000 }),
       error: () => this.snackBar.open('Failed to send restart command', 'close', { duration: 3000 }),
+    });
+  }
+
+  updateFirmware(device: DeviceView) {
+    const dialogRef = this.dialog.open(DeviceUpdateDialogComponent, {
+      width: '440px',
+      data: { device },
+    });
+    dialogRef.afterClosed().subscribe((updated) => {
+      if (updated) this.loadDevices();
     });
   }
 

@@ -10,6 +10,7 @@ import { GoogleActionTrait } from './google.actions.traits.service';
 })
 export class DeviceMgmtService {
   private apiUrl = `${environment.apiUrl}`;
+  private gatewayUrl = `${environment.deviceGatewayUrl}`;
   private http = inject(HttpClient);
 
   getDevices(): Observable<DeviceView[]> {
@@ -46,6 +47,14 @@ export class DeviceMgmtService {
 
   restartDevice(deviceId: number): Observable<void> {
     return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/restart`, {});
+  }
+
+  getUpdatePreview(deviceId: number): Observable<UpdatePreview | { up_to_date: true }> {
+    return this.http.get<UpdatePreview | { up_to_date: true }>(`${this.gatewayUrl}/api/devices/${deviceId}/update-preview`);
+  }
+
+  applyUpdate(deviceId: number): Observable<{ ok: true }> {
+    return this.http.post<{ ok: true }>(`${this.gatewayUrl}/api/devices/${deviceId}/apply-update`, {});
   }
 
   getDeviceBlueprints(deviceId: number): Observable<BlueprintView[]> {
@@ -87,6 +96,7 @@ export interface BlueprintInstanceView {
   mqttName: string;
   pins: { pinNumber: number; pinMode: string }[] | null;
   intervalMs: number | null;
+  status: 'active' | 'deprecated';
 }
 
 export interface BlueprintView {
@@ -104,11 +114,26 @@ export interface BlueprintView {
 export interface DeviceView {
   id: number;
   deviceName: string;
-  status: number;
   online: boolean;
   lastOnlineDate: Date;
   type: string;
   version: string;
+  current_firmware_version: string | null;
+  update_available: boolean;
+}
+
+export interface ActionPreview {
+  id: number;
+  name: string;
+  mqttName: string;
+  status: 'ok' | 'deprecated';
+  reason?: string;
+}
+
+export interface UpdatePreview {
+  current_version: string;
+  new_version: string;
+  actions: ActionPreview[];
 }
 
 export interface DeviceActionView {

@@ -7,10 +7,11 @@
 class CO2LevelAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::co2Level().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::co2Level().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::co2Level().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::co2Level().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::co2Level().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::co2Level(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::co2Level(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     HardwareSerial _serial;

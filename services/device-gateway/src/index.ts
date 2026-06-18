@@ -7,6 +7,7 @@ import { initQueue } from './queue';
 import { healthRouter } from './routes/health.routes';
 import { provisioningRouter } from './routes/provisioning.routes';
 import { deviceConfigurationRouter } from './routes/device-configuration.routes';
+import { deviceUpdateRouter } from './routes/device-update.routes';
 import { cameraRouter } from './routes/camera.routes';
 import { initCameraStream } from './ws/camera-stream';
 import { exceptionMiddleware } from './middlewares/exception.middleware';
@@ -29,6 +30,7 @@ async function main() {
   app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.use('/api/provisioning', provisioningRouter);
   app.use('/api/device', deviceConfigurationRouter);
+  app.use('/api/devices', deviceUpdateRouter);
   app.use('/api/camera', cameraRouter);
 
   app.use(exceptionMiddleware);

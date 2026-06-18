@@ -123,6 +123,29 @@
 .menu-delete { color: #e53935; }
 .menu-delete mat-icon { color: #e53935; }
 
+.menu-update { color: #1976d2; }
+.menu-update mat-icon { color: #1976d2; }
+
+/* ── Update badge ────────────────────────────────────────────────── */
+.update-badge {
+  display: flex;
+  align-items: center;
+  color: #1976d2;
+  flex-shrink: 0;
+}
+
+.update-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ── Card body ───────────────────────────────────────────────────── */
 .card-content {
   flex: 1;

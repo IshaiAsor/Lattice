@@ -233,3 +233,24 @@ mat-list-item.selected {
   border-left-color: #f57c00;
   border: 1px solid #f57c00;
 }
+
+.deprecated-card {
+  border: 1px solid #ffe0b2;
+  background: #fffde7;
+  opacity: 0.85;
+}
+
+.deprecated-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #ef6c00;
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 8px;
+  vertical-align: middle;
+}

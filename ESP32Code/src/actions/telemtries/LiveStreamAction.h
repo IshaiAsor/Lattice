@@ -16,10 +16,11 @@ extern LiveStreamService liveStreamService;
 class LiveStreamAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::camera().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::camera().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::camera().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::camera().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::camera().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::camera(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::camera(); }
+    static const char* implType()               { return capability().implType; }
 
 protected:
     String executeTelemetryAction() override

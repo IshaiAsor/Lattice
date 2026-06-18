@@ -7,10 +7,11 @@
 class PhLevelAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::phLevel().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::phLevel().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::phLevel().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::phLevel().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::phLevel().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::phLevel(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::phLevel(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int sensorPin;
@@ -21,8 +22,6 @@ public:
     {
         sensorPin = pins.empty() ? 0 : pins[0].PIN_NUMBER;
     }
-
-    void initPins() override {}
 
     String executeTelemetryAction() override
     {

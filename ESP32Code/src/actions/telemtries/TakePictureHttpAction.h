@@ -16,10 +16,11 @@ extern HttpFrameService httpFrameService;
 class TakePictureHttpAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::cameraHttpCapture().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::cameraHttpCapture().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::cameraHttpCapture().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::cameraHttpCapture().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::cameraHttpCapture().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::cameraHttpCapture(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::cameraHttpCapture(); }
+    static const char* implType()               { return capability().implType; }
 
 protected:
     String executeTelemetryAction() override

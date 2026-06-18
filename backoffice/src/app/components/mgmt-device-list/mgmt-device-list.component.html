@@ -11,6 +11,11 @@
                 <span class="material-symbols-outlined device-icon">developer_board</span>
                 <span class="card-name">{{ device.deviceName }}</span>
                 <span class="header-spacer"></span>
+                @if (device.update_available) {
+                  <span class="update-badge" matTooltip="New firmware version available">
+                    <mat-icon class="update-icon">system_update</mat-icon>
+                  </span>
+                }
                 <span class="status-dot" [class.online]="device.online" [class.offline]="!device.online"
                     [matTooltip]="device.online ? 'Online' : 'Offline'"></span>
                 <button mat-icon-button [matMenuTriggerFor]="deviceMenu" class="card-menu-btn">
@@ -21,6 +26,12 @@
                         <mat-icon>edit</mat-icon>
                         <span>Rename</span>
                     </button>
+                    @if (device.update_available) {
+                      <button mat-menu-item (click)="updateFirmware(device)" class="menu-update">
+                          <mat-icon>system_update</mat-icon>
+                          <span>Update Device</span>
+                      </button>
+                    }
                     <button mat-menu-item (click)="restartDevice(device)">
                         <mat-icon>power_settings_new</mat-icon>
                         <span>Restart</span>

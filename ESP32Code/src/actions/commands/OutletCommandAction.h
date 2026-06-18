@@ -8,10 +8,11 @@
 class OutletCommandAction : public BaseCommandAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::outlet().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::outlet().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::outlet().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::outlet().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::outlet().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::outlet(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::outlet(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int outletPinNumber;
@@ -23,7 +24,6 @@ public:
         outletPinNumber = pins.empty() ? 0 : pins[0].PIN_NUMBER;
     }
 
-    void initPins() override {}
 
     void executeValidAction(String action) override
     {

@@ -8,10 +8,11 @@
 class LightDimmerAction : public BaseCommandAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::dimmer().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::dimmer().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::dimmer().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::dimmer().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::dimmer().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::dimmer(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::dimmer(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int dimmerPinNumber;
@@ -21,11 +22,6 @@ public:
         : BaseCommandAction(name, pins, {"off", "on"}, true, 0, 100)
     {
         dimmerPinNumber = pins.empty() ? 0 : pins[0].PIN_NUMBER;
-    }
-
-    void initPins() override
-    {
-        BaseCommandAction::initPins();
     }
 
     void executeValidAction(String action) override

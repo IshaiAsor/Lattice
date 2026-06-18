@@ -16,10 +16,11 @@ extern LiveStreamService wsCaptureService;
 class TakePictureAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::cameraWsCapture().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::cameraWsCapture().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::cameraWsCapture().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::cameraWsCapture().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::cameraWsCapture().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::cameraWsCapture(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::cameraWsCapture(); }
+    static const char* implType()               { return capability().implType; }
 
 protected:
     String executeTelemetryAction() override

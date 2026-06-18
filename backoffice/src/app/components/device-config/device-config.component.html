@@ -70,9 +70,16 @@
         }
         <div class="bp-grid">
           @for (item of activeInstances; track item.instance.id) {
-            <mat-card class="bp-card active-card" [class.editing]="editingInstanceId === item.instance.id">
+            <mat-card class="bp-card active-card"
+              [class.editing]="editingInstanceId === item.instance.id"
+              [class.deprecated-card]="item.instance.status === 'deprecated'">
               <mat-card-header>
-                <mat-card-title>{{ item.instance.name }}</mat-card-title>
+                <mat-card-title>
+                  {{ item.instance.name }}
+                  @if (item.instance.status === 'deprecated') {
+                    <span class="deprecated-badge" matTooltip="This action is incompatible with the current firmware version">deprecated</span>
+                  }
+                </mat-card-title>
                 <mat-card-subtitle>
                   <span class="chip" [class.telemetry]="item.bp.mqtt_action_type === 'telemetry'">{{ typeChip(item.bp) }}</span>
                   <span class="impl-type">{{ item.bp.implementation_type }}</span>
@@ -142,7 +149,9 @@
                     [disabled]="!canSaveEdit(item.bp)"
                     (click)="saveEdit(item.bp, item.instance)">Save</button>
                 } @else {
-                  <button mat-icon-button matTooltip="Edit" (click)="startEdit(item.bp, item.instance)">
+                  <button mat-icon-button matTooltip="Edit"
+                    [disabled]="item.instance.status === 'deprecated'"
+                    (click)="startEdit(item.bp, item.instance)">
                     <mat-icon>edit</mat-icon>
                   </button>
                   <button mat-button color="warn" (click)="removeAction(item.bp, item.instance)">

@@ -52,6 +52,7 @@ export interface ProvisioningProgress {
 })
 export class ProvisioningService {
   private apiUrl = `${environment.apiUrl}`;
+  private gatewayUrl = `${environment.deviceGatewayUrl}`;
   private provisioningProgress$ = new Subject<ProvisioningProgress>();
   private http = inject(HttpClient);
 
@@ -101,7 +102,7 @@ export class ProvisioningService {
     const CHAR_UUID = 'abcdef01-1234-5678-1234-56789abcdef0';
 
     return this.http
-      .get<ProvisionTokenResponse>(`${this.apiUrl}/api/provisioning/provision-token`)
+      .get<ProvisionTokenResponse>(`${this.gatewayUrl}/api/provisioning/provision-token`)
       .pipe(
         switchMap((result) =>
           from(

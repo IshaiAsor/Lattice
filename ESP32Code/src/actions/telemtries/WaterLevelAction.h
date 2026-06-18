@@ -7,10 +7,11 @@
 class WaterLevelAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::waterLevel().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::waterLevel().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::waterLevel().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::waterLevel().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::waterLevel().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::waterLevel(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::waterLevel(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int sensorPin;
@@ -21,8 +22,6 @@ public:
     {
         sensorPin = pins.empty() ? 0 : pins[0].PIN_NUMBER;
     }
-
-    void initPins() override {}
 
     String executeTelemetryAction() override
     {

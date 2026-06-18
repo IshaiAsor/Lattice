@@ -8,10 +8,11 @@
 class HumidityAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::humidity().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::humidity().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::humidity().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::humidity().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::humidity().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::humidity(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::humidity(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int sdaPin;

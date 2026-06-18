@@ -129,13 +129,14 @@ export async function assertMlQueue(
   return queue;
 }
 
-export function publish<T>(ch: Channel, routingKey: string, payload: T): boolean {
-  return ch.publish(
+export function publish<T>(ch: Channel, routingKey: string, payload: T): void {
+  const ok = ch.publish(
     EXCHANGE,
     routingKey,
     Buffer.from(JSON.stringify(payload)),
     { persistent: true, contentType: 'application/json' },
   );
+  if (!ok) throw new Error(`RabbitMQ publish rejected (flow control / channel not writable) for routing key: ${routingKey}`);
 }
 
 export async function consume<T>(

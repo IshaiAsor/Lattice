@@ -10,10 +10,11 @@
 class TemperatureAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::temperature().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::temperature().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::temperature().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::temperature().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::temperature().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::temperature(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::temperature(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int pinNumber;
@@ -42,8 +43,6 @@ public:
     {
         initSensor(pins.empty() ? 0 : pins[0].PIN_NUMBER);
     }
-
-    void initPins() override {}
 
     String executeTelemetryAction() override
     {

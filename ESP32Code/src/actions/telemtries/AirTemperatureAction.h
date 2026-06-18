@@ -8,10 +8,11 @@
 class AirTemperatureAction : public BaseTelemetryAction
 {
 public:
-    static const PinSlotDef* blueprint() { return CapabilityRegistry::airTemp().pins; }
-    static const char* googleActionType() { return CapabilityRegistry::airTemp().googleType; }
+    static const PinSlotDef* blueprint()        { return CapabilityRegistry::airTemp().pins; }
+    static const char* googleActionType()       { return CapabilityRegistry::airTemp().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::airTemp().traits; }
-    static CapabilityDescriptor capability() { return CapabilityRegistry::airTemp(); }
+    static CapabilityDescriptor capability()    { return CapabilityRegistry::airTemp(); }
+    static const char* implType()               { return capability().implType; }
 
 private:
     int sdaPin;

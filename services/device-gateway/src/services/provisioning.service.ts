@@ -49,11 +49,7 @@ class ProvisioningService {
       );
     }
 
-    // 2. Cross-check the device-reported capabilities against the catalog (log-only).
-    //    The catalog is authoritative; a mismatch flags tampering or a stale build.
-    await this.warnOnCapabilityMismatch(device.id, deviceType, version, capabilities);
-
-    // 3. Upsert user_device by mac_id.
+    // 2. Upsert user_device by mac_id.
     const userDevice = await db.userDevice.upsert({
       where: { mac_id: macAddress },
       update: { user_id: userId, device_type_id: device.id },
@@ -64,28 +60,6 @@ class ProvisioningService {
     const tokenData = this.generatePermanentToken(userId, userDevice.id, version);
     log.debug({ userId, macAddress, deviceType, version, tokenData }, 'provisioned device');
     return tokenData;
-  }
-
-  private async warnOnCapabilityMismatch(
-    deviceId: number,
-    deviceType: string,
-    version: string,
-    reported: CapabilityInput[],
-  ) {
-    const blueprints = await db.deviceCapabilityBlueprint.findMany({
-      where: { device_id: deviceId },
-      select: { capability_key: true },
-    });
-    const catalogKeys = new Set(blueprints.map((b) => b.capability_key));
-    const reportedKeys = new Set(reported.map((c) => c.capability_key));
-    const extra = [...reportedKeys].filter((k) => !catalogKeys.has(k));
-    const missing = [...catalogKeys].filter((k) => !reportedKeys.has(k));
-    if (extra.length || missing.length) {
-      log.warn(
-        { deviceType, version, extra, missing },
-        'device-reported capabilities differ from catalog manifest',
-      );
-    }
   }
 
   refreshMqttToken(refreshToken: string) {
