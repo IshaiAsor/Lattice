@@ -29,6 +29,7 @@ export async function writeScalarState(
   const { userId, deviceId, actionName, value, timestamp } = input;
   const stateValue = asString(value);
 
+  log.info({ userActionId, userId, deviceId, actionName, value }, 'writing scalar state');
   // 1. Authoritative state write — failure nacks → DLQ.
   await db.userDeviceAction.update({
     where: { id: userActionId },

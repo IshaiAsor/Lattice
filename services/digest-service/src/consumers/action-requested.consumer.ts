@@ -25,6 +25,7 @@ export function actionRequestedConsumer(ch: Channel) {
     const row = await db.userDeviceAction.findUnique({
       where:  { id: actionId },
       select: {
+        current_state:   true,
         user_device_id:   true,
         mqtt_action_name: true,
         user_device: { select: { device: { select: { version: true } } } },
@@ -68,6 +69,7 @@ export function actionRequestedConsumer(ch: Channel) {
     };
     try {
       publish(ch, RK.ACTION_DISPATCH, dispatch);
+      log.info({ actionId, commandId }, 'action.dispatch published');
     } catch (err) {
       log.error({ err, actionId }, 'action.dispatch publish failed');
     }
@@ -79,7 +81,7 @@ export function actionRequestedConsumer(ch: Channel) {
         .then((pending) => {
           if (pending === null) return; // already acked
           log.warn({ actionId, commandId }, 'command timed out with no device ack → failed');
-          socket.emitActionStateFailed(parseInt(userId, 10), actionId, commandId);
+          socket.emitActionStateFailed(parseInt(userId, 10), actionId, commandId, row.current_state);
         })
         .catch((err) => log.error({ err, commandId }, 'pending timeout resolution failed'));
     });

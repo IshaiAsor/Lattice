@@ -50,7 +50,7 @@ export class DeviceSocketService {
   }
 
   // The device rejected the command or never acked within the timeout — no state changed.
-  onActionStateFailed(): Observable<{ actionId: number, commandId: string }> {
+  onActionStateFailed(): Observable<{ actionId: number, commandId: string ,lastState?: unknown }> {
     return new Observable((observer) => {
       this.socket.on('action_state_failed', (data) => {
         observer.next(data);

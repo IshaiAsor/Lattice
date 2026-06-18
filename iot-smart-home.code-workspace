@@ -2,60 +2,60 @@
   "folders": [
     {
       "name": "ESP32 Firmware",
-      "path": "ESP32Code",
+      "path": "ESP32Code"
     },
     {
       "name": "GITOPS",
-      "path": "../oci-k3s-gitops",
+      "path": "../oci-k3s-gitops"
     },
     {
       "name": "Project Root",
-      "path": ".",
+      "path": "."
     },
     {
       "name": "Backend API",
-      "path": "backend",
+      "path": "backend"
     },
     {
       "name": "Backoffice UI",
-      "path": "backoffice",
+      "path": "backoffice"
     },
     {
       "name": "Prisma",
-      "path": "prisma",
+      "path": "prisma"
     },
     {
       "name": "ML Router",
-      "path": "services/ml-router",
+      "path": "services/ml-router"
     },
     {
       "name": "Device Gateway",
-      "path": "services/device-gateway",
+      "path": "services/device-gateway"
     },
     {
       "name": "MQTT Service",
-      "path": "services/mqtt-service",
+      "path": "services/mqtt-service"
     },
     {
       "name": "Digest Service",
-      "path": "services/digest-service",
+      "path": "services/digest-service"
     },
     {
       "name": "Socket Server",
-      "path": "services/socket-server",
+      "path": "services/socket-server"
     },
     {
       "name": "OTA Manager",
-      "path": "services/ota-manager",
+      "path": "services/ota-manager"
     },
     {
       "name": "Automation Worker",
-      "path": "services/automation-worker",
+      "path": "services/automation-worker"
     },
     {
       "name": "Google Home",
-      "path": "services/google-home",
-    },
+      "path": "services/google-home"
+    }
   ],
   "settings": {
     "files.exclude": {

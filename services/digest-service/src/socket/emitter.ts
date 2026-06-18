@@ -27,10 +27,11 @@ export const socket = {
   },
   // The device rejected the command or never acked within the timeout. The UI reverts the
   // pending toggle; no DB state was written.
-  emitActionStateFailed(userId: number, userDeviceActionId: number, commandId: string): void {
+  emitActionStateFailed(userId: number, userDeviceActionId: number, commandId: string,lastState?: unknown): void {
     emitter.to(`user_${userId}`).emit('action_state_failed', {
       actionId: userDeviceActionId,
       commandId,
+      lastState
     });
   },
   emitDeviceStatusChange(userId: number, userDeviceId: number, online: boolean): void {

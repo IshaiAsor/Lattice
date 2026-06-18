@@ -90,7 +90,7 @@ export class UserDashboard implements OnInit {
         const action = this.findAction(data.actionId);
         if (action) {
           if (this.pendingPrevState.has(data.actionId)) {
-            action.state = this.pendingPrevState.get(data.actionId);
+            action.state = data.lastState;
             this.pendingPrevState.delete(data.actionId);
           }
           action.pending = false;
