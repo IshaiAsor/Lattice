@@ -23,7 +23,7 @@
           <div class="device-item">
             <div class="device-info">
               <span class="device-name">{{ device.deviceName }}</span>
-              <span class="device-meta">{{ device.type }} · v{{ device.version }}</span>
+              <span class="device-meta">{{ device.type }} · {{ device.version }}</span>
             </div>
             <span class="status-dot" [class.online]="device.online" [class.offline]="!device.online"
               [matTooltip]="device.online ? 'Online' : 'Offline'"></span>

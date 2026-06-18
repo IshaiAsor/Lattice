@@ -71,29 +71,51 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutp
   const session = await getSession(model.modelFile!);
   const tensor = new ort.Tensor('float32', float32, [1, 3, 640, 640]);
   const results = await session.run({ [session.inputNames[0]!]: tensor });
-  const outputData = results[session.outputNames[0]!]?.data as Float32Array | undefined;
+  const outTensor = results[session.outputNames[0]!];
+  const outputData = outTensor?.data as Float32Array | undefined;
   if (!outputData) return { detections: [] };
+  const data: Float32Array = outputData;
 
-  // Ultralytics YOLO11 ONNX output: [1, 4+nc, na]
-  // Rows 0–3: cx, cy, w, h (pixel coords in 640×640 space)
-  // Rows 4…: class scores (sigmoid already applied)
   const nc = model.classes?.length ?? 0;
-  const na = outputData.length / (4 + nc);
+  const dims = outTensor!.dims;
+
+  // Ultralytics YOLO11 ONNX exports in one of two layouts, with or without batch dim:
+  //   [1, 4+nc, na] or [4+nc, na]  — columnar (default simplify export)
+  //   [1, na, 4+nc] or [na, 4+nc]  — transposed (some export configs)
+  // For 2D output the batch dim is squeezed; detect layout from the remaining dims.
+  let columnar: boolean;
+  let na: number;
+  if (dims.length === 2) {
+    columnar = dims[0] === 4 + nc;
+    na = columnar ? dims[1]! : dims[0]!;
+  } else {
+    columnar = dims[1] === 4 + nc;
+    na = columnar ? dims[2]! : dims[1]!;
+  }
+
+  function getVal(anchor: number, field: number): number {
+    return columnar
+      ? data[field * na + anchor]!
+      : data[anchor * (4 + nc) + field]!;
+  }
+
+  // Class scores are raw logits — apply sigmoid before thresholding.
+  const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
 
   const detections: Detection[] = [];
   for (let a = 0; a < na; a++) {
     let bestClass = 0;
-    let bestScore = outputData[4 * na + a]!;
+    let bestScore = sigmoid(getVal(a, 4));
     for (let c = 1; c < nc; c++) {
-      const score = outputData[(4 + c) * na + a]!;
+      const score = sigmoid(getVal(a, 4 + c));
       if (score > bestScore) { bestScore = score; bestClass = c; }
     }
     if (bestScore < CONF_THRESHOLD) continue;
 
-    const cx = outputData[0 * na + a]!;
-    const cy = outputData[1 * na + a]!;
-    const w  = outputData[2 * na + a]!;
-    const h  = outputData[3 * na + a]!;
+    const cx = getVal(a, 0);
+    const cy = getVal(a, 1);
+    const w  = getVal(a, 2);
+    const h  = getVal(a, 3);
     detections.push({
       label: model.classes?.[bestClass] ?? String(bestClass),
       confidence: bestScore,
