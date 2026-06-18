@@ -41,3 +41,4 @@ main().catch((err) => {
   console.error('[google-home] Fatal startup error:', err);
   process.exit(1);
 });
+
