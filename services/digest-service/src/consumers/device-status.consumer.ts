@@ -17,10 +17,11 @@ export function deviceStatusConsumer() {
     const online = state === true;
     const userDeviceId = parseInt(deviceId, 10);
 
+    log.trace({ userId, deviceId, online }, 'device.status received');
     // 1. Authoritative liveness write — failure nacks → DLQ.
     await db.userDevice.update({
       where: { id: userDeviceId },
-      data:  { online, last_online_date: new Date(timestamp) },
+      data: { online, last_online_date: new Date(timestamp) },
     });
 
     // 2. Hot cache (best-effort).

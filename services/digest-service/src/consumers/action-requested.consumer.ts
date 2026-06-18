@@ -21,6 +21,7 @@ const log = createLogger('digest-service:action-requested');
 export function actionRequestedConsumer(ch: Channel) {
   return async (payload: ActionRequestedPayload): Promise<void> => {
     const { userId, actionId, value, duration } = payload;
+    log.trace({ userId, actionId, value, duration }, 'action.requested received');
 
     const row = await db.userDeviceAction.findUnique({
       where:  { id: actionId },
@@ -69,7 +70,6 @@ export function actionRequestedConsumer(ch: Channel) {
     };
     try {
       publish(ch, RK.ACTION_DISPATCH, dispatch);
-      log.info({ actionId, commandId }, 'action.dispatch published');
     } catch (err) {
       log.error({ err, actionId }, 'action.dispatch publish failed');
     }

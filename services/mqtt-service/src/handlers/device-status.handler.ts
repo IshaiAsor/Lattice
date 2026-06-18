@@ -2,6 +2,9 @@ import type { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
 import type { DeviceStateChangedPayload } from '@lattice/queue';
 import type { MqttHandler } from './handler.interface';
+import { createLogger } from '@lattice/logger';
+
+const log = createLogger('mqtt-service:device-status');
 
 export function deviceStatusHandler(ch: Channel): MqttHandler {
   return {
@@ -16,6 +19,7 @@ export function deviceStatusHandler(ch: Channel): MqttHandler {
         timestamp:  new Date().toISOString(),
       };
       publish(ch, RK.DEVICE_STATE_CHANGED, msg);
+      log.trace({ topic: parsed, msg }, 'device status received and forwarded');
     },
   };
 }

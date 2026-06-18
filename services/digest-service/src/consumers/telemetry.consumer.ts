@@ -17,6 +17,8 @@ export function telemetryConsumer(ch: Channel) {
   return async (payload: TelemetryArrivedPayload): Promise<void> => {
     const { userId, deviceId, actionName, value, timestamp } = payload;
 
+    log.trace({ userId, deviceId, actionName, value, timestamp }, 'telemetry received');
+
     // Resolve to the UserDeviceAction id + kind (Valkey cache → DB join fallback).
     const resolved = await resolveUserDeviceAction(deviceId, actionName);
 

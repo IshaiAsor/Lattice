@@ -2,6 +2,9 @@ import type { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
 import type { TelemetryArrivedPayload } from '@lattice/queue';
 import type { MqttHandler } from './handler.interface';
+import { createLogger } from '@lattice/logger';
+
+const log = createLogger('mqtt-service:device-telemetry');
 
 function tryParseJson(raw: string): unknown {
   try {
@@ -23,6 +26,7 @@ export function deviceTelemetryHandler(ch: Channel): MqttHandler {
         timestamp:  new Date().toISOString(),
       };
       publish(ch, RK.TELEMETRY_ARRIVED, msg);
+      log.trace({ topic: parsed, msg }, 'telemetry received and forwarded');
     },
   };
 }
