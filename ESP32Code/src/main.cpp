@@ -65,6 +65,7 @@ BLECharacteristic *pCharacteristic;
 DynamicDeviceActionsService deviceActionsService;
 extern OnboardLedAction onboardLed;
 
+
 // Command actions report execution here; route it to the device's ack MQTT topic so the
 // backend writes the authoritative state only after the device actually executed.
 AckPublisherFn ackPublisher = [](const char *actionName, const char *commandId, bool ok, const char *value)
