@@ -72,8 +72,7 @@ export class UserDashboard implements OnInit {
           if (isLatest) {
             action.pending = false;
             this.latestCommandId.delete(data.actionId);
-            this.pendingPrevState.delete(data.actionId);
-            this.snackBar.open('Device confirmed the change', 'Close', { duration: 3000 });
+            this.pendingPrevState.delete(data.actionId);        
           }
         }
       });

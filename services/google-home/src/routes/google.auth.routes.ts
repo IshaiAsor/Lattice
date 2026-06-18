@@ -14,7 +14,7 @@ const jwtService = new JwtService(config.jwt.secret, {
   [JwtPurpose.google_cloud_to_cloud_login_refresh]: config.jwt.googleCloudToCloudLoginRefreshExpiresIn,
 });
 
-const authRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+const authRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }) as unknown as express.RequestHandler;
 
 router.get('/auth', (req: Request, res: Response) => {
   const { redirect_uri, state, client_id, response_type } = req.query as Record<string, string>;

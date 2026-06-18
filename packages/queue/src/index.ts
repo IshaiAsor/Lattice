@@ -43,6 +43,7 @@ export const QUEUES = {
   ACTION_REQUESTED:             'q.action.requested',
   ACTION_DISPATCH:              'q.action.dispatch',
   ACTION_RESULT:                'q.action.result',
+  ACTION_RESULT_GOOGLE_HOME:    'q.action.result.google-home',
   PIPELINE_STAGE_SENSOR_DIGEST: 'q.pipeline.stage.sensor_digest',
   PIPELINE_STAGE_COMMAND_EXEC:  'q.pipeline.stage.command_exec',
   PIPELINE_STAGE_DONE:          'q.pipeline.stage.done',
@@ -74,6 +75,7 @@ const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.ACTION_REQUESTED,             RK.ACTION_REQUESTED],
   [QUEUES.ACTION_DISPATCH,              RK.ACTION_DISPATCH],
   [QUEUES.ACTION_RESULT,                RK.ACTION_RESULT],
+  [QUEUES.ACTION_RESULT_GOOGLE_HOME,    RK.ACTION_RESULT],
   [QUEUES.PIPELINE_STAGE_SENSOR_DIGEST, RK.PIPELINE_STAGE_SENSOR_DIGEST],
   [QUEUES.PIPELINE_STAGE_COMMAND_EXEC,  RK.PIPELINE_STAGE_COMMAND_EXEC],
   [QUEUES.PIPELINE_STAGE_DONE,          RK.PIPELINE_STAGE_DONE],
@@ -136,7 +138,10 @@ export function publish<T>(ch: Channel, routingKey: string, payload: T): void {
     Buffer.from(JSON.stringify(payload)),
     { persistent: true, contentType: 'application/json' },
   );
-  if (!ok) throw new Error(`RabbitMQ publish rejected (flow control / channel not writable) for routing key: ${routingKey}`);
+  if (!ok) 
+    {
+      throw new Error(`RabbitMQ publish rejected (flow control / channel not writable) for routing key: ${routingKey}`);
+    }
 }
 
 export async function consume<T>(
