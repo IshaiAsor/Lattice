@@ -18,8 +18,7 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      contents: write
     outputs:
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
