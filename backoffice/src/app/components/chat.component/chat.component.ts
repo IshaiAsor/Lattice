@@ -24,6 +24,7 @@ export class ChatComponent {
   constructor() {
     effect(() => {
       // Access the signal to register the dependency
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const _ = this.chatService.messages();
 
       // Schedule scroll adjustment immediately after the DOM renders the changes
