@@ -1,5 +1,4 @@
 <nav class="navbar">
-
   <!-- Brand -->
   <a class="nav-brand" routerLink="/">
     <mat-icon class="brand-icon">hub</mat-icon>
@@ -25,7 +24,13 @@
       <mat-icon>settings_suggest</mat-icon>
       <span>Device Config</span>
     </a>
-    <a class="nav-link"  (click)="openAIEditor()" routerLinkActive="active">
+    <a
+      class="nav-link"
+      (click)="openAIEditor()"
+      (keyup.enter)="openAIEditor()"
+      tabindex="0"
+      routerLinkActive="active"
+    >
       <mat-icon>auto_awesome</mat-icon>
       <span>Ask qwen</span>
     </a>
@@ -45,7 +50,7 @@
       <span class="user-name">{{ user.username }}</span>
       <button mat-icon-button [matMenuTriggerFor]="profileMenu" class="profile-btn" disableRipple>
         @if (user.profileImage) {
-          <img [src]="user.profileImage" class="nav-profile-pic" alt="Profile picture">
+          <img [src]="user.profileImage" class="nav-profile-pic" alt="Profile picture" />
         } @else {
           <mat-icon>account_circle</mat-icon>
         }
@@ -68,7 +73,6 @@
       <span>Sign in</span>
     </a>
   }
-
 </nav>
 
 <div class="page-container">
