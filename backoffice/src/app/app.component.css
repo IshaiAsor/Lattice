@@ -223,6 +223,19 @@
 
 @media (max-width: 1024px) { .collapse-btn { display: none; } }
 
+/* On tablet the sidebar is forced to 64px by CSS, but sidebarCollapsed() signal
+   stays false so labels/profile render in DOM. Mirror the collapsed state via CSS. */
+@media (max-width: 1024px) {
+  .brand-name               { display: none; }
+  .nav-section-label        { display: none; }
+  .sidebar-link span        { display: none; }
+  .sidebar-link             { justify-content: center; padding: 9px; gap: 0; }
+  .profile-info             { display: none; }
+  .profile-menu-btn         { display: none; }
+  .sidebar-profile          { justify-content: center; padding: 8px 4px; }
+  .sidebar-footer           { flex-direction: column; gap: 4px; justify-content: center; }
+}
+
 /* ── Main content ─────────────────────────────────────────────────── */
 .app-main {
   margin-left: var(--nav-width);
@@ -293,6 +306,24 @@
 
 .tab-item.active .tab-icon-wrap {
   background: var(--nav-active-bg);
+}
+
+/* Profile avatar tab item */
+.tab-avatar-img {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--border-strong);
+}
+
+.tab-avatar-initials {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--nav-active-bg);
+  border: 1.5px solid var(--primary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  color: var(--primary);
 }
 
 /* Active indicator pill on bottom bar */

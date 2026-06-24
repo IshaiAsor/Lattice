@@ -46,6 +46,9 @@
   --warning:       #f5a623;
   --error:         #ef5350;
   --info:          var(--primary);
+  --offline-overlay-bg:   rgba(230, 236, 255, 0.94);
+  --offline-overlay-icon: #4f5a72;
+  --offline-overlay-text: #6b7a8d;
 
   /* Stage chip colors */
   --stage-vlm:     #7c3aed;
@@ -80,9 +83,12 @@
   --border:        rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.15);
 
-  --card-bg:       rgba(255, 255, 255, 0.055);
+  --card-bg:       rgba(255, 255, 255, 0.08);
   --card-shadow:   0 8px 40px rgba(0, 0, 0, 0.55);
   --card-shadow-hover: 0 12px 48px rgba(0, 0, 0, 0.65);
+  --offline-overlay-bg:   rgba(6, 10, 22, 0.92);
+  --offline-overlay-icon: #8fa0b8;
+  --offline-overlay-text: #a0b0c4;
 }
 
 /* ── Reset ────────────────────────────────────────────────────────────── */
@@ -181,3 +187,59 @@ app-root {
 .mat-mdc-row:hover .mat-mdc-cell { background: var(--surface-alt) !important; }
 .mat-mdc-header-row { background: var(--surface-alt) !important; }
 .mat-mdc-cell, .mat-mdc-header-cell { border-color: var(--border) !important; color: var(--text) !important; }
+
+/* ── Glassmorphism dialog ─────────────────────────────────────────────── */
+.glass-dialog .mat-mdc-dialog-container {
+  --mdc-dialog-container-color: var(--card-bg);
+  --mdc-dialog-subhead-color: var(--text);
+  --mdc-dialog-supporting-text-color: var(--text-muted);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: 20px !important;
+  box-shadow: var(--card-shadow);
+}
+
+.glass-dialog .mat-mdc-dialog-surface {
+  background: transparent !important;
+  border-radius: 20px !important;
+}
+
+.glass-dialog .mat-mdc-dialog-title {
+  color: var(--text) !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  padding: 20px 20px 8px !important;
+}
+
+.glass-dialog .mat-mdc-dialog-content {
+  padding: 8px 20px !important;
+  max-height: none !important;
+}
+
+.glass-dialog .mat-mdc-dialog-actions {
+  padding: 8px 20px 16px !important;
+  gap: 8px;
+}
+
+/* Form field inside glass dialog */
+.glass-dialog .mat-mdc-text-field-wrapper {
+  background: var(--surface-alt) !important;
+  border-radius: 10px !important;
+}
+
+.glass-dialog .mdc-text-field--outlined .mdc-notched-outline__leading,
+.glass-dialog .mdc-text-field--outlined .mdc-notched-outline__notch,
+.glass-dialog .mdc-text-field--outlined .mdc-notched-outline__trailing {
+  border-color: var(--border-strong) !important;
+}
+
+.glass-dialog .mdc-text-field--focused .mdc-notched-outline__leading,
+.glass-dialog .mdc-text-field--focused .mdc-notched-outline__notch,
+.glass-dialog .mdc-text-field--focused .mdc-notched-outline__trailing {
+  border-color: var(--primary) !important;
+}
+
+.glass-dialog .mat-mdc-input-element { color: var(--text) !important; }
+.glass-dialog .mat-mdc-floating-label { color: var(--text-muted) !important; }

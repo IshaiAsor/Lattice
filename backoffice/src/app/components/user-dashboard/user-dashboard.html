@@ -1,6 +1,41 @@
-<div class="header">
-    <h1>Dashboard</h1>
+<div class="dash-header">
+  <div>
+    <h1 class="dash-title">Dashboard</h1>
+    <p class="dash-sub">{{ devicesOnline }} of {{ devicesTotal }} devices online</p>
+  </div>
 </div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-icon-row">
+      <div class="stat-icon stat-icon-primary"><mat-icon>device_hub</mat-icon></div>
+    </div>
+    <div class="stat-value">{{ devicesOnline }}<span class="stat-denom"> / {{ devicesTotal }}</span></div>
+    <div class="stat-label">Devices Online</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon-row">
+      <div class="stat-icon stat-icon-purple"><mat-icon>bolt</mat-icon></div>
+    </div>
+    <div class="stat-value">{{ activeRules }}</div>
+    <div class="stat-label">Active Automations</div>
+  </div>
+  <div class="stat-card" [class.stat-card-alert]="emergencyAlerts > 0">
+    <div class="stat-icon-row">
+      <div class="stat-icon stat-icon-red"><mat-icon>warning</mat-icon></div>
+    </div>
+    <div class="stat-value" [class.stat-value-alert]="emergencyAlerts > 0">{{ emergencyAlerts }}</div>
+    <div class="stat-label">Emergency Alerts</div>
+  </div>
+  <div class="stat-card" [class.stat-card-warn]="firmwareUpdates > 0">
+    <div class="stat-icon-row">
+      <div class="stat-icon stat-icon-orange"><mat-icon>system_update</mat-icon></div>
+    </div>
+    <div class="stat-value" [class.stat-value-warn]="firmwareUpdates > 0">{{ firmwareUpdates }}</div>
+    <div class="stat-label">Firmware Updates</div>
+  </div>
+</div>
+
 <div class="card-grid" cdkDropList cdkDropListOrientation="mixed" cdkDropListSortingDisabled
      (cdkDropListDropped)="drop($event)">
     @for (item of items; track itemTrackId(item); let i = $index) {

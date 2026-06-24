@@ -1,8 +1,9 @@
 import { Component, DestroyRef, HostListener, inject, OnInit } from '@angular/core';
-import { DeviceActionView } from 'src/app/services/device.mgmt.service';
+import { DeviceActionView, DeviceMgmtService } from 'src/app/services/device.mgmt.service';
 import { hasTrait, COLOR_OPTIONS, iconForAction } from 'src/app/utils/device-type.utils';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { ActionGroupView, DashboardItem, UserActionsService } from 'src/app/services/user.actions.service';
+import { UserRulesService } from 'src/app/services/user.rules.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
@@ -14,6 +15,8 @@ import { CameraDisplayComponent } from '../camera-display/camera-display.compone
 import { GroupBottomSheetComponent } from '../group-bottom-sheet/group-bottom-sheet.component';
 import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop';
 import { forkJoin } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { environment } from 'src/environments/environment';
 
 // Dial geometry constants
 const CX = 60, CY = 52, R = 36;
@@ -38,14 +41,25 @@ export class UserDashboard implements OnInit {
   dialog = inject(MatDialog);
   snackBar = inject(MatSnackBar);
   bottomSheet = inject(MatBottomSheet);
+  private deviceMgmtService = inject(DeviceMgmtService);
+  private rulesService = inject(UserRulesService);
+  private http = inject(HttpClient);
 
   items: DashboardItem[] = [];
   isDragging = false;
   draggingIndex = -1;
   groupDropTargetIndex: number | null = null;
 
+  // Stat card values
+  devicesOnline = 0;
+  devicesTotal = 0;
+  activeRules = 0;
+  emergencyAlerts = 0;
+  firmwareUpdates = 0;
+
   private lastPointerPos = { x: 0, y: 0 };
   private draggingActionId: number | null = null;
+  private deviceOnlineState = new Map<number, boolean>();
 
   // Prior action.state for in-flight commands, so action_state_failed can revert the UI.
   private pendingPrevState = new Map<number, unknown>();
@@ -58,6 +72,7 @@ export class UserDashboard implements OnInit {
 
   ngOnInit(): void {
     this.loadActions();
+    this.loadStats();
 
     this.socketService
       .onActionStateUpdate()
@@ -123,7 +138,29 @@ export class UserDashboard implements OnInit {
           .map(i => i.action!)
           .filter(a => a.deviceId === deviceId)
           .forEach(a => a.online = online);
+
+        const wasOnline = this.deviceOnlineState.get(deviceId);
+        if (wasOnline !== undefined && wasOnline !== online) {
+          this.deviceOnlineState.set(deviceId, online);
+          this.devicesOnline = Math.max(0, this.devicesOnline + (online ? 1 : -1));
+        }
       });
+  }
+
+  private loadStats() {
+    this.deviceMgmtService.getDevices().subscribe(devices => {
+      this.devicesTotal = devices.length;
+      this.devicesOnline = devices.filter(d => d.online).length;
+      this.firmwareUpdates = devices.filter(d => d.update_available).length;
+      for (const d of devices) this.deviceOnlineState.set(d.id, d.online);
+    });
+
+    this.rulesService.getRules().subscribe(rules => {
+      this.activeRules = rules.filter(r => r.enabled).length;
+    });
+
+    this.http.get<{ id: number }[]>(`${environment.apiUrl}/api/emergency/events?limit=50`)
+      .subscribe({ next: events => { this.emergencyAlerts = events.length; } });
   }
 
   private loadActions() {
@@ -333,6 +370,7 @@ export class UserDashboard implements OnInit {
     );
     const ref = this.dialog.open(RenameActionDialogComponent, {
       width: '320px',
+      panelClass: 'glass-dialog',
       data: { name: group.name, title: 'Rename Group' },
     });
     ref.afterClosed().subscribe((newName: string | undefined) => {
@@ -369,6 +407,7 @@ export class UserDashboard implements OnInit {
   renameAction(action: DeviceActionView) {
     const ref = this.dialog.open(RenameActionDialogComponent, {
       width: '320px',
+      panelClass: 'glass-dialog',
       data: { name: action.name },
     });
     ref.afterClosed().subscribe((newName: string | undefined) => {

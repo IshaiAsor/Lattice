@@ -1,36 +1,178 @@
 .material-symbols-outlined {
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 24;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-/* ── Card grid layout ───────────────────────────────────────────── */
+/* ── Page header ─────────────────────────────────────────────────── */
+.dash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 24px 0;
+}
+
+.dash-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin: 0;
+}
+
+.dash-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+/* ── Stat cards row ──────────────────────────────────────────────── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 20px 24px 0;
+}
+
+@media (max-width: 1024px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 599px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); padding: 14px 12px 0; gap: 10px; }
+  .dash-header { padding: 16px 12px 0; }
+}
+
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: box-shadow 0.15s;
+}
+
+.stat-card:hover { box-shadow: var(--card-shadow-hover); }
+
+.stat-card-alert {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.stat-card-warn {
+  border-color: rgba(251, 146, 60, 0.3);
+  background: rgba(251, 146, 60, 0.06);
+}
+
+.dark-theme .stat-card-alert { background: rgba(239, 68, 68, 0.08); }
+.dark-theme .stat-card-warn  { background: rgba(251, 146, 60, 0.08); }
+
+.stat-icon-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.stat-icon-primary { background: rgba(79, 70, 229, 0.12); }
+.stat-icon-primary mat-icon { color: var(--primary); }
+
+.stat-icon-purple { background: rgba(139, 92, 246, 0.12); }
+.stat-icon-purple mat-icon { color: #8b5cf6; }
+
+.stat-icon-red { background: rgba(239, 68, 68, 0.12); }
+.stat-icon-red mat-icon { color: #ef4444; }
+
+.stat-icon-orange { background: rgba(251, 146, 60, 0.12); }
+.stat-icon-orange mat-icon { color: #f97316; }
+
+.dark-theme .stat-icon-primary { background: rgba(56, 189, 248, 0.12); }
+.dark-theme .stat-icon-primary mat-icon { color: #38bdf8; }
+
+.stat-value {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--text);
+  line-height: 1;
+}
+
+.stat-denom {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.stat-value-alert { color: #ef4444; }
+.stat-value-warn  { color: #f97316; }
+
+.stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ── Card grid layout ────────────────────────────────────────────── */
 .card-grid {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  padding: 8px;
+  padding: 20px 14px 24px;
 }
 
-/* ── Card wrapper (drag target) ─────────────────────────────────── */
+/* ── Card wrapper (drag target) ──────────────────────────────────── */
 .device-card-wrapper {
   position: relative;
   display: flex;
   flex-direction: row;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   overflow: hidden;
   margin: 10px;
   width: 240px;
   height: 300px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.15s;
 }
 
-/* ── Left drag rail ─────────────────────────────────────────────── */
+/* Tablet: narrower cards so 3 fit per row in the 64px-offset content area */
+@media (max-width: 1024px) {
+  .device-card-wrapper { width: 196px; height: 270px; margin: 8px; }
+  .card-grid { padding: 16px 10px 20px; }
+}
+
+/* Phone: 2-column grid, fixed height so height:100% on .device-card resolves correctly */
+@media (max-width: 599px) {
+  .card-grid { padding: 12px 6px 16px; }
+  .device-card-wrapper {
+    width: calc(50% - 12px);
+    height: 180px;
+    margin: 6px;
+  }
+  .drag-placeholder { width: calc(50% - 12px); margin: 6px; }
+  .stat-value { font-size: 24px; }
+  .stat-icon { width: 34px; height: 34px; }
+}
+
+/* ── Left drag rail ──────────────────────────────────────────────── */
 .drag-rail {
-  width: 16px;
-  background: #f0f0f0;
+  width: 14px;
+  background: var(--surface-alt);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -40,8 +182,8 @@
   transition: background 0.15s;
 }
 
-.drag-rail:hover { background: #e0e0e0; }
-.drag-rail:active { cursor: grabbing; background: #d6d6d6; }
+.drag-rail:hover { background: var(--border-strong); }
+.drag-rail:active { cursor: grabbing; }
 
 .drag-rail-dots {
   display: flex;
@@ -53,43 +195,45 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #bdbdbd;
+  background: var(--text-dim);
 }
 
-.drag-rail:hover .drag-rail-dots span { background: #9e9e9e; }
+.drag-rail:hover .drag-rail-dots span { background: var(--text-muted); }
 
-/* ── Card shell (plain div) ─────────────────────────────────────── */
+/* ── Card shell ──────────────────────────────────────────────────── */
 .device-card {
   flex: 1;
   height: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
   border-left: none;
   box-sizing: border-box;
 }
 
-/* ── Card header ────────────────────────────────────────────────── */
+/* ── Card header ─────────────────────────────────────────────────── */
 .card-header {
   display: flex;
   align-items: center;
   padding: 10px 6px 8px 12px;
   gap: 6px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border);
 }
 
 .device-icon {
   font-size: 18px;
-  color: #757575;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .card-name {
   font-size: 13px;
-  font-weight: 500;
-  color: #212121;
+  font-weight: 600;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -106,11 +250,11 @@
 }
 
 .status-dot.online {
-  background: #4caf50;
-  box-shadow: 0 0 4px rgba(76, 175, 80, 0.5);
+  background: var(--online);
+  box-shadow: 0 0 5px var(--online-glow);
 }
 
-.status-dot.offline { background: #9e9e9e; }
+.status-dot.offline { background: var(--offline); }
 
 .card-menu-btn {
   width: 28px !important;
@@ -121,10 +265,10 @@
 
 .card-menu-btn mat-icon {
   font-size: 16px;
-  color: #9e9e9e;
+  color: var(--text-muted);
 }
 
-/* ── Card body ──────────────────────────────────────────────────── */
+/* ── Card body ───────────────────────────────────────────────────── */
 .card-content {
   flex: 1;
   min-height: 0;
@@ -137,17 +281,16 @@
   padding: 12px;
 }
 
-/* Command dispatched, awaiting the device's ack — soft pulse until confirmed/failed. */
 .card-content.pending {
   animation: card-pending-pulse 1s ease-in-out infinite;
 }
 
 @keyframes card-pending-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+  50% { opacity: 0.5; }
 }
 
-/* ── Offline overlay ────────────────────────────────────────────── */
+/* ── Offline overlay ─────────────────────────────────────────────── */
 .offline-overlay {
   position: absolute;
   inset: 0;
@@ -156,9 +299,8 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(2px);
-  color: #9e9e9e;
+  background: var(--offline-overlay-bg);
+  color: var(--text-muted);
   z-index: 1;
 }
 
@@ -166,23 +308,18 @@
   font-size: 28px;
   width: 28px;
   height: 28px;
-  color: #bdbdbd;
+  color: var(--offline-overlay-icon);
 }
 
 .offline-overlay span {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #9e9e9e;
+  color: var(--offline-overlay-text);
 }
 
-/* Dial fills the full column width */
-.card-content .speed-dial {
-  width: 100%;
-}
-
-/* ── Power button (OnOff) ───────────────────────────────────────── */
+/* ── Power button ────────────────────────────────────────────────── */
 .control-onoff {
   display: flex;
   justify-content: center;
@@ -193,9 +330,9 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  border: 2px solid #e0e0e0;
-  background: #fafafa;
-  color: #bdbdbd;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-alt);
+  color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -211,20 +348,16 @@
 }
 
 .power-btn:hover {
-  border-color: #bdbdbd;
-  background: #f5f5f5;
+  border-color: var(--primary);
+  background: var(--nav-active-bg);
+  color: var(--primary);
 }
 
 .power-btn.on {
-  background: #e8f5e9;
-  border-color: #4caf50;
-  color: #4caf50;
-  box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.12);
-}
-
-.power-btn.on:hover {
-  background: #c8e6c9;
-  box-shadow: 0 0 0 6px rgba(76, 175, 80, 0.15);
+  background: var(--nav-active-bg);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-glow);
 }
 
 .power-btn:disabled {
@@ -232,7 +365,9 @@
   cursor: not-allowed;
 }
 
-/* ── Arc speed dial ─────────────────────────────────────────────── */
+/* ── Arc speed dial ──────────────────────────────────────────────── */
+.card-content .speed-dial { width: 100%; }
+
 .speed-dial {
   width: 100%;
   cursor: pointer;
@@ -243,38 +378,38 @@
 
 .dial-track {
   fill: none;
-  stroke: #eeeeee;
+  stroke: var(--border-strong);
   stroke-width: 8;
   stroke-linecap: round;
 }
 
 .dial-active {
   fill: none;
-  stroke: #1976d2;
+  stroke: var(--primary);
   stroke-width: 8;
   stroke-linecap: round;
 }
 
 .dial-thumb {
-  fill: white;
-  stroke: #1976d2;
+  fill: var(--card-bg);
+  stroke: var(--primary);
   stroke-width: 2.5;
-  filter: drop-shadow(0 1px 3px rgba(25, 118, 210, 0.35));
+  filter: drop-shadow(0 1px 3px var(--primary-glow));
 }
 
 .dial-value {
   font-size: 18px;
-  font-weight: 300;
-  fill: #212121;
+  font-weight: 600;
+  fill: var(--text);
 }
 
 .dial-unit {
   font-size: 10px;
-  fill: #9e9e9e;
+  fill: var(--text-muted);
   letter-spacing: 0.04em;
 }
 
-/* ── Sensor display ─────────────────────────────────────────────── */
+/* ── Sensor display ──────────────────────────────────────────────── */
 .sensor-display {
   display: flex;
   align-items: center;
@@ -284,17 +419,19 @@
 
 .sensor-value {
   font-size: 2rem;
-  font-weight: 300;
-  color: #212121;
+  font-weight: 700;
+  color: var(--primary);
   line-height: 1;
 }
 
 .sensor-unit {
   font-size: 1rem;
-  color: #9e9e9e;
+  color: var(--text-muted);
 }
 
-/* ── Color controls ─────────────────────────────────────────────── */
+.sensor-icon { font-size: 18px; height: 18px; width: 18px; vertical-align: middle; margin-right: 2px; }
+
+/* ── Color controls ──────────────────────────────────────────────── */
 .color-controls {
   display: flex;
   gap: 8px;
@@ -313,34 +450,28 @@
 }
 
 .color-chip:hover { transform: scale(1.15); }
-.color-chip.active { border-color: #333; transform: scale(1.1); }
+.color-chip.active { border-color: var(--text); transform: scale(1.1); }
 
 .color-chip.color-red    { background: #e53935; }
 .color-chip.color-green  { background: #43a047; }
 .color-chip.color-blue   { background: #1e88e5; }
 .color-chip.color-orange { background: #fb8c00; }
-.color-chip.color-off    { background: #bdbdbd; }
-
-/* ── Sensor icon ─────────────────────────────────────────────────── */
-.sensor-icon { font-size: 18px; height: 18px; width: 18px; vertical-align: middle; margin-right: 2px; }
+.color-chip.color-off    { background: var(--offline); }
 
 /* ── Card states ─────────────────────────────────────────────────── */
 .device-card-wrapper:has(.card-enabled):hover {
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+  box-shadow: var(--card-shadow-hover);
 }
 
-.card-disabled {
-  opacity: 0.75;
-  filter: grayscale(50%);
-}
+.card-disabled { opacity: 0.6; filter: grayscale(30%); }
 
 /* ── CDK drag states ─────────────────────────────────────────────── */
 .drag-placeholder {
   width: 240px;
   min-height: 100px;
-  border: 2px dashed #bdbdbd;
-  border-radius: 12px;
-  background: transparent;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface-alt);
   margin: 10px;
   box-sizing: border-box;
 }
@@ -350,19 +481,18 @@
 }
 
 .cdk-drag-preview {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   opacity: 0.95;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
 }
 
-/* ── Group hover highlight (confirmed target after 400ms dwell) ───── */
+/* ── Group hover / drop hint ─────────────────────────────────────── */
 .group-hover {
-  outline: 2px solid #5c6bc0;
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
 }
 
-/* ── Group drop hint (shown inside the target card) ──────────────── */
 .group-drop-hint {
   position: absolute;
   inset: 0;
@@ -372,33 +502,39 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: rgba(92, 107, 192, 0.15);
-  backdrop-filter: blur(2px);
-  border-radius: 0 12px 12px 0;
+  background: rgba(79, 70, 229, 0.12);
+  backdrop-filter: blur(4px);
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
   pointer-events: none;
-  color: #3949ab;
+  color: var(--primary);
+}
+
+.dark-theme .group-drop-hint {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
 }
 
 .group-drop-hint mat-icon { font-size: 32px; width: 32px; height: 32px; }
 .group-drop-hint span { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
 
+/* ── Deprecated ──────────────────────────────────────────────────── */
 .deprecated-card {
-  border: 1px solid #ffe0b2;
-  background: #fffde7;
-  opacity: 0.85;
+  opacity: 0.6;
+  filter: grayscale(40%);
 }
 
 .deprecated-badge {
-  display: inline-block;
-  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #ef6c00;
-  background: #fff3e0;
-  border: 1px solid #ffcc80;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
-  margin-left: 8px;
-  vertical-align: middle;
+  margin-left: 4px;
+  flex-shrink: 0;
 }
