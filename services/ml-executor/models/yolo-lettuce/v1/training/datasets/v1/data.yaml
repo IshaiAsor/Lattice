@@ -11,4 +11,4 @@ val:   valid/images
 test:  test/images
 
 nc: 3
-names: ['class_0', 'class_1', 'class_2']
+names: ['immature', 'mature', 'damaged']

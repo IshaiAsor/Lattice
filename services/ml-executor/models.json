@@ -1,11 +1,11 @@
 [
   {
     "kind": "vlm",
-    "name": "yolo",
+    "name": "yolo-lettuce",
     "version": "v1",
     "backend": "onnx",
     "modelFile": "yolo.onnx",
-    "classes": ["class_0", "class_1", "class_2"]
+    "classes": ["immature", "mature", "damaged"]
   },
   {
     "kind": "llm",
