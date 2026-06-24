@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NonInteractive -File \"C:\\Projects\\iot-smart-home\\.claude\\hooks\\backoffice-lint.ps1\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
