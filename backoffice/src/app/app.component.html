@@ -1,80 +1,147 @@
-<nav class="navbar">
-  <!-- Brand -->
-  <a class="nav-brand" routerLink="/">
-    <mat-icon class="brand-icon">hub</mat-icon>
-    <span class="brand-text">Lattice</span>
-  </a>
+@if (!hideSidebar()) {
+  <aside class="sidebar" [class.collapsed]="sidebarCollapsed()">
 
-  <!-- Nav links (authenticated only) -->
-  @if (authService.getCurrentUser(); as user) {
-    <div class="nav-sep"></div>
-    <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">
-      <mat-icon>dashboard</mat-icon>
-      <span>Dashboard</span>
-    </a>
-    <a class="nav-link" routerLink="/mgmt/devices" routerLinkActive="active">
-      <mat-icon>device_hub</mat-icon>
-      <span>Devices</span>
-    </a>
-    <a class="nav-link" routerLink="/rules" routerLinkActive="active">
-      <mat-icon>play_for_work</mat-icon>
-      <span>Rules</span>
-    </a>
-    <a class="nav-link" routerLink="/device-config" routerLinkActive="active">
-      <mat-icon>settings_suggest</mat-icon>
-      <span>Device Config</span>
-    </a>
-    <a
-      class="nav-link"
-      (click)="openAIEditor()"
-      (keyup.enter)="openAIEditor()"
-      tabindex="0"
-      routerLinkActive="active"
-    >
-      <mat-icon>auto_awesome</mat-icon>
-      <span>Ask qwen</span>
-    </a>
-    @if (user.role === 'admin') {
-      <a class="nav-link" routerLink="/admin/templates" routerLinkActive="active">
-        <mat-icon>build</mat-icon>
-        <span>Templates</span>
-      </a>
-    }
-  }
+    <!-- Brand -->
+    <div class="sidebar-brand">
+      <div class="brand-icon-wrap">
+        <mat-icon>hub</mat-icon>
+      </div>
+      @if (!sidebarCollapsed()) {
+        <span class="brand-name">Lattice</span>
+      }
+    </div>
 
-  <div class="spacer"></div>
+    <!-- Nav links -->
+    @if (authService.getCurrentUser(); as user) {
+      <nav class="sidebar-nav">
 
-  <!-- Right: authenticated / guest -->
-  @if (authService.getCurrentUser(); as user) {
-    <div class="user-section">
-      <span class="user-name">{{ user.username }}</span>
-      <button mat-icon-button [matMenuTriggerFor]="profileMenu" class="profile-btn" disableRipple>
-        @if (user.profileImage) {
-          <img [src]="user.profileImage" class="nav-profile-pic" alt="Profile picture" />
-        } @else {
-          <mat-icon>account_circle</mat-icon>
+        @if (!sidebarCollapsed()) {
+          <span class="nav-section-label">Main</span>
         }
+
+        <a class="sidebar-link" routerLink="/dashboard" routerLinkActive="active"
+           [matTooltip]="sidebarCollapsed() ? 'Dashboard' : ''" matTooltipPosition="right">
+          <mat-icon>dashboard</mat-icon>
+          @if (!sidebarCollapsed()) { <span>Dashboard</span> }
+        </a>
+
+        <a class="sidebar-link" routerLink="/mgmt/devices" routerLinkActive="active"
+           [matTooltip]="sidebarCollapsed() ? 'Devices' : ''" matTooltipPosition="right">
+          <mat-icon>device_hub</mat-icon>
+          @if (!sidebarCollapsed()) { <span>Devices</span> }
+        </a>
+
+        <a class="sidebar-link" routerLink="/rules" routerLinkActive="active"
+           [matTooltip]="sidebarCollapsed() ? 'Rules' : ''" matTooltipPosition="right">
+          <mat-icon>bolt</mat-icon>
+          @if (!sidebarCollapsed()) { <span>Rules</span> }
+        </a>
+
+        <a class="sidebar-link" routerLink="/device-config" routerLinkActive="active"
+           [matTooltip]="sidebarCollapsed() ? 'Device Config' : ''" matTooltipPosition="right">
+          <mat-icon>settings_suggest</mat-icon>
+          @if (!sidebarCollapsed()) { <span>Device Config</span> }
+        </a>
+
+        @if (!sidebarCollapsed()) {
+          <span class="nav-section-label">Tools</span>
+        }
+
+        <a class="sidebar-link" (click)="openAIEditor()" (keyup.enter)="openAIEditor()" tabindex="0"
+           [matTooltip]="sidebarCollapsed() ? 'Ask AI' : ''" matTooltipPosition="right">
+          <mat-icon>auto_awesome</mat-icon>
+          @if (!sidebarCollapsed()) { <span>Ask AI</span> }
+        </a>
+
+        @if (user.role === 'admin') {
+          @if (!sidebarCollapsed()) {
+            <span class="nav-section-label">Admin</span>
+          }
+          <a class="sidebar-link" routerLink="/admin/templates" routerLinkActive="active"
+             [matTooltip]="sidebarCollapsed() ? 'Templates' : ''" matTooltipPosition="right">
+            <mat-icon>build</mat-icon>
+            @if (!sidebarCollapsed()) { <span>Templates</span> }
+          </a>
+        }
+
+      </nav>
+
+      <!-- Profile -->
+      <div class="sidebar-profile" [class.collapsed]="sidebarCollapsed()">
+        <button mat-icon-button [matMenuTriggerFor]="profileMenu" class="profile-avatar-btn"
+                [matTooltip]="sidebarCollapsed() ? user.username : ''" matTooltipPosition="right">
+          @if (user.profileImage) {
+            <img [src]="user.profileImage" class="profile-pic" alt="Profile" />
+          } @else {
+            <div class="profile-initials">{{ user.username[0] | uppercase }}</div>
+          }
+        </button>
+        @if (!sidebarCollapsed()) {
+          <div class="profile-info">
+            <span class="profile-name">{{ user.username }}</span>
+            <span class="profile-role">{{ user.role }}</span>
+          </div>
+          <button mat-icon-button class="profile-menu-btn" [matMenuTriggerFor]="profileMenu">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+        }
+      </div>
+    }
+
+    <!-- Footer: theme toggle + collapse -->
+    <div class="sidebar-footer">
+      <button class="icon-btn" (click)="themeService.toggle()"
+        [matTooltip]="themeService.theme() === 'dark' ? 'Switch to light' : 'Switch to dark'"
+        matTooltipPosition="right">
+        <mat-icon>{{ themeService.theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      </button>
+      <button class="icon-btn collapse-btn" (click)="toggleSidebar()"
+        [matTooltip]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+        matTooltipPosition="right">
+        <mat-icon>{{ sidebarCollapsed() ? 'chevron_right' : 'chevron_left' }}</mat-icon>
       </button>
     </div>
 
-    <mat-menu #profileMenu="matMenu">
-      <button mat-menu-item>
-        <mat-icon>person</mat-icon>
-        <span>My Profile</span>
-      </button>
-      <button mat-menu-item (click)="logout()">
-        <mat-icon>logout</mat-icon>
-        <span>Logout</span>
-      </button>
-    </mat-menu>
-  } @else {
-    <a class="nav-link" routerLink="/login">
-      <mat-icon>login</mat-icon>
-      <span>Sign in</span>
-    </a>
-  }
-</nav>
+  </aside>
+}
 
-<div class="page-container">
+<!-- Main content -->
+<main class="app-main"
+  [class.sidebar-hidden]="hideSidebar()"
+  [class.sidebar-collapsed]="sidebarCollapsed()">
   <router-outlet></router-outlet>
-</div>
+</main>
+
+<!-- Bottom tab bar: mobile only -->
+@if (!hideSidebar() && authService.getCurrentUser()) {
+  <nav class="bottom-bar">
+    <a class="tab-item" routerLink="/dashboard" routerLinkActive="active">
+      <div class="tab-icon-wrap"><mat-icon>dashboard</mat-icon></div>
+      <span>Home</span>
+    </a>
+    <a class="tab-item" routerLink="/mgmt/devices" routerLinkActive="active">
+      <div class="tab-icon-wrap"><mat-icon>device_hub</mat-icon></div>
+      <span>Devices</span>
+    </a>
+    <a class="tab-item" routerLink="/rules" routerLinkActive="active">
+      <div class="tab-icon-wrap"><mat-icon>bolt</mat-icon></div>
+      <span>Rules</span>
+    </a>
+    <a class="tab-item" (click)="themeService.toggle()">
+      <div class="tab-icon-wrap"><mat-icon>{{ themeService.theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon></div>
+      <span>Theme</span>
+    </a>
+  </nav>
+}
+
+<mat-menu #profileMenu="matMenu">
+  <button mat-menu-item>
+    <mat-icon>person</mat-icon>
+    <span>My Profile</span>
+  </button>
+  <mat-divider></mat-divider>
+  <button mat-menu-item (click)="logout()">
+    <mat-icon>logout</mat-icon>
+    <span>Sign out</span>
+  </button>
+</mat-menu>

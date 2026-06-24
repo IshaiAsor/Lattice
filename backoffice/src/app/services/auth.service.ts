@@ -54,13 +54,23 @@ export class AuthService {
     );
   }
 
-  loginWithGoogle(code: string) {
-    return this.http.post<string>(`${this.apiUrl}/api/auth/google`, { code }).pipe(
+  loginWithGoogle(code: string, termsAccepted = false) {
+    return this.http.post<string>(`${this.apiUrl}/api/auth/google`, { code, termsAccepted }).pipe(
       tap((token) => {
         localStorage.setItem(this.tokenKey, token);
         const decodedUser: User = jwtDecode(token);
         this.currentUser.set(decodedUser);
         console.log(decodedUser);
+      }),
+    );
+  }
+
+  register(username: string, email: string, password: string, termsAccepted: boolean) {
+    return this.http.post<string>(`${this.apiUrl}/api/auth/register`, { username, email, password, termsAccepted }).pipe(
+      tap((token) => {
+        localStorage.setItem(this.tokenKey, token);
+        const decodedUser: User = jwtDecode(token);
+        this.currentUser.set(decodedUser);
       }),
     );
   }

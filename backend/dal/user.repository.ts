@@ -29,7 +29,7 @@ export class UsersRepository {
     });
   }
 
-  async createGoogleUser(userRole: string, googleId: string, email: string, fullName: string, profilePictureUrl: string) {
+  async createGoogleUser(userRole: string, googleId: string, email: string, fullName: string, profilePictureUrl: string, termsAcceptedAt: Date) {
     return await db.user.create({
       data: {
         user_type: 1,
@@ -37,12 +37,13 @@ export class UsersRepository {
         google_id: googleId,
         email: email,
         full_name: fullName,
-        profile_picture_url: profilePictureUrl
+        profile_picture_url: profilePictureUrl,
+        terms_accepted_at: termsAcceptedAt
       }
     });
   }
 
-  async createRegularUser(userRole: string, username: string, password: string, email: string) {
+  async createRegularUser(userRole: string, username: string, password: string, email: string, termsAcceptedAt: Date) {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -52,7 +53,8 @@ export class UsersRepository {
         user_role: userRole,
         user_name: username,
         password: hashedPassword,
-        email: email
+        email: email,
+        terms_accepted_at: termsAcceptedAt
       }
     });
   }

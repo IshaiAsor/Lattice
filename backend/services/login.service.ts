@@ -36,8 +36,9 @@ export class LoginService {
     code: string,
     ipAddress: string,
     purpose: JwtPurpose,
+    termsAccepted?: boolean,
   ): Promise<{ token: string; user: any } | undefined> {
-    const user = await googleLoginService.handleGoogleLogin(code);
+    const user = await googleLoginService.handleGoogleLogin(code, termsAccepted);
     if (user) {
       await auditRepository.logLogin(user.id, ipAddress);
       let token = this.generateAuthResponse(user, purpose);

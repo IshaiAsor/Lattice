@@ -1,24 +1,45 @@
-/* ── Lattice design tokens — light (default) ────────────────────────────── */
+/* ── Lattice design tokens — light (default) ─────────────────────────── */
 :root {
-  --bg:            #f4f7fc;
-  --surface:       #ffffff;
-  --surface-alt:   #edf1f9;
-  --nav-bg:        #0f1729;
-  --nav-text:      #e8edf4;
-  --nav-text-muted:#8a9bbf;
-  --primary:       #3d6ee0;
-  --primary-hover: #2f59c0;
-  --text:          #1a2332;
-  --text-muted:    #5a6d85;
-  --text-dim:      #99aabb;
-  --border:        rgba(0, 0, 0, 0.09);
-  --border-strong: rgba(0, 0, 0, 0.16);
-  --card-shadow:   0 2px 8px rgba(0, 0, 0, 0.08);
-  --card-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.14);
-  --radius-card:   12px;
+  /* Backgrounds */
+  --bg:            linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  --bg-solid:      #eef2ff;
+  --surface:       rgba(255, 255, 255, 0.70);
+  --surface-alt:   rgba(255, 255, 255, 0.45);
+
+  /* Navigation */
+  --nav-bg:        rgba(255, 255, 255, 0.65);
+  --nav-border:    rgba(99, 102, 241, 0.12);
+  --nav-text:      #1e1b4b;
+  --nav-text-muted:#6366a0;
+  --nav-active-bg: rgba(79, 70, 229, 0.10);
+  --nav-active-text:#4f46e5;
+  --nav-hover-bg:  rgba(79, 70, 229, 0.06);
+  --nav-width:     240px;
+  --nav-width-collapsed: 64px;
+  --bottom-bar-height: 64px;
+
+  /* Primary accent: indigo */
+  --primary:       #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-glow:  rgba(79, 70, 229, 0.35);
+
+  /* Text */
+  --text:          #1e1b4b;
+  --text-muted:    #6366a0;
+  --text-dim:      #a5b4fc;
+
+  /* Borders */
+  --border:        rgba(99, 102, 241, 0.12);
+  --border-strong: rgba(99, 102, 241, 0.25);
+
+  /* Cards */
+  --card-bg:       rgba(255, 255, 255, 0.78);
+  --card-shadow:   0 8px 32px rgba(99, 102, 241, 0.12);
+  --card-shadow-hover: 0 12px 40px rgba(99, 102, 241, 0.20);
+  --radius-card:   16px;
   --radius-chip:   6px;
 
-  /* semantic — same in both themes */
+  /* Semantic */
   --online:        #2ecc71;
   --online-glow:   rgba(46, 204, 113, 0.35);
   --offline:       #6b7a8d;
@@ -26,45 +47,65 @@
   --error:         #ef5350;
   --info:          var(--primary);
 
-  /* stage-kind chip colors */
+  /* Stage chip colors */
   --stage-vlm:     #7c3aed;
   --stage-digest:  #0891b2;
   --stage-llm:     #2563eb;
   --stage-exec:    #d97706;
 }
 
-/* ── Dark theme ─────────────────────────────────────────────────────────── */
+/* ── Dark theme ───────────────────────────────────────────────────────── */
 .dark-theme {
-  --bg:            #0a1628;
-  --surface:       #111e35;
-  --surface-alt:   #162240;
-  --nav-bg:        #080f1c;
-  --nav-text:      #e8edf4;
-  --nav-text-muted:#4a6080;
-  --primary:       #6b9fe4;
-  --primary-hover: #89b5f0;
+  --bg:            radial-gradient(ellipse at 20% 10%, #0d2040, #020510);
+  --bg-solid:      #020510;
+  --surface:       rgba(255, 255, 255, 0.055);
+  --surface-alt:   rgba(255, 255, 255, 0.035);
+
+  --nav-bg:        rgba(6, 12, 26, 0.85);
+  --nav-border:    rgba(255, 255, 255, 0.07);
+  --nav-text:      #e2e8f3;
+  --nav-text-muted:#6b82a0;
+  --nav-active-bg: rgba(56, 189, 248, 0.12);
+  --nav-active-text:#38bdf8;
+  --nav-hover-bg:  rgba(255, 255, 255, 0.05);
+
+  --primary:       #38bdf8;
+  --primary-hover: #7dd3fc;
+  --primary-glow:  rgba(56, 189, 248, 0.30);
+
   --text:          #e2e8f3;
   --text-muted:    #6b82a0;
-  --text-dim:      #3d5275;
+  --text-dim:      #3a4f68;
+
   --border:        rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.15);
-  --card-shadow:   0 2px 12px rgba(0, 0, 0, 0.4);
-  --card-shadow-hover: 0 4px 20px rgba(0, 0, 0, 0.55);
+
+  --card-bg:       rgba(255, 255, 255, 0.055);
+  --card-shadow:   0 8px 40px rgba(0, 0, 0, 0.55);
+  --card-shadow-hover: 0 12px 48px rgba(0, 0, 0, 0.65);
 }
 
-/* ── Reset ──────────────────────────────────────────────────────────────── */
+/* ── Reset ────────────────────────────────────────────────────────────── */
 html, body { height: 100%; }
 body {
   margin: 0;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
+  font-family: 'Inter', Roboto, 'Helvetica Neue', sans-serif;
   background: var(--bg);
+  background-attachment: fixed;
   color: var(--text);
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background 0.3s ease, color 0.2s ease;
+  min-height: 100vh;
+}
+app-root {
+  display: block;
+  height: 100%;
 }
 
-/* ── Shared card utility ────────────────────────────────────────────────── */
+/* ── Glass card utility ───────────────────────────────────────────────── */
 .lattice-card {
-  background: var(--surface);
+  background: var(--card-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--card-shadow);
@@ -72,7 +113,7 @@ body {
 }
 .lattice-card:hover { box-shadow: var(--card-shadow-hover); }
 
-/* ── Status dot ─────────────────────────────────────────────────────────── */
+/* ── Status dot ───────────────────────────────────────────────────────── */
 .status-dot {
   display: inline-block;
   width: 8px;
@@ -88,17 +129,22 @@ body {
   50%       { box-shadow: 0 0 0 5px transparent; }
 }
 
-/* ── Stage-kind chips ───────────────────────────────────────────────────── */
+/* ── Stage chips ──────────────────────────────────────────────────────── */
 .stage-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--radius-chip); font-size: 0.75rem; font-weight: 500; }
-.stage-chip.vlm     { background: rgba(124, 58, 237, 0.15); color: var(--stage-vlm); }
-.stage-chip.digest  { background: rgba(8, 145, 178, 0.15);  color: var(--stage-digest); }
-.stage-chip.llm     { background: rgba(37, 99, 235, 0.15);  color: var(--stage-llm); }
-.stage-chip.exec    { background: rgba(217, 119, 6, 0.15);  color: var(--stage-exec); }
+.stage-chip.vlm    { background: rgba(124, 58, 237, 0.15); color: var(--stage-vlm); }
+.stage-chip.digest { background: rgba(8, 145, 178, 0.15);  color: var(--stage-digest); }
+.stage-chip.llm    { background: rgba(37, 99, 235, 0.15);  color: var(--stage-llm); }
+.stage-chip.exec   { background: rgba(217, 119, 6, 0.15);  color: var(--stage-exec); }
 
-/* ── Dialogs ─────────────────────────────────────────────────────────────── */
-.mat-mdc-dialog-surface { background: var(--surface) !important; border-radius: 16px !important; }
+/* ── Dialogs ──────────────────────────────────────────────────────────── */
+.mat-mdc-dialog-surface {
+  background: var(--card-bg) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
+}
 
-/* ── Camera fullscreen ──────────────────────────────────────────────────── */
+/* ── Camera fullscreen ────────────────────────────────────────────────── */
 .camera-dialog-panel .mat-mdc-dialog-container,
 .camera-dialog-panel .mdc-dialog__container,
 .camera-dialog-panel .mdc-dialog__surface {
@@ -106,32 +152,32 @@ body {
   overflow: hidden;
 }
 
-/* ── Mobile full-screen dialogs (<600px) ───────────────────────────────── */
+/* ── Mobile full-screen dialogs (<600px) ─────────────────────────────── */
 @media (max-width: 599px) {
   .mat-mdc-dialog-container { max-width: 100vw !important; }
   .mdc-dialog__surface { border-radius: 0 !important; width: 100vw !important; min-height: 100dvh !important; }
 }
 
-/* ── Page wrapper ───────────────────────────────────────────────────────── */
+/* ── Page wrapper ─────────────────────────────────────────────────────── */
 .page-container {
-  padding: 20px 24px;
+  padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
 }
 
 @media (max-width: 599px) {
-  .page-container { padding: 12px 12px; }
+  .page-container { padding: 12px; }
 }
 
-/* ── Responsive tile grid ───────────────────────────────────────────────── */
+/* ── Responsive tile grid ─────────────────────────────────────────────── */
 .tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
 }
 
-/* ── Tables ─────────────────────────────────────────────────────────────── */
-.mat-mdc-table { background: var(--surface) !important; }
+/* ── Tables ───────────────────────────────────────────────────────────── */
+.mat-mdc-table { background: var(--card-bg) !important; backdrop-filter: blur(12px); }
 .mat-mdc-row:hover .mat-mdc-cell { background: var(--surface-alt) !important; }
 .mat-mdc-header-row { background: var(--surface-alt) !important; }
 .mat-mdc-cell, .mat-mdc-header-cell { border-color: var(--border) !important; color: var(--text) !important; }

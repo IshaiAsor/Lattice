@@ -1,5 +1,5 @@
 import { Component, inject, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from 'src/environments/environment';
@@ -13,7 +13,7 @@ interface GoogleOAuthResponse {
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [SHARED_MATERIAL],
+  imports: [SHARED_MATERIAL, RouterModule],
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.css'],
 })
@@ -22,6 +22,7 @@ export class LoginComponent implements OnInit {
   username = '';
   password = '';
   error = '';
+  termsAccepted = false;
   private apiUrl = `${environment.apiUrl}`;
 
   private authService = inject(AuthService);
@@ -47,7 +48,7 @@ export class LoginComponent implements OnInit {
       return;
     }
 
-    this.authService.loginWithGoogle(response.code).subscribe({
+    this.authService.loginWithGoogle(response.code, this.termsAccepted).subscribe({
       next: () => this.loginSuccess(),
       error: (err) => {
         this.error = (err as { error?: { message?: string } })?.error?.message || 'Google login failed. Please try again.';
@@ -71,6 +72,6 @@ export class LoginComponent implements OnInit {
   }
 
   loginSuccess() {
-    this.router.navigate(['/devices']);
+    this.router.navigate(['/dashboard']);
   }
 }

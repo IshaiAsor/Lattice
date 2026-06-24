@@ -1,33 +1,33 @@
-<div class="login-page">
+<div class="register-page">
   <!-- Brand panel: visible on desktop only -->
-  <div class="login-left">
+  <div class="register-left">
     <div class="brand">
       <div class="brand-icon-wrap"><mat-icon>hub</mat-icon></div>
       <span class="brand-name">Lattice</span>
     </div>
     <div class="left-body">
-      <div class="tagline">Smart IoT.<br /><span class="accent">Intelligently</span><br />managed.</div>
-      <p class="left-sub">Real-time device control, ML-powered automation, and seamless OTA updates — all in one platform.</p>
+      <div class="tagline">Join the<br /><span class="accent">Smart Home</span><br />platform.</div>
+      <p class="left-sub">Monitor devices in real time, automate with ML rules, and push firmware updates — all from one place.</p>
       <div class="features">
         <div class="feat feat-a">
           <div class="feat-icon"><mat-icon>device_hub</mat-icon></div>
           <div class="feat-text">
-            <strong>Real-time device control</strong>
-            MQTT-powered live status and commands
+            <strong>Unified device registry</strong>
+            All your IoT devices, one dashboard
           </div>
         </div>
         <div class="feat feat-b">
           <div class="feat-icon"><mat-icon>auto_awesome</mat-icon></div>
           <div class="feat-text">
-            <strong>ML automation pipeline</strong>
-            VLM → digest → LLM → execute
+            <strong>ML-powered automation</strong>
+            Rules that learn and adapt
           </div>
         </div>
         <div class="feat feat-c">
-          <div class="feat-icon"><mat-icon>system_update</mat-icon></div>
+          <div class="feat-icon"><mat-icon>lock</mat-icon></div>
           <div class="feat-text">
-            <strong>OTA firmware updates</strong>
-            Staged, rollback-safe management
+            <strong>Secure by design</strong>
+            JWT auth, MQTT ACL, per-device tokens
           </div>
         </div>
       </div>
@@ -36,16 +36,16 @@
   </div>
 
   <!-- Form panel -->
-  <div class="login-right">
+  <div class="register-right">
     <!-- Mobile brand: shown below 1024px -->
     <div class="mobile-brand">
       <div class="brand-icon-wrap"><mat-icon>hub</mat-icon></div>
       <span class="brand-name">Lattice</span>
     </div>
 
-    <div class="login-card">
-      <div class="card-title">Welcome back</div>
-      <div class="card-sub">Sign in to your Lattice account</div>
+    <div class="register-card">
+      <div class="card-title">Create account</div>
+      <div class="card-sub">Sign up to manage your smart home</div>
 
       <form (ngSubmit)="onSubmit()">
         @if (error) {
@@ -53,13 +53,27 @@
         }
 
         <div class="field">
+          <label>Username</label>
+          <div class="input-wrap">
+            <mat-icon class="input-icon">person</mat-icon>
+            <input
+              type="text"
+              [(ngModel)]="username"
+              name="username"
+              placeholder="Choose a username"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="field">
           <label>Email</label>
           <div class="input-wrap">
             <mat-icon class="input-icon">email</mat-icon>
             <input
               type="email"
-              [(ngModel)]="username"
-              name="username"
+              [(ngModel)]="email"
+              name="email"
               placeholder="you@example.com"
               required
             />
@@ -74,15 +88,24 @@
               type="password"
               [(ngModel)]="password"
               name="password"
-              placeholder="••••••••"
+              placeholder="At least 8 characters"
               required
             />
           </div>
         </div>
 
-        <div class="row-opts">
-          <label class="remember"><input type="checkbox" /> Remember me</label>
-          <a class="forgot" href="#">Forgot password?</a>
+        <div class="field">
+          <label>Confirm password</label>
+          <div class="input-wrap">
+            <mat-icon class="input-icon">lock_reset</mat-icon>
+            <input
+              type="password"
+              [(ngModel)]="confirmPassword"
+              name="confirmPassword"
+              placeholder="Repeat your password"
+              required
+            />
+          </div>
         </div>
 
         <div class="terms-group">
@@ -94,23 +117,12 @@
         </div>
 
         <button type="submit" class="btn-sign" [disabled]="!termsAccepted">
-          <mat-icon>login</mat-icon>
-          Sign in
+          <mat-icon>person_add</mat-icon>
+          Create account
         </button>
       </form>
 
-      <div class="divider">
-        <div class="divider-line"></div>
-        <span class="divider-text">or continue with</span>
-        <div class="divider-line"></div>
-      </div>
-
-      <button type="button" class="btn-google" [disabled]="!termsAccepted" (click)="loginWithGoogle()">
-        <span class="google-g">G</span>
-        Continue with Google
-      </button>
-
-      <div class="card-foot">Don't have an account? <a routerLink="/register">Create one</a></div>
+      <div class="card-foot">Already have an account? <a routerLink="/login">Sign in</a></div>
     </div>
   </div>
 </div>
