@@ -119,6 +119,30 @@
         "internalConsoleOptions": "openOnSessionStart"
     },
     {
+        "name": "Debug ML Executor (dev + hot reload)",
+        "type": "node",
+        "request": "launch",
+        "cwd": "${workspaceFolder:Project Root}",
+        "runtimeExecutable": "npx",
+        "runtimeArgs": [
+            "@dotenvx/dotenvx", "run", "--",
+            "npx", "nodemon",
+            "--cwd", "services/ml-executor",
+            "--exec", "node -r ts-node/register",
+            "--ext", "ts,json",
+            "src/index.ts"
+        ],
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3002" },
+        "console": "internalConsole",
+        "outputCapture": "std",
+        "autoAttachChildProcesses": true,
+        "restart": true,
+        "preLaunchTask": "prep-ml-executor",
+        "skipFiles": ["<node_internals>/**"],
+        "sourceMaps": true,
+        "outFiles": ["${workspaceFolder:ML Executor}/**/*.js"]
+    },
+    {
         "name": "Debug ML Router (dev + hot reload)",
         "type": "node",
         "request": "launch",
@@ -132,7 +156,7 @@
             "--ext", "ts,json",
             "src/index.ts"
         ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3002" },
+        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3009" },
         "console": "internalConsole",
         "outputCapture": "std",
         "autoAttachChildProcesses": true,
@@ -312,9 +336,9 @@
     {
         "type": "debugpy",
         "request": "launch",
-        "name": "Train ML Router Model",
-        "program": "${workspaceFolder:ML Router}/training/train.py",
-        "cwd": "${workspaceFolder:ML Router}",
+        "name": "Train ML Executor Model",
+        "program": "${workspaceFolder:ML Executor}/training/train.py",
+        "cwd": "${workspaceFolder:ML Executor}",
         "console": "integratedTerminal",
         "args": []
     },
@@ -339,7 +363,7 @@
     },
     {
         "name": "All Backend Services (dev)",
-        "configurations": ["Debug Backend (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)", "Debug MQTT Service (dev + hot reload)", "Debug Digest Service (dev + hot reload)", "Debug Socket Server (dev + hot reload)", "Debug Automation Worker (dev + hot reload)", "Debug Google Home (dev + hot reload)", "Debug OTA Manager (dev + hot reload)"]
+        "configurations": ["Debug Backend (dev + hot reload)", "Debug ML Executor (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)", "Debug MQTT Service (dev + hot reload)", "Debug Digest Service (dev + hot reload)", "Debug Socket Server (dev + hot reload)", "Debug Automation Worker (dev + hot reload)", "Debug Google Home (dev + hot reload)", "Debug OTA Manager (dev + hot reload)"]
     }
     ]
 }

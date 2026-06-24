@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listPlans } from '../plans/registry';
+import { listModels } from '../models';
 
 export const healthRouter = Router();
 
@@ -8,8 +8,8 @@ const startedAt = Date.now();
 healthRouter.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
-    service: 'ml-router',
+    service: 'ml-executor',
     uptime: (Date.now() - startedAt) / 1000,
-    plans: listPlans(),
+    models: listModels(),
   });
 });

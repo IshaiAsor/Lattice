@@ -2,10 +2,12 @@ FROM node:22-slim AS builder
 WORKDIR /workspace
 
 COPY package.json package-lock.json ./
-COPY packages/logger packages/logger
-COPY packages/otel   packages/otel
-COPY packages/queue  packages/queue
-COPY packages/jwt    packages/jwt
+COPY packages/logger   packages/logger
+COPY packages/otel     packages/otel
+COPY packages/queue    packages/queue
+COPY packages/jwt      packages/jwt
+COPY packages/ml       packages/ml
+COPY packages/ioredis  packages/ioredis
 COPY services/socket-server services/socket-server
 COPY tsconfig.base.json ./
 
@@ -14,6 +16,8 @@ RUN npm run build -w @lattice/logger \
  && npm run build -w @lattice/otel \
  && npm run build -w @lattice/queue \
  && npm run build -w @lattice/jwt \
+ && npm run build -w @lattice/ml \
+ && npm run build -w @lattice/ioredis \
  && npm run build -w @lattice/socket-server
 
 FROM node:22-slim
@@ -35,6 +39,10 @@ COPY --from=builder /workspace/packages/queue/node_modules  ./node_modules/@latt
 COPY --from=builder /workspace/packages/jwt/package.json    ./node_modules/@lattice/jwt/package.json
 COPY --from=builder /workspace/packages/jwt/dist            ./node_modules/@lattice/jwt/dist
 COPY --from=builder /workspace/packages/jwt/node_modules    ./node_modules/@lattice/jwt/node_modules
+COPY --from=builder /workspace/packages/ml/package.json     ./node_modules/@lattice/ml/package.json
+COPY --from=builder /workspace/packages/ml/dist             ./node_modules/@lattice/ml/dist
+COPY --from=builder /workspace/packages/ioredis/package.json ./node_modules/@lattice/ioredis/package.json
+COPY --from=builder /workspace/packages/ioredis/dist        ./node_modules/@lattice/ioredis/dist
 
 COPY --from=builder /workspace/services/socket-server/dist ./dist
 

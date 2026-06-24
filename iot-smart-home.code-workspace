@@ -25,6 +25,10 @@
       "path": "prisma"
     },
     {
+      "name": "ML Executor",
+      "path": "services/ml-executor"
+    },
+    {
       "name": "ML Router",
       "path": "services/ml-router"
     },
@@ -55,6 +59,10 @@
     {
       "name": "Google Home",
       "path": "services/google-home"
+    },
+    {
+      "name": "Packages",
+      "path": "packages"
     }
   ],
   "settings": {

@@ -1,8 +1,8 @@
 {
-  "name": "@lattice/logger",
-  "version": "0.1.0",
+  "name": "@lattice/ioredis",
+  "version": "1.0.0",
   "private": true,
-   "main": "./dist/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
@@ -15,10 +15,12 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "pino": "^9.6.0"
+    "@lattice/ml": "*"
+  },
+  "peerDependencies": {
+    "ioredis": "*"
   },
   "devDependencies": {
-    "pino-pretty": "^13.0.0",
     "typescript": "^5.9.3",
     "@types/node": "^20.0.0"
   }

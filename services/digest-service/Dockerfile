@@ -10,6 +10,8 @@ COPY packages/logger        packages/logger
 COPY packages/otel          packages/otel
 COPY packages/queue         packages/queue
 COPY packages/prisma-client packages/prisma-client
+COPY packages/ml            packages/ml
+COPY packages/ioredis       packages/ioredis
 COPY services/digest-service services/digest-service
 # Root schema is the single source of truth; prisma-client's prepare step reads it.
 COPY prisma prisma
@@ -20,6 +22,8 @@ RUN npm run build -w @lattice/logger \
  && npm run build -w @lattice/otel \
  && npm run build -w @lattice/queue \
  && npm run build -w @lattice/prisma-client \
+ && npm run build -w @lattice/ml \
+ && npm run build -w @lattice/ioredis \
  && npm run build -w @lattice/digest-service
 
 FROM node:22-slim
@@ -45,6 +49,10 @@ COPY --from=builder /workspace/packages/prisma-client/package.json  ./node_modul
 COPY --from=builder /workspace/packages/prisma-client/dist          ./node_modules/@lattice/prisma-client/dist
 # Includes the generated .prisma/client (query engine + client) the package resolves.
 COPY --from=builder /workspace/packages/prisma-client/node_modules  ./node_modules/@lattice/prisma-client/node_modules
+COPY --from=builder /workspace/packages/ml/package.json             ./node_modules/@lattice/ml/package.json
+COPY --from=builder /workspace/packages/ml/dist                     ./node_modules/@lattice/ml/dist
+COPY --from=builder /workspace/packages/ioredis/package.json        ./node_modules/@lattice/ioredis/package.json
+COPY --from=builder /workspace/packages/ioredis/dist                ./node_modules/@lattice/ioredis/dist
 
 COPY --from=builder /workspace/services/digest-service/dist ./dist
 

@@ -9,8 +9,11 @@ import type { ActionRequestedPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import { env } from '../config/env.config';
 import { initOTel } from '@lattice/otel';
+import { CHAT_CHANNELS } from '@lattice/ioredis';
+import type { ChatIntentPayload } from '@lattice/ml';
 
 const { metricsHandler } = initOTel('socket-server');
+
 const log = createLogger('socket-server');
 
 // The app_usage token's user identity. The monolith (current auth owner until F2.2)
@@ -43,6 +46,8 @@ export function initSocket(httpServer: http.Server, ch: Channel): Server {
     lazyConnect: true,
   });
   const subClient = pubClient.duplicate();
+  pubClient.on('error', (err) => log.error({ err }, 'Redis pubClient error'));
+  subClient.on('error', (err) => log.error({ err }, 'Redis subClient error'));
 
   const io = new Server(httpServer, { cors: { origin: '*' } });
   io.adapter(createAdapter(pubClient, subClient));
@@ -67,37 +72,43 @@ export function initSocket(httpServer: http.Server, ch: Channel): Server {
     socket.join(`user_${userId}`);
     log.info({ userId }, 'socket connected');
 
-    socket.on('chat:request', async (payload: { chatMode: string; messages: any[] }) => {
+    socket.on(CHAT_CHANNELS.CHAT_REQUEST, async (payload: { chatMode: string; messages: any[]; stream?: boolean }) => {
       const requestId = `req_${socket.id}_${Date.now()}`;
-      const responseChannel = `chat:response:${requestId}`;
+      const responseChannel = `${CHAT_CHANNELS.CHAT_RESPONSE}${requestId}`;
+      const stream = payload.stream ?? true;
 
-      // A. Subscribe to the specific response channel for this request
       await subClient.subscribe(responseChannel);
 
       const messageHandler = (channel: string, message: string) => {
         if (channel !== responseChannel) return;
 
         if (message === '[DONE]') {
-          socket.emit('chat:done');
+          socket.emit(CHAT_CHANNELS.CHAT_DONE);
           subClient.unsubscribe(responseChannel);
           subClient.off('message', messageHandler);
         } else {
-          // Stream the token directly to the Angular client
-          socket.emit('chat:token', message);
+          socket.emit(CHAT_CHANNELS.CHAT_TOKEN, message);
         }
       };
 
-      // Listen to messages from the worker
       subClient.on('message', messageHandler);
-      
-      // B. Push the payload into the AI processing queue
-      const jobPayload = JSON.stringify({
-        requestId,
-        userId: userId,
-        messages: payload.messages,
-      });
 
-      await pubClient.publish('chat:jobs', jobPayload);
+      const intentPayload: ChatIntentPayload = {
+        requestId,
+        userId,
+        chatMode: payload.chatMode,
+        messages: payload.messages,
+        stream,
+      };
+
+      try {
+        await pubClient.publish(CHAT_CHANNELS.CHAT_INTENT, JSON.stringify(intentPayload));
+      } catch (err) {
+        log.error({ err, requestId, userId }, 'failed to publish chat intent to Redis');
+        subClient.unsubscribe(responseChannel);
+        subClient.off('message', messageHandler);
+        socket.emit(CHAT_CHANNELS.CHAT_ERROR, 'Failed to dispatch chat request');
+      }
     });
 
     socket.on('disconnect', () => log.info({ userId }, 'socket disconnected'));

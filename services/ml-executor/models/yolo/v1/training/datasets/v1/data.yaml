@@ -1,0 +1,14 @@
+# Detection dataset v1
+# Source: Roboflow universe — CC BY 4.0
+# 5,170 images — train / valid / test split
+#
+# path is relative to the training/ directory (where train.py runs from).
+# Update if you rename or relocate the dataset folder.
+
+path: ./datasets/v1
+train: train/images
+val:   valid/images
+test:  test/images
+
+nc: 3
+names: ['class_0', 'class_1', 'class_2']

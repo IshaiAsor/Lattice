@@ -1,18 +1,20 @@
 import * as ort from 'onnxruntime-node';
 import sharp from 'sharp';
 import { resolve } from 'path';
+import { createLogger } from '@lattice/logger';
+import type { ChatMessage, Detection, BoundingBox } from '@lattice/ml';
 import { env } from '../config/env.config';
 import type { ModelConfig } from '../models';
+import type { IVlmProvider } from './IVlmProvider';
 
-export interface BoundingBox { x: number; y: number; w: number; h: number }
-export interface Detection { label: string; confidence: number; box?: BoundingBox }
-export interface VlmOutput { detections: Detection[] }
+const log = createLogger('ml-executor:vlm');
 
-// Lazy-loaded ONNX sessions keyed by absolute model path.
+// Lazy-loaded ONNX sessions keyed by resolved model path.
 const _sessions = new Map<string, ort.InferenceSession>();
 
-async function getSession(modelFile: string): Promise<ort.InferenceSession> {
-  const path = resolve(env.onnxModelsDir, modelFile);
+async function getSession(model: ModelConfig): Promise<ort.InferenceSession> {
+  // Layout: {onnxModelsDir}/{name}/{version}/{modelFile}
+  const path = resolve(env.onnxModelsDir, model.name, model.version, model.modelFile!);
   if (!_sessions.has(path)) {
     _sessions.set(path, await ort.InferenceSession.create(path));
   }
@@ -49,7 +51,7 @@ function nms(dets: Detection[]): Detection[] {
   return kept;
 }
 
-async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutput> {
+async function runOnnx(model: ModelConfig, imageBase64: string): Promise<Detection[]> {
   const imageBuffer = Buffer.from(imageBase64, 'base64');
 
   // Resize to 640×640, drop alpha, keep RGB — output is HWC uint8
@@ -63,17 +65,17 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutp
   const numPixels = 640 * 640;
   const float32 = new Float32Array(3 * numPixels);
   for (let i = 0; i < numPixels; i++) {
-    float32[i]               = raw[i * 3]!     / 255.0;  // R plane
-    float32[numPixels + i]   = raw[i * 3 + 1]! / 255.0;  // G plane
+    float32[i]                = raw[i * 3]!     / 255.0;  // R plane
+    float32[numPixels + i]    = raw[i * 3 + 1]! / 255.0;  // G plane
     float32[2 * numPixels + i] = raw[i * 3 + 2]! / 255.0; // B plane
   }
 
-  const session = await getSession(model.modelFile!);
+  const session = await getSession(model);
   const tensor = new ort.Tensor('float32', float32, [1, 3, 640, 640]);
   const results = await session.run({ [session.inputNames[0]!]: tensor });
   const outTensor = results[session.outputNames[0]!];
   const outputData = outTensor?.data as Float32Array | undefined;
-  if (!outputData) return { detections: [] };
+  if (!outputData) return [];
   const data: Float32Array = outputData;
 
   const nc = model.classes?.length ?? 0;
@@ -96,14 +98,9 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutp
   // Diagnostic: log dims and sample raw values so layout issues are visible in service logs.
   // Sample the "class score" field for the first anchor in each possible layout so the
   // correct one (values in logit range ~-10..+10) is identifiable.
-  const sampleColumnar   = data[4 * na + 0];          // field-4 row, anchor 0
-  const sampleTransposed = data[0 * (4 + nc) + 4];    // anchor 0, field 4
-  console.log('[vlm]', JSON.stringify({
-    dims: Array.from(dims), nc, na, columnar,
-    dataLen: data.length,
-    sampleColumnar,    // should be a logit (~-10..10) if layout is columnar
-    sampleTransposed,  // should be a logit (~-10..10) if layout is transposed
-  }));
+  const sampleColumnar   = data[4 * na + 0];
+  const sampleTransposed = data[0 * (4 + nc) + 4];
+  log.debug({ dims: Array.from(dims), nc, na, columnar, dataLen: data.length, sampleColumnar, sampleTransposed }, 'ONNX tensor layout');
 
   function getVal(anchor: number, field: number): number {
     return columnar
@@ -141,30 +138,15 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<VlmOutp
     });
   }
 
-  return { detections: nms(detections) };
+  return nms(detections);
 }
 
-async function runOllama(model: ModelConfig, imageBase64: string): Promise<VlmOutput> {
-  const res = await fetch(`${env.ollamaUrl}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: model.ollamaModel,
-      prompt: 'Describe what you detect in this image. List each object with its confidence as a JSON array of {label, confidence} objects. Respond with JSON only.',
-      images: [imageBase64],
-      format: 'json',
-      stream: false,
-    }),
-  });
-  if (!res.ok) throw new Error(`Ollama VLM error: ${res.status}`);
-  const body = await res.json() as { response: string };
-  const parsed = JSON.parse(body.response) as Detection[] | { detections: Detection[] };
-  const detections = Array.isArray(parsed) ? parsed : parsed.detections ?? [];
-  return { detections };
-}
+export class OnnxVlmProvider implements IVlmProvider {
+  constructor(private readonly model: ModelConfig) {}
 
-export async function runVlm(model: ModelConfig, input: { image: string }): Promise<VlmOutput> {
-  return model.backend === 'onnx'
-    ? runOnnx(model, input.image)
-    : runOllama(model, input.image);
+  async detect(messages: ChatMessage[]): Promise<Detection[]> {
+    const image = messages.find((m) => m.image)?.image;
+    if (!image) throw new Error('No image in messages for VLM inference');
+    return runOnnx(this.model, image);
+  }
 }

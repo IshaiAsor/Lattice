@@ -10,13 +10,12 @@
   },
   "dependencies": {
     "@lattice/logger": "*",
+    "@lattice/ml": "*",
+    "@lattice/ioredis": "*",
     "@lattice/otel": "*",
     "@lattice/queue": "*",
     "express": "^4.21.2",
-    "ioredis": "^5.11.1",
-    "ollama": "^0.6.3",
-    "onnxruntime-node": "^1.20.1",
-    "sharp": "^0.33.5"
+    "ioredis": "^5.11.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
