@@ -8,6 +8,7 @@ import { MgmtDeviceEdit } from '../mgmt-device-edit/mgmt-device-edit';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DeviceUpdateDialogComponent } from '../device-update-dialog/device-update-dialog.component';
+import { ConfirmDialogComponent } from '../admin-device-config/confirm-dialog.component';
 
 @Component({
   imports: [SHARED_MATERIAL],
@@ -75,18 +76,20 @@ export class MgmtDeviceListComponent implements OnInit {
   }
 
   deleteDevice(device: DeviceView) {
-    console.log(device);
-    this.deviceMgmtService.deleteDevice(device.id).subscribe(
-      () => {
-        console.log('Device deleted');
-        this.loadDevices();
-
-        this.snackBar.open('device deleted successfully', 'close', { duration: 2000 });
+    this.dialog.open(ConfirmDialogComponent, {
+      panelClass: ['glass-dialog', 'compact-dialog'],
+      data: {
+        title: 'Delete Device',
+        message: `Delete "${device.deviceName}"? This will remove all associated actions and cannot be undone.`,
+        confirmLabel: 'Delete',
       },
-      (err) => {
-        console.log(err);
-      },
-    );
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.deviceMgmtService.deleteDevice(device.id).subscribe({
+        next: () => { this.loadDevices(); this.snackBar.open('Device deleted', 'Close', { duration: 2000 }); },
+        error: () => this.snackBar.open('Failed to delete device', 'Close', { duration: 3000 }),
+      });
+    });
   }
 
   reprovisionDevice(device: DeviceView) {
@@ -97,16 +100,36 @@ export class MgmtDeviceListComponent implements OnInit {
   }
 
   softResetDevice(device: DeviceView) {
-    this.deviceMgmtService.softResetDevice(device.id).subscribe({
-      next: () => this.snackBar.open('Soft reset command sent', 'close', { duration: 2000 }),
-      error: () => this.snackBar.open('Failed to send soft reset command', 'close', { duration: 3000 }),
+    this.dialog.open(ConfirmDialogComponent, {
+      panelClass: ['glass-dialog', 'compact-dialog'],
+      data: {
+        title: 'Soft Reset',
+        message: `Send a soft reset command to "${device.deviceName}"? The device will reboot and reconnect.`,
+        confirmLabel: 'Reset',
+      },
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.deviceMgmtService.softResetDevice(device.id).subscribe({
+        next: () => this.snackBar.open('Soft reset command sent', 'Close', { duration: 2000 }),
+        error: () => this.snackBar.open('Failed to send soft reset command', 'Close', { duration: 3000 }),
+      });
     });
   }
 
   hardResetDevice(device: DeviceView) {
-    this.deviceMgmtService.hardResetDevice(device.id).subscribe({
-      next: () => this.snackBar.open('Hard reset command sent', 'close', { duration: 2000 }),
-      error: () => this.snackBar.open('Failed to send hard reset command', 'close', { duration: 3000 }),
+    this.dialog.open(ConfirmDialogComponent, {
+      panelClass: ['glass-dialog', 'compact-dialog'],
+      data: {
+        title: 'Hard Reset',
+        message: `Hard reset "${device.deviceName}"? This will erase the device configuration and it will need to be re-provisioned.`,
+        confirmLabel: 'Hard Reset',
+      },
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.deviceMgmtService.hardResetDevice(device.id).subscribe({
+        next: () => this.snackBar.open('Hard reset command sent', 'Close', { duration: 2000 }),
+        error: () => this.snackBar.open('Failed to send hard reset command', 'Close', { duration: 3000 }),
+      });
     });
   }
 

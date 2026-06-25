@@ -131,7 +131,7 @@ export class GroupBottomSheetComponent implements OnInit {
   renameAction(action: DeviceActionView) {
     const ref = this.dialog.open(RenameActionDialogComponent, {
       width: '320px',
-      panelClass: 'glass-dialog',
+      panelClass: ['glass-dialog', 'compact-dialog'],
       data: { name: action.name },
     });
     ref.afterClosed().subscribe((newName: string | undefined) => {

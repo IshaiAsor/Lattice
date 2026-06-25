@@ -1,10 +1,12 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { DeviceMgmtService, DeviceView, BlueprintView, BlueprintInstanceView, PinSlot } from 'src/app/services/device.mgmt.service';
 import { UserActionsService } from 'src/app/services/user.actions.service';
 import { AuthService } from 'src/app/services/auth.service';
+import { DeviceSocketService } from 'src/app/services/device.socket.service';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 export interface ActiveInstance {
   bp: BlueprintView;
@@ -22,6 +24,8 @@ export class DeviceConfigComponent implements OnInit {
   private userActionsService = inject(UserActionsService);
   private snack = inject(MatSnackBar);
   private router = inject(Router);
+  private socketService = inject(DeviceSocketService);
+  private destroyRef = inject(DestroyRef);
   authService = inject(AuthService);
 
   devices: DeviceView[] = [];
@@ -53,6 +57,20 @@ export class DeviceConfigComponent implements OnInit {
       next: (devices) => { this.devices = devices; this.loadingDevices = false; },
       error: () => { this.snack.open('Failed to load devices', 'Close', { duration: 3000 }); this.loadingDevices = false; },
     });
+
+    this.socketService.onDeviceOnlineStatusChange()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(({ deviceId, online }) => {
+        const device = this.devices.find(d => d.id === deviceId);
+        if (device) {
+          if (device.online && !online) device.lastOnlineDate = new Date();
+          device.online = online;
+          if (this.selectedDevice?.id === deviceId) {
+            if (this.selectedDevice.online && !online) this.selectedDevice.lastOnlineDate = new Date();
+            this.selectedDevice.online = online;
+          }
+        }
+      });
   }
 
   selectDevice(device: DeviceView) {

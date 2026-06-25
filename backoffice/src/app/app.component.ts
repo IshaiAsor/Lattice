@@ -48,6 +48,7 @@ export class AppComponent implements OnInit {
     this.dialog.open(ChatComponent, {
       width: '640px',
       maxHeight: '90vh',
+      panelClass: 'compact-dialog',
       data: { chatMode: 'free' },
     });
   }

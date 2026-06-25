@@ -319,6 +319,14 @@
   color: var(--offline-overlay-text);
 }
 
+.offline-overlay span.offline-last-seen {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
 /* ── Power button ────────────────────────────────────────────────── */
 .control-onoff {
   display: flex;

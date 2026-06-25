@@ -85,6 +85,9 @@
                 <div class="offline-overlay">
                     <mat-icon>wifi_off</mat-icon>
                     <span>Offline</span>
+                    @if (item.action!.lastOnlineDate) {
+                    <span class="offline-last-seen">Last seen {{ item.action!.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
+                    }
                 </div>
                 }
                 @if (hasTrait(item.action!, 'action.devices.traits.OnOff')) {

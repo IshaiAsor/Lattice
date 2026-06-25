@@ -15,6 +15,7 @@ export interface DeviceActionView {
   implementation_type: string;
   state?: any;
   online?: boolean;
+  lastOnlineDate?: Date;
   sortOrder: number;
   status?: "active" | "deprecated";
   groupName: string | null;
@@ -39,6 +40,7 @@ class DeviceActionsService {
       state: a.current_state,
       deviceId: a.user_device_id,
       online: a.user_device?.online ?? false,
+      lastOnlineDate: a.user_device?.last_online_date ?? undefined,
       sortOrder: a.sort_order,
       groupName: a.group_name ?? null,
       status: a.status as "active" | "deprecated",
@@ -70,6 +72,7 @@ class DeviceActionsService {
       state: action.current_state,
       deviceId: action.user_device_id,
       online: device.online ?? false,
+      lastOnlineDate: device.last_online_date ?? undefined,
       sortOrder: action.sort_order,
       groupName: action.group_name ?? null,
       status: action.status as "active" | "deprecated",

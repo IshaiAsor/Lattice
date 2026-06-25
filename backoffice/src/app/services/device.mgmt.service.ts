@@ -149,6 +149,7 @@ export interface DeviceActionView {
   deviceId: number;
   googleType: GoogleActionType | null;
   online: boolean;
+  lastOnlineDate?: Date | null;
   pins: DeviceActionPinView[];
   sortOrder: number;
   groupName: string | null;

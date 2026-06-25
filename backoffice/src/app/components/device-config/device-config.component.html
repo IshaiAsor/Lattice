@@ -5,9 +5,15 @@
     <div class="mobile-chip-scroll">
       @for (device of devices; track device.id) {
         <button type="button" class="device-chip" [class.active]="selectedDevice?.id === device.id"
+          [class.chip-offline]="!device.online"
           (click)="selectDevice(device)">
           <span class="d-dot" [class.online]="device.online" [class.offline]="!device.online"></span>
-          {{ device.deviceName }}
+          <span class="chip-inner">
+            <span class="chip-name">{{ device.deviceName }}</span>
+            @if (!device.online && device.lastOnlineDate) {
+              <span class="chip-last-seen">{{ device.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
+            }
+          </span>
         </button>
       }
       @if (!loadingDevices && devices.length === 0) {
@@ -38,6 +44,9 @@
           <div class="rail-item-info">
             <span class="rail-item-name">{{ device.deviceName }}</span>
             <span class="rail-item-meta">{{ device.type }} · v{{ device.version }}</span>
+            @if (!device.online && device.lastOnlineDate) {
+              <span class="rail-item-meta">Last seen {{ device.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
+            }
           </div>
           <span class="status-dot" [class.online]="device.online" [class.offline]="!device.online"
             [matTooltip]="device.online ? 'Online' : 'Offline'"></span>
@@ -68,6 +77,9 @@
           <div class="config-device-meta">
             <span class="status-dot" [class.online]="selectedDevice.online" [class.offline]="!selectedDevice.online"></span>
             <span>{{ selectedDevice.type }} · v{{ selectedDevice.version }}</span>
+            @if (!selectedDevice.online && selectedDevice.lastOnlineDate) {
+              <span class="config-last-seen">· Last seen {{ selectedDevice.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
+            }
           </div>
         </div>
       </div>

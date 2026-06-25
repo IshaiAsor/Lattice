@@ -12,6 +12,7 @@ export interface ConfirmDialogData {
   selector: 'app-confirm-dialog',
   imports: [SHARED_MATERIAL],
   template: `
+    <div class="sheet-handle"></div>
     <h2 mat-dialog-title>{{ data.title }}</h2>
     <mat-dialog-content>
       <p class="message">{{ data.message }}</p>
@@ -24,8 +25,13 @@ export interface ConfirmDialogData {
     </mat-dialog-actions>
   `,
   styles: [`
-    .message { margin: 0; font-size: 14px; color: #333; }
-    mat-dialog-content { min-width: 320px; }
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: var(--border-strong, #ccc);
+      border-radius: 2px;
+      margin: 12px auto 0;
+    }
+    .message { margin: 0; font-size: 14px; color: var(--text-muted); line-height: 1.5; }
   `],
 })
 export class ConfirmDialogComponent {

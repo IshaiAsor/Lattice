@@ -137,7 +137,10 @@ export class UserDashboard implements OnInit {
           .filter(i => i.kind === 'action')
           .map(i => i.action!)
           .filter(a => a.deviceId === deviceId)
-          .forEach(a => a.online = online);
+          .forEach(a => {
+            if (a.online && !online) a.lastOnlineDate = new Date();
+            a.online = online;
+          });
 
         const wasOnline = this.deviceOnlineState.get(deviceId);
         if (wasOnline !== undefined && wasOnline !== online) {
@@ -370,7 +373,7 @@ export class UserDashboard implements OnInit {
     );
     const ref = this.dialog.open(RenameActionDialogComponent, {
       width: '320px',
-      panelClass: 'glass-dialog',
+      panelClass: ['glass-dialog', 'compact-dialog'],
       data: { name: group.name, title: 'Rename Group' },
     });
     ref.afterClosed().subscribe((newName: string | undefined) => {
@@ -407,7 +410,7 @@ export class UserDashboard implements OnInit {
   renameAction(action: DeviceActionView) {
     const ref = this.dialog.open(RenameActionDialogComponent, {
       width: '320px',
-      panelClass: 'glass-dialog',
+      panelClass: ['glass-dialog', 'compact-dialog'],
       data: { name: action.name },
     });
     ref.afterClosed().subscribe((newName: string | undefined) => {
