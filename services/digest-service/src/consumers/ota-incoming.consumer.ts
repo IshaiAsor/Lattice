@@ -1,6 +1,6 @@
 import type { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
-import type { OtaIncomingPayload, OtaDispatchPayload } from '@lattice/queue';
+import type { OtaIncomingPayload, OtaDispatchPayload, NotificationPublishPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 
 const log = createLogger('digest-service:ota-incoming');
@@ -21,11 +21,22 @@ export function otaIncomingConsumer(ch: Channel) {
       throw new Error(`invalid OTA version "${version}"`);
     }
 
-    // 2. Audit. (Future: persist to an OtaRelease table once the schema has one.)
     log.info({ deviceType, version, url, timestamp }, 'OTA release incoming');
 
-    // 3. Forward to mqtt-service, which publishes the retained MQTT notification.
+    // Forward to mqtt-service, which publishes the retained MQTT notification.
     const dispatch: OtaDispatchPayload = { deviceType, version, url, releaseNotes, timestamp };
     publish(ch, RK.OTA_DISPATCH, dispatch);
+
+    // Notify users best-effort — notification-service (F15) binds q.notification.publish
+    // and resolves which users own a device of this type. Drops silently if not yet deployed.
+    try {
+      publish(ch, RK.NOTIFICATION_PUBLISH, {
+        type: 'ota_available',
+        deviceType,
+        version,
+      } satisfies NotificationPublishPayload);
+    } catch (err) {
+      log.warn({ err, deviceType, version }, 'failed to publish OTA notification event — skipped');
+    }
   };
 }
