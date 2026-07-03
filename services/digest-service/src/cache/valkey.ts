@@ -1,5 +1,8 @@
 import IORedis from 'ioredis';
+import { createLogger } from '@lattice/logger';
 import { env } from '../config/env.config';
+
+const log = createLogger('digest-service:valkey');
 
 export const valkey = new IORedis(env.valkey.url, {
   username:    env.valkey.username,
@@ -7,6 +10,8 @@ export const valkey = new IORedis(env.valkey.url, {
   lazyConnect: true,
   maxRetriesPerRequest: null,
 });
+
+valkey.on('error', (err) => log.error({ err }, 'valkey connection error'));
 
 export const keys = {
   // Hot state — written after every confirmed telemetry DB write.

@@ -3,12 +3,13 @@ const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const { createLogger } = require('@lattice/logger');
+const { createLogger, createHttpLogger } = require('@lattice/logger');
 const { connect, publish, RK } = require('@lattice/queue');
 
 const log = createLogger('ota-manager');
 
 const app = express();
+app.use(createHttpLogger(log));
 const port = process.env.PORT || 3000;
 const firmwarePath = process.env.FIRMWARE_PATH || './firmware';
 

@@ -1,7 +1,7 @@
 import { initOTel } from '@lattice/otel';
 const { metricsHandler } = initOTel('google-home');
 
-import { createLogger } from '@lattice/logger';
+import { createLogger, createHttpLogger } from '@lattice/logger';
 import { connect, consume, QUEUES } from '@lattice/queue';
 import type { ActionResultPayload } from '@lattice/queue';
 import express from 'express';
@@ -23,6 +23,7 @@ async function main() {
   log.info('action-result consumer started');
 
   const app = express();
+  app.use(createHttpLogger(log));
   app.use(cors());
   app.use(express.json());
 

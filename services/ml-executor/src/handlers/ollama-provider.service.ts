@@ -60,6 +60,7 @@ export class OllamaProviderService implements ILlmProvider {
         yield chunk.message.content;
       }
     } catch (error) {
+      log.error({ err: error, model: this.modelName }, 'LLM generateStream failed');
       throw new Error('LLM generation failed at infrastructure layer');
     }
   }

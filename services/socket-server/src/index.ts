@@ -1,5 +1,5 @@
 import { initOTel } from '@lattice/otel';
-import { createLogger } from '@lattice/logger';
+import { createLogger, createHttpLogger } from '@lattice/logger';
 import { connect } from '@lattice/queue';
 import express from 'express';
 import http from 'http';
@@ -16,6 +16,7 @@ async function main() {
   log.info('RabbitMQ connected');
 
   const app = express();
+  app.use(createHttpLogger(log));
   app.use(healthRouter);
   app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.use(exceptionMiddleware);

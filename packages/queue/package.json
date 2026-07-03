@@ -9,6 +9,7 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
+    "@lattice/logger": "*",
     "amqplib": "^0.10.7"
   },
   "devDependencies": {

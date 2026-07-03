@@ -1,6 +1,9 @@
 import amqplib, { Channel, ConsumeMessage } from 'amqplib';
+import { createLogger } from '@lattice/logger';
 
 export * from './types';
+
+const log = createLogger('queue');
 
 const EXCHANGE = 'iot';
 const DLQ_EXCHANGE = 'iot.dlq';
@@ -112,7 +115,14 @@ export async function connect(url?: string): Promise<Channel> {
   const conn = await amqplib.connect(
     withHeartbeat(url ?? process.env['RABBITMQ_URL'] ?? 'amqp://localhost'),
   );
+  // Without these, a dropped connection/channel is an uncaught 'error' event —
+  // the process crashes with a raw stack dump instead of a structured log line.
+  conn.on('error', (err) => log.error({ err }, 'RabbitMQ connection error'));
+  conn.on('close', () => log.error('RabbitMQ connection closed'));
+
   const ch = await conn.createChannel();
+  ch.on('error', (err) => log.error({ err }, 'RabbitMQ channel error'));
+  ch.on('close', () => log.error('RabbitMQ channel closed'));
 
   await ch.assertExchange(EXCHANGE, 'topic', { durable: true });
 
@@ -172,7 +182,7 @@ export async function consume<T>(
       await handler(payload, msg);
       ch.ack(msg);
     } catch (err) {
-      console.error('[queue] consumer error — nacking to DLQ', { queue, err });
+      log.error({ err, queue }, 'consumer error — nacking to DLQ');
       // nack without requeue — message goes to DLQ via x-dead-letter-exchange
       ch.nack(msg, false, false);
     }

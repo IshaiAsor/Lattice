@@ -1,5 +1,5 @@
 import { initOTel } from '@lattice/otel';
-import { createLogger } from '@lattice/logger';
+import { createLogger, createHttpLogger } from '@lattice/logger';
 import { connect, consume, QUEUES } from '@lattice/queue';
 import express from 'express';
 import cron from 'node-cron';
@@ -26,6 +26,7 @@ async function main() {
   log.info('scheduled rules cron started (every 10 seconds)');
 
   const app = express();
+  app.use(createHttpLogger(log));
   app.use(healthRouter);
   app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.listen(env.port, () => log.info({ port: env.port }, 'automation-worker listening'));

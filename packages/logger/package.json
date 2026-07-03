@@ -2,7 +2,7 @@
   "name": "@lattice/logger",
   "version": "0.1.0",
   "private": true,
-   "main": "./dist/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
@@ -16,11 +16,12 @@
   },
   "dependencies": {
     "@lattice/otel": "*",
-    "pino": "^9.6.0"
+    "pino": "^9.6.0",
+    "pino-http": "^10.5.0"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "pino-pretty": "^13.0.0",
-    "typescript": "^5.9.3",
-    "@types/node": "^20.0.0"
+    "typescript": "^5.9.3"
   }
 }

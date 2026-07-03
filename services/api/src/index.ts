@@ -1,5 +1,5 @@
 import { initOTel } from '@lattice/otel';
-import { createLogger } from '@lattice/logger';
+import { createLogger, createHttpLogger } from '@lattice/logger';
 import express from 'express';
 import { env } from './config/env.config';
 import { globalRateLimiter } from './middlewares/rate.limiter.middleware';
@@ -22,6 +22,7 @@ const log = createLogger('api');
 
 function main() {
   const app = express();
+  app.use(createHttpLogger(log));
   app.set('trust proxy', 1); // behind Traefik — honour X-Forwarded-For for rate limiting/audit.
   // Default 100kb is too small for a dry-run sensor override carrying a base64 camera frame.
   app.use(express.json({ limit: '8mb' }));

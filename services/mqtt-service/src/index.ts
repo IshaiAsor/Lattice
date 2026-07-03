@@ -1,5 +1,5 @@
 import { initOTel } from '@lattice/otel';
-import { createLogger } from '@lattice/logger';
+import { createLogger, createHttpLogger } from '@lattice/logger';
 import { connect, consume, QUEUES } from '@lattice/queue';
 import express from 'express';
 import { env } from './config/env.config';
@@ -60,6 +60,7 @@ async function main() {
   log.info('consumers started (action-dispatch, ota-dispatch)');
 
   const app = express();
+  app.use(createHttpLogger(log));
   app.use(healthRouter);
   app.get('/metrics', (req, res) => metricsHandler(req, res));
   app.listen(env.port, () => log.info({ port: env.port }, 'mqtt-service listening'));

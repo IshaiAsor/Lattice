@@ -1,5 +1,5 @@
 import { initOTel } from '@lattice/otel';
-import { createLogger } from '@lattice/logger';
+import { createLogger, createHttpLogger } from '@lattice/logger';
 import express from 'express';
 import http from 'http';
 import { env } from './config/env.config';
@@ -23,6 +23,7 @@ async function main() {
   log.info('RabbitMQ connected');
 
   const app = express();
+  app.use(createHttpLogger(log));
   // JSON for provisioning/config; the camera route applies its own raw() parser.
   app.use(express.json());
 

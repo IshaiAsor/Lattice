@@ -1,5 +1,5 @@
 import { initOTel } from '@lattice/otel';
-import { createLogger } from '@lattice/logger';
+import { createLogger, createHttpLogger } from '@lattice/logger';
 import { connect } from '@lattice/queue';
 import express from 'express';
 import { env } from './config/env.config';
@@ -13,6 +13,7 @@ const log = createLogger('ml-router');
 
 async function main() {
   const app = express();
+  app.use(createHttpLogger(log));
   app.use(express.json({ limit: '20mb' }));
   app.use(healthRouter);
   app.get('/metrics', (req, res) => metricsHandler(req, res));
