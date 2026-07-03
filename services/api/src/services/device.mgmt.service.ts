@@ -1,4 +1,7 @@
 import { db } from '../db';
+import { publish, RK } from '@lattice/queue';
+import type { ActionDispatchPayload } from '@lattice/queue';
+import { getChannel } from '../queue';
 
 // User-facing device management (F2.5).
 //
@@ -25,6 +28,9 @@ export interface UserActionView {
   pins: { pinNumber: number; pinMode: string }[];
   intervalMs: number | null;
   status: string;
+  // CameraAction only — null for every other implementation_type.
+  cameraResolution: string | null;
+  cameraTransport: string | null;
 }
 export interface CapabilityView {
   id: number;            // DeviceCapability id
@@ -126,6 +132,8 @@ class DeviceMgmtService {
             pins:      a.pins.map((p) => ({ pinNumber: p.pin_number, pinMode: modeByPinId.get(p.capability_pin_id) ?? 'OUTPUT' })),
             intervalMs: a.telemetry_interval_ms,
             status:    a.status,
+            cameraResolution: a.camera_resolution,
+            cameraTransport:  a.camera_transport,
           })),
       };
     });
@@ -134,7 +142,10 @@ class DeviceMgmtService {
   async activateCapability(
     userId: number,
     deviceId: number,
-    body: { capability_id: number; telemetry_interval_ms?: number | null; pins?: PinInput[] },
+    body: {
+      capability_id: number; telemetry_interval_ms?: number | null; pins?: PinInput[];
+      camera_resolution?: string | null; camera_transport?: string | null;
+    },
   ): Promise<{ id: number }> {
     const device = await this.getOwnedDevice(userId, deviceId);
     const cap = await db.deviceCapability.findUnique({ where: { id: body.capability_id } });
@@ -156,6 +167,8 @@ class DeviceMgmtService {
         mqtt_action_name:      mqttName,
         status:                'active',
         telemetry_interval_ms: body.telemetry_interval_ms ?? null,
+        camera_resolution:     body.camera_resolution ?? null,
+        camera_transport:      body.camera_transport ?? null,
         pins: { create: (body.pins ?? []).map((p) => ({ capability_pin_id: p.capability_pin_id, pin_number: p.pin_number })) },
       },
     });
@@ -166,7 +179,10 @@ class DeviceMgmtService {
     userId: number,
     deviceId: number,
     actionId: number,
-    body: { name?: string; telemetry_interval_ms?: number | null; pins?: PinInput[] },
+    body: {
+      name?: string; telemetry_interval_ms?: number | null; pins?: PinInput[];
+      camera_resolution?: string | null; camera_transport?: string | null;
+    },
   ): Promise<void> {
     await this.getOwnedDevice(userId, deviceId);
     const action = await db.userDeviceAction.findUnique({ where: { id: actionId }, select: { user_device_id: true } });
@@ -180,6 +196,8 @@ class DeviceMgmtService {
         data: {
           action_name:           body.name?.trim(),
           telemetry_interval_ms: body.telemetry_interval_ms,
+          camera_resolution:     body.camera_resolution,
+          camera_transport:      body.camera_transport,
           updated_at:            new Date(),
         },
       });
@@ -192,6 +210,28 @@ class DeviceMgmtService {
         }
       }
     });
+  }
+
+  // ─── Lifecycle commands (reprovision/reset/restart) ───────────────────
+  // actionName is the mqtt_action_name the device firmware listens for; command is the
+  // message body sent as-is (these 4 all take no parameters).
+  async dispatchCommand(userId: number, deviceId: number, actionName: string): Promise<void> {
+    const device = await db.userDevice.findUnique({
+      where: { id: deviceId },
+      select: { user_id: true, device: { select: { version: true } } },
+    });
+    if (!device) throw Object.assign(new Error('Device not found'), { statusCode: 404 });
+    if (device.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
+
+    const payload: ActionDispatchPayload = {
+      userId:   String(userId),
+      deviceId: String(deviceId),
+      actionName,
+      command: '',
+      firmwareVersion: device.device.version,
+    };
+    const ch = await getChannel();
+    publish(ch, RK.ACTION_DISPATCH, payload);
   }
 
   private async ensureOwned(userId: number, deviceId: number): Promise<void> {

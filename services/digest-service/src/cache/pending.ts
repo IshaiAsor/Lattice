@@ -33,3 +33,29 @@ export async function takePending(commandId: string): Promise<PendingCommand | n
     return null;
   }
 }
+
+// Context for an in-flight on-demand picture capture awaiting the device's uploaded frame.
+// Same setPending/takePending/timeout shape as PendingCommand, kept separate since the
+// request/response fields don't overlap (no value/actionName to echo, just who to notify).
+export interface PendingPicture {
+  userId:   string;
+  actionId: number;
+}
+
+export async function setPendingPicture(
+  commandId: string,
+  pending: PendingPicture,
+  ttlSeconds: number,
+): Promise<void> {
+  await valkey.set(keys.pendingPicture(commandId), JSON.stringify(pending), 'EX', ttlSeconds);
+}
+
+export async function takePendingPicture(commandId: string): Promise<PendingPicture | null> {
+  const raw = await valkey.getdel(keys.pendingPicture(commandId));
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw) as PendingPicture;
+  } catch {
+    return null;
+  }
+}

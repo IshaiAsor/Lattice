@@ -1,0 +1,106 @@
+<div class="pipelines-page">
+
+  <!-- Stats row -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total</div>
+      <div class="stat-value">{{ pipelines.length }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Enabled</div>
+      <div class="stat-value">{{ totalEnabled }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Runs (24h)</div>
+      <div class="stat-value">{{ runsToday }}</div>
+    </div>
+    <div class="stat-card stat-err">
+      <div class="stat-label">Failures</div>
+      <div class="stat-value">{{ failures }}</div>
+    </div>
+  </div>
+
+  @if (loading) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+
+  <!-- Pipeline cards -->
+  <div class="pipeline-list">
+    @for (p of pipelines; track p.id) {
+      <div class="pipeline-card" [class.disabled]="!p.enabled">
+        <!-- Card header -->
+        <div class="card-header">
+          <div class="card-title-row">
+            <span class="pipeline-name">{{ p.name }}</span>
+            <div class="stage-pills">
+              @for (t of stagePills; track t.label) {
+                <span class="stage-pill" [ngClass]="t.cls">{{ t.label }}</span>
+              }
+            </div>
+          </div>
+          <div class="card-meta">
+            @for (tt of p.trigger_types; track tt) {
+              <span class="trigger-badge">{{ tt }}</span>
+            }
+            @if (p.last_run) {
+              <span class="run-status-chip" [ngClass]="statusColor(p.last_run.status)">
+                {{ p.last_run.status }}
+              </span>
+            }
+          </div>
+        </div>
+
+        <!-- Card actions -->
+        <div class="card-actions">
+          <mat-slide-toggle [checked]="p.enabled" (change)="toggleEnabled(p)" />
+
+          <button mat-icon-button class="action-btn simulate-btn"
+                  (click)="openSimulate(p)"
+                  matTooltip="Simulate">
+            <mat-icon>science</mat-icon>
+          </button>
+
+          <button mat-icon-button class="action-btn"
+                  (click)="triggerRun(p)"
+                  matTooltip="Trigger now">
+            <mat-icon>play_arrow</mat-icon>
+          </button>
+
+          <button mat-icon-button class="action-btn"
+                  (click)="toggleHistory(p.id)"
+                  matTooltip="Run history">
+            <mat-icon>history</mat-icon>
+          </button>
+
+          <button mat-icon-button class="action-btn"
+                  (click)="openEditor(p)"
+                  matTooltip="Edit">
+            <mat-icon>edit</mat-icon>
+          </button>
+
+          <button mat-icon-button class="action-btn action-delete"
+                  (click)="delete(p)"
+                  matTooltip="Delete">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+
+        <!-- Inline run history -->
+        @if (expandedRunHistory === p.id) {
+          <div class="history-panel">
+            <app-pipeline-run-history [pipelineId]="p.id" />
+          </div>
+        }
+      </div>
+    }
+
+    @if (!loading && pipelines.length === 0) {
+      <div class="empty-state">
+        <mat-icon>bolt</mat-icon>
+        <p>No pipelines yet. Create one to get started.</p>
+      </div>
+    }
+  </div>
+
+
+</div>

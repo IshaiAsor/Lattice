@@ -23,12 +23,25 @@ struct PinSlotDef
     int         mode;   // expected pinMode (OUTPUT or INPUT)
 };
 
-// Describes a Google Smart Home trait that an action class supports.
+// Accepted-value shape for a trait — a protocol fact (OnOff is always on/off, Brightness
+// is always 0-100), not a per-device one. None == 0 so the {nullptr} array terminator
+// (which zero-initializes every field it doesn't list) naturally gets "no constraint".
+enum class TraitConstraintType { None, Enum, Range };
+
+// Describes a Google Smart Home trait that an action class supports, plus the values it
+// accepts. Declared once per trait in GoogleTraits.h and reused by every capability that
+// lists that trait — see CapabilityRegistry.h. This is what flows through the manifest
+// into google_device_traits.valid_parameters, so the backend doesn't have to guess it.
 // Each action class declares SUPPORTED_TRAITS[] terminated by a {nullptr} sentinel.
 struct GoogleTraitDef
 {
     const char* traitValue;  // full "action.devices.traits.XXX" string
     const char* label;       // short label for serial logging
+    TraitConstraintType constraintType;
+    const char* const* enumValues; // null-terminated; only meaningful when constraintType == Enum
+    int rangeMin;
+    int rangeMax;
+    int rangeStep;
 };
 
 // Full capability descriptor — each action class returns one from capability().

@@ -21,7 +21,7 @@ export interface CapabilityInput {
   configurable_pins?: { key: string; label: string; mode: string }[];
   min_telemetry_interval_ms?: number | null;
   google_action_type?: string | null;
-  google_traits?: string[] | null;
+  google_traits?: { value: string; label: string; constraint?: unknown }[] | null;
 }
 
 class ProvisioningService {

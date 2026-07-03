@@ -1,5 +1,10 @@
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { config as dotenvConfig } from 'dotenv';
+
+dotenvConfig({ path: join(__dirname, '..', '.env') });
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -96,6 +101,46 @@ async function main() {
     );
   } else {
     console.log('ℹ️  OWNER_USERNAME/OWNER_PASSWORD not set — skipping credential admin seed');
+  }
+
+  // Sync ML models from ml-executor/models.json — that file is the single source of truth.
+  // On conflict (kind, name, version) the row is updated so config changes are picked up on re-seed.
+  const modelsPath = join(__dirname, '..', 'services', 'ml-executor', 'models.json');
+  const mlModels = JSON.parse(readFileSync(modelsPath, 'utf8')) as {
+    kind: string; name: string; version: string; backend: string;
+    modelFile?: string; ollamaModel?: string; classes?: string[];
+  }[];
+  console.log(`🌱 Seeding ML models from models.json (${mlModels.length} entries)`);
+  for (const m of mlModels) {
+    await pool.query(
+      `INSERT INTO ml_models (kind, name, version, backend, model_file, ollama_model, classes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+       ON CONFLICT (kind, name, version) DO UPDATE
+         SET backend      = EXCLUDED.backend,
+             model_file   = EXCLUDED.model_file,
+             ollama_model = EXCLUDED.ollama_model,
+             classes      = EXCLUDED.classes`,
+      [m.kind, m.name, m.version, m.backend, m.modelFile ?? null, m.ollamaModel ?? null,
+       m.classes ? JSON.stringify(m.classes) : null],
+    );
+    console.log(`   ✓ ${m.kind}/${m.name}/${m.version} (${m.backend})`);
+  }
+
+  // Prune rows left behind by a rename/removal in models.json (upsert above never deletes).
+  // Skip any still referenced by a pipeline_stage instead of failing the whole seed run.
+  const current = mlModels.map((m) => `${m.kind}|${m.name}|${m.version}`);
+  const { rows: stale } = await pool.query<{ id: number; kind: string; name: string; version: string }>(
+    `SELECT id, kind, name, version FROM ml_models
+     WHERE (kind || '|' || name || '|' || version) <> ALL($1::text[])`,
+    [current],
+  );
+  for (const s of stale) {
+    try {
+      await pool.query('DELETE FROM ml_models WHERE id = $1', [s.id]);
+      console.log(`   🗑️  Pruned stale ml_model ${s.kind}/${s.name}/${s.version}`);
+    } catch {
+      console.log(`   ⚠️  Skipped pruning ${s.kind}/${s.name}/${s.version} — still referenced by a pipeline stage`);
+    }
   }
 
   console.log('✅ Seed completed.');

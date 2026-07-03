@@ -3,6 +3,7 @@ import { assertMlQueue, type PipelineStagePayload } from '@lattice/queue';
 import { loadRegistry, type ModelConfig } from '../models';
 import { OnnxVlmProvider } from '../handlers/onnx-provider.service';
 import { OllamaProviderService } from '../handlers/ollama-provider.service';
+import { parseLlmOutput } from '../handlers/parse-llm-output';
 import { advancePipeline } from './advance-pipeline';
 import type { Logger } from 'pino';
 
@@ -18,6 +19,8 @@ function makeConsumer(model: ModelConfig, ch: Channel, log: Logger) {
 
     try {
       let output: Record<string, unknown>;
+      let stageError: string | undefined;
+
       if (vlmProvider) {
         const image = payload.context['image'] as string;
         if (!image) throw new Error('context.image missing for vlm stage');
@@ -29,13 +32,22 @@ function makeConsumer(model: ModelConfig, ch: Channel, log: Logger) {
         if (!prompt) throw new Error('context.prompt missing for llm stage');
         const image = payload.context['image'] as string | undefined;
         const messages = [{ role: 'user' as const, content: prompt, ...(image ? { image } : {}) }];
-        const result = await llmProvider.generate(messages);
-        output = result as unknown as Record<string, unknown>;
+        const result = await llmProvider.generate(messages, { json: true });
+        const parsed = parseLlmOutput(result.text ?? '', result.durationMs);
+        output = parsed.output;
+        stageError = parsed.error;
+        if (stageError) {
+          log.warn(
+            { pipelineRunId: payload.pipelineRunId, stageId: payload.stageId, error: stageError },
+            `[${label}] LLM output failed JSON validation`,
+          );
+        }
       } else {
         throw new Error(`no provider for model ${label}`);
       }
-      await advancePipeline(ch, payload, output);
-      log.info({ pipelineRunId: payload.pipelineRunId }, `[${label}] stage completed`);
+
+      await advancePipeline(ch, payload, output, stageError);
+      log.info({ pipelineRunId: payload.pipelineRunId }, `[${label}] stage ${stageError ? 'failed' : 'completed'}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log.error({ pipelineRunId: payload.pipelineRunId, err: message }, `[${label}] stage failed`);

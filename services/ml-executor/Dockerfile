@@ -14,10 +14,11 @@ COPY tsconfig.base.json ./
 
 RUN npm ci
 # The lockfile was generated on Windows so it only contains the win32-x64 sharp binary.
-# Install the correct Linux binary for whatever arch this build is running on.
-RUN npm install --os=linux --cpu=$(uname -m | sed 's/aarch64/arm64/') sharp
-RUN npm run build -w @lattice/logger \
- && npm run build -w @lattice/otel \
+# Install the correct Linux binary for whatever arch this build is running on. npm's --cpu
+# filter wants its own arch names (x64/arm64), not uname -m's (x86_64/aarch64).
+RUN npm install --os=linux --cpu=$(uname -m | sed -e 's/x86_64/x64/' -e 's/aarch64/arm64/') sharp
+RUN npm run build -w @lattice/otel \
+ && npm run build -w @lattice/logger \
  && npm run build -w @lattice/queue \
  && npm run build -w @lattice/ml \
  && npm run build -w @lattice/ioredis \
@@ -46,6 +47,7 @@ COPY --from=builder /workspace/packages/ioredis/dist         ./node_modules/@lat
 
 COPY --from=builder /workspace/services/ml-executor/dist ./dist
 COPY --from=builder /workspace/services/ml-executor/models.json ./models.json
+COPY --from=builder /workspace/services/ml-executor/models ./models
 
 ENV NODE_ENV=production
 EXPOSE 3002

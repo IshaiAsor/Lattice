@@ -1,0 +1,228 @@
+# Development overlay — adds every app service currently missing from compose.yaml
+# (api, mqtt-service, device-gateway, socket-server, digest-service, automation-worker,
+# ml-router, ml-executor, backoffice), on the SAME ports/infra/.env as normal local dev.
+#
+# Unlike compose.test.yaml (a separate, disposable stack with its own DB/creds for
+# tests/e2e), this file is an overlay merged on top of the real compose.yaml — it reuses
+# your existing postgres/emqx/rabbitmq/cache containers and root .env, so it's meant to sit
+# alongside your everyday dev DB, not replace it.
+#
+# The point: bring the whole suite up in Docker, then swap ONE service out to iterate on
+# locally — since it's on the same port, nothing else needs reconfiguring:
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d
+#   docker compose -f compose.yaml -f compose.dev.yaml stop api
+#   cd services/api && npm run dev          # now serving on :3000, same as the container did
+#   docker compose -f compose.yaml -f compose.dev.yaml start api   # put it back when done
+#
+# Ports match backoffice/src/environments/environment.development.ts (api 3100, device-gateway
+# 3004, socket-server 3007) and each service's own env.config.ts default otherwise.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: api
+    ports:
+      - '3100:3000'
+    environment:
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    restart: always
+
+  device-gateway:
+    build:
+      context: .
+      dockerfile: services/device-gateway/Dockerfile
+    container_name: device-gateway
+    ports:
+      - '3004:3004'
+    environment:
+      - PORT=3004
+      - JWT_SECRET=${JWT_SECRET}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+      # Embedded in provisioning responses returned to devices — must be host-reachable.
+      - DEVICE_GATEWAY_URL=http://localhost:3004
+      - OTA_MANAGER_URL=http://localhost:3001
+      - MQTT_SERVER_NAME=localhost
+      - MQTT_PORT=1883
+      - MQTT_VALIDATE_CERT=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    restart: always
+
+  mqtt-service:
+    build:
+      context: .
+      dockerfile: services/mqtt-service/Dockerfile
+    container_name: mqtt-service
+    ports:
+      - '3005:3005'
+    environment:
+      - PORT=3005
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - MQTT_INTERNAL_HOST=emqx
+      - MQTT_PORT=1883
+      - MQTT_APP_USERNAME=${MQTT_APP_USERNAME}
+      - MQTT_APP_PASSWORD=${MQTT_APP_PASSWORD}
+      - MQTT_CLIENT_ID=mqtt-service
+      - MQTT_VALIDATE_CERT=false
+    depends_on:
+      - emqx
+      - rabbitmq
+    restart: always
+
+  socket-server:
+    build:
+      context: .
+      dockerfile: services/socket-server/Dockerfile
+    container_name: socket-server
+    ports:
+      - '3007:3007'
+    environment:
+      - PORT=3007
+      - JWT_SECRET=${JWT_SECRET}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+    depends_on:
+      - rabbitmq
+      - cache
+    restart: always
+
+  digest-service:
+    build:
+      context: .
+      dockerfile: services/digest-service/Dockerfile
+    container_name: digest-service
+    ports:
+      - '3006:3006'
+    environment:
+      - PORT=3006
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      cache:
+        condition: service_started
+    restart: always
+
+  automation-worker:
+    build:
+      context: .
+      dockerfile: services/automation-worker/Dockerfile
+    container_name: automation-worker
+    ports:
+      - '3008:3008'
+    environment:
+      - PORT=3008
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    restart: always
+
+  ml-router:
+    build:
+      context: .
+      dockerfile: services/ml-router/Dockerfile
+    container_name: ml-router
+    ports:
+      - '3009:3009'
+    environment:
+      - PORT=3009
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      cache:
+        condition: service_started
+    restart: always
+
+  ml-executor:
+    build:
+      context: .
+      dockerfile: services/ml-executor/Dockerfile
+    container_name: ml-executor
+    ports:
+      - '3002:3002'
+    environment:
+      - PORT=3002
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+      # Ollama models via cluster tunnel (started automatically with compose)
+      - OLLAMA_URL=${OLLAMA_URL:-http://cluster-tunnel:11434}
+    depends_on:
+      - rabbitmq
+      - cache
+      - cluster-tunnel
+    restart: always
+
+  # Angular UI, built with the `development` config (see backoffice/Dockerfile's
+  # `runtime-test` stage) so it resolves the localhost:* ports above instead of the
+  # production subdomain-derivation scheme.
+  backoffice:
+    build:
+      context: ./backoffice
+      dockerfile: Dockerfile
+      target: runtime-test
+    container_name: backoffice
+    ports:
+      - '4200:80'
+    depends_on:
+      - api
+      - device-gateway
+      - socket-server
+    restart: always
+
+  # Software device fleet (tools/device-sim) — provisions + drives a small mixed fleet against
+  # the stack so there's something to see/debug in the backoffice without real hardware. Fleet
+  # composition lives in tools/device-sim/fleet.dev.json (committed — edit to change it).
+  device-sim:
+    build:
+      context: .
+      dockerfile: tools/device-sim/Dockerfile
+    container_name: device-sim
+    # device-gateway embeds "http://localhost:<port>/..." callback URLs in its provisioning
+    # response (so the host-run Jest e2e suite can reach it) — this container has no other way
+    # to resolve those, so make "localhost" here mean the Docker host instead of itself. The
+    # request then round-trips back in through the host-published port into the right container.
+    extra_hosts:
+      - 'localhost:host-gateway'
+    environment:
+      - API_URL=http://api:3000
+      - DEVICE_GATEWAY_URL=http://device-gateway:3004
+      - MQTT_SERVER_NAME=emqx
+      - MQTT_PORT=1883
+      - SIM_USER=${OWNER_USERNAME:-admin}
+      - SIM_PASS=${OWNER_PASSWORD:-admin}
+      - FLEET_CONFIG=fleet.dev.json
+      - PERSIST=false
+      - CLEANUP_ON_EXIT=true
+    depends_on:
+      - api
+      - device-gateway
+      - mqtt-service
+    restart: always

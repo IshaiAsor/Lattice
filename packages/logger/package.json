@@ -15,6 +15,7 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
+    "@lattice/otel": "*",
     "pino": "^9.6.0"
   },
   "devDependencies": {

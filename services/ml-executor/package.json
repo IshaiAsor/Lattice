@@ -9,16 +9,17 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@lattice/ioredis": "*",
     "@lattice/logger": "*",
     "@lattice/ml": "*",
-    "@lattice/ioredis": "*",
     "@lattice/otel": "*",
     "@lattice/queue": "*",
     "express": "^4.21.2",
     "ioredis": "^5.11.1",
     "ollama": "^0.6.3",
     "onnxruntime-node": "^1.20.1",
-    "sharp": "^0.33.5"
+    "sharp": "^0.33.5",
+    "undici": "^6.27.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

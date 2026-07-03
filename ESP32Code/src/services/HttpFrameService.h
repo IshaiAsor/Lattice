@@ -11,7 +11,8 @@
 struct HttpFrame {
     uint8_t *buf;
     size_t   len;
-    char     action[64];   // mqtt_action_name this frame belongs to
+    char     action[64];      // mqtt_action_name this frame belongs to
+    char     commandId[40];   // empty = periodic push; set = on-demand capture correlation
 };
 
 class HttpFrameService
@@ -45,6 +46,7 @@ private:
                 continue;
 
             String url = self->_baseUrl + "/api/camera/frame?action=" + frame.action;
+            if (frame.commandId[0] != '\0') url += "&commandId=" + String(frame.commandId);
 
             bool begun = self->_useSSL
                 ? http.begin(ssl,   url)
@@ -90,7 +92,7 @@ public:
 
     bool isReady() const { return _queue != nullptr; }
 
-    bool sendFrame(const uint8_t *buf, size_t len, const String& actionName)
+    bool sendFrame(const uint8_t *buf, size_t len, const String& actionName, const String& commandId = "")
     {
         if (!_queue) return false;
 
@@ -108,6 +110,7 @@ public:
         frame.buf = copy;
         frame.len = len;
         strlcpy(frame.action, actionName.c_str(), sizeof(frame.action));
+        strlcpy(frame.commandId, commandId.c_str(), sizeof(frame.commandId));
 
         if (xQueueSend(_queue, &frame, 0) != pdTRUE)
         {

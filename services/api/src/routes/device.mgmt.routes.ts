@@ -43,12 +43,14 @@ deviceMgmtRouter.get('/:id/capabilities', async (req, res, next) => {
 
 deviceMgmtRouter.post('/:id/actions', async (req, res, next) => {
   try {
-    const { capability_id, telemetry_interval_ms, pins } = req.body ?? {};
+    const { capability_id, telemetry_interval_ms, pins, camera_resolution, camera_transport } = req.body ?? {};
     res.status(201).json(
       await deviceMgmtService.activateCapability(req.user!.id, Number(req.params.id), {
         capability_id,
         telemetry_interval_ms,
         pins,
+        camera_resolution,
+        camera_transport,
       }),
     );
   } catch (err) {
@@ -58,15 +60,32 @@ deviceMgmtRouter.post('/:id/actions', async (req, res, next) => {
 
 deviceMgmtRouter.patch('/:id/actions/:actionId', async (req, res, next) => {
   try {
-    const { name, telemetry_interval_ms, pins } = req.body ?? {};
+    const { name, telemetry_interval_ms, pins, camera_resolution, camera_transport } = req.body ?? {};
     await deviceMgmtService.updateActivatedAction(
       req.user!.id,
       Number(req.params.id),
       Number(req.params.actionId),
-      { name, telemetry_interval_ms, pins },
+      { name, telemetry_interval_ms, pins, camera_resolution, camera_transport },
     );
     res.sendStatus(204);
   } catch (err) {
     next(err);
   }
 });
+
+// ─── Lifecycle commands ────────────────────────────────────────────────
+for (const [path, actionName] of [
+  ['reprovision', 'reprovision'],
+  ['soft-reset', 'soft-reset'],
+  ['hard-reset', 'hard-reset'],
+  ['restart', 'restart'],
+] as const) {
+  deviceMgmtRouter.post(`/:id/${path}`, async (req, res, next) => {
+    try {
+      await deviceMgmtService.dispatchCommand(req.user!.id, Number(req.params.id), actionName);
+      res.json({ message: `${actionName} command sent` });
+    } catch (err) {
+      next(err);
+    }
+  });
+}

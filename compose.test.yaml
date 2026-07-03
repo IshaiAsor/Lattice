@@ -1,0 +1,438 @@
+# Ephemeral integration-test stack — mirrors compose.yaml's infra but as its own Compose
+# project (separate network/volumes/container names), with every app service under services/
+# added so tests/e2e can run against a real, disposable stack instead of requiring each
+# service to be started by hand via `npm run dev`.
+#
+# Host ports are deliberately NOT the same as compose.yaml (see plan / README notes): only
+# api (3100), device-gateway (3004) and socket-server (3007) are fixed, because those three
+# are hard-coded at build time into backoffice/src/environments/environment.development.ts.
+# Everything else is shifted so this stack can run alongside the regular dev compose.yaml.
+#
+# Usage:
+#   docker compose -f compose.test.yaml --env-file .env.test up -d postgres rabbitmq emqx cache
+#   docker compose -f compose.test.yaml --env-file .env.test run --rm migrate
+#   docker compose -f compose.test.yaml --env-file .env.test up -d
+#   npm run test:e2e
+#   docker compose -f compose.test.yaml --env-file .env.test down -v
+#
+# (or just `npm run test:e2e:up` / `npm run test:e2e:down`)
+
+name: lattice-test
+
+services:
+  # EMQX MQTT Broker
+  emqx:
+    image: emqx/emqx:5.6.0
+    container_name: emqx-test
+    depends_on:
+      - postgres
+    ports:
+      - '0.0.0.0:${MQTT_PORT:-11883}:1883' # Standard MQTT
+      - '0.0.0.0:18883:8883' # Secure MQTT (MQTTS)
+      - '0.0.0.0:28083:18083' # Dashboard
+    environment:
+      - EMQX_NODE_NAME=emqx@127.0.0.1
+      - EMQX_LISTENERS__SSL__DEFAULT__BIND=8883
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CACERTFILE=/opt/emqx/etc/certs/ca.pem
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE=/opt/emqx/etc/certs/server.pem
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE=/opt/emqx/etc/certs/server.key
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__VERIFY=verify_none
+      - EMQX_LISTENERS__WSS__DEFAULT__ENABLE=false
+      - EMQX_AUTHENTICATION__1__MECHANISM=jwt
+      - EMQX_AUTHENTICATION__1__USE_JWKS=false
+      - EMQX_AUTHENTICATION__1__ALGORITHM=hmac-based
+      - EMQX_AUTHENTICATION__1__SECRET=${JWT_SECRET}
+      - EMQX_AUTHENTICATION__1__SECRET_BASE64_ENCODED=false
+      - EMQX_AUTHENTICATION__2__MECHANISM=password_based
+      - EMQX_AUTHENTICATION__2__BACKEND=postgresql
+      - EMQX_AUTHENTICATION__2__SERVER=postgres:5432
+      - EMQX_AUTHENTICATION__2__DATABASE=${DB_NAME:-lattice_test}
+      - EMQX_AUTHENTICATION__2__USERNAME=${EMQX_DB_USERNAME}
+      - EMQX_AUTHENTICATION__2__PASSWORD=${EMQX_DB_PASSWORD}
+      - EMQX_AUTHENTICATION__2__QUERY=SELECT password_hash, is_superuser FROM mqtt_user WHERE username = $${username} LIMIT 1
+      - EMQX_AUTHENTICATION__2__PASSWORD_HASH_ALGORITHM__NAME=bcrypt
+      - EMQX_AUTHORIZATION__NO_MATCH=deny
+      - EMQX_AUTHORIZATION__SOURCES__1__TYPE=file
+      - EMQX_AUTHORIZATION__SOURCES__1__ENABLE=true
+      - EMQX_AUTHORIZATION__SOURCES__1__PATH=/opt/emqx/etc/acl.conf
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USERNAME}
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
+    volumes:
+      - ./certs:/opt/emqx/etc/certs:ro
+      - ./acl.conf:/opt/emqx/etc/acl.conf
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db-test
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-lattice_test}
+      - BACKEND_DB_USER=${BACKEND_DB_USER}
+      - BACKEND_DB_PASSWORD=${BACKEND_DB_PASSWORD}
+      - EMQX_DB_USERNAME=${EMQX_DB_USERNAME}
+      - EMQX_DB_PASSWORD=${EMQX_DB_PASSWORD}
+      - MQTT_APP_USERNAME=${MQTT_APP_USERNAME}
+      - MQTT_APP_PASSWORD=${MQTT_APP_PASSWORD}
+      - TZ=Asia/Jerusalem
+      - PGTZ=Asia/Jerusalem
+    ports:
+      - '15432:5432'
+    volumes:
+      - pg-data-test:/var/lib/postgresql/data
+      - ./local-sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d ${DB_NAME:-lattice_test}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Valkey (Redis-compatible cache)
+  cache:
+    image: valkey/valkey:8-alpine
+    container_name: redis_cache-test
+    command: >
+      valkey-server
+      --maxmemory 256mb
+      --maxmemory-policy volatile-lru
+      --appendonly yes
+      --user ${REDIS_USER} on ">${REDIS_PASSWORD}" ~* allchannels +@all
+    ports:
+      - '16379:6379'
+    volumes:
+      - redis-data-test:/data
+    restart: always
+
+  # RabbitMQ message broker
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq-test
+    ports:
+      - '25672:5672'   # AMQP
+      - '35672:15672'  # Management UI → http://localhost:35672
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq-data-test:/var/lib/rabbitmq
+    restart: always
+
+  # Prisma migrations — run once before starting the app services:
+  #   docker compose -f compose.test.yaml --env-file .env.test run --rm migrate
+  migrate:
+    build:
+      context: .
+      dockerfile: prisma/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
+      - BACKEND_DB_USER=${BACKEND_DB_USER}
+      - EMQX_DB_USERNAME=${EMQX_DB_USERNAME}
+      - MQTT_APP_USERNAME=${MQTT_APP_USERNAME}
+      - MQTT_APP_PASSWORD=${MQTT_APP_PASSWORD}
+      - OWNER_USERNAME=${OWNER_USERNAME}
+      - OWNER_PASSWORD=${OWNER_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - migrate
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: api-test
+    ports:
+      - '3100:3000'
+    environment:
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=http://localhost:14200
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    restart: always
+
+  device-gateway:
+    build:
+      context: .
+      dockerfile: services/device-gateway/Dockerfile
+    container_name: device-gateway-test
+    ports:
+      - '3004:3004'
+    environment:
+      - PORT=3004
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=http://localhost:14200
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
+      # Embedded in provisioning responses returned to the (host-side) simulated device —
+      # must be host-reachable, not the internal Docker DNS names used above.
+      - DEVICE_GATEWAY_URL=http://localhost:3004
+      - OTA_MANAGER_URL=http://localhost:13001
+      - MQTT_SERVER_NAME=localhost
+      - MQTT_PORT=${MQTT_PORT:-11883}
+      - MQTT_VALIDATE_CERT=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    restart: always
+
+  mqtt-service:
+    build:
+      context: .
+      dockerfile: services/mqtt-service/Dockerfile
+    container_name: mqtt-service-test
+    ports:
+      - '3005:3005'
+    environment:
+      - PORT=3005
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      # Internal Docker-network connection to the broker — NOT the shifted host port above.
+      - MQTT_INTERNAL_HOST=emqx
+      - MQTT_PORT=1883
+      - MQTT_APP_USERNAME=${MQTT_APP_USERNAME}
+      - MQTT_APP_PASSWORD=${MQTT_APP_PASSWORD}
+      - MQTT_CLIENT_ID=mqtt-service-test
+      - MQTT_VALIDATE_CERT=false
+    depends_on:
+      - emqx
+      - rabbitmq
+    restart: always
+
+  socket-server:
+    build:
+      context: .
+      dockerfile: services/socket-server/Dockerfile
+    container_name: socket-server-test
+    ports:
+      - '3007:3007'
+    environment:
+      - PORT=3007
+      - JWT_SECRET=${JWT_SECRET}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+    depends_on:
+      - rabbitmq
+      - cache
+    restart: always
+
+  digest-service:
+    build:
+      context: .
+      dockerfile: services/digest-service/Dockerfile
+    container_name: digest-service-test
+    ports:
+      - '3006:3006'
+    environment:
+      - PORT=3006
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      cache:
+        condition: service_started
+    restart: always
+
+  automation-worker:
+    build:
+      context: .
+      dockerfile: services/automation-worker/Dockerfile
+    container_name: automation-worker-test
+    ports:
+      - '3008:3008'
+    environment:
+      - PORT=3008
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    restart: always
+
+  ota-manager:
+    build:
+      context: .
+      dockerfile: services/ota-manager/Dockerfile
+    container_name: ota-manager-test
+    ports:
+      - '13001:3000'
+    environment:
+      - PORT=3000
+      - FIRMWARE_PATH=/app/firmware
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./firmware-storage:/app/firmware
+    depends_on:
+      - rabbitmq
+    restart: always
+
+  # Angular UI, built with the `development` config (localhost-based apiV2Url/deviceGatewayUrl/
+  # socketUrl) instead of the default `production` config's subdomain-derivation scheme — see
+  # backoffice/Dockerfile's `runtime-test` stage.
+  backoffice:
+    build:
+      context: ./backoffice
+      dockerfile: Dockerfile
+      target: runtime-test
+    container_name: backoffice-test
+    ports:
+      - '14200:80'
+    depends_on:
+      - api
+      - device-gateway
+      - socket-server
+    restart: always
+
+  # Software device fleet (tools/device-sim) — provisions + drives a small mixed fleet so the
+  # stack has ambient device traffic to inspect. Separate from tests/e2e/device-sim.e2e.test.ts,
+  # which provisions its own SIM-E2E-* device directly from the host and doesn't use this fleet.
+  # Fleet composition lives in tools/device-sim/fleet.test.json (committed — edit to change it).
+  device-sim:
+    build:
+      context: .
+      dockerfile: tools/device-sim/Dockerfile
+    container_name: device-sim-test
+    # device-gateway embeds "http://localhost:<port>/..." callback URLs in its provisioning
+    # response (so the host-run Jest e2e suite can reach it) — this container has no other way
+    # to resolve those, so make "localhost" here mean the Docker host instead of itself. The
+    # request then round-trips back in through the host-published port into the right container.
+    extra_hosts:
+      - 'localhost:host-gateway'
+    environment:
+      - API_URL=http://api:3000
+      - DEVICE_GATEWAY_URL=http://device-gateway:3004
+      - MQTT_SERVER_NAME=emqx
+      - MQTT_PORT=1883
+      - SIM_USER=${OWNER_USERNAME:-admin}
+      - SIM_PASS=${OWNER_PASSWORD:-admin}
+      - FLEET_CONFIG=fleet.test.json
+      - PERSIST=false
+      - CLEANUP_ON_EXIT=true
+    depends_on:
+      - api
+      - device-gateway
+      - mqtt-service
+    restart: always
+
+  # Not required by tests/e2e/device-sim.e2e.test.ts today — enable with `--profile full` for
+  # broader smoke-testing. ml-executor talks to the cluster-tunnel-test service below for
+  # Ollama (inference runs on the cluster, not locally — see project memory); google-home
+  # needs real Google creds.
+  ml-router:
+    build:
+      context: .
+      dockerfile: services/ml-router/Dockerfile
+    container_name: ml-router-test
+    ports:
+      - '3009:3009'
+    environment:
+      - PORT=3009
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      cache:
+        condition: service_started
+    restart: always
+    profiles:
+      - full
+
+  ml-executor:
+    build:
+      context: .
+      dockerfile: services/ml-executor/Dockerfile
+    container_name: ml-executor-test
+    ports:
+      - '3002:3002'
+    environment:
+      - PORT=3002
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+      - OLLAMA_URL=${OLLAMA_URL:-http://cluster-tunnel-test:11434}
+    depends_on:
+      - rabbitmq
+      - cache
+      - cluster-tunnel-test
+    restart: always
+    profiles:
+      - full
+
+  # SSH tunnel to staging cluster for ollama models — same approach as compose.yaml's
+  # cluster-tunnel (ClusterIP resolved at startup via `sudo -n kubectl get svc` over SSH,
+  # since it changes whenever the Service object is recreated), but on its own container
+  # name/host port so this stack stays self-contained and can run standalone or alongside
+  # the regular dev compose.yaml without a port clash.
+  cluster-tunnel-test:
+    image: alpine:latest
+    container_name: cluster-tunnel-test
+    command: >
+      sh -c "apk add --no-cache openssh-client &&
+      mkdir -p /root/.ssh &&
+      cp /root/.ssh-ro/k3s-a1.1.key /root/.ssh/k3s-a1.1.key &&
+      chmod 600 /root/.ssh/k3s-a1.1.key &&
+      OLLAMA_IP=$$(ssh -i /root/.ssh/k3s-a1.1.key -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@151.145.93.240 'sudo -n kubectl get svc ollama-api -n lattice-shared -o jsonpath={.spec.clusterIP}') &&
+      ssh -i /root/.ssh/k3s-a1.1.key
+      -o StrictHostKeyChecking=no
+      -o UserKnownHostsFile=/dev/null
+      -N
+      -L 0.0.0.0:11434:$$OLLAMA_IP:11434
+      ubuntu@151.145.93.240"
+    ports:
+      - '21434:11434'
+    volumes:
+      - ${K3S_SSH_KEY_PATH:-C:\\Users\\ishai\\Desktop\\k3s-infra\\k3s-a1.1.key}:/root/.ssh-ro/k3s-a1.1.key:ro
+    restart: always
+    profiles:
+      - full
+
+  google-home:
+    build:
+      context: .
+      dockerfile: services/google-home/Dockerfile
+    container_name: google-home-test
+    ports:
+      - '13010:3010'
+    environment:
+      - PORT=3010
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
+      - JWT_SECRET=${JWT_SECRET}
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+      - GOOGLE_AUTH_CLIENT_ID=${GOOGLE_AUTH_CLIENT_ID}
+      - GOOGLE_AUTH_CLIENT_SECRET=${GOOGLE_AUTH_CLIENT_SECRET}
+      - GOOGLE_SIGN_IN_CLIENT_ID=${GOOGLE_SIGN_IN_CLIENT_ID}
+      - GOOGLE_SIGN_IN_CLIENT_SECRET=${GOOGLE_SIGN_IN_CLIENT_SECRET}
+      - GOOGLE_SERVICE_ACCOUNT_KEY=${GOOGLE_SERVICE_ACCOUNT_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    restart: always
+    profiles:
+      - full
+
+volumes:
+  pg-data-test:
+  redis-data-test:
+  rabbitmq-data-test:

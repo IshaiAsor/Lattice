@@ -5,6 +5,7 @@ export interface GoogleActionTraitView {
   id: number;
   name: string;
   value: string;
+  validParameters: unknown;
 }
 
 class GoogleActionsTraitsService {
@@ -19,6 +20,7 @@ class GoogleActionsTraitsService {
         id: capabilityTrait.id,
         name: traitDef?.name ?? '',
         value: traitDef?.value ?? '',
+        validParameters: traitDef?.valid_parameters,
       };
     });
   }

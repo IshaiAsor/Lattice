@@ -23,4 +23,6 @@ export const env = {
     windowMs: parseInt(process.env['RATE_LIMIT_WINDOW_MS']    ?? String(15 * 60 * 1000), 10),
     limit:    parseInt(process.env['RATE_LIMIT_MAX_REQUESTS'] ?? '150', 10),
   },
+
+  rabbitmqUrl: process.env['RABBITMQ_URL'] ?? 'amqp://localhost',
 };

@@ -3,25 +3,38 @@ FROM node:22-slim AS base
 FROM base AS builder
 WORKDIR /workspace
 
+# Prisma v7 needs openssl present to fetch/run the query engine.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
-COPY packages/logger   packages/logger
-COPY packages/otel     packages/otel
-COPY packages/queue    packages/queue
-COPY packages/ml       packages/ml
-COPY packages/ioredis  packages/ioredis
+COPY packages/logger        packages/logger
+COPY packages/otel          packages/otel
+COPY packages/queue         packages/queue
+COPY packages/ml            packages/ml
+COPY packages/ioredis       packages/ioredis
+COPY packages/prisma-client packages/prisma-client
+COPY packages/capability-validation packages/capability-validation
 COPY services/ml-router services/ml-router
+# Root schema is the single source of truth; prisma-client's prepare step reads it.
+COPY prisma prisma
 COPY tsconfig.base.json ./
 
 RUN npm ci
-RUN npm run build -w @lattice/logger \
- && npm run build -w @lattice/otel \
+RUN npm run build -w @lattice/otel \
+ && npm run build -w @lattice/logger \
  && npm run build -w @lattice/queue \
  && npm run build -w @lattice/ml \
  && npm run build -w @lattice/ioredis \
+ && npm run build -w @lattice/prisma-client \
+ && npm run build -w @lattice/capability-validation \
  && npm run build -w @lattice/ml-router
 
 FROM base
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/node_modules ./node_modules
 # npm workspace packages land as symlinks pointing at /workspace/packages/* which
@@ -40,6 +53,12 @@ COPY --from=builder /workspace/packages/ml/package.json      ./node_modules/@lat
 COPY --from=builder /workspace/packages/ml/dist              ./node_modules/@lattice/ml/dist
 COPY --from=builder /workspace/packages/ioredis/package.json ./node_modules/@lattice/ioredis/package.json
 COPY --from=builder /workspace/packages/ioredis/dist         ./node_modules/@lattice/ioredis/dist
+COPY --from=builder /workspace/packages/prisma-client/package.json  ./node_modules/@lattice/prisma-client/package.json
+COPY --from=builder /workspace/packages/prisma-client/dist          ./node_modules/@lattice/prisma-client/dist
+# Includes the generated .prisma/client (query engine + client) the package resolves.
+COPY --from=builder /workspace/packages/prisma-client/node_modules  ./node_modules/@lattice/prisma-client/node_modules
+COPY --from=builder /workspace/packages/capability-validation/package.json ./node_modules/@lattice/capability-validation/package.json
+COPY --from=builder /workspace/packages/capability-validation/dist         ./node_modules/@lattice/capability-validation/dist
 
 COPY --from=builder /workspace/services/ml-router/dist ./dist
 COPY --from=builder /workspace/services/ml-router/plans.json ./plans.json

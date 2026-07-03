@@ -1,0 +1,9 @@
+{
+  "//": "Fleet for the compose.test.yaml device-sim service — small and camera-free to keep the ephemeral integration-test stack fast/deterministic. tests/e2e/device-sim.e2e.test.ts provisions its own separate SIM-E2E-* device directly, so this fleet doesn't collide with it; it just gives the stack ambient device traffic to exercise/inspect.",
+  "defaults": { "activateAll": true },
+  "devices": [
+    { "type": "ESP32S3_MINI", "count": 2 },
+    { "type": "ESP32S3_GEN4_GENERIC", "count": 1 },
+    { "type": "ESP32S3_CAM", "count": 1, "camera": true }
+  ]
+}

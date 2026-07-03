@@ -4,7 +4,7 @@ import { tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { Observable } from 'rxjs';
 import { jwtDecode } from 'jwt-decode';
-import { apiV2Url } from './api.config';
+import { apiUrl } from './api.config';
 
 export interface User {
   id?: number;
@@ -24,8 +24,7 @@ interface AuthResponse {
 export class AuthService {
   private tokenKey = 'access_token';
   private refreshTokenKey = 'refresh_token';
-  // Migrated to the new `api` service (F2): /api/auth/* + /api/users/me.
-  private apiUrl = apiV2Url();
+  private apiUrl = apiUrl();
   private http = inject(HttpClient);
   private router = inject(Router);
 

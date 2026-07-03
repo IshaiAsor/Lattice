@@ -15,8 +15,24 @@ inline void serializeCapability(JsonArray caps, const CapabilityDescriptor& d) {
     cap["google_action_type"]        = d.googleType;
     cap["min_telemetry_interval_ms"] = d.minIntervalMs;
     JsonArray tr = cap["google_traits"].to<JsonArray>();
-    for (const GoogleTraitDef* t = d.traits; t->traitValue != nullptr; ++t)
-        tr.add(t->traitValue);
+    for (const GoogleTraitDef* t = d.traits; t->traitValue != nullptr; ++t) {
+        JsonObject trait = tr.add<JsonObject>();
+        trait["value"] = t->traitValue;
+        trait["label"] = t->label;
+        if (t->constraintType == TraitConstraintType::Enum) {
+            JsonObject constraint = trait["constraint"].to<JsonObject>();
+            constraint["type"] = "enum";
+            JsonArray values = constraint["values"].to<JsonArray>();
+            for (const char* const* v = t->enumValues; *v != nullptr; ++v)
+                values.add(*v);
+        } else if (t->constraintType == TraitConstraintType::Range) {
+            JsonObject constraint = trait["constraint"].to<JsonObject>();
+            constraint["type"] = "range";
+            constraint["min"]  = t->rangeMin;
+            constraint["max"]  = t->rangeMax;
+            constraint["step"] = t->rangeStep;
+        }
+    }
     JsonArray pinSlots = cap["configurable_pins"].to<JsonArray>();
     if (d.pins != nullptr) {
         for (const PinSlotDef* p = d.pins; p->key != nullptr; ++p) {

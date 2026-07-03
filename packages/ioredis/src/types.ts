@@ -12,6 +12,7 @@ export const SOCKET_EVENTS = {
   ACTION_STATE_PENDING: 'action_state_pending',
   ACTION_STATE_FAILED:  'action_state_failed',
   DEVICE_STATUS_CHANGE: 'device_status_change',
+  PIPELINE_RUN_UPDATE:  'pipeline_run_update',
 } as const;
 
 export const INFER_CHANNELS = {

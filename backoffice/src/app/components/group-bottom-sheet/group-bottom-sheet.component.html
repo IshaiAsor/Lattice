@@ -158,10 +158,15 @@
                     <span class="sensor-unit">%</span>
                 </div>
                 }
+                @if (isTelemetryAction(action) || isCameraAction(action)) {
+                <div class="sensor-received-badge">
+                    <app-received-badge [receivedAt]="action.receivedAt"
+                        [variant]="isCameraAction(action) ? 'overlay' : 'inline'"></app-received-badge>
+                </div>
+                }
 
                 <!-- Camera / doorbell feeds -->
-                @if (action.googleType?.value === 'action.devices.types.CAMERA' ||
-                     action.googleType?.value === 'action.devices.types.DOORBELL') {
+                @if (isCameraAction(action)) {
                 <div class="camera-display" (click)="openCameraFullscreen(action)" (keydown.enter)="openCameraFullscreen(action)" tabindex="0" role="button" [matTooltip]="'Click to expand'">
                     @if (action.state) {
                     <img [src]="'data:image/jpeg;base64,' + action.state" alt="Camera" class="camera-img" />

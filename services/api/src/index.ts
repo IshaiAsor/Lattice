@@ -12,6 +12,8 @@ import { deviceMgmtRouter } from './routes/device.mgmt.routes';
 import { userActionsRouter } from './routes/user.actions.routes';
 import { actionGroupsRouter } from './routes/action.groups.routes';
 import { rulesRouter } from './routes/rules.routes';
+import { pipelinesRouter } from './routes/pipelines.routes';
+import { getChannel } from './queue';
 
 // OTel must be initialised before any other imports that could create spans.
 const { metricsHandler } = initOTel('api');
@@ -21,7 +23,8 @@ const log = createLogger('api');
 function main() {
   const app = express();
   app.set('trust proxy', 1); // behind Traefik — honour X-Forwarded-For for rate limiting/audit.
-  app.use(express.json());
+  // Default 100kb is too small for a dry-run sensor override carrying a base64 camera frame.
+  app.use(express.json({ limit: '8mb' }));
 
   // CORS for the Angular backoffice (separate origin/subdomain).
   app.use((req, res, next) => {
@@ -46,8 +49,12 @@ function main() {
   app.use('/api/actions', userActionsRouter);
   app.use('/api/action-groups', actionGroupsRouter);
   app.use('/api/rules', rulesRouter);
+  app.use('/api/pipelines', pipelinesRouter);
 
   app.use(exceptionMiddleware);
+
+  // Pre-connect to RabbitMQ so the first pipeline trigger isn't slow.
+  getChannel().catch((err) => log.warn({ err }, 'RabbitMQ not yet available — will retry on first pipeline trigger'));
 
   app.listen(env.port, () => {
     log.info({ port: env.port }, 'api listening');

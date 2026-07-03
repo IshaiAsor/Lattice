@@ -1,8 +1,10 @@
 import Redis from 'ioredis';
+import { createLogger } from '@lattice/logger';
 import config from '../config/env.config';
 
+const log = createLogger('google-home:valkey');
 const client = new Redis(config.valkeyUrl);
-client.on('error', (err) => console.error('[valkey] error:', err.message));
+client.on('error', (err) => log.error({ err: err.message }, 'valkey connection error'));
 
 export const valkeyService = {
   async set(key: string, value: unknown, ttlSeconds: number): Promise<void> {

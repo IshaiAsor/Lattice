@@ -1,7 +1,11 @@
 import { Channel } from 'amqplib';
 import { SmartHomeV1ExecuteRequestExecution } from 'actions-on-google';
+import { validateValue } from '@lattice/capability-validation';
+import { createLogger } from '@lattice/logger';
 import { deviceActionsService, DeviceActionView } from '../device.actions.service';
 import { dispatchAction } from '../command.dispatch';
+
+const log = createLogger('google-home:execute');
 
 type ValueMapper = (params: any) => string | undefined;
 
@@ -31,8 +35,7 @@ const IMPLEMENTATION_COMMAND_MAP: Record<string, Record<string, ValueMapper>> = 
   HumidityAction:       {},
   AirTemperatureAction: {},
   CO2LevelAction:       {},
-  TakePictureAction:    {},
-  LiveStreamAction:     {},
+  CameraAction:         {},
 };
 
 class GoogleExecuteDeviceService {
@@ -43,41 +46,54 @@ class GoogleExecuteDeviceService {
     for (const command of commands) {
       const deviceIds = command.devices.map((d: any) => parseInt(d.id));
       for (const execution of command.execution) {
-        await this.handleExecuteCommand(ch, userId, execution, actions, deviceIds);
+        const invalidIds = await this.handleExecuteCommand(ch, userId, execution, actions, deviceIds);
+        const validIds = deviceIds.filter((id: number) => !invalidIds.includes(id));
+        if (validIds.length) responses.push({ ids: validIds, status: 'SUCCESS', states: { online: true } });
+        // Value failed the capability's declared valid_parameters constraint — Google's
+        // documented error code for this case.
+        if (invalidIds.length) responses.push({ ids: invalidIds, status: 'ERROR', errorCode: 'valueOutOfRange' });
       }
-      responses.push({ ids: deviceIds, status: 'SUCCESS', states: { online: true } });
     }
 
     return responses;
   }
 
+  // Returns the subset of deviceIds whose mapped command value failed valid_parameters.
   private async handleExecuteCommand(
     ch: Channel,
     userId: number,
     execution: SmartHomeV1ExecuteRequestExecution,
     actions: DeviceActionView[],
     deviceIds: number[],
-  ): Promise<void> {
+  ): Promise<number[]> {
+    const invalidIds: number[] = [];
     for (const deviceId of deviceIds) {
       try {
         const userAction = actions.find(a => a.id === deviceId);
         if (!userAction) {
-          console.error(`[execute] Action ${deviceId} not found for user ${userId}`);
+          log.error({ deviceId, userId }, 'action not found for user');
           continue;
         }
 
         const deviceValue = this.mapExecutionToValue(execution, userAction.implementation_type, deviceId);
         if (deviceValue === undefined) {
-          console.warn(`[execute] No mapping for '${execution.command}' on ${userAction.implementation_type} (device ${deviceId})`);
+          log.warn({ command: execution.command, implType: userAction.implementation_type, deviceId }, 'no mapping for command');
           continue;
         }
 
-        console.log(`[execute] '${execution.command}' → '${deviceValue}' on device ${deviceId}`);
+        if (!validateValue(deviceValue, userAction.validParameters)) {
+          log.warn({ deviceValue, deviceId }, 'value rejected by valid_parameters');
+          invalidIds.push(deviceId);
+          continue;
+        }
+
+        log.info({ command: execution.command, deviceValue, deviceId }, 'dispatching command');
         await dispatchAction(ch, userId, userAction.id, deviceValue);
       } catch (err) {
-        console.error(`[execute] Failed on device ${deviceId}:`, err);
+        log.error({ deviceId, err }, 'execute failed');
       }
     }
+    return invalidIds;
   }
 
   private mapExecutionToValue(
@@ -87,7 +103,7 @@ class GoogleExecuteDeviceService {
   ): string | undefined {
     const implMap = IMPLEMENTATION_COMMAND_MAP[implType];
     if (!implMap) {
-      console.warn(`[execute] No command map for impl type '${implType}' (device ${deviceId})`);
+      log.warn({ implType, deviceId }, 'no command map for impl type');
       return undefined;
     }
     const mapper = implMap[execution.command];

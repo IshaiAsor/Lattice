@@ -9,6 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@lattice/capability-validation": "*",
     "@lattice/logger": "*",
     "@lattice/otel": "*",
     "@lattice/jwt": "*",

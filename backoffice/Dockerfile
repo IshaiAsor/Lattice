@@ -26,3 +26,31 @@ EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD wget -qO- http://localhost/health || exit 1
+
+# ─── Stage 3: Build (development config) ─────────────────────────────────────
+# Used only by compose.test.yaml — bakes in environment.development.ts's localhost:* URLs
+# (see fileReplacements in angular.json) instead of production's subdomain-derivation scheme,
+# so the built bundle can talk to the integration-test stack's host-published ports.
+FROM node:20-alpine AS builder-test
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --ignore-scripts
+
+COPY . .
+RUN npm run build -- --configuration development
+
+# ─── Stage 4: Serve (development config) ─────────────────────────────────────
+FROM nginx:1.27-alpine AS runtime-test
+
+RUN rm /etc/nginx/conf.d/default.conf
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+COPY --from=builder-test /app/dist/backoffice /usr/share/nginx/html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+  CMD wget -qO- http://localhost/health || exit 1

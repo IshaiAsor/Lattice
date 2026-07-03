@@ -5,17 +5,6 @@
     "version": "0.2.0",
     "configurations": [
     {
-        "name": "Debug Backend (dev + hot reload)",
-        "type": "node",
-        "request": "attach",
-        "port": 9229,
-        "restart": true,
-        "preLaunchTask": "start-backend-debug",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:Backend API}/**/*.js"]
-    },
-    {
         "name": "Start SSH Tunnel",
         "type": "node",
         "request": "launch",
@@ -71,33 +60,6 @@
         "preLaunchTask": "catalog:gen",
         "skipFiles": ["<node_internals>/**"],
         "presentation": { "group": "catalog" }
-    },
-    {
-        "type": "node",
-        "request": "launch",
-        "name": "Debug Backend (ts-node)",
-        "runtimeArgs": [
-            "-r",
-            "ts-node/register"
-        ],
-        "program": "${workspaceFolder:Backend API}/index.ts",
-        "cwd": "${workspaceFolder:Backend API}",
-        "outFiles": ["${workspaceFolder:Backend API}/**/*.js"],
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "env": {
-            "TS_NODE_PROJECT": "${workspaceFolder:Backend API}/tsconfig.json"
-        },
-        "skipFiles": ["<node_internals>/**"]
-    },
-    {
-        "type": "node",
-        "request": "launch",
-        "name": "Debug Backend (compiled)",
-        "program": "${workspaceFolder:Backend API}/dist/index.js",
-        "cwd": "${workspaceFolder:Backend API}",
-        "preLaunchTask": "pre-debug-compiled",
-        "outFiles": ["${workspaceFolder:Backend API}/dist/**/*.js"],
-        "skipFiles": ["<node_internals>/**"]
     },
     {
         "name": "Debug FrontEnd (Chrome)",
@@ -384,6 +346,26 @@
         "presentation": { "group": "tools" }
     },
     {
+        // Multiple devices at once, driven by tools/device-sim/fleet.json (gitignored — copy
+        // from fleet.example.json first). Same local-stack env overrides as "Run Device Sim".
+        "name": "Run Device Fleet",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder:Project Root}/tools/device-sim/index.js",
+        "cwd": "${workspaceFolder:Project Root}",
+        "console": "integratedTerminal",
+        "envFile": "${workspaceFolder:Project Root}/.env",
+        "env": {
+            "API_URL": "http://localhost:3100",
+            "DEVICE_GATEWAY_URL": "http://localhost:3004",
+            "MQTT_SERVER_NAME": "127.0.0.1",
+            "MQTT_PORT": "1883",
+            "FLEET_CONFIG": "${workspaceFolder:Project Root}/tools/device-sim/fleet.json"
+        },
+        "skipFiles": ["<node_internals>/**"],
+        "presentation": { "group": "tools" }
+    },
+    {
         "type": "debugpy",
         "request": "launch",
         "name": "Train ML Executor Model",
@@ -405,11 +387,7 @@
     ],    "compounds": [
     {
         "name": "Full Stack Debug (dev)",
-        "configurations": ["Debug Backend (dev + hot reload)", "Debug FrontEnd (Chrome)"]
-    },
-    {
-        "name": "Full Stack Debug (ts-node)",
-        "configurations": ["Debug Backend (ts-node)", "Debug FrontEnd (Chrome)"]
+        "configurations": ["Debug API (dev + hot reload)", "Debug FrontEnd (Chrome)"]
     },
     {
         // google-home (3010) and ota-manager (3001) are served by docker compose containers, so
@@ -417,7 +395,7 @@
         // debug either locally, `docker compose stop google-home ota-manager` first, then launch
         // its individual "Debug …" config.
         "name": "All Backend Services (dev)",
-        "configurations": ["Debug Backend (dev + hot reload)", "Debug API (dev + hot reload)", "Debug ML Executor (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)", "Debug MQTT Service (dev + hot reload)", "Debug Digest Service (dev + hot reload)", "Debug Socket Server (dev + hot reload)", "Debug Automation Worker (dev + hot reload)"]
+        "configurations": ["Debug API (dev + hot reload)", "Debug ML Executor (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)", "Debug MQTT Service (dev + hot reload)", "Debug Digest Service (dev + hot reload)", "Debug Socket Server (dev + hot reload)", "Debug Automation Worker (dev + hot reload)"]
     }
     ]
 }

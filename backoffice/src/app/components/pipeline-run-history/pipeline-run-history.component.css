@@ -1,0 +1,102 @@
+.run-history { padding: 12px 14px; }
+
+.history-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.history-title { font-weight: 600; font-size: 13px; color: var(--text-muted); }
+.trigger-btn { font-size: 12px; }
+
+.run-row {
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.run-row:last-child { border-bottom: none; }
+
+.run-summary {
+  display: flex; align-items: center; gap: 8px; padding: 8px 4px;
+  cursor: pointer; user-select: none;
+}
+.run-summary:hover { background: var(--surface-alt); border-radius: 6px; }
+
+.run-status-chip {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  padding: 2px 7px; border-radius: 20px;
+}
+.status-ok  { background: rgba(16,185,129,.12); color: #059669; }
+.status-err { background: rgba(220,38,38,.12);  color: #dc2626; }
+.status-run { background: rgba(79,70,229,.12);  color: var(--primary); }
+.status-q   { background: rgba(99,102,241,.08); color: var(--text-muted); }
+
+.sim-badge {
+  font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 20px;
+  background: rgba(20,184,166,.12); color: #0d9488; border: 1px solid rgba(20,184,166,.3);
+}
+.run-trigger { color: var(--text-muted); font-size: 11px; }
+.run-date { color: var(--text-muted); font-size: 11px; }
+.run-duration { color: var(--text-dim); font-size: 11px; margin-left: auto; }
+.expand-icon { font-size: 18px; height: 18px; width: 18px; color: var(--text-dim); }
+
+.run-row-actions { display: flex; align-items: center; }
+.run-action-btn {
+  width: 28px; height: 28px; line-height: 28px;
+  color: var(--text-muted);
+}
+.run-action-btn mat-icon { font-size: 16px; height: 16px; width: 16px; line-height: 16px; }
+.run-action-btn:hover { color: var(--text); }
+.run-action-delete:hover { color: var(--error); }
+
+.run-detail { padding: 0 4px 8px; }
+
+.stage-row {
+  margin: 8px 0; padding: 8px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.stage-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.stage-ordinal { font-size: 11px; font-weight: 700; color: var(--text-dim); }
+
+.stage-kind-badge {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  padding: 1px 6px; border-radius: 10px; border: 1px solid;
+}
+.kind-enrich { background: rgba(20,184,166,.08); color: #0d9488; border-color: rgba(20,184,166,.25); }
+.kind-infer  { background: rgba(99,102,241,.08); color: var(--primary); border-color: rgba(99,102,241,.2); }
+.kind-command_exec { background: rgba(16,185,129,.08); color: #059669; border-color: rgba(16,185,129,.2); }
+
+.stage-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+
+.stage-output {
+  font-family: 'Fira Code', monospace; font-size: 11px; color: var(--text);
+  background: rgba(0,0,0,.18); border-radius: 6px; padding: 8px; margin: 4px 0 0;
+  overflow-x: auto; white-space: pre-wrap; max-height: 200px;
+}
+.stage-output.compact { max-height: 80px; }
+
+.would-execute-panel, .infer-panel {
+  background: rgba(20,184,166,.06); border: 1px solid rgba(20,184,166,.25);
+  border-radius: 8px; padding: 10px 12px; margin-top: 6px;
+}
+.we-label {
+  font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+  color: #0d9488; margin-bottom: 4px;
+}
+.we-action, .infer-action { font-size: 13px; font-weight: 600; color: #0d9488; }
+.we-reason, .infer-reason { font-size: 11px; color: var(--text-muted); margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid rgba(20,184,166,.2); }
+.infer-duration { font-size: 10px; color: var(--text-dim); margin-top: 6px; }
+
+.stage-error {
+  font-size: 11px; color: var(--error);
+  background: rgba(220,38,38,.06); padding: 6px 8px; border-radius: 6px; margin-top: 4px;
+}
+
+.io-details { margin-bottom: 4px; }
+.io-details > summary {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-muted); cursor: pointer; user-select: none;
+}
+.io-details .stage-output { margin-top: 4px; }
+
+.empty { text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px; }

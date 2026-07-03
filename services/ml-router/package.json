@@ -9,12 +9,15 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@lattice/capability-validation": "*",
     "@lattice/logger": "*",
     "@lattice/ml": "*",
     "@lattice/ioredis": "*",
     "@lattice/otel": "*",
+    "@lattice/prisma-client": "*",
     "@lattice/queue": "*",
     "express": "^4.21.2",
+    "@socket.io/redis-emitter": "^5.1.0",
     "ioredis": "^5.11.1"
   },
   "devDependencies": {

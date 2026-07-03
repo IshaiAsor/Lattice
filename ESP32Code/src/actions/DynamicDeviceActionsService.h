@@ -16,14 +16,10 @@
 #include "actions/telemtries/AirTemperatureAction.h"
 #include "actions/telemtries/CO2LevelAction.h"
 #ifdef HAS_CAMERA
-#include "actions/telemtries/TakePictureAction.h"
-#include "actions/telemtries/LiveStreamAction.h"
-#include "actions/telemtries/TakePictureHttpAction.h"
-#include "actions/telemtries/LiveStreamHttpAction.h"
+#include "actions/telemtries/CameraAction.h"
 #include "services/LiveStreamService.h"
 #include "services/HttpFrameService.h"
-extern LiveStreamService liveStreamService;
-extern LiveStreamService wsCaptureService;
+extern LiveStreamService cameraWsService;
 extern HttpFrameService  httpFrameService;
 extern const char       *root_ca;
 #endif
@@ -41,6 +37,12 @@ private:
     std::vector<BaseCommandAction*>   _cmdActions;
     std::vector<BaseTelemetryAction*> _telActions;
     bool _ownedByServer = false;
+#ifdef HAS_CAMERA
+    // At most one per device (see the one-camera-per-device provisioning rule) — kept
+    // separately from _telActions so take_picture commands can be routed to it directly
+    // without scanning/downcasting the generic telemetry list.
+    CameraAction* _cameraAction = nullptr;
+#endif
 
     // Validates pin count against the class blueprint and logs the named slot mapping.
     bool validateAndLogPins(const ActionConfig& ac, const PinSlotDef* blueprint)
@@ -141,10 +143,18 @@ private:
         if (auto* a = tryCreateTel<AirTemperatureAction>(ac, interval)) return a;
         if (auto* a = tryCreateTel<CO2LevelAction>(ac, interval))       return a;
 #ifdef HAS_CAMERA
-        if (auto* a = tryCreateTel<TakePictureAction>(ac, interval))     return a;
-        if (auto* a = tryCreateTel<LiveStreamAction>(ac, interval))      return a;
-        if (auto* a = tryCreateTel<TakePictureHttpAction>(ac, interval)) return a;
-        if (auto* a = tryCreateTel<LiveStreamHttpAction>(ac, interval))  return a;
+        // Not routed through tryCreateTel<T> — CameraAction needs a post-construction
+        // configure() call for its per-instance resolution/transport, which the generic
+        // (name, pins, interval) constructor signature has no room for.
+        if (strcmp(ac.implementation_type.c_str(), CameraAction::implType()) == 0)
+        {
+            if (!validateAndLogPins(ac, CameraAction::blueprint())) return nullptr;
+            logSupportedTraits(CameraAction::supportedTraits());
+            auto* a = new CameraAction(ac.mqtt_action_name, ac.pins, interval);
+            a->configure(ac.camera_resolution, ac.camera_transport);
+            _cameraAction = a;
+            return a;
+        }
 #endif
 
         Serial.println("[Config] Unknown telemetry type: " + ac.implementation_type);
@@ -191,6 +201,9 @@ public:
 
         _cmdActions.clear();
         _telActions.clear();
+#ifdef HAS_CAMERA
+        _cameraAction = nullptr;
+#endif
 
         for (const ActionConfig& ac : resp.actions)
         {
@@ -211,16 +224,19 @@ public:
             _cmdActions.size(), _telActions.size());
 
 #ifdef HAS_CAMERA
+        // Start whichever transport the one CameraAction instance (if any) is configured for.
+        // Both services are cheap to construct unstarted, so it's fine that only one gets a
+        // begin() call — the other just sits idle.
         for (const ActionConfig& ac : resp.actions)
         {
             if (ac.mqtt_action_type != "telemetry") continue;
-            if (ac.implementation_type == "LiveStreamAction")
-                liveStreamService.begin(jwtData->wsStreamUrl, jwtData->token, jwtData->validateCACert, root_ca, "/ws/stream", ac.mqtt_action_name);
-            else if (ac.implementation_type == "TakePictureAction")
-                wsCaptureService.begin(jwtData->wsStreamUrl, jwtData->token, jwtData->validateCACert, root_ca, "/ws/capture", ac.mqtt_action_name);
-            else if (ac.implementation_type == "TakePictureHttpAction" ||
-                     ac.implementation_type == "LiveStreamHttpAction")
+            if (strcmp(ac.implementation_type.c_str(), CameraAction::implType()) != 0) continue;
+
+            if (ac.camera_transport == "ws")
+                cameraWsService.begin(jwtData->wsStreamUrl, jwtData->token, jwtData->validateCACert, root_ca, "/ws/stream", ac.mqtt_action_name);
+            else
                 httpFrameService.begin(jwtData->cameraHttpUrl, jwtData->token, jwtData->validateCACert, root_ca);
+            break; // at most one camera per device
         }
 #endif
 
@@ -231,5 +247,15 @@ public:
     size_t                getDeviceActionsCount()    { return _cmdActions.size(); }
     BaseTelemetryAction** getTelemetryActions()      { return _telActions.data(); }
     size_t                getTelemetryActionsCount() { return _telActions.size(); }
+
+#ifdef HAS_CAMERA
+    // Routes a take_picture command (see main.cpp's MQTT command dispatch) to the device's
+    // camera instance, if any. No-op if the device has no camera configured.
+    void triggerPictureCapture(const String& commandId)
+    {
+        if (_cameraAction) _cameraAction->triggerCapture(commandId);
+        else Serial.println("[Camera] take_picture command received but no camera configured");
+    }
+#endif
 
 };

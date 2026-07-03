@@ -9,17 +9,21 @@ COPY package.json package-lock.json ./
 COPY packages/logger        packages/logger
 COPY packages/otel          packages/otel
 COPY packages/jwt           packages/jwt
+COPY packages/queue         packages/queue
 COPY packages/prisma-client packages/prisma-client
+COPY packages/capability-validation packages/capability-validation
 COPY services/api services/api
 # Root schema is the single source of truth; prisma-client's prepare step reads it.
 COPY prisma prisma
 COPY tsconfig.base.json ./
 
 RUN npm ci
-RUN npm run build -w @lattice/logger \
- && npm run build -w @lattice/otel \
+RUN npm run build -w @lattice/otel \
+ && npm run build -w @lattice/logger \
  && npm run build -w @lattice/jwt \
+ && npm run build -w @lattice/queue \
  && npm run build -w @lattice/prisma-client \
+ && npm run build -w @lattice/capability-validation \
  && npm run build -w @lattice/api
 
 FROM node:22-slim
@@ -45,10 +49,15 @@ COPY --from=builder /workspace/packages/otel/node_modules    ./node_modules/@lat
 COPY --from=builder /workspace/packages/jwt/package.json     ./node_modules/@lattice/jwt/package.json
 COPY --from=builder /workspace/packages/jwt/dist             ./node_modules/@lattice/jwt/dist
 COPY --from=builder /workspace/packages/jwt/node_modules     ./node_modules/@lattice/jwt/node_modules
+COPY --from=builder /workspace/packages/queue/package.json   ./node_modules/@lattice/queue/package.json
+COPY --from=builder /workspace/packages/queue/dist           ./node_modules/@lattice/queue/dist
+COPY --from=builder /workspace/packages/queue/node_modules   ./node_modules/@lattice/queue/node_modules
 COPY --from=builder /workspace/packages/prisma-client/package.json  ./node_modules/@lattice/prisma-client/package.json
 COPY --from=builder /workspace/packages/prisma-client/dist          ./node_modules/@lattice/prisma-client/dist
 # Includes the generated .prisma/client (query engine + client) the package resolves.
 COPY --from=builder /workspace/packages/prisma-client/node_modules  ./node_modules/@lattice/prisma-client/node_modules
+COPY --from=builder /workspace/packages/capability-validation/package.json ./node_modules/@lattice/capability-validation/package.json
+COPY --from=builder /workspace/packages/capability-validation/dist         ./node_modules/@lattice/capability-validation/dist
 
 COPY --from=builder /workspace/services/api/dist ./dist
 

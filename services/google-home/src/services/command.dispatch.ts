@@ -1,8 +1,11 @@
 import { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
 import type { ActionDispatchPayload } from '@lattice/queue';
+import { createLogger } from '@lattice/logger';
 import { userDevicesActionsRepository } from '../dal/user.devices.actions.repository';
 import { userDevicesRepository } from '../dal/user.devices.repository';
+
+const log = createLogger('google-home:dispatch');
 
 export async function dispatchAction(
   ch: Channel,
@@ -12,7 +15,7 @@ export async function dispatchAction(
 ): Promise<void> {
   const action = await userDevicesActionsRepository.getById(actionId);
   if (!action) {
-    console.warn(`[dispatch] Action ${actionId} not found`);
+    log.warn({ actionId }, 'action not found');
     return;
   }
 
@@ -21,7 +24,7 @@ export async function dispatchAction(
     const userDevice = await userDevicesRepository.getById(action.user_device_id);
     firmwareVersion = userDevice.device.version ?? undefined;
   } catch (err) {
-    console.error(`[dispatch] Could not resolve version for device ${action.user_device_id}:`, err);
+    log.error({ userDeviceId: action.user_device_id, err }, 'could not resolve firmware version');
   }
 
   const payload: ActionDispatchPayload = {
@@ -33,5 +36,5 @@ export async function dispatchAction(
   };
 
   publish(ch, RK.ACTION_DISPATCH, payload);
-  console.log(`[dispatch] action.dispatch → device ${action.user_device_id} (action: ${action.mqtt_action_name})`);
+  log.info({ userDeviceId: action.user_device_id, actionName: action.mqtt_action_name }, 'action.dispatch published');
 }

@@ -1,23 +1,5 @@
 .rules-page {
-  padding: 20px 24px;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-/* ── Header ─────────────────────────────────────────────────────────── */
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.page-header h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text);
+  padding: 16px 0 24px;
 }
 
 /* ── Empty state ─────────────────────────────────────────────────────── */

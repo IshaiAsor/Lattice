@@ -1,0 +1,15 @@
+{
+  "//": "Copy to fleet.json (gitignored) and edit. Run with: node index.js fleet.json",
+  "//mac": "Omit mac to auto-generate SIM-<TYPE>-<NN>. If given with count>1 it's used as a prefix (mac-01, mac-02, ...).",
+  "defaults": {
+    "activateAll": false
+  },
+  "devices": [
+    {
+      "type": "ESP32S3_CAM",
+      "count": 1,
+      "camera": true,
+      "activateAll": false
+    }
+  ]
+}

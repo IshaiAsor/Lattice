@@ -31,10 +31,10 @@
           @if (!sidebarCollapsed()) { <span>Devices</span> }
         </a>
 
-        <a class="sidebar-link" routerLink="/rules" routerLinkActive="active"
-           [matTooltip]="sidebarCollapsed() ? 'Rules' : ''" matTooltipPosition="right">
+        <a class="sidebar-link" routerLink="/automations" routerLinkActive="active"
+           [matTooltip]="sidebarCollapsed() ? 'Automate' : ''" matTooltipPosition="right">
           <mat-icon>bolt</mat-icon>
-          @if (!sidebarCollapsed()) { <span>Rules</span> }
+          @if (!sidebarCollapsed()) { <span>Automate</span> }
         </a>
 
         <a class="sidebar-link" routerLink="/device-config" routerLinkActive="active"
@@ -127,9 +127,9 @@
       <div class="tab-icon-wrap"><mat-icon>auto_awesome</mat-icon></div>
       <span>Ask AI</span>
     </button>
-    <a class="tab-item" routerLink="/device-config" routerLinkActive="active">
-      <div class="tab-icon-wrap"><mat-icon>settings_suggest</mat-icon></div>
-      <span>Config</span>
+    <a class="tab-item" routerLink="/automations" routerLinkActive="active">
+      <div class="tab-icon-wrap"><mat-icon>bolt</mat-icon></div>
+      <span>Automate</span>
     </a>
     @let user = authService.getCurrentUser();
     <button type="button" class="tab-item tab-profile" [matMenuTriggerFor]="profileMenu">

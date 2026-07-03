@@ -17,10 +17,16 @@ const { validate, normalize } = require('./command-models');
 const { makeFrame } = require('./jpeg');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Node clamps setTimeout delays above this (~24.8 days) to fire almost immediately instead of
+// throwing, which turns a long-lived device JWT (JWT_DEVICE_USAGE_EXPIRES_IN can be up to a
+// year) into a tight refresh-token loop. Cap and re-check instead of scheduling the raw delay.
+const MAX_TIMEOUT_MS = 0x7fffffff;
 // Tolerate a scheme-less base URL (e.g. API_URL=localhost:3010) — fetch() requires a scheme.
 const withScheme = (u) => (u && !/^https?:\/\//i.test(u) ? `http://${u}` : u);
 const isCamera = (impl) => /camera|stream|picture/i.test(impl || '');
-const isHttpCamera = (impl) => /Http/.test(impl || ''); // TakePictureHttpAction / LiveStreamHttpAction
+// Unified CameraAction picks WS vs HTTP via its own camera_transport config field (default
+// 'http'), not a distinct implementation_type — the old per-transport action classes are gone.
+const isHttpCamera = (a) => (a.camera_transport || 'http') !== 'ws';
 
 // Strictly-greater semver compare ("v2.0.165"), matching firmware OtaService::isNewerVersion.
 function isNewer(a, b) {
@@ -89,6 +95,8 @@ const DEFAULTS = {
   mac: 'SIM-AA:BB:CC:DD:EE:01',
   telemetryMs: 5000,
   cameraMs: 2000,
+  cameraResolution: 'SVGA',   // sent when auto-activating a CameraAction capability
+  cameraTransport: 'http',    // 'http' or 'ws'
   configRefreshMs: 60000, // 0 disables the periodic re-pull (real firmware only pulls at boot)
   activateAll: true,
   autoTelemetry: true,   // run telemetry + config-refresh loops in start()
@@ -145,7 +153,10 @@ class SimDevice extends EventEmitter {
     this._log(`✔ catalog ${this.opts.deviceType} ${this.version} — ${this.catalogCaps.length} capabilities`);
     await this.provision();
     this._log(`✔ provisioned — deviceId ${this.deviceId}`);
-    if (this.opts.activateAll) {
+    // `capabilities` (a list of catalog capability_keys) activates just those, even if
+    // activateAll is off — an explicit list is an explicit request to activate them.
+    const wantsSelected = Array.isArray(this.opts.capabilities) && this.opts.capabilities.length > 0;
+    if (this.opts.activateAll || wantsSelected) {
       const { activated, skipped } = await this.activateAll();
       this._log(`✔ activated ${activated} capabilit${activated === 1 ? 'y' : 'ies'} via api (skipped ${skipped} already configured)`);
     }
@@ -204,20 +215,31 @@ class SimDevice extends EventEmitter {
     return { deviceId: this.deviceId, mqttToken: this.mqttToken };
   }
 
-  // Activate every catalog capability through the real api (the device-config page's own call).
+  // Activate catalog capabilities through the real api (the device-config page's own call).
+  // With `opts.capabilities` set (an array of catalog `capability_key`s, e.g. "outlet",
+  // "temperature"), only those are activated; otherwise every catalog capability is.
   async activateAll() {
     const view = await this._http('GET', `${this.opts.apiUrl}/api/devices/${this.deviceId}/capabilities`, this.appToken);
+    const filter = Array.isArray(this.opts.capabilities) ? this.opts.capabilities : null;
+    const candidates = filter ? view.filter((cap) => filter.includes(cap.capability_key)) : view;
+    if (filter) {
+      const found = new Set(candidates.map((c) => c.capability_key));
+      for (const key of filter) if (!found.has(key)) this._log(`⚠ requested capability "${key}" not found in catalog for ${this.opts.deviceType} — skipping`);
+    }
     let activated = 0;
-    for (const cap of view) {
+    for (const cap of candidates) {
       if (cap.instances.length > 0) continue; // idempotent across runs
+      const camera = isCamera(cap.implementation_type);
       await this._http('POST', `${this.opts.apiUrl}/api/devices/${this.deviceId}/actions`, this.appToken, {
         capability_id: cap.id,
         telemetry_interval_ms: cap.mqtt_action_type === 'telemetry' ? (cap.min_telemetry_interval_ms ?? this.opts.telemetryMs) : null,
         pins: cap.configurable_pins.map((p, i) => ({ capability_pin_id: p.id, pin_number: 10 + i })),
+        camera_resolution: camera ? this.opts.cameraResolution : null,
+        camera_transport:  camera ? this.opts.cameraTransport : null,
       });
       activated++;
     }
-    return { activated, skipped: view.length - activated };
+    return { activated, skipped: candidates.length - activated };
   }
 
   // PULL configuration — only the device's own active actions (firmware loadFromServer).
@@ -299,6 +321,18 @@ class SimDevice extends EventEmitter {
       this._log('⚑ hard-reset command — factory wipe; going offline');
       this.emit('hard-reset', {});
       await this.stop();
+      return;
+    }
+    if (action === 'take_picture') {
+      let cmd;
+      try { cmd = JSON.parse(msg); } catch { cmd = {}; }
+      const camAction = this.actions.find((a) => isCamera(a.implementation_type));
+      if (!camAction) {
+        this._log('📷 take_picture received but no camera configured — ignoring');
+        return;
+      }
+      this._log(`📷 on-demand capture requested (commandId=${cmd.commandId || ''})`);
+      this._sendOnDemandFrame(camAction, cmd.commandId).catch((e) => this._emitErr(e));
       return;
     }
 
@@ -425,12 +459,12 @@ class SimDevice extends EventEmitter {
   // ── camera (WS + HTTP) ───────────────────────────────────────────────────
   _startCamera() {
     const camActions = this.actions.filter((a) => isCamera(a.implementation_type));
-    const wanted = new Set(camActions.map((a) => (isHttpCamera(a.implementation_type) ? `http:${a.mqtt_action_name}` : a.mqtt_action_name)));
+    const wanted = new Set(camActions.map((a) => (isHttpCamera(a) ? `http:${a.mqtt_action_name}` : a.mqtt_action_name)));
     for (const [key, conn] of this._cameraConns) {
       if (!wanted.has(key)) { try { conn.close(); } catch {} this._cameraConns.delete(key); }
     }
     for (const a of camActions) {
-      if (isHttpCamera(a.implementation_type)) {
+      if (isHttpCamera(a)) {
         const key = `http:${a.mqtt_action_name}`;
         if (this._cameraConns.has(key)) continue;
         const interval = a.telemetry_interval_ms && a.telemetry_interval_ms > 0 ? a.telemetry_interval_ms : this.opts.cameraMs;
@@ -444,29 +478,76 @@ class SimDevice extends EventEmitter {
   }
 
   _openStreamWs(a) {
-    const isCapture = a.implementation_type === 'TakePictureAction';
-    const wsPath = isCapture ? '/ws/capture' : '/ws/stream';
-    const url = `${this.wsStreamUrl.replace(/^http/, 'ws')}${wsPath}?token=${encodeURIComponent(this.mqttToken)}&action=${encodeURIComponent(a.mqtt_action_name)}`;
+    // Both /ws/stream and /ws/capture behave identically server-side (device-gateway's
+    // ws/camera-stream.ts republishes either the same way) — CameraAction always connects
+    // to /ws/stream now that the old per-purpose action classes are gone.
+    const url = `${this.wsStreamUrl.replace(/^http/, 'ws')}/ws/stream?token=${encodeURIComponent(this.mqttToken)}&action=${encodeURIComponent(a.mqtt_action_name)}`;
     const interval = a.telemetry_interval_ms && a.telemetry_interval_ms > 0 ? a.telemetry_interval_ms : this.opts.cameraMs;
     let frameTmr = null;
+    let sending = false; // re-entrancy guard: skip a tick if the previous frame is still encoding
     const ws = makeWs(url, {
       onOpen: () => {
-        this._log(`📷 ${a.mqtt_action_name} WS ${wsPath} open`);
+        this._log(`📷 ${a.mqtt_action_name} WS /ws/stream open`);
         frameTmr = setInterval(() => {
-          const frame = makeFrame();
-          try { ws.send(frame); this.emit('camera-frame', { action: a.mqtt_action_name, transport: 'ws', bytes: frame.length }); } catch {}
+          if (sending) return;
+          sending = true;
+          makeFrame()
+            .then((frame) => {
+              try { ws.send(frame); this.emit('camera-frame', { action: a.mqtt_action_name, transport: 'ws', bytes: frame.length }); } catch {}
+            })
+            .catch((e) => this._emitErr(e))
+            .finally(() => { sending = false; });
         }, interval);
       },
       onClose: () => { if (frameTmr) clearInterval(frameTmr); },
       onError: (e) => this._log(`📷 ${a.mqtt_action_name} WS error: ${(e && e.message) || e}`),
     });
-    this._cameraConns.set(a.mqtt_action_name, { close: () => { if (frameTmr) clearInterval(frameTmr); try { ws.close(); } catch {} } });
+    this._cameraConns.set(a.mqtt_action_name, { ws, close: () => { if (frameTmr) clearInterval(frameTmr); try { ws.close(); } catch {} } });
   }
 
-  async _sendHttpFrame(name) {
-    const frame = makeFrame();
-    await this._httpRaw(`${this.cameraHttpUrl}/api/camera/frame?action=${encodeURIComponent(name)}`, this.mqttToken, frame, 'image/jpeg');
-    this.emit('camera-frame', { action: name, transport: 'http', bytes: frame.length });
+  async _sendHttpFrame(name, commandId) {
+    const frame = await makeFrame();
+    const qs = commandId ? `&commandId=${encodeURIComponent(commandId)}` : '';
+    await this._httpRaw(`${this.cameraHttpUrl}/api/camera/frame?action=${encodeURIComponent(name)}${qs}`, this.mqttToken, frame, 'image/jpeg');
+    this.emit('camera-frame', { action: name, transport: 'http', bytes: frame.length, commandId });
+  }
+
+  // On-demand capture (CameraAction::triggerCapture equivalent) — used to answer a
+  // take_picture command, independent of whether periodic camera streaming is running.
+  async _sendOnDemandFrame(a, commandId) {
+    if (isHttpCamera(a)) {
+      await this._sendHttpFrame(a.mqtt_action_name, commandId);
+      return;
+    }
+    // WS: reuse the persistent connection if one is open; otherwise open a transient one for
+    // this single frame. Either way, a small JSON text frame carrying commandId precedes the
+    // binary frame — mirrors CameraAction's WS pairing convention (see device-gateway's
+    // ws/camera-stream.ts).
+    const frame = await makeFrame();
+    const existing = this._cameraConns.get(a.mqtt_action_name);
+    if (existing && existing.ws && existing.ws.readyState === 1) {
+      try {
+        existing.ws.send(JSON.stringify({ commandId }));
+        existing.ws.send(frame);
+        this.emit('camera-frame', { action: a.mqtt_action_name, transport: 'ws', bytes: frame.length, commandId });
+      } catch (e) { this._emitErr(e); }
+      return;
+    }
+    const url = `${this.wsStreamUrl.replace(/^http/, 'ws')}/ws/stream?token=${encodeURIComponent(this.mqttToken)}&action=${encodeURIComponent(a.mqtt_action_name)}`;
+    await new Promise((resolve) => {
+      const ws = makeWs(url, {
+        onOpen: () => {
+          try {
+            ws.send(JSON.stringify({ commandId }));
+            ws.send(frame);
+            this.emit('camera-frame', { action: a.mqtt_action_name, transport: 'ws', bytes: frame.length, commandId });
+          } catch (e) { this._emitErr(e); }
+          setTimeout(() => { try { ws.close(); } catch {} resolve(); }, 200);
+        },
+        onError: (e) => { this._log(`📷 ${a.mqtt_action_name} on-demand WS error: ${(e && e.message) || e}`); resolve(); },
+        onClose: () => resolve(),
+      });
+    });
   }
 
   _stopCamera() {
@@ -480,6 +561,10 @@ class SimDevice extends EventEmitter {
     const exp = decodeJwtExp(this.mqttToken);
     if (!exp) return; // no exp claim → nothing to schedule
     const delay = Math.max(exp * 1000 - Date.now() - this.opts.refreshLeadMs, 1000);
+    if (delay > MAX_TIMEOUT_MS) {
+      this._refreshTimer = setTimeout(() => this._scheduleRefresh(), MAX_TIMEOUT_MS);
+      return;
+    }
     this._refreshTimer = setTimeout(() => this.refreshTokenNow().catch((e) => this._emitErr(e)), delay);
   }
 

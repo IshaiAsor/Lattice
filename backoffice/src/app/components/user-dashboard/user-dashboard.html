@@ -215,10 +215,15 @@
                     <span class="sensor-unit">ppm</span>
                 </div>
                 }
+                @if (isTelemetryAction(item.action!) || isCameraAction(item.action!)) {
+                <div class="sensor-received-badge">
+                    <app-received-badge [receivedAt]="item.action!.receivedAt"
+                        [variant]="isCameraAction(item.action!) ? 'overlay' : 'inline'"></app-received-badge>
+                </div>
+                }
 
                 <!-- Camera / doorbell feeds -->
-                @if (item.action!.googleType?.value === 'action.devices.types.CAMERA' ||
-                     item.action!.googleType?.value === 'action.devices.types.DOORBELL') {
+                @if (isCameraAction(item.action!)) {
                 <app-camera-display [action]="item.action!"></app-camera-display>
                 }
 

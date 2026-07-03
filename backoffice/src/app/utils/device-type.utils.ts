@@ -63,6 +63,11 @@ export function hasTrait(action: DeviceActionView, traitValue: string): boolean 
   return action.googleTraits.some(t => t.value === traitValue);
 }
 
+export function isCameraAction(action: DeviceActionView): boolean {
+  return action.googleType?.value === 'action.devices.types.CAMERA'
+    || action.googleType?.value === 'action.devices.types.DOORBELL';
+}
+
 // Returns the trait value string for the currently active (displayed) control.
 // Resolution order: user's saved defaultTraitId → first trait in list → null.
 export function activeTraitValue(action: DeviceActionView): string | null {
@@ -86,6 +91,12 @@ export const SENSOR_TRAIT_VALUES = new Set([
 // the switcher chip row and which chips to render.
 export function controllableTraits(action: DeviceActionView) {
   return action.googleTraits.filter(t => !SENSOR_TRAIT_VALUES.has(t.value));
+}
+
+// True for read-only sensor telemetry actions (temperature, humidity, etc.) — used to gate
+// UI elements that only make sense for telemetry, not command/control actions.
+export function isTelemetryAction(action: DeviceActionView): boolean {
+  return action.googleTraits.some(t => SENSOR_TRAIT_VALUES.has(t.value));
 }
 
 // Maps a Google trait value to a mat-icon name for use in the trait-switcher chips.
@@ -124,8 +135,7 @@ export function iconForAction(action: DeviceActionView): string {
     case 'PhLevelAction':             return 'science';
     case 'TdsLevelAction':            return 'water_drop';
     case 'CO2LevelAction':            return 'air';
-    case 'TakePictureAction':
-    case 'LiveStreamAction':          return 'photo_camera';
+    case 'CameraAction':              return 'photo_camera';
     default:                          return 'device_unknown';
   }
 }

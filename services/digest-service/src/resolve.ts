@@ -2,14 +2,9 @@ import { db } from './db/client';
 import { resolveAction } from './cache/valkey';
 import type { ResolvedAction } from './cache/valkey';
 
-// DeviceCapability.implementation_type values that produce image/camera-frame telemetry
+// DeviceCapability.implementation_type value that produces image/camera-frame telemetry
 // rather than scalar sensor readings. Anything else is treated as scalar.
-const IMAGE_IMPL_TYPES = new Set([
-  'TakePictureAction',
-  'LiveStreamAction',
-  'TakePictureHttpAction',
-  'LiveStreamHttpAction',
-]);
+const IMAGE_IMPL_TYPES = new Set(['CameraAction']);
 
 // Resolve a (deviceId, actionName) pair to its UserDeviceAction id + kind, via the
 // Valkey cache with a DB-join fallback. Shared by the telemetry consumer (actual

@@ -37,11 +37,35 @@ export class DeviceConfigComponent implements OnInit {
   expandedCapabilityId: number | null = null;
   intervalInputValue: number | null = null;
   pinInputValues: Record<number, number | null> = {};
+  resolutionInputValue: string | null = null;
+  transportInputValue: string | null = 'http';
 
   editingInstanceId: number | null = null;
   editName = '';
   editIntervalMs: number | null = null;
   editPinValues: Record<number, number | null> = {};
+  editResolution: string | null = null;
+  editTransport: string | null = 'http';
+
+  readonly cameraResolutionOptions = [
+    { value: 'QQVGA', label: 'QQVGA (160x120)' },
+    { value: 'QVGA', label: 'QVGA (320x240)' },
+    { value: 'VGA', label: 'VGA (640x480)' },
+    { value: 'SVGA', label: 'SVGA (800x600)' },
+    { value: 'XGA', label: 'XGA (1024x768)' },
+    { value: 'HD', label: 'HD (1280x720)' },
+    { value: 'SXGA', label: 'SXGA (1280x1024)' },
+    { value: 'UXGA', label: 'UXGA (1600x1200)' },
+    { value: 'FHD', label: 'FHD (1920x1080)' },
+    { value: 'QXGA', label: 'QXGA (2048x1536)' },
+    { value: 'QHD', label: 'QHD (2560x1440)' },
+    { value: 'WQXGA', label: 'WQXGA (2560x1600)' },
+    { value: 'QSXGA', label: 'QSXGA (2560x1920)' },
+  ];
+  readonly cameraTransportOptions = [
+    { value: 'http', label: 'HTTP' },
+    { value: 'ws', label: 'WebSocket' },
+  ];
 
   get isAdmin(): boolean { return this.authService.getCurrentUser()?.role === 'admin'; }
 
@@ -93,6 +117,15 @@ export class DeviceConfigComponent implements OnInit {
     return cap.configurable_pins ?? [];
   }
 
+  isCameraCapability(cap: CapabilityView): boolean {
+    return cap.implementation_type === 'CameraAction';
+  }
+
+  resolutionLabel(value: string | null | undefined): string | null {
+    if (!value) return null;
+    return this.cameraResolutionOptions.find((r) => r.value === value)?.label ?? value;
+  }
+
   startAdd(cap: CapabilityView) {
     this.expandedCapabilityId = cap.id;
     this.intervalInputValue = cap.min_telemetry_interval_ms ?? null;
@@ -100,12 +133,16 @@ export class DeviceConfigComponent implements OnInit {
     for (const slot of this.pinSlots(cap)) {
       this.pinInputValues[slot.id] = null;
     }
+    this.resolutionInputValue = this.isCameraCapability(cap) ? 'SVGA' : null;
+    this.transportInputValue = this.isCameraCapability(cap) ? 'http' : null;
   }
 
   cancelAdd() {
     this.expandedCapabilityId = null;
     this.intervalInputValue = null;
     this.pinInputValues = {};
+    this.resolutionInputValue = null;
+    this.transportInputValue = null;
   }
 
   confirmAdd(cap: CapabilityView) {
@@ -119,8 +156,13 @@ export class DeviceConfigComponent implements OnInit {
 
     const intervalMs = cap.mqtt_action_type === 'telemetry' ? this.intervalInputValue : null;
     const deviceId = this.selectedDevice.id;
+    const isCamera = this.isCameraCapability(cap);
 
-    this.deviceMgmtService.activateCapability(deviceId, cap.id, intervalMs, pins).subscribe({
+    this.deviceMgmtService.activateCapability(
+      deviceId, cap.id, intervalMs, pins,
+      isCamera ? this.resolutionInputValue : null,
+      isCamera ? this.transportInputValue : null,
+    ).subscribe({
       next: () => {
         this.snack.open(`${cap.label} added — restarting device`, 'Close', { duration: 2500 });
         this.cancelAdd();
@@ -140,6 +182,8 @@ export class DeviceConfigComponent implements OnInit {
     for (let i = 0; i < slots.length; i++) {
       this.editPinValues[slots[i].id] = instance.pins?.[i]?.pinNumber ?? null;
     }
+    this.editResolution = instance.cameraResolution ?? (this.isCameraCapability(cap) ? 'SVGA' : null);
+    this.editTransport = instance.cameraTransport ?? (this.isCameraCapability(cap) ? 'http' : null);
   }
 
   cancelEdit() {
@@ -147,6 +191,8 @@ export class DeviceConfigComponent implements OnInit {
     this.editName = '';
     this.editIntervalMs = null;
     this.editPinValues = {};
+    this.editResolution = null;
+    this.editTransport = null;
   }
 
   saveEdit(cap: CapabilityView, instance: UserActionView) {
@@ -157,6 +203,7 @@ export class DeviceConfigComponent implements OnInit {
       pin_number: this.editPinValues[slot.id] as number,
     }));
     const deviceId = this.selectedDevice.id;
+    const isCamera = this.isCameraCapability(cap);
     this.deviceMgmtService.updateActivatedAction(
       deviceId,
       instance.id,
@@ -164,6 +211,7 @@ export class DeviceConfigComponent implements OnInit {
         name: this.editName,
         ...(cap.mqtt_action_type === 'telemetry' && { telemetry_interval_ms: this.editIntervalMs }),
         ...(slots.length > 0 && { pins }),
+        ...(isCamera && { camera_resolution: this.editResolution, camera_transport: this.editTransport }),
       },
     ).subscribe({
       next: () => {
@@ -185,7 +233,8 @@ export class DeviceConfigComponent implements OnInit {
     });
     const intervalOk = cap.mqtt_action_type !== 'telemetry'
       || (this.editIntervalMs != null && this.editIntervalMs >= (cap.min_telemetry_interval_ms ?? 0));
-    return allPinsFilled && intervalOk;
+    const cameraOk = !this.isCameraCapability(cap) || (!!this.editResolution && !!this.editTransport);
+    return allPinsFilled && intervalOk && cameraOk;
   }
 
   removeAction(cap: CapabilityView, instance: UserActionView) {
@@ -209,7 +258,8 @@ export class DeviceConfigComponent implements OnInit {
     });
     const intervalOk = cap.mqtt_action_type !== 'telemetry'
       || (this.intervalInputValue != null && this.intervalInputValue >= (cap.min_telemetry_interval_ms ?? 0));
-    return allPinsFilled && intervalOk;
+    const cameraOk = !this.isCameraCapability(cap) || (!!this.resolutionInputValue && !!this.transportInputValue);
+    return allPinsFilled && intervalOk && cameraOk;
   }
 
   typeChip(cap: CapabilityView): string {

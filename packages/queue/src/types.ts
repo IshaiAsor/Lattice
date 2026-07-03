@@ -4,6 +4,10 @@ export interface TelemetryArrivedPayload {
   actionName: string;
   value: unknown;
   timestamp: string;
+  // Present only for an on-demand camera capture (CameraAction.triggerCapture), threaded
+  // through by device-gateway's HTTP/WS frame-upload paths; absent for periodic telemetry.
+  // digest-service's handleImage() uses it to resolve the matching pending picture request.
+  commandId?: string;
 }
 
 export interface RulesEvaluatePayload {
@@ -16,11 +20,14 @@ export interface RulesEvaluatePayload {
 
 export interface PipelineTriggerPayload {
   userId: string;
-  deviceId: string;
   pipelineId: string;
-  actionName: string;
-  value: unknown;
-  timestamp: string;
+  runId: number;
+  deviceId?: string;
+  actionName?: string;
+  value?: unknown;
+  timestamp?: string;
+  isDryRun?: boolean;
+  sensorOverrides?: Record<string, string>;
 }
 
 export interface PipelineResultPayload {
@@ -29,6 +36,12 @@ export interface PipelineResultPayload {
   pipelineRunId: string;
   status: 'completed' | 'failed';
   error?: string;
+}
+
+export interface PipelineCancelPayload {
+  userId: string;
+  pipelineId: string;
+  runId: number;
 }
 
 export interface DeviceStateChangedPayload {
@@ -74,6 +87,26 @@ export interface ActionResultPayload {
   timestamp: string;
 }
 
+// ml-router's request for a fresh camera frame for a pipeline's enrich stage — published
+// when the plan includes an image-flagged PipelineSensor. digest-service resolves actionId
+// to a device (same as ActionRequestedPayload), dispatches the take_picture MQTT command,
+// and arms a timeout.
+export interface PictureRequestedPayload {
+  userId: string;
+  actionId: number;
+  commandId: string;
+  timeoutMs: number;
+}
+
+// digest-service's correlated response — either the captured frame (resolved via the same
+// commandId carried through TelemetryArrivedPayload) or a timeout if the device never acked.
+export interface PictureResultPayload {
+  commandId: string;
+  status: 'ok' | 'timeout';
+  image?: string;       // base64 JPEG
+  capturedAt?: string;
+}
+
 export interface PipelineStagePayload {
   userId: string;
   deviceId: string;
@@ -111,4 +144,13 @@ export interface OtaIncomingPayload {
   url: string;
   releaseNotes?: string;
   timestamp: string;
+}
+
+// Published best-effort by digest-service when a new OTA release passes validation.
+// notification-service (F15) consumes this, resolves which users own a device of
+// that type, and fans out per-user q.notification.send messages.
+export interface NotificationPublishPayload {
+  type: 'ota_available';
+  deviceType: string;
+  version: string;
 }

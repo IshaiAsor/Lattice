@@ -152,9 +152,29 @@
                       <mat-hint>Min: {{ item.cap.min_telemetry_interval_ms ?? 0 }} ms</mat-hint>
                     </mat-form-field>
                   }
+
+                  @if (isCameraCapability(item.cap)) {
+                    <p class="field-section-label">Camera</p>
+                    <mat-form-field appearance="outline" class="pin-field">
+                      <mat-label>Resolution</mat-label>
+                      <mat-select [(ngModel)]="editResolution">
+                        @for (r of cameraResolutionOptions; track r.value) {
+                          <mat-option [value]="r.value">{{ r.label }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="pin-field">
+                      <mat-label>Transport</mat-label>
+                      <mat-select [(ngModel)]="editTransport">
+                        @for (t of cameraTransportOptions; track t.value) {
+                          <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  }
                 </div>
               } @else {
-                @if (item.cap.min_telemetry_interval_ms || item.instance.intervalMs) {
+                @if (item.cap.min_telemetry_interval_ms || item.instance.intervalMs || item.instance.cameraResolution) {
                   <div class="card-body">
                     @if (item.instance.intervalMs) {
                       <div class="meta-row">
@@ -166,6 +186,18 @@
                       <div class="meta-row">
                         <span class="meta-label">Min interval</span>
                         <span>{{ item.cap.min_telemetry_interval_ms }} ms</span>
+                      </div>
+                    }
+                    @if (item.instance.cameraResolution) {
+                      <div class="meta-row">
+                        <span class="meta-label">Resolution</span>
+                        <span>{{ resolutionLabel(item.instance.cameraResolution) }}</span>
+                      </div>
+                    }
+                    @if (item.instance.cameraTransport) {
+                      <div class="meta-row">
+                        <span class="meta-label">Transport</span>
+                        <span>{{ item.instance.cameraTransport === 'ws' ? 'WebSocket' : 'HTTP' }}</span>
                       </div>
                     }
                   </div>
@@ -233,6 +265,26 @@
                       <input matInput type="number" [(ngModel)]="intervalInputValue"
                         [min]="cap.min_telemetry_interval_ms ?? 0" />
                       <mat-hint>Min: {{ cap.min_telemetry_interval_ms ?? 0 }} ms</mat-hint>
+                    </mat-form-field>
+                  }
+
+                  @if (isCameraCapability(cap)) {
+                    <p class="field-section-label">Camera</p>
+                    <mat-form-field appearance="outline" class="pin-field">
+                      <mat-label>Resolution</mat-label>
+                      <mat-select [(ngModel)]="resolutionInputValue">
+                        @for (r of cameraResolutionOptions; track r.value) {
+                          <mat-option [value]="r.value">{{ r.label }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="pin-field">
+                      <mat-label>Transport</mat-label>
+                      <mat-select [(ngModel)]="transportInputValue">
+                        @for (t of cameraTransportOptions; track t.value) {
+                          <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                        }
+                      </mat-select>
                     </mat-form-field>
                   }
                 </div>

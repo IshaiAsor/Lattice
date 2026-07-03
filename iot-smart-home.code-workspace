@@ -13,10 +13,6 @@
       "path": "."
     },
     {
-      "name": "Backend API",
-      "path": "backend"
-    },
-    {
       "name": "Backoffice UI",
       "path": "backoffice"
     },

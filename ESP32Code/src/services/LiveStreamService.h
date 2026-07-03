@@ -10,6 +10,7 @@
 struct WsFrame {
     uint8_t *buf;
     size_t   len;
+    char     commandId[40];   // empty = periodic push; set = on-demand capture correlation
 };
 
 class LiveStreamService
@@ -33,7 +34,17 @@ private:
             if (xQueueReceive(self->_queue, &frame, 0) == pdTRUE)
             {
                 if (self->_connected)
+                {
+                    // On-demand captures send a small JSON text frame immediately before the
+                    // binary frame it correlates to (both here, in the same task, so order is
+                    // guaranteed) — see device-gateway's ws/camera-stream.ts for the pairing.
+                    if (frame.commandId[0] != '\0')
+                    {
+                        String json = "{\"commandId\":\"" + String(frame.commandId) + "\"}";
+                        self->_ws.sendTXT(json);
+                    }
                     self->_ws.sendBIN(frame.buf, frame.len);
+                }
                 free(frame.buf);
             }
             vTaskDelay(1 / portTICK_PERIOD_MS);
@@ -100,7 +111,7 @@ public:
 
     bool isConnected() const { return _connected; }
 
-    bool sendFrame(const uint8_t *buf, size_t len)
+    bool sendFrame(const uint8_t *buf, size_t len, const String& commandId = "")
     {
         if (!_connected || !_queue) return false;
 
@@ -110,7 +121,8 @@ public:
         if (!copy) { Serial.printf("[%s] malloc failed — dropping frame\n", _label.c_str()); return false; }
 
         memcpy(copy, buf, len);
-        WsFrame frame = {copy, len};
+        WsFrame frame = {copy, len, {0}};
+        strlcpy(frame.commandId, commandId.c_str(), sizeof(frame.commandId));
 
         if (xQueueSend(_queue, &frame, 0) != pdTRUE)
         {

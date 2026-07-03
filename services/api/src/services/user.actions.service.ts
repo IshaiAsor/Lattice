@@ -1,3 +1,4 @@
+import { deriveValidParameters } from '@lattice/capability-validation';
 import { db } from '../db';
 
 // User action management (F2.6). Action *instances* are created by the provisioning /
@@ -17,6 +18,7 @@ export interface ActionView {
   name: string;            // action_name (user-facing label)
   mqttName: string;        // mqtt_action_name
   implementation_type: string;
+  validParameters: unknown;
   googleTypeId: number | null;
   googleType: { id: number; name: string; value: string } | null;
   googleTraits: GoogleTraitView[];
@@ -62,6 +64,7 @@ class UserActionsService {
         name:                a.action_name,
         mqttName:            a.mqtt_action_name,
         implementation_type: a.capability.implementation_type,
+        validParameters:     deriveValidParameters(a.capability.traits.map((t) => t.google_trait.valid_parameters)),
         googleTypeId:        a.capability.google_type_id,
         googleType:          a.capability.google_type
           ? { id: a.capability.google_type.id, name: a.capability.google_type.name, value: a.capability.google_type.value }
@@ -130,11 +133,11 @@ class UserActionsService {
     if (orderedIds.some((id) => !owned.has(id))) {
       throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
     }
-    await db.$transaction(
-      orderedIds.map((id, index) =>
-        db.userDeviceAction.update({ where: { id }, data: { sort_order: index } }),
-      ),
-    );
+    await db.$transaction(async (tx) => {
+      for (const [index, id] of orderedIds.entries()) {
+        await tx.userDeviceAction.update({ where: { id }, data: { sort_order: index } });
+      }
+    });
   }
 
   async deleteAction(userId: number, actionId: number): Promise<void> {

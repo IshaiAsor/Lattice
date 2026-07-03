@@ -13,7 +13,8 @@ deviceConfigurationRouter.get(
   '/configuration',
   requireDeviceToken(JwtPurpose.device_usage),
   async (req, res) => {
-    const deviceId = req.device?.deviceId ?? req.query.deviceId;
+    const device = req.device as { clientid?: number } | undefined;
+    const deviceId = device?.clientid ?? req.query.deviceId;
     if (!deviceId) {
       res.status(400).json({ error: 'Missing deviceId' });
       return;

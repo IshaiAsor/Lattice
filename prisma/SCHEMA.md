@@ -117,6 +117,8 @@ erDiagram
     string status "active/staged_*/deprecated"
     int sort_order "position within group"
     int telemetry_interval_ms
+    string camera_resolution "nullable; CameraAction only, e.g. VGA/SVGA/XGA"
+    string camera_transport "nullable; CameraAction only, ws/http, default http"
   }
   UserDeviceActionPin {
     int id PK
@@ -173,16 +175,21 @@ erDiagram
     int pipeline_id FK
     int user_device_action_id FK
     string group_name
+    string description "required LLM context note"
+    bool inject_as_sensor "default true; include in historic digest + current state"
+    bool inject_as_action "default false; include in LLM available_actions"
     string min_value
     string max_value
+    string compression "average/last_n/min_max/min_max_avg/time_series"
+    int window_minutes "default 60"
+    int n "nullable; required for last_n"
   }
   PipelineStage {
     int id PK
     int pipeline_id FK
     int ordinal
-    string kind "infer/sensor_digest/command_exec"
+    string kind "enrich/infer/command_exec"
     int ml_model_id FK "nullable"
-    int execute_user_device_action_id FK "nullable"
     json config "optional per-stage overrides"
   }
   PipelineTrigger {
@@ -198,8 +205,11 @@ erDiagram
   PipelineRun {
     int id PK
     int pipeline_id FK
-    string status "pending/running/completed/failed"
+    string status "queued/running/completed/failed"
+    string trigger_type "manual/sensor_threshold/schedule"
     json trigger_payload "ML audit blob"
+    bool is_dry_run "default false"
+    json sensor_overrides "nullable; dry-run override map"
     datetime started_at
     datetime completed_at
   }
@@ -255,7 +265,6 @@ erDiagram
   PipelineRun           ||--o{ PipelineRunStage       : "per-stage record"
   PipelineStage         ||--o{ PipelineRunStage       : "definition of"
   UserDeviceAction      ||--o{ PipelineSensor         : "read by"
-  UserDeviceAction      |o--o{ PipelineStage          : "exec target"
   UserDeviceAction      |o--o{ PipelineTrigger        : "triggers"
 
   UserDeviceAction      ||--o{ SensorHistory          : "readings"
@@ -274,10 +283,11 @@ erDiagram
 | 2 | Sensor | `action.devices.types.SENSOR` |
 
 #### `google_device_traits`
-`valid_parameters` is JSON — mirrors Google's external trait contract (freeform by trait).
+`valid_parameters` is JSON — a seed-authored, canonical accepted-value constraint per Google trait (one of `{"type":"enum","values":[...]}`, `{"type":"range","min","max","step"}`, or `{"type":"pattern","regex":"..."}`). This is the single source of truth for "what values can this trait take" — it lives on the trait, not the capability, because it's a property of Google's protocol contract (OnOff is always on/off, Brightness is always 0–100), not of any specific device's hardware. A capability's actual accepted values are *derived* at read/validation time by unioning the `valid_parameters` of all traits it declares via `device_capability_traits` (see `@lattice/capability-validation`'s `deriveValidParameters()`) — e.g. the `dimmer` capability (OnOff + Brightness traits) derives to `{"type":"range","min":0,"max":100,"step":1,"aliases":["on","off"]}`. Consumed by dispatch validation (digest-service, google-home EXECUTE) and ml-router prompt enrichment.
 | id | name | value | valid_parameters |
 |----|------|-------|------------------|
-| 1 | On / Off | `action.devices.traits.OnOff` | `["on","off"]` |
+| 1 | On / Off | `action.devices.traits.OnOff` | `{"type":"enum","values":["on","off"]}` |
+| 2 | Brightness | `action.devices.traits.Brightness` | `{"type":"range","min":0,"max":100,"step":1}` |
 
 ### Tier 1 — Device & ML catalog
 
@@ -341,11 +351,12 @@ erDiagram
 |----|---------|------|------------|
 | 1 | 2 | Garage | 0 |
 
-#### `user_device_actions` (`UserDeviceAction`) — an activated capability instance. Index `(user_device_id, mqtt_action_name)`. `sort_order` = position within group. `default_trait_id` (nullable FK → `google_device_traits`) = the user's chosen display trait; overrides the capability-level `is_default` when set. Resolution order: `default_trait_id` → catalog `is_default` trait → first trait.
-| id | user_device_id | capability_id | group_id | default_trait_id | action_name | mqtt_action_name | current_state | status | sort_order |
-|----|----------------|---------------|----------|-----------------|-------------|------------------|---------------|--------|------------|
-| 100 | 7 | 10 | 1 | NULL | Garage Temp | temperature | "23.4" | active | 0 |
-| 101 | 7 | 11 | 1 | 1 | Door Relay | relay1 | "OFF" | active | 1 |
+#### `user_device_actions` (`UserDeviceAction`) — an activated capability instance. Index `(user_device_id, mqtt_action_name)`. `sort_order` = position within group. `default_trait_id` (nullable FK → `google_device_traits`) = the user's chosen display trait; overrides the capability-level `is_default` when set. Resolution order: `default_trait_id` → catalog `is_default` trait → first trait. `camera_resolution`/`camera_transport` are only meaningful for a `CameraAction` instance (nullable, unused by every other implementation_type).
+| id | user_device_id | capability_id | group_id | default_trait_id | action_name | mqtt_action_name | current_state | status | sort_order | camera_resolution | camera_transport |
+|----|----------------|---------------|----------|-----------------|-------------|------------------|---------------|--------|------------|--------------------|--------------------|
+| 100 | 7 | 10 | 1 | NULL | Garage Temp | temperature | "23.4" | active | 0 | NULL | NULL |
+| 101 | 7 | 11 | 1 | 1 | Door Relay | relay1 | "OFF" | active | 1 | NULL | NULL |
+| 102 | 7 | 12 | 1 | NULL | Door Camera | camera | NULL | active | 2 | SVGA | http |
 | 102 | 7 | 12 | 1 | NULL | Garage Cam | cam | NULL | active | 2 |
 
 #### `user_device_action_pins` (`UserDeviceActionPin`) — per-instance GPIO assignment. `capability_pin_id` FK to the catalog slot (mode is read from there). Unique `(user_device_action_id, capability_pin_id)`.
@@ -387,19 +398,20 @@ erDiagram
 |----|---------|------|---------|
 | 40 | 2 | Garage AI watch | true |
 
-#### `pipeline_sensors` (`PipelineSensor`) — grouped read inputs + ranges. Unique `(pipeline_id, user_device_action_id)`.
-| id | pipeline_id | group_name | user_device_action_id | min_value | max_value |
-|----|-------------|------------|-----------------------|-----------|-----------|
-| 1 | 40 | climate | 100 | 18 | 27 |
-| 2 | 40 | vision | 102 | NULL | NULL |
+#### `pipeline_sensors` (`PipelineSensor`) — unified per-item list: every device action the pipeline cares about (sensor reading and/or LLM-invocable action), one row each. `inject_as_sensor` includes the item in the current-state + historic-digest blobs the enrich stage builds; `inject_as_action` includes it in the LLM's derived `available_actions` list. Telemetry and image/camera capability types force `inject_as_sensor=true` (can't be turned off) and `inject_as_action=false` (can't be commanded) — enforced both in the UI and server-side in `pipelines.service.ts`. Unique `(pipeline_id, user_device_action_id)`.
+| id | pipeline_id | group_name | description | user_device_action_id | inject_as_sensor | inject_as_action | min_value | max_value | compression | window_minutes | n |
+|----|-------------|------------|-------------|------------------------|-------------------|-------------------|-----------|-----------|-------------|----------------|---|
+| 1 | 40 | climate | Air temp in grow tent | 100 | true | false | 18 | 27 | average | 60 | NULL |
+| 2 | 40 | vision | Door camera frame | 102 | true | false | NULL | NULL | last_n | 5 | 5 |
+| 3 | 40 | access | Door relay | 101 | true | true | NULL | NULL | average | 60 | NULL |
 
-#### `pipeline_stages` (`PipelineStage`) — ordered steps. `infer`→`ml_model_id`; `command_exec`→`execute_user_device_action_id` (value from preceding LLM structured output). Unique `(pipeline_id, ordinal)`.
-| id | pipeline_id | ordinal | kind | ml_model_id | execute_user_device_action_id | config |
-|----|-------------|---------|------|-------------|-------------------------------|--------|
-| 70 | 40 | 1 | infer | 1 (yolo/vlm) | NULL | NULL |
-| 71 | 40 | 2 | sensor_digest | NULL | NULL | NULL |
-| 72 | 40 | 3 | infer | 2 (qwen/llm) | NULL | NULL |
-| 73 | 40 | 4 | command_exec | NULL | 101 | NULL |
+#### `pipeline_stages` (`PipelineStage`) — ordered steps. Kinds: `enrich` (builds current-state/historic-digest/available-actions from `pipeline_sensors`, no config needed); `infer` (ML model via `ml_model_id`); `command_exec` (executes LLM-recommended action). The pipeline editor always constructs the canonical sequence `enrich → [infer/vlm] → infer/llm → [command_exec]`; the engine itself stays generic over ordinal/kind. Unique `(pipeline_id, ordinal)`.
+| id | pipeline_id | ordinal | kind | ml_model_id | config |
+|----|-------------|---------|------|-------------|--------|
+| 70 | 40 | 1 | enrich | NULL | NULL |
+| 71 | 40 | 2 | infer | 1 (yolo/vlm) | NULL |
+| 72 | 40 | 3 | infer | 2 (qwen/llm) | `{"prompt_template":"Prioritize security over comfort"}` |
+| 73 | 40 | 4 | command_exec | NULL | NULL |
 
 #### `pipeline_triggers` (`PipelineTrigger`) — many per pipeline (telemetry / schedule / manual)
 | id | pipeline_id | trigger_type | user_device_action_id | operator | threshold_value | schedule_cron | min_interval_sec |
@@ -407,10 +419,11 @@ erDiagram
 | 60 | 40 | telemetry | 102 | NULL | NULL | NULL | 30 |
 | 61 | 40 | telemetry | 100 | > | 30 | NULL | 30 |
 
-#### `pipeline_runs` (`PipelineRun`) — one execution. `trigger_payload` JSON = ML audit blob.
-| id | pipeline_id | status | started_at | completed_at |
-|----|-------------|--------|------------|--------------|
-| 500 | 40 | completed | 2026-06-26T14:32:00Z | 2026-06-26T14:32:09Z |
+#### `pipeline_runs` (`PipelineRun`) — one execution. `trigger_payload` JSON = ML audit blob. `sensor_overrides` JSON = dry-run override map keyed by `user_device_action_id`.
+| id | pipeline_id | status | trigger_type | is_dry_run | started_at | completed_at |
+|----|-------------|--------|--------------|------------|------------|--------------|
+| 500 | 40 | completed | sensor_threshold | false | 2026-06-26T14:32:00Z | 2026-06-26T14:32:09Z |
+| 501 | 40 | completed | manual | true | 2026-06-26T15:00:00Z | 2026-06-26T15:00:08Z |
 
 #### `pipeline_run_stages` (`PipelineRunStage`) — per-stage audit trail (`input`/`output` JSON = ML blobs). Unique `(run_id, stage_id)`. Replaced the old `vlm_analysis_logs`.
 | id | run_id | stage_id | status | input | output |
@@ -432,9 +445,11 @@ erDiagram
 
 - **JSON is used only for genuinely freeform data**: ML audit blobs (`pipeline_runs.trigger_payload`,
   `pipeline_run_stages.input`/`output`), per-model metadata (`ml_models.classes`/`config`),
-  optional per-stage overrides (`pipeline_stages.config`), and Google's external trait contract
-  (`google_device_traits.valid_parameters`). All stable-shape domain data is normalized:
-  instance pins → `user_device_action_pins`; rule condition params → typed columns.
+  and optional per-stage overrides (`pipeline_stages.config`). All stable-shape domain data is
+  normalized: instance pins → `user_device_action_pins`; rule condition params → typed columns.
+  Exception: `google_device_traits.valid_parameters` is JSON despite having a small fixed schema
+  (`{type: enum|range|pattern, ...}`) because it's a discriminated union — the shape varies by
+  `type`, so no single flat set of typed columns fits.
 - **Catalog vs instance:** `DeviceCapability` (catalog, per device model) is abstract; a user
   activates it as a `UserDeviceAction` (instance, with assigned pins + live state).
 - **Rules vs pipelines:** rules are deterministic + synchronous (no ML); pipelines are the single

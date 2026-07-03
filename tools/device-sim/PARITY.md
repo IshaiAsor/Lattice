@@ -35,7 +35,8 @@ Legend: ✓ mirrored · ◐ partial / functional-equivalent · ✗ not simulated
 |---|---|---|
 | Per-action interval publish on `telemetry/<name>` | `handleTelametryReading` | ✓ |
 | Scalar sensors (Temperature, AirTemperature, Humidity, WaterLevel, PhLevel, TdsLevel, CO2Level) | `actions/telemtries/*` | ✓ — plausible per-type values, slow sine drift |
-| Camera telemetry — LiveStream/TakePicture over WS; HTTP frame upload | `LiveStream/TakePicture*Action.h`, `device-gateway/ws/camera-stream.ts`, `routes/camera.routes.ts` | ✓ — binary JPEG over `/ws/stream` + `/ws/capture`, and `POST /api/camera/frame` |
+| Camera telemetry — unified `CameraAction`, periodic snapshot over WS or HTTP (per-instance `camera_transport`) | `CameraAction.h`, `device-gateway/ws/camera-stream.ts`, `routes/camera.routes.ts` | ✓ — binary JPEG over `/ws/stream`, and `POST /api/camera/frame`. Mock frame is a real small JPEG (320x240) with the generation timestamp burned into the pixels (sim-only cosmetic aid for visually confirming delivery — real firmware sends actual camera-sensor bytes with no overlay) |
+| On-demand capture — `command/take_picture` → immediate frame tagged with `commandId`, answers a pipeline's live picture request | `CameraAction::triggerCapture`, `digest-service/picture-requested.consumer.ts` | ✓ — `_sendOnDemandFrame`, works over whichever transport (`camera_transport`) the instance is configured for, independent of whether periodic streaming (`camera`/`CAMERA`) is enabled |
 
 ## Commands
 | Firmware behavior | Source | Sim |

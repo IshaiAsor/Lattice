@@ -2,11 +2,12 @@ import { Component, inject, input } from '@angular/core';
 import { DeviceActionView } from 'src/app/services/device.mgmt.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { ReceivedBadgeComponent } from '../received-badge/received-badge.component';
 
 @Component({
   selector: 'app-camera-fullscreen-dialog',
   standalone: true,
-  imports: [SHARED_MATERIAL],
+  imports: [SHARED_MATERIAL, ReceivedBadgeComponent],
   template: `
     <div class="cam-fs-wrap">
       <button mat-icon-button class="cam-fs-close" (click)="dialogRef.close()">
@@ -14,6 +15,9 @@ import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dial
       </button>
       @if (data.action.state) {
         <img [src]="'data:image/jpeg;base64,' + data.action.state" alt="Camera" class="cam-fs-img" />
+        <div class="cam-fs-received-badge">
+          <app-received-badge [receivedAt]="data.action.receivedAt" variant="overlay"></app-received-badge>
+        </div>
       } @else {
         <div class="cam-fs-placeholder">
           <span class="material-symbols-outlined">photo_camera</span>
@@ -26,8 +30,10 @@ import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dial
     .cam-fs-wrap {
       position: relative;
       background: #000;
-      width: 88vw;
-      height: 88vh;
+      width: fit-content;
+      height: fit-content;
+      max-width: 88vw;
+      max-height: 88vh;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -45,6 +51,12 @@ import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dial
       max-height: 100%;
       object-fit: contain;
       display: block;
+    }
+    .cam-fs-received-badge {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      z-index: 10;
     }
     .cam-fs-placeholder {
       display: flex;

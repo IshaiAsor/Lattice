@@ -1,0 +1,113 @@
+<div class="run-history">
+  <div class="history-header">
+    <span class="history-title">Run History</span>
+    <button mat-stroked-button class="trigger-btn" (click)="load()">
+      <mat-icon>refresh</mat-icon> Refresh
+    </button>
+  </div>
+
+  @if (loading) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+
+  @for (run of runs; track run.id) {
+    <div class="run-row" [class.expanded]="expandedRunId === run.id">
+      <div class="run-summary" (click)="toggleRun(run)" (keyup.enter)="toggleRun(run)" tabindex="0">
+        <span class="run-status-chip" [ngClass]="statusClass(run.status)">{{ run.status }}</span>
+        @if (run.is_dry_run) {
+          <span class="sim-badge">SIMULATION</span>
+        }
+        <span class="run-trigger">{{ run.trigger_type }}</span>
+        <span class="run-date">{{ run.started_at | date:'MMM d, HH:mm' }}</span>
+        <span class="run-duration">{{ duration(run) }}</span>
+        <span class="run-row-actions">
+          @if (canCancel(run)) {
+            <button mat-icon-button class="run-action-btn" (click)="cancelRun(run, $event)" matTooltip="Cancel run">
+              <mat-icon>cancel</mat-icon>
+            </button>
+          } @else {
+            <button mat-icon-button class="run-action-btn run-action-delete" (click)="deleteRun(run, $event)" matTooltip="Delete run">
+              <mat-icon>delete</mat-icon>
+            </button>
+          }
+        </span>
+        <mat-icon class="expand-icon">
+          {{ expandedRunId === run.id ? 'expand_less' : 'expand_more' }}
+        </mat-icon>
+      </div>
+
+      @if (expandedRunId === run.id) {
+        <div class="run-detail">
+          @if (!expandedRun) {
+            <mat-progress-bar mode="indeterminate" />
+          } @else {
+            @for (rs of expandedRun.stages; track rs.id) {
+              <div class="stage-row">
+                <div class="stage-header">
+                  <span class="stage-ordinal">#{{ rs.stage.ordinal + 1 }}</span>
+                  <span class="stage-kind-badge" [ngClass]="'kind-' + rs.stage.kind">
+                    {{ rs.stage.kind }}
+                  </span>
+                  <span class="stage-status" [ngClass]="statusClass(rs.status)">{{ rs.status }}</span>
+                </div>
+
+                @if (rs.input) {
+                  <details class="io-details">
+                    <summary>Input</summary>
+                    @if (rs.stage.kind === 'infer' && inferPrompt(rs.input); as prompt) {
+                      <pre class="stage-output compact">{{ prompt }}</pre>
+                    } @else {
+                      <pre class="stage-output compact">{{ stageInput(rs.input) }}</pre>
+                    }
+                  </details>
+                }
+
+                @if (rs.output) {
+                  <!-- Would Execute panel (dry-run command_exec) -->
+                  @if (isDryRunStage(rs.output)) {
+                    <div class="would-execute-panel">
+                      <div class="we-label">WOULD EXECUTE</div>
+                      @for (we of wouldExecute(rs.output); track we.actionId) {
+                        <div class="we-action">Action #{{ we.actionId }} → {{ we.value }}</div>
+                        @if (we.reasoning) {
+                          <div class="we-reason">{{ we.reasoning }}</div>
+                        }
+                      }
+                    </div>
+                  } @else if (rs.stage.kind === 'infer') {
+                    @let inf = inferView(rs.output);
+                    <div class="infer-panel">
+                      @if (inf && inf.actions?.length) {
+                        @for (act of inf.actions; track act.actionId) {
+                          <div class="infer-action">Action #{{ act.actionId }} → {{ act.value }}</div>
+                          @if (act.reasoning) {
+                            <div class="infer-reason">{{ act.reasoning }}</div>
+                          }
+                        }
+                      } @else {
+                        <pre class="stage-output">{{ inf?.raw ?? stageOutput(rs.output) }}</pre>
+                      }
+                      @if (inf?.durationMs) {
+                        <div class="infer-duration">{{ formatMs(inf!.durationMs!) }}</div>
+                      }
+                    </div>
+                  } @else {
+                    <pre class="stage-output compact">{{ stageOutput(rs.output) }}</pre>
+                  }
+                }
+
+                @if (stageError(rs.output); as errMsg) {
+                  <div class="stage-error">{{ errMsg }}</div>
+                }
+              </div>
+            }
+          }
+        </div>
+      }
+    </div>
+  }
+
+  @if (!loading && runs.length === 0) {
+    <div class="empty">No runs yet.</div>
+  }
+</div>

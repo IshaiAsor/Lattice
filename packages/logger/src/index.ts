@@ -1,4 +1,5 @@
 import pino from 'pino';
+import { pinoMixin } from '@lattice/otel';
 
 export type { Logger } from 'pino';
 
@@ -15,6 +16,8 @@ export function createLogger(
       ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:HH:MM:ss' } }
       : undefined,
     base: options?.extra ? { service, ...options.extra } : { service },
-    mixin: options?.mixin,
+    // Attaches traceId/spanId from the active OTel span so Loki log lines
+    // can be correlated back to the matching Tempo trace in Grafana.
+    mixin: options?.mixin ?? pinoMixin,
   });
 }

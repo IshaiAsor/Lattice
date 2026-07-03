@@ -58,9 +58,9 @@ describe('device-sim e2e', () => {
     dev.publishTelemetry(sensor.mqtt_action_name, 42);
     const actions = await poll(
       () => apiGet('/api/actions', token),
-      (list: any[]) => list.some((a) => a.mqttName === sensor.mqtt_action_name && a.state === '42'),
+      (list: any[]) => list.some((a) => a.deviceId === dev.deviceId && a.mqttName === sensor.mqtt_action_name && a.state === '42'),
     );
-    expect(actions.find((a: any) => a.mqttName === sensor.mqtt_action_name).state).toBe('42');
+    expect(actions.find((a: any) => a.deviceId === dev.deviceId && a.mqttName === sensor.mqtt_action_name).state).toBe('42');
   });
 
   itStack('valid command → ok ack (echoes commandId) and state update', async () => {
@@ -77,9 +77,9 @@ describe('device-sim e2e', () => {
 
     const actions = await poll(
       () => apiGet('/api/actions', token),
-      (list: any[]) => list.some((a) => a.mqttName === outlet.mqtt_action_name && a.state === 'on'),
+      (list: any[]) => list.some((a) => a.deviceId === dev.deviceId && a.mqttName === outlet.mqtt_action_name && a.state === 'on'),
     );
-    expect(actions.find((a: any) => a.mqttName === outlet.mqtt_action_name).state).toBe('on');
+    expect(actions.find((a: any) => a.deviceId === dev.deviceId && a.mqttName === outlet.mqtt_action_name).state).toBe('on');
   });
 
   itStack('invalid command → error ack (no state change)', async () => {

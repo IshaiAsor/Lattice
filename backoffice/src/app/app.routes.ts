@@ -6,9 +6,9 @@ import { RegisterComponent } from './components/register/register.component';
 import { LegalComponent } from './components/legal/legal.component';
 import { MgmtDeviceListComponent } from './components/mgmt-device-list/mgmt-device-list.component';
 import { UserDashboard } from './components/user-dashboard/user-dashboard';
-import { RulesComponent } from './components/rules/rules.component';
 import { AdminDeviceConfigComponent } from './components/admin-device-config/admin-device-config.component';
 import { DeviceConfigComponent } from './components/device-config/device-config.component';
+import { AutomationsComponent } from './components/automations/automations.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
@@ -24,7 +24,12 @@ export const routes: Routes = [
   },
   {
     path: 'rules',
-    component: RulesComponent,
+    redirectTo: '/automations?tab=rules',
+    pathMatch: 'full',
+  },
+  {
+    path: 'automations',
+    component: AutomationsComponent,
     canActivate: [authGuard],
   },
   {

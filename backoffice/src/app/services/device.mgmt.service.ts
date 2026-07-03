@@ -2,19 +2,19 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
-import { apiV2Url } from './api.config';
+import { apiUrl } from './api.config';
 export interface GoogleActionType { id: number; name: string; value: string; }
-export interface GoogleActionTrait { id: number; name: string; value: string; }
+export interface GoogleActionTrait {
+  id: number;
+  name: string;
+  value: string;
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class DeviceMgmtService {
-  private apiUrl = `${environment.apiUrl}`;
-  // New `api` service (F2.5) owns device list/rename/delete. The remaining methods below
-  // (provisioning, status, resets, capability activation) have no new-api home yet and stay on the
-  // monolith until device-gateway/F3.x land them.
-  private apiV2 = apiV2Url();
+  private apiUrl = apiUrl();
   private get gatewayUrl(): string {
     return environment.deviceGatewayUrl ||
       (environment.production ? `${window.location.protocol}//device.${window.location.hostname}` : 'http://localhost:3004');
@@ -22,39 +22,31 @@ export class DeviceMgmtService {
   private http = inject(HttpClient);
 
   getDevices(): Observable<DeviceView[]> {
-    return this.http.get<DeviceView[]>(`${this.apiV2}/api/devices`);
-  }
-
-  addDevice(deviceData: unknown): Observable<DeviceView> {
-    return this.http.post<DeviceView>(`${this.apiUrl}/api/mgmt/devices`, deviceData);
-  }
-
-  updateDeviceStatus(deviceId: number, status: number): Observable<DeviceView> {
-    return this.http.patch<DeviceView>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/status`, { status });
+    return this.http.get<DeviceView[]>(`${this.apiUrl}/api/devices`);
   }
 
   updateDevice(deviceId: number, updates: unknown): Observable<DeviceView> {
-    return this.http.patch<DeviceView>(`${this.apiV2}/api/devices/${deviceId}`, updates);
+    return this.http.patch<DeviceView>(`${this.apiUrl}/api/devices/${deviceId}`, updates);
   }
 
   deleteDevice(deviceId: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiV2}/api/devices/${deviceId}`);
+    return this.http.delete<void>(`${this.apiUrl}/api/devices/${deviceId}`);
   }
 
   reprovisionDevice(deviceId: number): Observable<void> {
-    return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/reprovision`, {});
+    return this.http.post<void>(`${this.apiUrl}/api/devices/${deviceId}/reprovision`, {});
   }
 
   softResetDevice(deviceId: number): Observable<void> {
-    return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/soft-reset`, {});
+    return this.http.post<void>(`${this.apiUrl}/api/devices/${deviceId}/soft-reset`, {});
   }
 
   hardResetDevice(deviceId: number): Observable<void> {
-    return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/hard-reset`, {});
+    return this.http.post<void>(`${this.apiUrl}/api/devices/${deviceId}/hard-reset`, {});
   }
 
   restartDevice(deviceId: number): Observable<void> {
-    return this.http.post<void>(`${this.apiUrl}/api/mgmt/devices/${deviceId}/restart`, {});
+    return this.http.post<void>(`${this.apiUrl}/api/devices/${deviceId}/restart`, {});
   }
 
   getUpdatePreview(deviceId: number): Observable<UpdatePreview | { up_to_date: true }> {
@@ -66,7 +58,7 @@ export class DeviceMgmtService {
   }
 
   getDeviceCapabilities(deviceId: number): Observable<CapabilityView[]> {
-    return this.http.get<CapabilityView[]>(`${this.apiV2}/api/devices/${deviceId}/capabilities`);
+    return this.http.get<CapabilityView[]>(`${this.apiUrl}/api/devices/${deviceId}/capabilities`);
   }
 
   activateCapability(
@@ -74,20 +66,27 @@ export class DeviceMgmtService {
     capabilityId: number,
     telemetryIntervalMs?: number | null,
     pins?: { capability_pin_id: number; pin_number: number }[],
+    cameraResolution?: string | null,
+    cameraTransport?: string | null,
   ): Observable<{ id: number }> {
-    return this.http.post<{ id: number }>(`${this.apiV2}/api/devices/${deviceId}/actions`, {
+    return this.http.post<{ id: number }>(`${this.apiUrl}/api/devices/${deviceId}/actions`, {
       capability_id: capabilityId,
       telemetry_interval_ms: telemetryIntervalMs ?? null,
       pins: pins ?? [],
+      camera_resolution: cameraResolution ?? null,
+      camera_transport: cameraTransport ?? null,
     });
   }
 
   updateActivatedAction(
     deviceId: number,
     userActionId: number,
-    updates: { name: string; telemetry_interval_ms?: number | null; pins?: { capability_pin_id: number; pin_number: number }[] },
+    updates: {
+      name: string; telemetry_interval_ms?: number | null; pins?: { capability_pin_id: number; pin_number: number }[];
+      camera_resolution?: string | null; camera_transport?: string | null;
+    },
   ): Observable<void> {
-    return this.http.patch<void>(`${this.apiV2}/api/devices/${deviceId}/actions/${userActionId}`, updates);
+    return this.http.patch<void>(`${this.apiUrl}/api/devices/${deviceId}/actions/${userActionId}`, updates);
   }
 }
 
@@ -106,6 +105,9 @@ export interface UserActionView {
   pins: { pinNumber: number; pinMode: string }[] | null;
   intervalMs: number | null;
   status: 'active' | 'deprecated';
+  // CameraAction only — null for every other implementation_type.
+  cameraResolution: string | null;
+  cameraTransport: string | null;
 }
 
 export interface CapabilityView {
@@ -162,10 +164,16 @@ export interface DeviceActionView {
   groupId: number | null;
   groupName: string | null;
   implementation_type: string;
+  // Firmware-authored accepted-value constraint ({type:'enum'|'range'|'pattern', ...}), or
+  // undefined when not fetched via UserActionsService (e.g. device-config's own action list).
+  validParameters?: unknown;
   // Transient UI flag: a command was sent and is awaiting the device's ack. Set on
   // action_state_pending, cleared on action_state_update / action_state_failed. Not persisted.
   pending?: boolean;
   status: 'active' | 'deprecated';
+  // Client-side wall-clock time (ms since epoch) this browser tab received the current `state`
+  // via action_state_update. Local only — never persisted or sent by the server.
+  receivedAt?: number;
 }
 
 export interface DeviceActionPinView {

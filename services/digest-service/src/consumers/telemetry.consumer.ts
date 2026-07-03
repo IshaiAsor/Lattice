@@ -1,12 +1,15 @@
 import type { Channel } from 'amqplib';
-import type { TelemetryArrivedPayload } from '@lattice/queue';
+import type { TelemetryArrivedPayload, PictureResultPayload } from '@lattice/queue';
+import { publish, RK } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
-import { db } from '../db/client';
+import { db, Prisma } from '../db/client';
 import { valkey, keys } from '../cache/valkey';
 import { resolveUserDeviceAction } from '../resolve';
 import { asString } from '../util';
 import { socket } from '../socket/emitter';
 import { writeScalarState } from '../state-write';
+import { takePendingPicture } from '../cache/pending';
+import * as timeout from '../pending-timeout';
 
 const log = createLogger('digest-service:telemetry');
 
@@ -32,7 +35,7 @@ export function telemetryConsumer(ch: Channel) {
     }
 
     if (resolved.kind === 'image') {
-      await handleImage(resolved.id, payload);
+      await handleImage(ch, resolved.id, payload);
       return;
     }
     await handleScalar(ch, resolved.id, payload);
@@ -43,10 +46,11 @@ export function telemetryConsumer(ch: Channel) {
 // is TEXT) — full image history is intentional; retention/cleanup is a roadmap item.
 // The frame never goes to current_state or rules.evaluate.
 async function handleImage(
+  ch: Channel,
   userActionId: number,
   payload: TelemetryArrivedPayload,
 ): Promise<void> {
-  const { userId, deviceId, value, timestamp } = payload;
+  const { userId, deviceId, value, timestamp, commandId } = payload;
   const userDeviceId = parseInt(deviceId, 10);
   const frame = asString(value);
 
@@ -76,8 +80,21 @@ async function handleImage(
     log.error({ err, userActionId }, 'socket image frame emit failed');
   }
 
-  // TODO(F8): trigger a configured pipeline (RK.PIPELINE_TRIGGER) with a per-device
-  // cooldown once the Pipeline model lands. The cached frame above feeds VLM/LLM stages.
+  // 4. If this frame answers an in-flight on-demand capture (pipeline enrich stage),
+  // resolve it. takePendingPicture is the arbiter against the request's own timeout —
+  // whichever fires first wins, so this is a no-op if the timeout already resolved it.
+  if (commandId) {
+    timeout.clear(commandId);
+    try {
+      const pending = await takePendingPicture(commandId);
+      if (pending !== null) {
+        const result: PictureResultPayload = { commandId, status: 'ok', image: frame, capturedAt: timestamp };
+        publish(ch, RK.PICTURE_RESULT, result);
+      }
+    } catch (err) {
+      log.error({ err, commandId }, 'picture request resolution failed');
+    }
+  }
 }
 
 // Scalar sensor reading. Delegates to the shared authoritative-state writer (also used
@@ -89,4 +106,70 @@ async function handleScalar(
 ): Promise<void> {
   const { userId, deviceId, actionName, value, timestamp } = payload;
   await writeScalarState(ch, userActionId, { userId, deviceId, actionName, value, timestamp });
+  await firePipelineTriggers(ch, userId, userActionId, value);
+}
+
+function evaluateThreshold(value: unknown, operator: string, threshold: string): boolean {
+  const v = parseFloat(String(value));
+  const t = parseFloat(threshold);
+  if (isNaN(v) || isNaN(t)) return String(value) === threshold;
+  switch (operator) {
+    case '>':  return v > t;
+    case '<':  return v < t;
+    case '>=': return v >= t;
+    case '<=': return v <= t;
+    case '=':
+    case '==': return v === t;
+    default:   return false;
+  }
+}
+
+async function firePipelineTriggers(
+  ch: Channel,
+  userId: string,
+  userActionId: number,
+  value: unknown,
+): Promise<void> {
+  try {
+    const triggers = await db.pipelineTrigger.findMany({
+      where: {
+        pipeline:              { enabled: true, user_id: parseInt(userId, 10) },
+        trigger_type:          'sensor_threshold',
+        user_device_action_id: userActionId,
+      },
+      include: { pipeline: { select: { id: true, user_id: true } } },
+    });
+
+    for (const trigger of triggers) {
+      if (!evaluateThreshold(value, trigger.operator!, trigger.threshold_value!)) continue;
+
+      if (trigger.min_interval_sec) {
+        const ck = `pipeline:cooldown:${trigger.id}`;
+        const locked = await valkey.get(ck);
+        if (locked) continue;
+        await valkey.set(ck, '1', 'EX', trigger.min_interval_sec);
+      }
+
+      const run = await db.pipelineRun.create({
+        data: {
+          pipeline_id:     trigger.pipeline.id,
+          status:          'queued',
+          trigger_type:    'sensor_threshold',
+          trigger_payload: { triggerId: trigger.id, actionId: userActionId, value: String(value) } as Prisma.InputJsonValue,
+        },
+      });
+
+      publish(ch, RK.PIPELINE_TRIGGER, {
+        userId:     String(trigger.pipeline.user_id),
+        pipelineId: String(trigger.pipeline.id),
+        runId:      run.id,
+        deviceId:   undefined,
+        actionName: undefined,
+        value,
+        timestamp:  new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    log.error({ err, userActionId }, 'pipeline trigger check failed (best-effort)');
+  }
 }

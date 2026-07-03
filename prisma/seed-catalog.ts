@@ -16,6 +16,11 @@
 //   - google_type_id FK        (→ google_action_types)    ← manifest google_action_type
 // Google types/traits are upserted by `value` here so the catalog self-populates even if
 // seed.ts didn't list a firmware-declared value; existing (nicely named) rows are kept.
+//
+// A trait's accepted-value constraint (google_device_traits.valid_parameters) comes straight
+// off the manifest's google_traits[].constraint — declared once per trait in firmware
+// (ESP32Code/src/actions/manifest/GoogleTraits.h) alongside the action classes that already
+// enforce it (BaseCommandAction's validParameters/range), not guessed here from the trait name.
 import pg from 'pg';
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -27,6 +32,18 @@ dotenvConfig({ path: join(__dirname, '..', '.env') });
 
 const manifestDir = join(__dirname, '..', 'ESP32Code', 'tools', 'manifest-gen', 'out');
 
+// Mirrors GoogleTraitDef's constraint shape (ESP32Code ActionPinsSetup.h) as serialized by
+// CapabilitySerializer.h: an enum of accepted string values, or a numeric range.
+type TraitConstraint =
+  | { type: 'enum'; values: string[] }
+  | { type: 'range'; min: number; max: number; step?: number };
+
+interface GoogleTraitManifestEntry {
+  value: string;
+  label: string;
+  constraint?: TraitConstraint;
+}
+
 interface CapabilityManifestEntry {
   capability_key: string;
   label: string;
@@ -35,7 +52,7 @@ interface CapabilityManifestEntry {
   mqtt_action_name: string;
   google_action_type: string | null;
   min_telemetry_interval_ms: number | null;
-  google_traits: string[];
+  google_traits: GoogleTraitManifestEntry[];
   configurable_pins: { key: string; label: string; mode: string }[];
 }
 
@@ -76,12 +93,15 @@ async function upsertGoogleActionType(client: pg.PoolClient, value: string): Pro
   return res.rows[0].id;
 }
 
-async function upsertGoogleDeviceTrait(client: pg.PoolClient, value: string): Promise<number> {
+async function upsertGoogleDeviceTrait(
+  client: pg.PoolClient,
+  trait: GoogleTraitManifestEntry,
+): Promise<number> {
   const res = await client.query<{ id: number }>(
-    `INSERT INTO google_device_traits (name, value) VALUES ($1, $2)
+    `INSERT INTO google_device_traits (name, value, valid_parameters) VALUES ($1, $2, $3::jsonb)
      ON CONFLICT (value) DO UPDATE SET value = EXCLUDED.value
      RETURNING id`,
-    [fallbackName(value), value],
+    [fallbackName(trait.value), trait.value, trait.constraint ? JSON.stringify(trait.constraint) : null],
   );
   return res.rows[0].id;
 }
@@ -140,8 +160,8 @@ async function seedManifest(client: pg.PoolClient, m: DeviceManifest) {
     }
 
     // 4. Append new trait links only — same immutability rationale.
-    for (const traitValue of c.google_traits ?? []) {
-      const traitId = await upsertGoogleDeviceTrait(client, traitValue);
+    for (const trait of c.google_traits ?? []) {
+      const traitId = await upsertGoogleDeviceTrait(client, trait);
       await client.query(
         `INSERT INTO device_capability_traits (capability_id, google_trait_id)
          VALUES ($1, $2)

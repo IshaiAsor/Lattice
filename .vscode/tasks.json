@@ -2,19 +2,6 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build-backend",
-      "type": "shell",
-      "command": "npx tsc -p tsconfig.json",
-      "options": {
-        "cwd": "${workspaceFolder:Backend API}"
-      },
-      "group": "build",
-      "presentation": {
-        "reveal": "always"
-      },
-      "problemMatcher": ["$tsc"]
-    },
-    {
       "label": "kill-old-tunnel",
       "type": "shell",
       "command": "npx -y kill-port 5432",
@@ -46,11 +33,6 @@
       }
     },
     {
-      "label": "pre-debug-compiled",
-      "dependsOn": ["build-backend"],
-      "dependsOrder": "sequence"
-    },
-    {
       "label": "serve-backoffice",
       "type": "shell",
       "command": "npm start",
@@ -68,34 +50,6 @@
           "endsPattern": {
             "regexp": "Application bundle generation complete|Compiled successfully"
           }
-        }
-      }
-    },
-    {
-      "label": "kill-backend-ports",
-      "type": "shell",
-      "command": "npx -y kill-port 9229 3000",
-      "presentation": { "reveal": "silent" },
-      "problemMatcher": []
-    },
-    {
-      "label": "start-backend-debug",
-      "dependsOn": ["kill-backend-ports"],
-      "dependsOrder": "sequence",
-      "type": "shell",
-      "command": "npx @dotenvx/dotenvx run -- npx nodemon --cwd backend --exec \"node --inspect=9229 -r ts-node/register\" --ext ts,json index.ts",
-      "options": {
-        "cwd": "${workspaceFolder:Project Root}",
-        "env": { "TS_NODE_PROJECT": "tsconfig.json" }
-      },
-      "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated" },
-      "problemMatcher": {
-        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "\\[nodemon\\]",
-          "endsPattern": "Debugger listening on"
         }
       }
     },
@@ -229,6 +183,16 @@
         "cwd": "${workspaceFolder:ESP32 Firmware}"
       },
       "label": "PlatformIO: Build (ESP32Code)"
+    },
+    {
+      "label": "docker:migrate",
+      "type": "shell",
+      "command": "docker compose run --rm --build migrate",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}"
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
     },
     {
       "label": "catalog:gen",

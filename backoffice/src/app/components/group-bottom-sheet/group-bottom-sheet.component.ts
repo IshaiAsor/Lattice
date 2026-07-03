@@ -1,6 +1,6 @@
 import { Component, DestroyRef, HostListener, inject, OnInit } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
-import { iconForDeviceType, hasTrait, COLOR_OPTIONS, activeTraitValue, traitIconName, controllableTraits } from 'src/app/utils/device-type.utils';
+import { iconForDeviceType, hasTrait, COLOR_OPTIONS, activeTraitValue, traitIconName, controllableTraits, isTelemetryAction, isCameraAction } from 'src/app/utils/device-type.utils';
 import { ActionGroupView } from 'src/app/services/user.actions.service';
 import { UserActionsService } from 'src/app/services/user.actions.service';
 import { DeviceActionView } from 'src/app/services/device.mgmt.service';
@@ -12,6 +12,7 @@ import { RenameActionDialogComponent } from '../rename-action-dialog/rename-acti
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import { CdkDragEnd, CdkDragMove } from '@angular/cdk/drag-drop';
+import { ReceivedBadgeComponent } from '../received-badge/received-badge.component';
 
 // Dial geometry constants (duplicated from user-dashboard for standalone use)
 const CX = 60, CY = 52, R = 36;
@@ -26,7 +27,7 @@ function toSvgPt(angleDeg: number) {
 @Component({
   selector: 'app-group-bottom-sheet',
   standalone: true,
-  imports: [SHARED_MATERIAL],
+  imports: [SHARED_MATERIAL, ReceivedBadgeComponent],
   templateUrl: './group-bottom-sheet.component.html',
   styleUrl: './group-bottom-sheet.component.css',
 })
@@ -52,6 +53,8 @@ export class GroupBottomSheetComponent implements OnInit {
   activeTraitValue = activeTraitValue;
   traitIconName = traitIconName;
   controllableTraits = controllableTraits;
+  isTelemetryAction = isTelemetryAction;
+  isCameraAction = isCameraAction;
   colorOptions = COLOR_OPTIONS;
 
   setDefaultTrait(action: DeviceActionView, traitId: number) {
@@ -71,6 +74,7 @@ export class GroupBottomSheetComponent implements OnInit {
         const action = this.actions.find(a => a.id === data.actionId);
         if (action) {
           action.state = data.state;
+          action.receivedAt = Date.now();
           const isLatest = !data.commandId || this.latestCommandId.get(data.actionId) === data.commandId;
           if (isLatest) {
             action.pending = false;

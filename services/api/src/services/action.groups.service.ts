@@ -70,11 +70,11 @@ class ActionGroupsService {
     if (orderedIds.some((id) => !owned.has(id))) {
       throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
     }
-    await db.$transaction(
-      orderedIds.map((id, index) =>
-        db.userActionGroup.update({ where: { id }, data: { sort_order: index } }),
-      ),
-    );
+    await db.$transaction(async (tx) => {
+      for (const [index, id] of orderedIds.entries()) {
+        await tx.userActionGroup.update({ where: { id }, data: { sort_order: index } });
+      }
+    });
   }
 
   // Creates or finds a group by name and assigns all given actions to it atomically.

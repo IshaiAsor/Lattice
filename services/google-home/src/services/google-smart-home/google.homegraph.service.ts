@@ -1,7 +1,10 @@
 import { google } from 'googleapis';
+import { createLogger } from '@lattice/logger';
 import config from '../../config/env.config';
 import { DeviceActionView } from '../device.actions.service';
 import { googleStateService } from './google.state.service';
+
+const log = createLogger('google-home:homegraph');
 
 class GoogleHomegraphService {
   private homegraph: ReturnType<typeof google.homegraph> | undefined;
@@ -13,7 +16,7 @@ class GoogleHomegraphService {
         try {
           credentials = JSON.parse(config.google.serviceAccountKey);
         } catch {
-          console.warn('[homegraph] GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON — ignored');
+          log.warn('GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON — ignored');
         }
       }
 
@@ -30,15 +33,15 @@ class GoogleHomegraphService {
       const auth = new google.auth.GoogleAuth(authConfig);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.homegraph = google.homegraph({ version: 'v1', auth: auth as any });
-      console.log(`[homegraph] Initialized (${credentials ? 'env key' : keyFilename ? 'key file' : 'ADC'})`);
+      log.info({ source: credentials ? 'env key' : keyFilename ? 'key file' : 'ADC' }, 'initialized');
     } catch (error) {
-      console.error('[homegraph] Failed to initialize — check service account config:', error);
+      log.error({ err: error }, 'failed to initialize — check service account config');
     }
   }
 
   async reportState(agentUserId: string, action: DeviceActionView): Promise<void> {
     if (!this.homegraph) {
-      console.error('[homegraph] Not initialized, skipping reportState');
+      log.error('not initialized, skipping reportState');
       return;
     }
 
@@ -57,9 +60,9 @@ class GoogleHomegraphService {
 
     try {
       const res = await this.homegraph.devices.reportStateAndNotification({ requestBody });
-      console.log(`[homegraph] reportState user=${agentUserId} action=${action.id}:`, res.data);
+      log.info({ agentUserId, actionId: action.id, data: res.data }, 'reportState succeeded');
     } catch (error: any) {
-      console.error('[homegraph] reportState failed:', error.message, error.response?.data?.error);
+      log.error({ agentUserId, actionId: action.id, err: error.message, googleErr: error.response?.data?.error }, 'reportState failed');
     }
   }
 }

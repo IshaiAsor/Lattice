@@ -72,8 +72,9 @@ AckPublisherFn ackPublisher = [](const char *actionName, const char *commandId, 
   mqttService.publishAck(actionName, commandId, ok, value);
 };
 #ifdef HAS_CAMERA
-LiveStreamService liveStreamService;
-LiveStreamService wsCaptureService;
+// At most one CameraAction per device (see the one-camera-per-device rule), so one shared
+// WS connection covers it; HttpFrameService already multiplexes by actionName.
+LiveStreamService cameraWsService;
 HttpFrameService httpFrameService;
 #endif
 

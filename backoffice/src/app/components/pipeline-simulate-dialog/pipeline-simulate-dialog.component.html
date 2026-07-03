@@ -1,0 +1,179 @@
+<h2 mat-dialog-title class="sim-title">
+  <mat-icon class="sim-icon">science</mat-icon>
+  Simulate — {{ data.pipelineName }}
+</h2>
+
+<mat-dialog-content class="sim-content">
+
+  <!-- Step 1: Sensor inputs -->
+  @if (step === 'input') {
+    <div class="info-chip">
+      <mat-icon>info</mat-icon>
+      Enter mock sensor values. The pipeline will run with these values — no actions will be dispatched.
+    </div>
+
+    @if (hasImageSensor) {
+      <div class="warn-chip">
+        <mat-icon>photo_camera</mat-icon>
+        Upload a camera frame below, or leave it blank to use the last stored frame.
+      </div>
+    }
+
+    @if (error) {
+      <div class="error-chip">{{ error }}</div>
+    }
+
+    <div class="sensor-inputs">
+      @for (s of simSensors; track s.id) {
+        <div class="sensor-input-row">
+          <span class="sensor-label">{{ sensorLabel(s) }}</span>
+
+          @switch (sensorKind(s)) {
+            @case ('image') {
+              <div class="image-field">
+                @if (imagePreview[s.user_device_action_id]; as preview) {
+                  <img class="image-preview" [src]="preview" alt="" />
+                  <span class="image-filename">{{ imageFileName[s.user_device_action_id] }}</span>
+                  <button mat-icon-button type="button" (click)="clearImage(s.user_device_action_id)">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                } @else {
+                  <button mat-stroked-button type="button" class="upload-btn" (click)="fileInput.click()">
+                    <mat-icon>upload</mat-icon> Upload image
+                  </button>
+                  <input #fileInput type="file" accept="image/*" hidden
+                         (change)="onFileSelected($event, s.user_device_action_id)" />
+                }
+              </div>
+            }
+            @case ('enum') {
+              <mat-form-field appearance="outline" class="sensor-field">
+                <mat-label>Value</mat-label>
+                <mat-select [(ngModel)]="sensorValues[s.user_device_action_id]">
+                  @for (v of enumConstraint(s)?.values; track v) {
+                    <mat-option [value]="v">{{ v }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
+            @case ('range') {
+              <mat-form-field appearance="outline" class="sensor-field">
+                <mat-label>Value</mat-label>
+                <input matInput type="number" [(ngModel)]="sensorValues[s.user_device_action_id]"
+                       [min]="rangeConstraint(s)?.min ?? null" [max]="rangeConstraint(s)?.max ?? null"
+                       [step]="rangeConstraint(s)?.step ?? 1"
+                       [placeholder]="rangeConstraint(s)?.min + ' – ' + rangeConstraint(s)?.max" />
+                <mat-hint>{{ rangeConstraint(s)?.min }} – {{ rangeConstraint(s)?.max }}</mat-hint>
+                @if (!isValueValid(s)) {
+                  <mat-error>Out of range</mat-error>
+                }
+              </mat-form-field>
+            }
+            @default {
+              <mat-form-field appearance="outline" class="sensor-field">
+                <mat-label>Value</mat-label>
+                <input matInput [(ngModel)]="sensorValues[s.user_device_action_id]" placeholder="e.g. 6.1" />
+              </mat-form-field>
+            }
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Step 2: Running -->
+  @if (step === 'running') {
+    <div class="running-state">
+      <mat-progress-bar mode="indeterminate" />
+      <p class="running-label">Running simulation…</p>
+    </div>
+  }
+
+  <!-- Step 3: Results -->
+  @if (step === 'result' && runResult) {
+    <div class="results">
+      <div class="results-header">
+        <span class="sim-badge-lg">SIMULATION RESULTS</span>
+        <span class="run-status" [class.ok]="runResult.status === 'completed'"
+                                 [class.err]="runResult.status === 'failed'">
+          {{ runResult.status }}
+        </span>
+      </div>
+
+      @for (rs of runResult.stages; track rs.id) {
+        <div class="result-stage">
+          <div class="result-stage-header">
+            <span class="stage-badge" [ngClass]="'kind-' + rs.stage.kind">{{ rs.stage.kind }}</span>
+            @if (rs.stage.kind === 'command_exec') {
+              <span class="dry-run-label">DRY RUN</span>
+            }
+            <span class="stage-status-sm" [class.skip]="rs.status === 'skipped'">{{ rs.status }}</span>
+          </div>
+
+          @if (rs.input) {
+            <details class="io-details">
+              <summary>Input</summary>
+              @if (rs.stage.kind === 'infer' && inferPrompt(rs.input); as prompt) {
+                <pre class="result-output">{{ prompt }}</pre>
+              } @else {
+                <pre class="result-output">{{ stageInput(rs.input) }}</pre>
+              }
+            </details>
+          }
+
+          @if (rs.output) {
+            @if (isDryRunStage(rs.output)) {
+              <div class="would-exec-panel">
+                <div class="we-label">WOULD EXECUTE</div>
+                @for (we of wouldExecute(rs.output); track we.actionId) {
+                  <div class="we-action">Action #{{ we.actionId }} → {{ we.value }}</div>
+                  @if (we.reasoning) {
+                    <div class="we-reason">{{ we.reasoning }}</div>
+                  }
+                }
+              </div>
+            } @else if (rs.stage.kind === 'infer' && rs.status !== 'skipped') {
+              @let inf = inferView(rs.output);
+              <div class="infer-panel">
+                @if (inf && inf.actions?.length) {
+                  @for (act of inf.actions; track act.actionId) {
+                    <div class="infer-action">Action #{{ act.actionId }} → {{ act.value }}</div>
+                    @if (act.reasoning) {
+                      <div class="infer-reason">{{ act.reasoning }}</div>
+                    }
+                  }
+                } @else {
+                  <pre class="result-output">{{ inf?.raw ?? stageOutput(rs.output) }}</pre>
+                }
+                @if (inf?.durationMs) {
+                  <div class="infer-duration">{{ formatMs(inf!.durationMs!) }}</div>
+                }
+              </div>
+            } @else if (rs.status !== 'skipped') {
+              <pre class="result-output">{{ stageOutput(rs.output) }}</pre>
+            }
+            @if (stageError(rs.output); as errMsg) {
+              <div class="stage-error-note">{{ errMsg }}</div>
+            }
+          }
+          @if (rs.status === 'skipped') {
+            <div class="skip-note">Skipped in simulation — requires live data</div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (step === 'result') {
+    <button mat-stroked-button (click)="runAgain()">Run Again</button>
+  }
+  <button mat-button mat-dialog-close>Close</button>
+  @if (step === 'input') {
+    <button mat-flat-button class="run-btn" [disabled]="!canRun" (click)="run()">
+      <mat-icon>science</mat-icon> Run Simulation
+    </button>
+  }
+</mat-dialog-actions>

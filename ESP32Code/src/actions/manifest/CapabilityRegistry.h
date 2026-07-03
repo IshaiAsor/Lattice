@@ -12,6 +12,7 @@
 // read the exact same data — no drift.
 #include <vector>
 #include "actions/ActionPinsSetup.h"
+#include "actions/manifest/GoogleTraits.h"
 
 namespace CapabilityRegistry {
 
@@ -23,7 +24,7 @@ inline CapabilityDescriptor outlet() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.OnOff", "OnOff" },
+        GoogleTraits::OnOff(),
         { nullptr }
     };
     return { "outlet", "Outlet", "OutletCommandAction", "command", "outlet",
@@ -38,8 +39,8 @@ inline CapabilityDescriptor fan() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.OnOff",    "OnOff"    },
-        { "action.devices.traits.FanSpeed", "FanSpeed" },
+        GoogleTraits::OnOff(),
+        GoogleTraits::FanSpeed(),
         { nullptr }
     };
     return { "fan", "Fan", "OneDirectionalMotorAction", "command", "fan",
@@ -52,8 +53,8 @@ inline CapabilityDescriptor dimmer() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.OnOff",      "OnOff"      },
-        { "action.devices.traits.Brightness", "Brightness" },
+        GoogleTraits::OnOff(),
+        GoogleTraits::Brightness(),
         { nullptr }
     };
     return { "dimmer", "Light Dimmer", "LightDimmerAction", "command", "dimmer",
@@ -68,8 +69,8 @@ inline CapabilityDescriptor temperature() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.TemperatureSetting", "TemperatureSetting" },
-        { "action.devices.traits.HumiditySetting",    "HumiditySetting"    },
+        GoogleTraits::TemperatureSetting(),
+        GoogleTraits::HumiditySetting(),
         { nullptr }
     };
     return { "temperature", "Temperature Sensor", "TemperatureAction", "telemetry", "sensor1",
@@ -82,7 +83,7 @@ inline CapabilityDescriptor waterLevel() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.WaterLevel", "WaterLevel" },
+        GoogleTraits::WaterLevel(),
         { nullptr }
     };
     return { "water_level", "Water Level Sensor", "WaterLevelAction", "telemetry", "water_level",
@@ -95,7 +96,7 @@ inline CapabilityDescriptor phLevel() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.PhLevel", "PhLevel" },
+        GoogleTraits::PhLevel(),
         { nullptr }
     };
     return { "ph_level", "pH Sensor", "PhLevelAction", "telemetry", "ph_level",
@@ -108,7 +109,7 @@ inline CapabilityDescriptor tdsLevel() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.TdsLevel", "TdsLevel" },
+        GoogleTraits::TdsLevel(),
         { nullptr }
     };
     return { "tds_level", "TDS Sensor", "TdsLevelAction", "telemetry", "tds_level",
@@ -122,7 +123,7 @@ inline CapabilityDescriptor humidity() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.HumiditySetting", "HumiditySetting" },
+        GoogleTraits::HumiditySetting(),
         { nullptr }
     };
     return { "humidity", "Humidity Sensor", "HumidityAction", "telemetry", "humidity",
@@ -136,7 +137,7 @@ inline CapabilityDescriptor airTemp() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.TemperatureSetting", "TemperatureSetting" },
+        GoogleTraits::TemperatureSetting(),
         { nullptr }
     };
     return { "air_temp", "Air Temperature Sensor", "AirTemperatureAction", "telemetry", "air_temp",
@@ -150,7 +151,7 @@ inline CapabilityDescriptor co2Level() {
         { nullptr }
     };
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.CO2Level", "CO2Level" },
+        GoogleTraits::CO2Level(),
         { nullptr }
     };
     return { "co2_level", "CO2 Sensor", "CO2LevelAction", "telemetry", "co2_level",
@@ -158,49 +159,23 @@ inline CapabilityDescriptor co2Level() {
 }
 
 // ---- Camera (HAS_CAMERA builds only) ----
-
+// One unified capability — a device has at most one physical camera, and CameraAction
+// itself picks WS vs HTTP delivery + resolution from per-instance config (camera_transport/
+// camera_resolution), not from separate capability types. minIntervalMs is a periodic-
+// snapshot floor, not a streaming frame rate — continuous streaming was dropped in favor of
+// periodic snapshot + on-demand capture (see CameraAction::triggerCapture).
 inline CapabilityDescriptor camera() {
     static const PinSlotDef pins[] = { { nullptr } };  // camera GPIO owned by board macros
     static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.CameraStream", "CameraStream" },
+        GoogleTraits::CameraStream(),
         { nullptr }
     };
-    return { "camera", "Camera", "LiveStreamAction", "telemetry", "camera",
-             "action.devices.types.CAMERA", traits, 333, pins };
-}
-
-inline CapabilityDescriptor cameraWsCapture() {
-    static const PinSlotDef pins[] = { { nullptr } };
-    static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.CameraStream", "CameraStream" },
-        { nullptr }
-    };
-    return { "camera_ws_capture", "Camera (Snapshot WS)", "TakePictureAction", "telemetry",
-             "camera_ws_capture", "action.devices.types.CAMERA", traits, 1000, pins };
-}
-
-inline CapabilityDescriptor cameraHttpCapture() {
-    static const PinSlotDef pins[] = { { nullptr } };
-    static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.CameraStream", "CameraStream" },
-        { nullptr }
-    };
-    return { "camera_http_capture", "Camera (Snapshot HTTP)", "TakePictureHttpAction", "telemetry",
-             "camera_http_capture", "action.devices.types.CAMERA", traits, 1000, pins };
-}
-
-inline CapabilityDescriptor cameraHttpStream() {
-    static const PinSlotDef pins[] = { { nullptr } };
-    static const GoogleTraitDef traits[] = {
-        { "action.devices.traits.CameraStream", "CameraStream" },
-        { nullptr }
-    };
-    return { "camera_http_stream", "Camera (Live Stream HTTP)", "LiveStreamHttpAction", "telemetry",
-             "camera_http_stream", "action.devices.types.CAMERA", traits, 33, pins };
+    return { "camera", "Camera", "CameraAction", "telemetry", "camera",
+             "action.devices.types.CAMERA", traits, 1000, pins };
 }
 
 // Full manifest for the current build. The HAS_CAMERA gating mirrors the firmware exactly,
-// so a host build compiled with -D HAS_CAMERA emits the camera capabilities and a build
+// so a host build compiled with -D HAS_CAMERA emits the camera capability and a build
 // without it does not.
 inline std::vector<CapabilityDescriptor> all() {
     std::vector<CapabilityDescriptor> caps;
@@ -216,9 +191,6 @@ inline std::vector<CapabilityDescriptor> all() {
     caps.push_back(co2Level());
 #ifdef HAS_CAMERA
     caps.push_back(camera());
-    caps.push_back(cameraWsCapture());
-    caps.push_back(cameraHttpCapture());
-    caps.push_back(cameraHttpStream());
 #endif
     return caps;
 }

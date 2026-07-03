@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
-import { apiV2Url } from './api.config';
+import { apiUrl } from './api.config';
 import { DeviceActionView, GoogleActionType, GoogleActionTrait } from './device.mgmt.service';
 
 export interface ActionGroupView {
@@ -26,6 +26,7 @@ interface ApiUserAction {
   name: string;
   mqttName: string;
   implementation_type: string;
+  validParameters: unknown;
   googleTypeId: number | null;
   googleType: GoogleActionType | null;
   googleTraits: GoogleActionTrait[];
@@ -44,8 +45,7 @@ interface ApiUserAction {
   providedIn: 'root',
 })
 export class UserActionsService {
-  // Migrated to the new `api` service (F2.6): /api/actions + /api/action-groups.
-  private apiUrl = apiV2Url();
+  private apiUrl = apiUrl();
 
   http = inject(HttpClient);
 
@@ -75,6 +75,7 @@ export class UserActionsService {
       groupId: r.groupId,
       groupName: r.groupName,
       implementation_type: r.implementation_type,
+      validParameters: r.validParameters,
       status: r.status === 'active' ? 'active' : 'deprecated',
     };
   }

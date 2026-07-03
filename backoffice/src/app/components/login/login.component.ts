@@ -1,7 +1,6 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
-import { HttpClient } from '@angular/common/http';
 import { environment } from 'src/environments/environment';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 
@@ -23,11 +22,9 @@ export class LoginComponent implements OnInit {
   password = '';
   error = '';
   termsAccepted = false;
-  private apiUrl = `${environment.apiUrl}`;
 
   private authService = inject(AuthService);
   private router = inject(Router);
-  private http = inject(HttpClient);
 
   ngOnInit() {
     window.onload = () => {

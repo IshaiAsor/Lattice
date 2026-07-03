@@ -19,3 +19,12 @@ adminCatalogRouter.delete('/devices/:id', async (req, res, next) => {
 adminCatalogRouter.get('/devices/:id/capabilities', async (req, res, next) => {
   try { res.json(await catalogService.listCapabilities(Number(req.params.id))); } catch (err) { next(err); }
 });
+adminCatalogRouter.get('/devices/:id/actions', async (req, res, next) => {
+  try { res.json(await catalogService.listActions(Number(req.params.id))); } catch (err) { next(err); }
+});
+adminCatalogRouter.patch('/capabilities/:capabilityId/traits/:traitId/default', async (req, res, next) => {
+  try {
+    await catalogService.setDefaultTrait(Number(req.params.capabilityId), Number(req.params.traitId));
+    res.sendStatus(204);
+  } catch (err) { next(err); }
+});

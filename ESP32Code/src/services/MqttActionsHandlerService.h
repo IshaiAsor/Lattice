@@ -105,6 +105,19 @@ public:
                 ESP.restart();
                 return;
             }
+#ifdef HAS_CAMERA
+            // take_picture targets the device's telemetry-class CameraAction, not a
+            // BaseCommandAction — routed directly rather than through getAction() below,
+            // which only searches _cmdActions.
+            if (strcmp(action, "take_picture") == 0)
+            {
+                JsonDocument doc;
+                deserializeJson(doc, message);
+                String commandId = doc["commandId"] | "";
+                deviceActionsService.triggerPictureCapture(commandId);
+                return;
+            }
+#endif
             BaseCommandAction *deviceAction = getAction(action);
             if (deviceAction != nullptr)
             {

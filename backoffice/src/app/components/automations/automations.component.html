@@ -1,0 +1,31 @@
+<div class="automations-shell">
+
+  <div class="automate-header">
+    <h1 class="automate-title">Automate</h1>
+    <button mat-flat-button color="primary" (click)="onAdd()">
+      <mat-icon>add</mat-icon>
+      {{ activeTab === 0 ? 'New Rule' : 'New Pipeline' }}
+    </button>
+  </div>
+
+  <mat-tab-group animationDuration="200ms" class="automate-tabs"
+                 [selectedIndex]="activeTab"
+                 (selectedIndexChange)="onTabChange($event)">
+
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="tab-icon">bolt</mat-icon> Rules
+      </ng-template>
+      <app-rules />
+    </mat-tab>
+
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="tab-icon">account_tree</mat-icon> Pipelines
+      </ng-template>
+      <app-pipelines />
+    </mat-tab>
+
+  </mat-tab-group>
+
+</div>

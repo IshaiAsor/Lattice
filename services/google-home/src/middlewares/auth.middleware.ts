@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { JwtService, JwtPurpose } from '@lattice/jwt';
+import { createLogger } from '@lattice/logger';
 import config from '../config/env.config';
+
+const log = createLogger('google-home:auth-middleware');
 
 declare global {
   namespace Express {
@@ -43,12 +46,12 @@ export const verifyToken = (purpose: JwtPurpose) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const token = extractToken(req);
     if (!token) {
-      console.log(`[AUTH] No token found. URL: ${req.url}`);
+      log.warn({ url: req.url }, 'no token found');
       return res.sendStatus(401);
     }
     const result = jwtService.verifyToken(token, purpose);
     if (!result.valid) {
-      console.log(`[AUTH] JWT not valid for purpose ${purpose}: ${result.err}`);
+      log.warn({ purpose, err: result.err }, 'JWT not valid');
       return res.sendStatus(403);
     }
     req.user = result.decoded;

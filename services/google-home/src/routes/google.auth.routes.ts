@@ -2,11 +2,13 @@ import crypto from 'crypto';
 import express, { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { JwtPurpose, JwtService } from '@lattice/jwt';
+import { createLogger } from '@lattice/logger';
 import config from '../config/env.config';
 import { authService } from '../services/auth.service';
 import { valkeyService } from '../services/valkey.service';
 import { renderAuthPage } from '../views/auth.view';
 
+const log = createLogger('google-home:auth-routes');
 const router = express.Router();
 
 const jwtService = new JwtService(config.jwt.secret, {
@@ -58,7 +60,7 @@ router.post('/auth/login', authRateLimiter, async (req: Request, res: Response) 
       return res.redirect(`${redirect_uri}?code=${authCode}&state=${state}`);
     }
   } catch (err) {
-    console.error('[google-auth] login error:', err);
+    log.error({ err }, 'login error');
   }
 
   res.send(renderAuthPage('/api/google/auth/login', { redirect_uri, state, client_id, response_type }, 'Invalid credentials'));
@@ -124,7 +126,7 @@ router.post('/token', async (req: Request, res: Response) => {
       expires_in: config.jwt.googleCloudToCloudLoginExpiresIn,
     });
   } catch (err) {
-    console.error('[google-auth] token error:', err);
+    log.error({ err }, 'token error');
     res.status(401).json({ error: 'invalid_grant' });
   }
 });

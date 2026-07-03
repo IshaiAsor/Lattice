@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "esp_camera.h"
+#include "services/Ov5640AutoFocus.h"
 
 // Shared singleton that initializes the ESP32 camera driver exactly once.
 // All camera action classes call CameraService::init() and then use
@@ -69,6 +70,12 @@ public:
                 s->set_contrast(s,   1);
                 s->set_saturation(s, 1);
                 Serial.println("[Camera] OV5640: XGA q6");
+
+                if (Ov5640AutoFocus::init(s)) {
+                    Serial.println("[Camera] OV5640: continuous autofocus enabled");
+                } else {
+                    Serial.println("[Camera] OV5640: autofocus unavailable (no VCM lens?)");
+                }
             } else {
                 Serial.printf("[Camera] Unknown sensor 0x%04X — generic settings\n", pid);
                 s->set_framesize(s,  FRAMESIZE_SVGA);
@@ -89,6 +96,36 @@ public:
     }
 
     static bool isReady() { return _ready; }
+
+    // Applies a user-configured resolution override on top of init()'s PSRAM/sensor-PID
+    // defaults. Called once by CameraAction after init() if the instance has a configured
+    // camera_resolution; a no-op if the sensor isn't ready.
+    static void applyResolution(framesize_t fs)
+    {
+        if (!_ready) return;
+        sensor_t *s = esp_camera_sensor_get();
+        if (s) s->set_framesize(s, fs);
+    }
+
+    // Maps the backend's camera_resolution string (device-config JSON) to a framesize_t.
+    // Unrecognized/empty values return false and leave out untouched (caller keeps init()'s default).
+    static bool resolutionFromString(const String& name, framesize_t& out)
+    {
+        if (name == "QQVGA") { out = FRAMESIZE_QQVGA; return true; }
+        if (name == "QVGA")  { out = FRAMESIZE_QVGA;  return true; }
+        if (name == "VGA")   { out = FRAMESIZE_VGA;   return true; }
+        if (name == "SVGA")  { out = FRAMESIZE_SVGA;  return true; }
+        if (name == "XGA")   { out = FRAMESIZE_XGA;   return true; }
+        if (name == "HD")    { out = FRAMESIZE_HD;    return true; }
+        if (name == "SXGA")  { out = FRAMESIZE_SXGA;  return true; }
+        if (name == "UXGA")  { out = FRAMESIZE_UXGA;  return true; }
+        if (name == "FHD")   { out = FRAMESIZE_FHD;   return true; }
+        if (name == "QXGA")  { out = FRAMESIZE_QXGA;  return true; }
+        if (name == "QHD")   { out = FRAMESIZE_QHD;   return true; }
+        if (name == "WQXGA") { out = FRAMESIZE_WQXGA; return true; }
+        if (name == "QSXGA") { out = FRAMESIZE_QSXGA; return true; }
+        return false;
+    }
 
 private:
     static bool _ready;

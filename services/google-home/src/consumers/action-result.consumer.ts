@@ -1,7 +1,10 @@
 import type { Channel } from 'amqplib';
 import type { ActionResultPayload } from '@lattice/queue';
+import { createLogger } from '@lattice/logger';
 import { deviceActionsService } from '../services/device.actions.service';
 import { googleHomegraphService } from '../services/google-smart-home/google.homegraph.service';
+
+const log = createLogger('google-home:action-result');
 
 // Consumes device acks and forwards the resulting state to Google HomeGraph.
 // Best-effort: errors are logged but the message is still acked so a bad
@@ -22,7 +25,7 @@ export function actionResultConsumer(_ch: Channel) {
 
       await googleHomegraphService.reportState(userId, action);
     } catch (err) {
-      console.error(`[google-home] actionResultConsumer failed for device ${deviceId}/${actionName}:`, err);
+      log.error({ deviceId, actionName, err }, 'actionResultConsumer failed');
     }
   };
 }

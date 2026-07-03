@@ -9,8 +9,8 @@ COPY services/mqtt-service services/mqtt-service
 COPY tsconfig.base.json ./
 
 RUN npm ci
-RUN npm run build -w @lattice/logger \
- && npm run build -w @lattice/otel \
+RUN npm run build -w @lattice/otel \
+ && npm run build -w @lattice/logger \
  && npm run build -w @lattice/queue \
  && npm run build -w @lattice/mqtt-service
 

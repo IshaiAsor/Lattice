@@ -9,6 +9,8 @@ RUN npm install
 COPY prisma/ ./prisma/
 # Capability manifests committed at build time — seed-catalog.ts reads from this path.
 COPY ESP32Code/tools/manifest-gen/out/ ./ESP32Code/tools/manifest-gen/out/
+# ML model registry — seed.ts reads this to sync ml_models table.
+COPY services/ml-executor/models.json ./services/ml-executor/models.json
 
 RUN mkdir -p /app/backend/node_modules
 

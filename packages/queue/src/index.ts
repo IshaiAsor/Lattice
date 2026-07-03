@@ -10,6 +10,7 @@ export const RK = {
   TELEMETRY_ARRIVED:            'telemetry.arrived',
   RULES_EVALUATE:               'rules.evaluate',
   PIPELINE_TRIGGER:             'pipeline.trigger',
+  PIPELINE_CANCEL:              'pipeline.cancel',
   PIPELINE_RESULT:              'pipeline.result',
   DEVICE_STATE_CHANGED:         'device.state.changed',
   // A UI client's intent to change an action's state, keyed by UserDeviceAction id.
@@ -20,11 +21,19 @@ export const RK = {
   // A device's ack that it executed (or rejected) a command. digest writes the
   // authoritative current_state on success and resolves the in-flight pending request.
   ACTION_RESULT:                'action.result',
+  // ml-router's request for a fresh camera frame (not a cached/periodic one), and digest's
+  // correlated response — same request/response shape as ACTION_REQUESTED/ACTION_RESULT,
+  // but for camera captures triggered by a pipeline's enrich stage.
+  PICTURE_REQUESTED:            'picture.requested',
+  PICTURE_RESULT:               'picture.result',
   PIPELINE_STAGE_SENSOR_DIGEST: 'pipeline.stage.sensor_digest',
   PIPELINE_STAGE_COMMAND_EXEC:  'pipeline.stage.command_exec',
   PIPELINE_STAGE_DONE:          'pipeline.stage.done.v1',
   OTA_INCOMING:                 'ota.incoming',
   OTA_DISPATCH:                 'ota.dispatch',
+  // Best-effort event published by digest when an OTA release passes validation.
+  // notification-service (F15) binds q.notification.publish to this key.
+  NOTIFICATION_PUBLISH:         'notification.publish',
 } as const;
 
 export type RoutingKey = (typeof RK)[keyof typeof RK];
@@ -38,17 +47,21 @@ export const QUEUES = {
   TELEMETRY_ARRIVED:            'q.telemetry.arrived',
   RULES_EVALUATE:               'q.rules.evaluate',
   PIPELINE_TRIGGER:             'q.pipeline.trigger',
+  PIPELINE_CANCEL:              'q.pipeline.cancel',
   PIPELINE_RESULT:              'q.pipeline.result',
   DEVICE_STATE_CHANGED:         'q.device.state.changed',
   ACTION_REQUESTED:             'q.action.requested',
   ACTION_DISPATCH:              'q.action.dispatch',
   ACTION_RESULT:                'q.action.result',
   ACTION_RESULT_GOOGLE_HOME:    'q.action.result.google-home',
+  PICTURE_REQUESTED:            'q.picture.requested',
+  PICTURE_RESULT:               'q.picture.result',
   PIPELINE_STAGE_SENSOR_DIGEST: 'q.pipeline.stage.sensor_digest',
   PIPELINE_STAGE_COMMAND_EXEC:  'q.pipeline.stage.command_exec',
   PIPELINE_STAGE_DONE:          'q.pipeline.stage.done',
   OTA_INCOMING:                 'q.ota.incoming',
   OTA_DISPATCH:                 'q.ota.dispatch',
+  NOTIFICATION_PUBLISH:         'q.notification.publish',
   DLQ:                          'q.dlq',
 } as const;
 
@@ -70,12 +83,15 @@ const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.TELEMETRY_ARRIVED,            RK.TELEMETRY_ARRIVED],
   [QUEUES.RULES_EVALUATE,               RK.RULES_EVALUATE],
   [QUEUES.PIPELINE_TRIGGER,             RK.PIPELINE_TRIGGER],
+  [QUEUES.PIPELINE_CANCEL,              RK.PIPELINE_CANCEL],
   [QUEUES.PIPELINE_RESULT,              RK.PIPELINE_RESULT],
   [QUEUES.DEVICE_STATE_CHANGED,         RK.DEVICE_STATE_CHANGED],
   [QUEUES.ACTION_REQUESTED,             RK.ACTION_REQUESTED],
   [QUEUES.ACTION_DISPATCH,              RK.ACTION_DISPATCH],
   [QUEUES.ACTION_RESULT,                RK.ACTION_RESULT],
   [QUEUES.ACTION_RESULT_GOOGLE_HOME,    RK.ACTION_RESULT],
+  [QUEUES.PICTURE_REQUESTED,            RK.PICTURE_REQUESTED],
+  [QUEUES.PICTURE_RESULT,               RK.PICTURE_RESULT],
   [QUEUES.PIPELINE_STAGE_SENSOR_DIGEST, RK.PIPELINE_STAGE_SENSOR_DIGEST],
   [QUEUES.PIPELINE_STAGE_COMMAND_EXEC,  RK.PIPELINE_STAGE_COMMAND_EXEC],
   [QUEUES.PIPELINE_STAGE_DONE,          RK.PIPELINE_STAGE_DONE],

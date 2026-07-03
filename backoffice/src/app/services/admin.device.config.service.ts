@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { environment } from 'src/environments/environment';
+import { apiUrl } from './api.config';
 
 export interface AdminDeviceType {
   id: number;
@@ -45,7 +45,7 @@ export interface AdminDeviceAction {
 
 @Injectable({ providedIn: 'root' })
 export class AdminDeviceConfigService {
-  private base = `${environment.apiUrl}/api/device-config`;
+  private base = `${apiUrl()}/api/admin/catalog`;
   private http = inject(HttpClient);
 
   getDeviceTypes(): Observable<AdminDeviceType[]> {

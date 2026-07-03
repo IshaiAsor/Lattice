@@ -17,6 +17,8 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle'; // Fix 1
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { MatSliderModule } from '@angular/material/slider'; // Fix 2
 import { MatBottomSheetModule } from '@angular/material/bottom-sheet';
+import { MatStepperModule } from '@angular/material/stepper';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 export const SHARED_MATERIAL = [
     CommonModule,
     FormsModule,
@@ -39,4 +41,6 @@ export const SHARED_MATERIAL = [
     DragDropModule,
     MatSliderModule , // Fix 2
     MatBottomSheetModule,
+    MatStepperModule,
+    MatAutocompleteModule,
 ] as const;

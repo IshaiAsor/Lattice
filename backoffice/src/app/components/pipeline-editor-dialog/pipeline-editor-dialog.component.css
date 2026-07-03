@@ -1,0 +1,339 @@
+/* ── Dialog content ──────────────────────────────────────────────────── */
+
+.editor-content {
+  padding: 0 4px;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 24px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+:host ::ng-deep mat-stepper,
+:host ::ng-deep .mat-horizontal-stepper-wrapper,
+:host ::ng-deep .mat-horizontal-content-container,
+:host ::ng-deep .mat-horizontal-stepper-content {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.full-width  { width: 100%; }
+.flex-grow   { flex: 1; min-width: 140px; }
+
+/* ── Stepper theming (Material's stepper doesn't pick up the app's glass/
+   dark palette by default — pin its tokens to our own CSS vars) ───────── */
+
+:host ::ng-deep mat-stepper {
+  --mat-stepper-container-color: transparent;
+  --mat-stepper-line-color: var(--border-strong);
+  --mat-stepper-header-height: 56px;
+
+  --mat-stepper-header-icon-background-color: var(--surface-alt);
+  --mat-stepper-header-icon-foreground-color: var(--text-muted);
+
+  --mat-stepper-header-selected-state-icon-background-color: var(--primary);
+  --mat-stepper-header-selected-state-icon-foreground-color: var(--bg-solid);
+  --mat-stepper-header-done-state-icon-background-color: var(--primary);
+  --mat-stepper-header-done-state-icon-foreground-color: var(--bg-solid);
+  --mat-stepper-header-edit-state-icon-background-color: var(--primary);
+  --mat-stepper-header-edit-state-icon-foreground-color: var(--bg-solid);
+
+  --mat-stepper-header-label-text-color: var(--text-muted);
+  --mat-stepper-header-selected-state-label-text-color: var(--text);
+  --mat-stepper-header-hover-state-layer-color: var(--surface-alt);
+  --mat-stepper-header-focus-state-layer-color: var(--surface-alt);
+}
+
+:host ::ng-deep mat-stepper .mat-step-icon {
+  border: 1px solid var(--border-strong);
+}
+:host ::ng-deep mat-stepper .mat-step-icon-selected,
+:host ::ng-deep mat-stepper .mat-step-icon-state-done,
+:host ::ng-deep mat-stepper .mat-step-icon-state-edit {
+  border-color: var(--primary);
+}
+:host ::ng-deep mat-stepper .mat-horizontal-content-container {
+  padding: 12px 4px 0;
+}
+
+/* ── Section labels ─────────────────────────────────────────────────── */
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 16px 0 6px;
+}
+.section-label.sensors  { color: var(--stage-digest); }
+.section-label.stages   { color: var(--stage-vlm); }
+.section-label.triggers { color: var(--stage-exec); }
+
+/* ── Groups (Step 1) ───────────────────────────────────────────────── */
+
+.group-block {
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 12px;
+  background: var(--surface-alt);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.group-header .spacer { flex: 1; }
+
+.field-group-name { flex: 1; max-width: 320px; }
+
+/* ── Row cards — shared ─────────────────────────────────────────────── */
+
+.sensor-row,
+.stage-row,
+.trigger-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.sensor-row  { border-left: 3px solid color-mix(in srgb, var(--stage-digest) 55%, transparent); }
+.stage-row   { border-left: 3px solid color-mix(in srgb, var(--stage-vlm)    55%, transparent); }
+.trigger-row { border-left: 3px solid color-mix(in srgb, var(--stage-exec)   55%, transparent); }
+
+/* ── Row header ─────────────────────────────────────────────────────── */
+
+.row-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+}
+.row-header .spacer { flex: 1; }
+
+.type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: var(--radius-chip, 6px);
+  padding: 3px 7px;
+  flex-shrink: 0;
+}
+
+.badge-sensor,
+.badge-enrich {
+  background: color-mix(in srgb, var(--stage-digest) 14%, transparent);
+  color: var(--stage-digest);
+  border: 1px solid color-mix(in srgb, var(--stage-digest) 30%, transparent);
+}
+.badge-infer {
+  background: color-mix(in srgb, var(--stage-vlm) 14%, transparent);
+  color: var(--stage-vlm);
+  border: 1px solid color-mix(in srgb, var(--stage-vlm) 30%, transparent);
+}
+.badge-exec {
+  background: color-mix(in srgb, var(--stage-exec) 14%, transparent);
+  color: var(--stage-exec);
+  border: 1px solid color-mix(in srgb, var(--stage-exec) 30%, transparent);
+}
+.badge-threshold {
+  background: color-mix(in srgb, var(--stage-exec) 14%, transparent);
+  color: var(--stage-exec);
+  border: 1px solid color-mix(in srgb, var(--stage-exec) 30%, transparent);
+}
+.badge-schedule {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.badge-manual {
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.stage-ordinal {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.vlm-chip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-chip, 6px);
+  background: color-mix(in srgb, var(--stage-vlm) 10%, transparent);
+  color: var(--stage-vlm);
+  border: 1px solid color-mix(in srgb, var(--stage-vlm) 25%, transparent);
+}
+
+.remove-btn { color: var(--error, #ef5350); }
+
+/* ── Row fields area ────────────────────────────────────────────────── */
+
+.row-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 4px 10px 10px;
+}
+
+.row-fields.col {
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Stage top row (kind + model side-by-side) ──────────────────────── */
+
+.stage-top-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+/* ── Field size helpers ─────────────────────────────────────────────── */
+
+/* Keeps a "value + unit" pair (Every/Unit, Cooldown/Unit) glued together when the row wraps,
+   instead of the unit field splitting off onto its own line separated from its value. */
+.field-pair          { display: flex; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; }
+
+.field-action        { flex: 1; min-width: 150px; }
+.field-compression   { flex: 1; min-width: 140px; }
+.field-window        { width: 80px; }
+.field-unit          { width: 128px; }
+.field-n             { width: 60px; }
+.field-n-large       { width: 140px; }
+.field-kind          { width: 220px; }
+.field-model-sel     { min-width: 220px; flex: 1; }
+.field-trigger-type  { width: 160px; }
+.field-op            { width: 86px; }
+.field-threshold     { width: 110px; }
+.field-schedule-val  { width: 90px; }
+.field-schedule-unit { width: 128px; }
+.field-ctx-key       { width: 130px; }
+.field-notify        { width: 180px; }
+.field-exec-cond     { flex: 1; min-width: 180px; }
+
+/* ── Enrich sub-sections ────────────────────────────────────────────── */
+
+.sub-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--stage-digest);
+  margin: 8px 0 4px;
+}
+.sub-section-label.extra-ctx { color: var(--text-muted); }
+
+.inner-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.inner-remove { align-self: center; }
+
+.add-btn-inner {
+  font-size: 12px;
+  margin-bottom: 8px;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── command_exec ───────────────────────────────────────────────────── */
+
+.exec-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0 8px;
+}
+.exec-note mat-icon { font-size: 16px; width: 16px; height: 16px; }
+
+.exec-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Sensor description row ─────────────────────────────────────────── */
+
+.sensor-desc-row {
+  padding: 0 10px 10px;
+}
+
+/* ── Toggle row (inject_as_sensor / inject_as_action) ───────────────── */
+
+.toggle-row {
+  padding: 0 10px 8px;
+  gap: 20px;
+}
+
+/* ── Stepper step actions ───────────────────────────────────────────── */
+
+.step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.step-actions .spacer { flex: 1; }
+
+.step-empty-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 8px 0 12px;
+}
+
+/* ── Add buttons ────────────────────────────────────────────────────── */
+
+.add-btn {
+  width: 100%;
+  margin-bottom: 4px;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── Cross-field validation banner ──────────────────────────────────── */
+
+.pipeline-errors {
+  margin: 0 4px 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
+}
+.pipeline-error-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--error);
+  padding: 2px 0;
+}
+.pipeline-error-row mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}

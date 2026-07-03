@@ -147,14 +147,15 @@ public:
     preferences.end();
   }
 
-  char *LoadActionState(char *action)
+  String LoadActionState(char *action)
   {
     preferences.begin(PREF_NAMESPACE, false);
+    String value = "";
     if (preferences.isKey(action))
     {
-      return (char *)preferences.getString(action, "").c_str();
+      value = preferences.getString(action, "");
     }
     preferences.end();
-    return nullptr;
+    return value;
   }
 };

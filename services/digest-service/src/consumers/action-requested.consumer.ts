@@ -3,6 +3,7 @@ import type { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
 import type { ActionRequestedPayload, ActionDispatchPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
+import { deriveValidParameters, validateValue } from '@lattice/capability-validation';
 import { db } from '../db/client';
 import { asString } from '../util';
 import { socket } from '../socket/emitter';
@@ -30,6 +31,9 @@ export function actionRequestedConsumer(ch: Channel) {
         user_device_id:   true,
         mqtt_action_name: true,
         user_device: { select: { device: { select: { version: true } } } },
+        capability:       {
+          select: { traits: { select: { google_trait: { select: { valid_parameters: true } } } } },
+        },
       },
     });
     if (!row) {
@@ -41,6 +45,16 @@ export function actionRequestedConsumer(ch: Channel) {
     const stateValue = asString(value);
     const deviceId   = String(row.user_device_id);
     const commandId  = randomUUID();
+
+    // A value outside the capability's declared constraint is expected user/UI error, not an
+    // infra fault — reject it directly to the requesting client instead of dispatching or
+    // routing to the DLQ.
+    const validParameters = deriveValidParameters(row.capability.traits.map((t) => t.google_trait.valid_parameters));
+    if (!validateValue(stateValue, validParameters)) {
+      log.warn({ userId, actionId, value }, 'action.requested rejected — value outside valid_parameters');
+      socket.emitActionStateFailed(parseInt(userId, 10), actionId, commandId, row.current_state);
+      return;
+    }
 
     // 1. Record the in-flight command so the ack / timeout can resolve it. TTL outlives the
     //    ack timeout so a crash can't leak the key.

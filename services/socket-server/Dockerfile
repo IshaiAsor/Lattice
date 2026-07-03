@@ -12,8 +12,8 @@ COPY services/socket-server services/socket-server
 COPY tsconfig.base.json ./
 
 RUN npm ci
-RUN npm run build -w @lattice/logger \
- && npm run build -w @lattice/otel \
+RUN npm run build -w @lattice/otel \
+ && npm run build -w @lattice/logger \
  && npm run build -w @lattice/queue \
  && npm run build -w @lattice/jwt \
  && npm run build -w @lattice/ml \

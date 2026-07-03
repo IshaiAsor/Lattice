@@ -5,11 +5,13 @@ WORKDIR /workspace
 
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/logger packages/logger
+COPY packages/otel packages/otel
 COPY packages/queue packages/queue
 COPY services/ota-manager services/ota-manager
 
 RUN npm ci
-RUN npm run build -w @lattice/logger \
+RUN npm run build -w @lattice/otel \
+ && npm run build -w @lattice/logger \
  && npm run build -w @lattice/queue
 
 FROM node:20-slim

@@ -45,9 +45,21 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
   const userId   = Number(decoded.decoded.userid);
   const deviceId = Number(decoded.decoded.clientid);
 
-  ws.on('message', (data: Buffer) => {
+  // On-demand captures (CameraAction::triggerCapture) send a small JSON text frame
+  // {"commandId":"..."} immediately before the binary JPEG frame it correlates to; periodic
+  // pushes send only the binary frame, unchanged. A device only ever has one capture in
+  // flight at a time, so "next binary frame after this text frame" is an unambiguous pairing.
+  let pendingCommandId: string | undefined;
+
+  ws.on('message', (data: Buffer, isBinary: boolean) => {
     try {
-      cameraService.publishFrame(userId, deviceId, action, data);
+      if (!isBinary) {
+        const parsed = JSON.parse(data.toString('utf8')) as { commandId?: string };
+        pendingCommandId = parsed.commandId;
+        return;
+      }
+      cameraService.publishFrame(userId, deviceId, action, data, pendingCommandId);
+      pendingCommandId = undefined;
     } catch (err) {
       log.error({ err, deviceId }, 'ws frame publish failed');
     }

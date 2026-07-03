@@ -7,15 +7,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as mqtt from 'mqtt';
 
-// Best-effort: load the root .env so tests can use the app MQTT (superuser) credentials.
+// Best-effort: load the repo root's env file so tests can use the app MQTT (superuser)
+// credentials. Prefers .env.test (the ephemeral compose.test.yaml stack — see
+// compose.test.yaml) over .env (a developer's personal dev stack, whose ports/creds won't
+// match this ephemeral one) when both exist.
 function loadEnv(): void {
+  const root = path.join(__dirname, '..', '..', '..');
+  const envPath = fs.existsSync(path.join(root, '.env.test')) ? path.join(root, '.env.test') : path.join(root, '.env');
   try {
-    const envPath = path.join(__dirname, '..', '..', '..', '.env');
     for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
       const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/);
       if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
     }
-  } catch { /* no .env — rely on the ambient environment */ }
+  } catch { /* no env file — rely on the ambient environment */ }
 }
 loadEnv();
 

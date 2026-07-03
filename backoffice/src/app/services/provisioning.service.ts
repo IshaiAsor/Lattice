@@ -51,7 +51,6 @@ export interface ProvisioningProgress {
   providedIn: 'root',
 })
 export class ProvisioningService {
-  private apiUrl = `${environment.apiUrl}`;
   private get gatewayUrl(): string {
     return environment.deviceGatewayUrl ||
       (environment.production ? `${window.location.protocol}//device.${window.location.hostname}` : 'http://localhost:3004');

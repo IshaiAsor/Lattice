@@ -1,6 +1,6 @@
 import { Component, DestroyRef, HostListener, inject, OnInit } from '@angular/core';
 import { DeviceActionView, DeviceMgmtService } from 'src/app/services/device.mgmt.service';
-import { hasTrait, COLOR_OPTIONS, iconForAction, activeTraitValue, traitIconName, controllableTraits } from 'src/app/utils/device-type.utils';
+import { hasTrait, COLOR_OPTIONS, iconForAction, activeTraitValue, traitIconName, controllableTraits, isTelemetryAction, isCameraAction } from 'src/app/utils/device-type.utils';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { ActionGroupView, DashboardItem, UserActionsService } from 'src/app/services/user.actions.service';
 import { UserRulesService } from 'src/app/services/user.rules.service';
@@ -12,10 +12,11 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
 import { GroupTileComponent } from '../group-tile/group-tile.component';
 import { CameraDisplayComponent } from '../camera-display/camera-display.component';
+import { ReceivedBadgeComponent } from '../received-badge/received-badge.component';
 import { GroupBottomSheetComponent } from '../group-bottom-sheet/group-bottom-sheet.component';
 import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop';
 import { HttpClient } from '@angular/common/http';
-import { apiV2Url } from 'src/app/services/api.config';
+import { apiUrl } from 'src/app/services/api.config';
 
 // Dial geometry constants
 const CX = 60, CY = 52, R = 36;
@@ -29,7 +30,7 @@ function toSvgPt(angleDeg: number) {
 
 @Component({
   selector: 'app-user-dashboard',
-  imports: [SHARED_MATERIAL, GroupTileComponent, CameraDisplayComponent],
+  imports: [SHARED_MATERIAL, GroupTileComponent, CameraDisplayComponent, ReceivedBadgeComponent],
   templateUrl: './user-dashboard.html',
   styleUrl: './user-dashboard.css',
 })
@@ -80,6 +81,7 @@ export class UserDashboard implements OnInit {
         const action = this.findAction(data.actionId);
         if (action) {
           action.state = data.state;
+          action.receivedAt = Date.now();
           // Only clear pending when this is the latest in-flight commandId. A stale
           // concurrent ack for an older command must not clobber a newer command's pending.
           const isLatest = !data.commandId || this.latestCommandId.get(data.actionId) === data.commandId;
@@ -161,7 +163,7 @@ export class UserDashboard implements OnInit {
       this.activeRules = rules.filter(r => r.enabled).length;
     });
 
-    this.http.get<{ id: number }[]>(`${apiV2Url()}/api/rules/events?limit=50&emergency=true`)
+    this.http.get<{ id: number }[]>(`${apiUrl()}/api/rules/events?limit=50&emergency=true`)
       .subscribe({ next: events => { this.emergencyAlerts = events.length; } });
   }
 
@@ -403,6 +405,8 @@ export class UserDashboard implements OnInit {
   activeTraitValue = activeTraitValue;
   traitIconName = traitIconName;
   controllableTraits = controllableTraits;
+  isTelemetryAction = isTelemetryAction;
+  isCameraAction = isCameraAction;
   colorOptions = COLOR_OPTIONS;
 
   setDefaultTrait(action: DeviceActionView, traitId: number) {

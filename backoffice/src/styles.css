@@ -91,6 +91,31 @@
   --offline-overlay-text: #a0b0c4;
 }
 
+/* ── Scrollbars (themed) ──────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--text-muted);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* ── Reset ────────────────────────────────────────────────────────────── */
 html, body { height: 100%; }
 body {
@@ -285,4 +310,34 @@ app-root {
 }
 
 .glass-dialog .mat-mdc-input-element { color: var(--text) !important; }
+
+/* ── Select / autocomplete overlay panels ────────────────────────────────
+   These render into the CDK overlay container (a sibling of <body>, not a
+   descendant of the opening component or dialog), so they can't be reached
+   by component-scoped ::ng-deep — theme them globally instead. */
+.mat-mdc-select-panel,
+.mat-mdc-autocomplete-panel {
+  background: var(--card-bg) !important;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--card-shadow) !important;
+}
+
+.mat-mdc-option .mdc-list-item__primary-text { color: var(--text) !important; }
+.mat-mdc-option:hover:not(.mdc-list-item--disabled),
+.mat-mdc-option.mat-mdc-option-active {
+  background: var(--surface-alt) !important;
+}
+.mat-mdc-option.mdc-list-item--selected:not(.mat-mdc-option-multiple) {
+  background: color-mix(in srgb, var(--primary) 16%, transparent) !important;
+}
+.mat-mdc-option.mdc-list-item--selected .mdc-list-item__primary-text {
+  color: var(--primary) !important;
+}
+.mat-mdc-optgroup-label .mdc-list-item__primary-text {
+  color: var(--text-muted) !important;
+  font-weight: 700;
+}
 .glass-dialog .mat-mdc-floating-label { color: var(--text-muted) !important; }

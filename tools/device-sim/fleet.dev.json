@@ -1,0 +1,10 @@
+{
+  "//": "Fleet for the compose.dev.yaml device-sim service — a small mixed fleet to click around against in the backoffice. Committed (unlike the gitignored fleet.json); edit here to change what dev:up brings online.",
+  "defaults": { "activateAll": false },
+  "devices": [
+    { "type": "ESP32S3_MINI", "count": 1,
+     "capabilities": ["outlet", "temperature"] , "telemetryMs": 2000},
+    { "type": "ESP32S3_CAM", "count": 1, "camera": true ,
+    "capabilities": ["camera"], "telemetryMs": 2000}
+  ]
+}

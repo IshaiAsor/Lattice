@@ -1,3 +1,4 @@
+import { deriveValidParameters } from '@lattice/capability-validation';
 import { db } from '../db';
 
 export interface PinConfigDto {
@@ -11,6 +12,10 @@ export interface ActionConfigDto {
   mqtt_action_type: string;
   pins: PinConfigDto[];
   telemetry_interval_ms: number | null;
+  valid_parameters: unknown;
+  // CameraAction only — null/unused for every other implementation_type.
+  camera_resolution: string | null;
+  camera_transport: string | null;
 }
 
 export interface DeviceConfigurationDto {
@@ -29,7 +34,15 @@ class DeviceConfigurationService {
 
     const userActions = await db.userDeviceAction.findMany({
       where: { user_device_id: userDeviceId, status: 'active' },
-      include: { capability: { include: { pins: true } }, pins: true },
+      include: {
+        capability: {
+          include: {
+            pins: true,
+            traits: { include: { google_trait: { select: { valid_parameters: true } } } },
+          },
+        },
+        pins: true,
+      },
     });
 
     const actions: ActionConfigDto[] = userActions.map((ua) => {
@@ -45,6 +58,9 @@ class DeviceConfigurationService {
         mqtt_action_type:      ua.capability.mqtt_action_type ?? 'command',
         pins,
         telemetry_interval_ms: ua.telemetry_interval_ms ?? ua.capability.min_telemetry_interval_ms ?? null,
+        valid_parameters: deriveValidParameters(ua.capability.traits.map((t) => t.google_trait.valid_parameters)),
+        camera_resolution: ua.camera_resolution,
+        camera_transport:  ua.camera_transport,
       };
     });
 

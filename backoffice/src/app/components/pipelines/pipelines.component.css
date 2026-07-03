@@ -1,0 +1,206 @@
+.pipelines-page {
+  padding: 16px 0 24px;
+}
+
+/* ── Stats row ───────────────────────────────────────────────────────── */
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  box-shadow: var(--card-shadow);
+}
+
+.stat-card.stat-err {
+  border-color: color-mix(in srgb, var(--error) 30%, transparent);
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.stat-err .stat-value {
+  color: var(--error);
+}
+
+/* ── Pipeline list ───────────────────────────────────────────────────── */
+
+.pipeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pipeline-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+
+.pipeline-card.disabled {
+  opacity: 0.55;
+}
+
+/* ── Card header ─────────────────────────────────────────────────────── */
+
+.card-header {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.pipeline-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+}
+
+/* ── Stage pills ─────────────────────────────────────────────────────── */
+
+.stage-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.stage-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-chip);
+  border: 1px solid;
+}
+
+.pill-enrich {
+  background: color-mix(in srgb, var(--stage-digest) 10%, transparent);
+  color: var(--stage-digest);
+  border-color: color-mix(in srgb, var(--stage-digest) 28%, transparent);
+}
+
+.pill-infer {
+  background: color-mix(in srgb, var(--stage-vlm) 10%, transparent);
+  color: var(--stage-vlm);
+  border-color: color-mix(in srgb, var(--stage-vlm) 28%, transparent);
+}
+
+.pill-exec {
+  background: color-mix(in srgb, var(--stage-exec) 10%, transparent);
+  color: var(--stage-exec);
+  border-color: color-mix(in srgb, var(--stage-exec) 28%, transparent);
+}
+
+/* ── Card meta ───────────────────────────────────────────────────────── */
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.trigger-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+.run-status-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+}
+
+.status-ok  { background: color-mix(in srgb, var(--stage-exec)  12%, transparent); color: var(--stage-exec); }
+.status-err { background: color-mix(in srgb, var(--error)        12%, transparent); color: var(--error); }
+.status-run { background: color-mix(in srgb, var(--primary)      12%, transparent); color: var(--primary); }
+.status-q   { background: color-mix(in srgb, var(--text-muted)   10%, transparent); color: var(--text-muted); }
+
+/* ── Card actions ────────────────────────────────────────────────────── */
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+}
+
+.card-actions mat-slide-toggle {
+  margin-right: 4px;
+}
+
+.action-btn     { color: var(--text-muted); }
+.simulate-btn   { color: var(--stage-digest) !important; }
+.action-delete:hover { color: var(--error); }
+
+/* ── Run history panel ───────────────────────────────────────────────── */
+
+.history-panel {
+  border-top: 1px solid var(--border);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-muted);
+}
+
+.empty-state mat-icon {
+  font-size: 48px;
+  height: 48px;
+  width: 48px;
+  opacity: 0.4;
+}
+
+.empty-state p {
+  margin-top: 8px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .pipelines-page { padding: 12px; }
+}

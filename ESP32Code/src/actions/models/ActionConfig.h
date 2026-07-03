@@ -20,6 +20,9 @@ struct ActionConfig
     String mqtt_action_type;
     std::vector<ActionPinsSetup> pins;
     int    telemetry_interval_ms = 0;  // 0 = not set, use firmware default
+    // CameraAction only — empty for every other implementation_type.
+    String camera_resolution;          // e.g. "VGA"/"SVGA"/"XGA"; empty = firmware default
+    String camera_transport;           // "ws" or "http"; empty = "http"
 };
 
 class DeviceConfigurationResponse : public JsonModel
@@ -48,6 +51,8 @@ public:
             }
 
             ac.telemetry_interval_ms = obj["telemetry_interval_ms"] | 0;
+            ac.camera_resolution     = obj["camera_resolution"] | "";
+            ac.camera_transport      = obj["camera_transport"]  | "";
 
             actions.push_back(ac);
         }

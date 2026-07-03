@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { apiV2Url } from './api.config';
+import { apiUrl } from './api.config';
 
 // Typed conditions (F1.7) — no more `parameters` blob. Fields are populated per
 // condition_type; the rest stay null.
@@ -41,8 +41,7 @@ export interface UserRuleView extends CreateRuleDto {
 
 @Injectable({ providedIn: 'root' })
 export class UserRulesService {
-  // Migrated to the new `api` service (F6.3): /api/rules with typed conditions + is_emergency.
-  private apiUrl = `${apiV2Url()}/api/rules`;
+  private apiUrl = `${apiUrl()}/api/rules`;
   http = inject(HttpClient);
 
   getRules(): Observable<UserRuleView[]> {

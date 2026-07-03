@@ -8,5 +8,8 @@ const valkeyConfig = {
   username: process.env['VALKEY_USER'] ?? process.env['REDIS_USER'],
   password: process.env['VALKEY_PASSWORD'] ?? process.env['REDIS_PASSWORD'],
 };
+// How long the enrich stage waits for an on-demand camera capture before falling back to
+// the last durably-stored frame. Mirrors digest-service's own PICTURE_ACK_TIMEOUT_MS default.
+const pictureRequestTimeoutMs = parseInt(process.env['PICTURE_ACK_TIMEOUT_MS'] ?? '15000', 10);
 
-export const env = { port, logLevel, otelEndpoint, rabbitmqUrl, valkeyConfig };
+export const env = { port, logLevel, otelEndpoint, rabbitmqUrl, valkeyConfig, pictureRequestTimeoutMs };
