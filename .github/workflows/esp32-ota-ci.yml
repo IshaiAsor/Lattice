@@ -13,9 +13,8 @@ concurrency:
 jobs:
   generate-firmware-matrix:
     runs-on: ubuntu-latest
-    concurrency:
-      group: global-version-tag
-      cancel-in-progress: false
+    permissions:
+      contents: write
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
@@ -77,11 +76,7 @@ jobs:
 
       - name: Bump version and push tag
         id: tag_version
-        uses: anothrNick/github-tag-action@1.64.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WITH_V: true
-          DEFAULT_BUMP: patch
+        uses: ./.github/actions/bump-version-tag
 
       - name: Update DEVICE_VERSION_STR in platformio.ini
         if: github.actor != 'github-actions'

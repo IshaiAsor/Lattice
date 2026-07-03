@@ -53,9 +53,6 @@ jobs:
     needs: [lint, test]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    concurrency:
-      group: global-version-tag
-      cancel-in-progress: false
     permissions:
       contents: write
     outputs:
@@ -66,11 +63,7 @@ jobs:
           fetch-depth: 0
       - name: Bump version and push tag
         id: tag_version
-        uses: anothrNick/github-tag-action@1.64.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WITH_V: true
-          DEFAULT_BUMP: patch
+        uses: ./.github/actions/bump-version-tag
 
   build:
     name: Build (${{ matrix.platform-pair }})
