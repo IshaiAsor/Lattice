@@ -53,6 +53,9 @@ jobs:
     needs: [lint, test]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    concurrency:
+      group: global-version-tag
+      cancel-in-progress: false
     permissions:
       contents: write
     outputs:

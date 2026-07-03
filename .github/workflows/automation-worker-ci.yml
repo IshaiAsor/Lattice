@@ -17,6 +17,9 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    concurrency:
+      group: global-version-tag
+      cancel-in-progress: false
     permissions:
       contents: write
     outputs:

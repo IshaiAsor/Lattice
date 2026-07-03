@@ -13,6 +13,9 @@ concurrency:
 jobs:
   generate-firmware-matrix:
     runs-on: ubuntu-latest
+    concurrency:
+      group: global-version-tag
+      cancel-in-progress: false
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
