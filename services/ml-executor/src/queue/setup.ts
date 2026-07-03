@@ -30,8 +30,11 @@ function makeConsumer(model: ModelConfig, ch: Channel, log: Logger) {
       } else if (llmProvider) {
         const prompt = payload.context['prompt'] as string;
         if (!prompt) throw new Error('context.prompt missing for llm stage');
-        const image = payload.context['image'] as string | undefined;
-        const messages = [{ role: 'user' as const, content: prompt, ...(image ? { image } : {}) }];
+        // TODO: current cluster hardware can't run qwen2.5vl multimodal inference (with the raw
+        // frame attached) in reasonable time — text-only prompt (which already carries the VLM
+        // stage's detections as JSON, see prompt.ts) for now. Re-attach payload.context['image']
+        // here once running on hardware that can handle vision inference at acceptable latency.
+        const messages = [{ role: 'user' as const, content: prompt }];
         const result = await llmProvider.generate(messages, { json: true });
         const parsed = parseLlmOutput(result.text ?? '', result.durationMs);
         output = parsed.output;
