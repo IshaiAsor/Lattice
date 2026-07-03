@@ -94,6 +94,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./backoffice
+          target: runtime
           platforms: ${{ matrix.platform }}
           push: true
           outputs: type=image,name=ghcr.io/ishaiasor/lattice-backoffice,push-by-digest=true,name-canonical=true
