@@ -22,6 +22,8 @@ inferRouter.post('/api/infer', async (req, res) => {
     return;
   }
 
+  log.info({ model: `${model.kind}/${model.name}/${model.version}` }, 'HTTP infer request received');
+
   try {
     let result: InferResponse;
     if (cfg.kind === 'vlm') {

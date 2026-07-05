@@ -13,6 +13,7 @@ export async function dispatchAction(
   actionId: number,
   state: string,
 ): Promise<void> {
+  log.info({ userId, actionId, state }, 'dispatchAction started');
   const action = await userDevicesActionsRepository.getById(actionId);
   if (!action) {
     log.warn({ actionId }, 'action not found');

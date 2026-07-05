@@ -38,7 +38,7 @@ export async function initPipelineCoordinator(ch: Channel): Promise<void> {
 
 async function onCancel(c: PipelineCancelPayload): Promise<void> {
   const runId = Number(c.runId);
-  log.trace({ runId }, 'PIPELINE_CANCEL received');
+  log.info({ runId }, 'PIPELINE_CANCEL received');
   if (runs.delete(runId)) {
     log.info({ runId }, 'pipeline run cancelled — coordinator stopped tracking it');
   }
@@ -47,7 +47,7 @@ async function onCancel(c: PipelineCancelPayload): Promise<void> {
 async function onTrigger(t: PipelineTriggerPayload): Promise<void> {
   const pipelineId = Number(t.pipelineId);
   const { runId, isDryRun = false, sensorOverrides } = t;
-  log.trace({ runId, pipelineId, isDryRun }, 'PIPELINE_TRIGGER received');
+  log.info({ runId, pipelineId, isDryRun }, 'PIPELINE_TRIGGER received');
 
   // The API marks the run 'cancelled' synchronously before publishing PIPELINE_CANCEL, but
   // message delivery order across queues isn't guaranteed — re-check here so a cancel that
@@ -82,7 +82,7 @@ async function onTrigger(t: PipelineTriggerPayload): Promise<void> {
 async function advance(run: Run): Promise<void> {
   while (run.index < run.plan.stages.length) {
     const stage = run.plan.stages[run.index];
-    log.trace({ runId: run.runId, stageId: stage.dbId, stageType: stage.type, index: run.index }, 'advancing to stage');
+    log.info({ runId: run.runId, stageId: stage.dbId, stageType: stage.type, index: run.index }, 'advancing to stage');
 
     if (stage.type === 'enrich') {
       await runEnrich(channel, run, stage);
@@ -148,8 +148,11 @@ async function advance(run: Run): Promise<void> {
 async function onStageDone(d: PipelineStageDonePayload): Promise<void> {
   const runId = Number(d.pipelineRunId);
   const run   = runs.get(runId);
-  log.trace({ runId, stageId: d.stageId, status: d.status }, 'PIPELINE_STAGE_DONE received');
-  if (!run) return;
+  log.info({ runId, stageId: d.stageId, status: d.status }, 'PIPELINE_STAGE_DONE received');
+  if (!run) {
+    log.warn({ runId, stageId: d.stageId }, 'PIPELINE_STAGE_DONE for unknown/finished run — dropped');
+    return;
+  }
 
   const stageDbId = Number(d.stageId);
   const stageOutput = d.output
@@ -176,7 +179,7 @@ async function onStageDone(d: PipelineStageDonePayload): Promise<void> {
 }
 
 async function finish(run: Run, status: 'completed' | 'failed', error?: string): Promise<void> {
-  log.trace({ runId: run.runId, status, error }, 'finishing pipeline run');
+  log.info({ runId: run.runId, status, error }, 'finishing pipeline run');
   runs.delete(run.runId);
   await db.pipelineRun.update({
     where: { id: run.runId },

@@ -72,4 +72,6 @@ export async function writeScalarState(
   } catch (err) {
     log.error({ err, userActionId }, 'rules.evaluate publish failed');
   }
+
+  log.info({ userActionId, stateValue }, 'scalar state write complete');
 }

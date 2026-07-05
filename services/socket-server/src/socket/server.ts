@@ -80,6 +80,8 @@ export async function initSocket(httpServer: http.Server, ch: Channel): Promise<
       const responseChannel = `${CHAT_CHANNELS.CHAT_RESPONSE}${requestId}`;
       const stream = payload.stream ?? true;
 
+      log.info({ requestId, userId, chatMode: payload.chatMode }, 'chat request received from client');
+
       await subClient.subscribe(responseChannel);
 
       const messageHandler = (channel: string, message: string) => {
@@ -106,6 +108,7 @@ export async function initSocket(httpServer: http.Server, ch: Channel): Promise<
 
       try {
         await pubClient.publish(CHAT_CHANNELS.CHAT_INTENT, JSON.stringify(intentPayload));
+        log.info({ requestId, userId, chatMode: payload.chatMode, stream }, 'chat intent published');
       } catch (err) {
         log.error({ err, requestId, userId }, 'failed to publish chat intent to Redis');
         subClient.unsubscribe(responseChannel);
@@ -128,6 +131,7 @@ export async function initSocket(httpServer: http.Server, ch: Channel): Promise<
       };
       try {
         publish(ch, RK.ACTION_REQUESTED, payload);
+        log.info({ userId, actionId: data.actionId, state: data.state }, 'action.requested published');
       } catch (err) {
         log.error({ err, userId }, 'failed to publish action.requested');
       }

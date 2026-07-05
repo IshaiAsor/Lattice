@@ -40,6 +40,7 @@ const IMPLEMENTATION_COMMAND_MAP: Record<string, Record<string, ValueMapper>> = 
 
 class GoogleExecuteDeviceService {
   public async ExecuteDeviceCommands(ch: Channel, userId: number, commands: any[]): Promise<any> {
+    log.info({ userId, commandCount: commands.length }, 'Google EXECUTE intent received');
     const actions = await deviceActionsService.getUserActions(userId);
     const responses: any[] = [];
 
@@ -55,6 +56,7 @@ class GoogleExecuteDeviceService {
       }
     }
 
+    log.info({ userId, responseCount: responses.length }, 'Google EXECUTE intent processed');
     return responses;
   }
 

@@ -20,7 +20,7 @@ const log = createLogger('digest-service:action-result');
 export function actionResultConsumer(ch: Channel) {
   return async (payload: ActionResultPayload): Promise<void> => {
     const { userId, deviceId, actionName, commandId, status, value, timestamp } = payload;
-    log.trace({ userId, deviceId, actionName, commandId, status }, 'action.result received');
+    log.info({ userId, deviceId, actionName, commandId, status }, 'action.result received');
 
     // Settle the in-flight request (if any). takePending races the timeout via GETDEL;
     // whoever wins resolves the UI. Always clear the local timer regardless.
@@ -68,5 +68,6 @@ export function actionResultConsumer(ch: Channel) {
     }
 
     await writeScalarState(ch, resolved.id, { userId, deviceId, actionName, value, timestamp, commandId });
+    log.info({ userId, deviceId, actionName, commandId }, 'action result processed — state updated');
   };
 }

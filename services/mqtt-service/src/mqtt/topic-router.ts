@@ -49,6 +49,6 @@ export class TopicRouter {
       return;
     }
 
-    log.debug({ topic }, 'no handler matched topic');
+    log.warn({ topic }, 'no handler matched topic');
   }
 }

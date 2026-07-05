@@ -26,6 +26,7 @@ export function otaIncomingConsumer(ch: Channel) {
     // Forward to mqtt-service, which publishes the retained MQTT notification.
     const dispatch: OtaDispatchPayload = { deviceType, version, url, releaseNotes, timestamp };
     publish(ch, RK.OTA_DISPATCH, dispatch);
+    log.info({ deviceType, version }, 'OTA release forwarded to mqtt-service');
 
     // Notify users best-effort — notification-service (F15) binds q.notification.publish
     // and resolves which users own a device of this type. Drops silently if not yet deployed.
@@ -35,6 +36,7 @@ export function otaIncomingConsumer(ch: Channel) {
         deviceType,
         version,
       } satisfies NotificationPublishPayload);
+      log.info({ deviceType, version }, 'OTA notification event published');
     } catch (err) {
       log.warn({ err, deviceType, version }, 'failed to publish OTA notification event — skipped');
     }

@@ -7,6 +7,7 @@ const log = createLogger('mqtt-service:ota-dispatch');
 export function otaDispatchConsumer(client: MqttClient) {
   return async (payload: OtaDispatchPayload): Promise<void> => {
     const topic = `ota/updates/${payload.deviceType}`;
+    log.info({ topic, deviceType: payload.deviceType, version: payload.version }, 'OTA dispatch received');
     const message = JSON.stringify({
       version:      payload.version,
       deviceType:   payload.deviceType,

@@ -16,7 +16,7 @@ const log = createLogger('digest-service:picture-requested');
 export function pictureRequestedConsumer(ch: Channel) {
   return async (payload: PictureRequestedPayload): Promise<void> => {
     const { userId, actionId, commandId, timeoutMs } = payload;
-    log.trace({ userId, actionId, commandId, timeoutMs }, 'picture.requested received');
+    log.info({ userId, actionId, commandId, timeoutMs }, 'picture.requested received');
 
     const row = await db.userDeviceAction.findUnique({
       where:  { id: actionId },
@@ -56,6 +56,7 @@ export function pictureRequestedConsumer(ch: Channel) {
     };
     try {
       publish(ch, RK.ACTION_DISPATCH, dispatch);
+      log.info({ actionId, commandId, deviceId }, 'take_picture dispatched to device');
     } catch (err) {
       log.error({ err, actionId }, 'take_picture dispatch publish failed');
     }

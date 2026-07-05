@@ -67,6 +67,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Fatal startup error', err);
+  log.error({ err }, 'Fatal startup error');
   process.exit(1);
 });

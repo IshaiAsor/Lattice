@@ -17,7 +17,7 @@ export function deviceStatusConsumer() {
     const online = state === true;
     const userDeviceId = parseInt(deviceId, 10);
 
-    log.trace({ userId, deviceId, online }, 'device.status received');
+    log.info({ userId, deviceId, online }, 'device.status received');
     // 1. Authoritative liveness write — failure nacks → DLQ.
     await db.userDevice.update({
       where: { id: userDeviceId },
@@ -76,5 +76,7 @@ export function deviceStatusConsumer() {
     } catch (err) {
       log.error({ err, userDeviceId }, 'socket emit failed');
     }
+
+    log.info({ userDeviceId, online }, 'device status processed');
   };
 }

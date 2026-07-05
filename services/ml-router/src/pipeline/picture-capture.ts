@@ -14,7 +14,8 @@ const pending = new Map<string, (result: PictureResultPayload) => void>();
 
 export async function registerPictureResultConsumer(ch: Channel): Promise<void> {
   await consume<PictureResultPayload>(ch, QUEUES.PICTURE_RESULT, async (result) => {
-    log.trace({ commandId: result.commandId, status: result.status }, 'PICTURE_RESULT received');
+    // Never log result.image — it's a base64 JPEG.
+    log.info({ commandId: result.commandId, status: result.status }, 'PICTURE_RESULT received');
     const resolve = pending.get(result.commandId);
     if (!resolve) return; // already resolved locally (safety-net timeout beat it), or unknown
     pending.delete(result.commandId);

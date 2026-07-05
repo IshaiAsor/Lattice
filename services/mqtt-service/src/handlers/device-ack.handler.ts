@@ -45,7 +45,7 @@ export function deviceAckHandler(ch: Channel): MqttHandler {
         timestamp:  new Date().toISOString(),
       };
       publish(ch, RK.ACTION_RESULT, msg);
-      log.debug({ topic: parsed, msg }, 'ack received and forwarded as action.result');
+      log.info({ topic: parsed, msg }, 'ack received and forwarded as action.result');
     },
   };
 }

@@ -18,7 +18,7 @@ export async function runCommandExec(
   run: Run,
   stage: Extract<PipelineStagePlan, { type: 'command_exec' }>,
 ): Promise<void> {
-  log.trace({ runId: run.runId, stageId: stage.dbId, isDryRun: run.isDryRun }, 'command_exec stage starting');
+  log.info({ runId: run.runId, stageId: stage.dbId, isDryRun: run.isDryRun }, 'command_exec stage starting');
   const started = new Date();
   const prevOutput = run.context as { actions?: LlmAction[] };
   const actions = (prevOutput.actions ?? []).filter(

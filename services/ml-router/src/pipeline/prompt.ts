@@ -36,7 +36,7 @@ export async function prepareLlmPrompt(
   run: Run,
   stage: Extract<PipelineStagePlan, { type: 'infer' }>,
 ): Promise<void> {
-  log.trace({ runId: run.runId, stageId: stage.dbId }, 'preparing LLM prompt');
+  log.info({ runId: run.runId, stageId: stage.dbId }, 'preparing LLM prompt');
 
   // current_state, sensors (historic) + available_actions (already enriched with traits/valid_parameters)
   // come from the enrich stage that must run earlier in the plan; detections come from an earlier

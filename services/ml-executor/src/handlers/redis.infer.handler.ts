@@ -40,13 +40,15 @@ export async function initInferWorker(): Promise<void> {
     const { requestId, model: modelId, messages, stream } = job;
     const out = `${INFER_CHANNELS.INFER_RESPONSE}${requestId}`;
     const emit = (chunk: InferChunk) => resultPublisher.publish(out, JSON.stringify(chunk));
+    const start = Date.now();
+
+    log.info({ requestId, modelId, stream }, 'infer job received');
 
     try {
       const cfg = getModel(modelId.kind, modelId.name, modelId.version);
       if (!cfg) throw new Error(`model ${modelId.kind}/${modelId.name}/${modelId.version} not found`);
 
       if (cfg.kind === 'vlm') {
-        const start = Date.now();
         const detections = await getVlmProvider(cfg).detect(messages);
         await emit({ type: 'result', result: { detections, durationMs: Date.now() - start } });
       } else {
@@ -62,9 +64,10 @@ export async function initInferWorker(): Promise<void> {
         }
       }
       await emit({ type: 'done' });
+      log.info({ requestId, modelId, durationMs: Date.now() - start }, 'infer job complete');
     } catch (error) {
       const errMessage = error instanceof Error ? error.message : String(error);
-      log.error({ error, requestId, modelId }, 'infer job error');
+      log.error({ err: error, requestId, modelId }, 'infer job error');
       await emit({ type: 'error', message: errMessage });
       await emit({ type: 'done' });
     }

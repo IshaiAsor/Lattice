@@ -122,7 +122,7 @@ export async function initChatWorker(): Promise<void> {
         'chat intent dispatched',
       );
     } catch (error) {
-      log.error({ error, requestId: intent.requestId }, 'chat routing failed');
+      log.error({ err: error, requestId: intent.requestId }, 'chat routing failed');
       await publisher.publish(clientChannel, 'Failed to route chat request.');
       await publisher.publish(clientChannel, '[DONE]');
     }

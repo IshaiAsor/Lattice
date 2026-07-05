@@ -1,4 +1,4 @@
-# v2.2 (Lattice) Incremental Rebuild — Roadmap & Progress Tracker
+# Lattice — System Design & Development Roadmap
 
 > **How to use this file:** every work session starts and ends here. Each item is the
 > smallest independently testable step. Pick any unblocked item ("Needs" column empty or

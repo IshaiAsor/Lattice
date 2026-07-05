@@ -14,7 +14,7 @@ export async function runEnrich(
   run: Run,
   stage: Extract<PipelineStagePlan, { type: 'enrich' }>,
 ): Promise<void> {
-  log.trace({ runId: run.runId, stageId: stage.dbId, isDryRun: run.isDryRun }, 'enrich stage starting');
+  log.info({ runId: run.runId, stageId: stage.dbId, isDryRun: run.isDryRun }, 'enrich stage starting');
   const started = new Date();
   let currentState: Record<string, Record<string, unknown>>;
   let sensorDigest: Record<string, Record<string, unknown>>;

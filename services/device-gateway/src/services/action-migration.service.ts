@@ -110,6 +110,11 @@ class ActionMigrationService {
 
     if (currentDevice.id === latestDevice.id) return;
 
+    log.info(
+      { userDeviceId, from: currentDevice.version, to: latestDevice.version },
+      'applying device action migration',
+    );
+
     const [capabilities, activeActions] = await Promise.all([
       db.deviceCapability.findMany({ where: { device_id: latestDevice.id }, include: { pins: true } }),
       db.userDeviceAction.findMany({
@@ -184,6 +189,7 @@ class ActionMigrationService {
         },
       });
     });
+    log.info({ userDeviceId, to: latestDevice.version, actionsStaged: activeActions.length }, 'device action migration staged');
 
     // Best-effort OTA dispatch — failure is logged but not fatal.
     try {

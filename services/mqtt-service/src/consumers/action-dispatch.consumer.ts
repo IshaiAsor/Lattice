@@ -9,12 +9,12 @@ export function actionDispatchConsumer(client: MqttClient) {
   return async (payload: ActionDispatchPayload): Promise<void> => {
     const version = payload.firmwareVersion ?? env.mqtt.defaultVersion;
     const topic = `users/${payload.userId}/devices/${payload.deviceId}/${version}/command/${payload.actionName}`;
-    log.trace({ topic, payload }, 'publishing action command to MQTT');
+    log.info({ topic, commandId: payload.commandId }, 'publishing action command to MQTT');
     client.publish(topic, JSON.stringify(payload.command), { qos: 1 }, (err) => {
       if (err) {
-        log.error({ err, topic }, 'failed to publish command to MQTT');
+        log.error({ err, topic, commandId: payload.commandId }, 'failed to publish command to MQTT');
       } else {
-        log.debug({ topic }, 'command dispatched');
+        log.info({ topic, commandId: payload.commandId }, 'command dispatched');
       }
     });
   };

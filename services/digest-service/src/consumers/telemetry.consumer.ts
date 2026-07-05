@@ -20,7 +20,9 @@ export function telemetryConsumer(ch: Channel) {
   return async (payload: TelemetryArrivedPayload): Promise<void> => {
     const { userId, deviceId, actionName, value, timestamp } = payload;
 
-    log.trace({ userId, deviceId, actionName, value, timestamp }, 'telemetry received');
+    // value can be a base64 image frame — never log it raw here, before the kind
+    // (scalar vs image) is known. handleScalar/handleImage log their own specifics.
+    log.info({ userId, deviceId, actionName, timestamp }, 'telemetry received');
 
     // Resolve to the UserDeviceAction id + kind (Valkey cache → DB join fallback).
     const resolved = await resolveUserDeviceAction(deviceId, actionName);
@@ -95,6 +97,9 @@ async function handleImage(
       log.error({ err, commandId }, 'picture request resolution failed');
     }
   }
+
+  // Never log `frame` itself — it's a base64 JPEG, easily hundreds of KB.
+  log.info({ userDeviceId, userActionId, frameSizeBytes: frame.length, commandId }, 'camera frame stored');
 }
 
 // Scalar sensor reading. Delegates to the shared authoritative-state writer (also used
