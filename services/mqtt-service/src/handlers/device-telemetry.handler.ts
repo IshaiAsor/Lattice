@@ -19,11 +19,11 @@ export function deviceTelemetryHandler(ch: Channel): MqttHandler {
     pattern: 'users/+/devices/+/+/telemetry/#',
     handle: async ({ parsed, payload }) => {
       const msg: TelemetryArrivedPayload = {
-        userId:     parsed.userId,
-        deviceId:   parsed.deviceId,
+        userId: parsed.userId,
+        deviceId: parsed.deviceId,
         actionName: parsed.actionName ?? '',
-        value:      tryParseJson(payload.toString()),
-        timestamp:  new Date().toISOString(),
+        value: tryParseJson(payload.toString()),
+        timestamp: new Date().toISOString(),
       };
       publish(ch, RK.TELEMETRY_ARRIVED, msg);
       log.info({ topic: parsed, msg }, 'telemetry received and forwarded');

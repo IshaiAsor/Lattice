@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { Channel } from 'amqplib';
-import { consume, publish, RK, QUEUES, type PictureRequestedPayload, type PictureResultPayload } from '@lattice/queue';
+import {
+  consume,
+  publish,
+  RK,
+  QUEUES,
+  type PictureRequestedPayload,
+  type PictureResultPayload,
+} from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 
 const log = createLogger('ml-router:pipeline:picture-capture');
@@ -39,13 +46,21 @@ export async function requestPicture(
 
     const localTimeout = setTimeout(() => {
       if (pending.delete(commandId)) {
-        log.warn({ commandId, actionId }, 'picture request had no PICTURE_RESULT — local timeout fallback');
+        log.warn(
+          { commandId, actionId },
+          'picture request had no PICTURE_RESULT — local timeout fallback',
+        );
         resolve({ commandId, status: 'timeout' });
       }
     }, timeoutMs + 2000); // small buffer past digest-service's own timeout
     localTimeout.unref?.();
 
-    const payload: PictureRequestedPayload = { userId: String(userId), actionId, commandId, timeoutMs };
+    const payload: PictureRequestedPayload = {
+      userId: String(userId),
+      actionId,
+      commandId,
+      timeoutMs,
+    };
     publish(ch, RK.PICTURE_REQUESTED, payload);
     log.info({ commandId, actionId, timeoutMs }, 'picture.requested published');
   });

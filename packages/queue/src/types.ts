@@ -59,8 +59,8 @@ export interface DeviceStateChangedPayload {
 export interface ActionRequestedPayload {
   userId: string;
   actionId: number;
-  value: unknown;      // desired state value (e.g. "on", "23.5")
-  duration?: string;   // command duration hint passed through to the device
+  value: unknown; // desired state value (e.g. "on", "23.5")
+  duration?: string; // command duration hint passed through to the device
 }
 
 export interface ActionDispatchPayload {
@@ -68,7 +68,7 @@ export interface ActionDispatchPayload {
   deviceId: string;
   actionName: string;
   command: unknown;
-  commandId?: string;   // correlates the device's ack back to the in-flight request
+  commandId?: string; // correlates the device's ack back to the in-flight request
   firmwareVersion?: string;
 }
 
@@ -83,7 +83,7 @@ export interface ActionResultPayload {
   actionName: string;
   commandId?: string;
   status: 'ok' | 'error';
-  value?: unknown;     // resulting state the device actually applied
+  value?: unknown; // resulting state the device actually applied
   timestamp: string;
 }
 
@@ -103,7 +103,7 @@ export interface PictureRequestedPayload {
 export interface PictureResultPayload {
   commandId: string;
   status: 'ok' | 'timeout';
-  image?: string;       // base64 JPEG
+  image?: string; // base64 JPEG
   capturedAt?: string;
 }
 

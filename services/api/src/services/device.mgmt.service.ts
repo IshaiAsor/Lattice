@@ -20,7 +20,12 @@ export interface DeviceView {
   update_available: boolean;
 }
 
-export interface PinSlotView { id: number; key: string; label: string; mode: string; }
+export interface PinSlotView {
+  id: number;
+  key: string;
+  label: string;
+  mode: string;
+}
 export interface UserActionView {
   id: number;
   name: string;
@@ -33,7 +38,7 @@ export interface UserActionView {
   cameraTransport: string | null;
 }
 export interface CapabilityView {
-  id: number;            // DeviceCapability id
+  id: number; // DeviceCapability id
   capability_key: string;
   label: string;
   implementation_type: string;
@@ -43,7 +48,10 @@ export interface CapabilityView {
   configurable_pins: PinSlotView[];
   instances: UserActionView[];
 }
-export interface PinInput { capability_pin_id: number; pin_number: number; }
+export interface PinInput {
+  capability_pin_id: number;
+  pin_number: number;
+}
 
 class DeviceMgmtService {
   async listUserDevices(userId: number): Promise<DeviceView[]> {
@@ -58,7 +66,10 @@ class DeviceMgmtService {
     const latestVersions = new Map<string, string>();
     await Promise.all(
       uniqueTypes.map(async (type) => {
-        const latest = await db.device.findFirst({ where: { type }, orderBy: { created_at: 'desc' } });
+        const latest = await db.device.findFirst({
+          where: { type },
+          orderBy: { created_at: 'desc' },
+        });
         if (latest) latestVersions.set(type, latest.version);
       }),
     );
@@ -66,14 +77,14 @@ class DeviceMgmtService {
     return devices.map((d) => {
       const latestVersion = latestVersions.get(d.device.type) ?? d.device.version;
       return {
-        id:                       d.id,
-        deviceName:               d.name,
-        online:                   d.online,
-        lastOnlineDate:           d.last_online_date,
-        type:                     d.device.type,
-        version:                  d.device.version,
+        id: d.id,
+        deviceName: d.name,
+        online: d.online,
+        lastOnlineDate: d.last_online_date,
+        type: d.device.type,
+        version: d.device.version,
         current_firmware_version: d.current_firmware_version,
-        update_available:         d.device.version !== latestVersion,
+        update_available: d.device.version !== latestVersion,
       };
     });
   }
@@ -115,25 +126,33 @@ class DeviceMgmtService {
     return caps.map((cap) => {
       const modeByPinId = new Map(cap.pins.map((p) => [p.id, p.mode]));
       return {
-        id:                        cap.id,
-        capability_key:            cap.capability_key,
-        label:                     cap.label,
-        implementation_type:       cap.implementation_type,
-        mqtt_action_type:          cap.mqtt_action_type,
-        mqtt_action_name:          cap.mqtt_action_name,
+        id: cap.id,
+        capability_key: cap.capability_key,
+        label: cap.label,
+        implementation_type: cap.implementation_type,
+        mqtt_action_type: cap.mqtt_action_type,
+        mqtt_action_name: cap.mqtt_action_name,
         min_telemetry_interval_ms: cap.min_telemetry_interval_ms,
-        configurable_pins:         cap.pins.map((p) => ({ id: p.id, key: p.key, label: p.label, mode: p.mode })),
+        configurable_pins: cap.pins.map((p) => ({
+          id: p.id,
+          key: p.key,
+          label: p.label,
+          mode: p.mode,
+        })),
         instances: actions
           .filter((a) => a.capability_id === cap.id)
           .map((a) => ({
-            id:        a.id,
-            name:      a.action_name,
-            mqttName:  a.mqtt_action_name,
-            pins:      a.pins.map((p) => ({ pinNumber: p.pin_number, pinMode: modeByPinId.get(p.capability_pin_id) ?? 'OUTPUT' })),
+            id: a.id,
+            name: a.action_name,
+            mqttName: a.mqtt_action_name,
+            pins: a.pins.map((p) => ({
+              pinNumber: p.pin_number,
+              pinMode: modeByPinId.get(p.capability_pin_id) ?? 'OUTPUT',
+            })),
             intervalMs: a.telemetry_interval_ms,
-            status:    a.status,
+            status: a.status,
             cameraResolution: a.camera_resolution,
-            cameraTransport:  a.camera_transport,
+            cameraTransport: a.camera_transport,
           })),
       };
     });
@@ -143,8 +162,11 @@ class DeviceMgmtService {
     userId: number,
     deviceId: number,
     body: {
-      capability_id: number; telemetry_interval_ms?: number | null; pins?: PinInput[];
-      camera_resolution?: string | null; camera_transport?: string | null;
+      capability_id: number;
+      telemetry_interval_ms?: number | null;
+      pins?: PinInput[];
+      camera_resolution?: string | null;
+      camera_transport?: string | null;
     },
   ): Promise<{ id: number }> {
     const device = await this.getOwnedDevice(userId, deviceId);
@@ -157,19 +179,25 @@ class DeviceMgmtService {
     const existing = await db.userDeviceAction.count({
       where: { user_device_id: deviceId, capability_id: cap.id },
     });
-    const mqttName = existing === 0 ? cap.mqtt_action_name : `${cap.mqtt_action_name}_${existing + 1}`;
+    const mqttName =
+      existing === 0 ? cap.mqtt_action_name : `${cap.mqtt_action_name}_${existing + 1}`;
 
     const action = await db.userDeviceAction.create({
       data: {
-        user_device_id:        deviceId,
-        capability_id:         cap.id,
-        action_name:           cap.label,
-        mqtt_action_name:      mqttName,
-        status:                'active',
+        user_device_id: deviceId,
+        capability_id: cap.id,
+        action_name: cap.label,
+        mqtt_action_name: mqttName,
+        status: 'active',
         telemetry_interval_ms: body.telemetry_interval_ms ?? null,
-        camera_resolution:     body.camera_resolution ?? null,
-        camera_transport:      body.camera_transport ?? null,
-        pins: { create: (body.pins ?? []).map((p) => ({ capability_pin_id: p.capability_pin_id, pin_number: p.pin_number })) },
+        camera_resolution: body.camera_resolution ?? null,
+        camera_transport: body.camera_transport ?? null,
+        pins: {
+          create: (body.pins ?? []).map((p) => ({
+            capability_pin_id: p.capability_pin_id,
+            pin_number: p.pin_number,
+          })),
+        },
       },
     });
     return { id: action.id };
@@ -180,12 +208,18 @@ class DeviceMgmtService {
     deviceId: number,
     actionId: number,
     body: {
-      name?: string; telemetry_interval_ms?: number | null; pins?: PinInput[];
-      camera_resolution?: string | null; camera_transport?: string | null;
+      name?: string;
+      telemetry_interval_ms?: number | null;
+      pins?: PinInput[];
+      camera_resolution?: string | null;
+      camera_transport?: string | null;
     },
   ): Promise<void> {
     await this.getOwnedDevice(userId, deviceId);
-    const action = await db.userDeviceAction.findUnique({ where: { id: actionId }, select: { user_device_id: true } });
+    const action = await db.userDeviceAction.findUnique({
+      where: { id: actionId },
+      select: { user_device_id: true },
+    });
     if (!action || action.user_device_id !== deviceId) {
       throw Object.assign(new Error('Action not found'), { statusCode: 404 });
     }
@@ -194,18 +228,22 @@ class DeviceMgmtService {
       await tx.userDeviceAction.update({
         where: { id: actionId },
         data: {
-          action_name:           body.name?.trim(),
+          action_name: body.name?.trim(),
           telemetry_interval_ms: body.telemetry_interval_ms,
-          camera_resolution:     body.camera_resolution,
-          camera_transport:      body.camera_transport,
-          updated_at:            new Date(),
+          camera_resolution: body.camera_resolution,
+          camera_transport: body.camera_transport,
+          updated_at: new Date(),
         },
       });
       if (body.pins !== undefined) {
         await tx.userDeviceActionPin.deleteMany({ where: { user_device_action_id: actionId } });
         if (body.pins.length) {
           await tx.userDeviceActionPin.createMany({
-            data: body.pins.map((p) => ({ user_device_action_id: actionId, capability_pin_id: p.capability_pin_id, pin_number: p.pin_number })),
+            data: body.pins.map((p) => ({
+              user_device_action_id: actionId,
+              capability_pin_id: p.capability_pin_id,
+              pin_number: p.pin_number,
+            })),
           });
         }
       }
@@ -224,7 +262,7 @@ class DeviceMgmtService {
     if (device.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
 
     const payload: ActionDispatchPayload = {
-      userId:   String(userId),
+      userId: String(userId),
       deviceId: String(deviceId),
       actionName,
       command: '',
@@ -238,7 +276,10 @@ class DeviceMgmtService {
     await this.getOwnedDevice(userId, deviceId);
   }
 
-  private async getOwnedDevice(userId: number, deviceId: number): Promise<{ id: number; device_type_id: number }> {
+  private async getOwnedDevice(
+    userId: number,
+    deviceId: number,
+  ): Promise<{ id: number; device_type_id: number }> {
     const device = await db.userDevice.findUnique({
       where: { id: deviceId },
       select: { id: true, user_id: true, device_type_id: true },

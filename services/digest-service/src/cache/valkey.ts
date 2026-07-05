@@ -5,8 +5,8 @@ import { env } from '../config/env.config';
 const log = createLogger('digest-service:valkey');
 
 export const valkey = new IORedis(env.valkey.url, {
-  username:    env.valkey.username,
-  password:    env.valkey.password,
+  username: env.valkey.username,
+  password: env.valkey.password,
   lazyConnect: true,
   maxRetriesPerRequest: null,
 });
@@ -15,11 +15,11 @@ valkey.on('error', (err) => log.error({ err }, 'valkey connection error'));
 
 export const keys = {
   // Hot state — written after every confirmed telemetry DB write.
-  actionState:  (userDeviceActionId: number) => `action_state:${userDeviceActionId}`,
+  actionState: (userDeviceActionId: number) => `action_state:${userDeviceActionId}`,
   // Device liveness — set with a heartbeat-length TTL on online, deleted on offline.
   deviceOnline: (userDeviceId: number) => `device_online:${userDeviceId}`,
   // Latest camera frame for live relay / pipeline consumption (short TTL).
-  cameraFrame:  (userDeviceId: number) => `camera_frame:${userDeviceId}`,
+  cameraFrame: (userDeviceId: number) => `camera_frame:${userDeviceId}`,
   // Resolution cache: (deviceId string, actionName) → "{id}:{kind}".
   actionResolve: (deviceId: string, actionName: string) =>
     `action_resolve:${deviceId}:${actionName}`,
@@ -35,7 +35,7 @@ export const keys = {
 export type ActionKind = 'scalar' | 'image';
 
 export interface ResolvedAction {
-  id:   number;
+  id: number;
   kind: ActionKind;
 }
 

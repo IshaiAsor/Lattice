@@ -18,7 +18,10 @@ const server = net.createServer((client) => {
   client.pipe(target);
   target.pipe(client);
 
-  const cleanup = () => { client.destroy(); target.destroy(); };
+  const cleanup = () => {
+    client.destroy();
+    target.destroy();
+  };
   client.on('error', cleanup);
   target.on('error', cleanup);
   client.on('close', cleanup);

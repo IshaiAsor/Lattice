@@ -19,7 +19,11 @@ export class OllamaProviderService implements ILlmProvider {
   constructor(private readonly modelName: string) {
     this.client = new Ollama({
       host: env.ollamaUrl,
-      fetch: (input, init) => undiciFetch(input as string, { ...init, dispatcher: ollamaAgent }) as unknown as Promise<Response>,
+      fetch: (input, init) =>
+        undiciFetch(input as string, {
+          ...init,
+          dispatcher: ollamaAgent,
+        }) as unknown as Promise<Response>,
     });
   }
 

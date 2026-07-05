@@ -2,7 +2,7 @@ import { deviceActionsService, DeviceActionView } from '../device.actions.servic
 
 class GoogleSyncDevicesService {
   public async SyncUserDevices(userId: number): Promise<any[]> {
-    const actions = await deviceActionsService.getUserActions(userId);
+    const actions = await deviceActionsService.getUserActions(userId, '');
     return actions
       .filter((d) => d.googleType?.value && d.googleTraits.length > 0)
       .map((d) => ({
@@ -25,8 +25,14 @@ class GoogleSyncDevicesService {
           supportsFanSpeedPercent: true,
           availableFanSpeeds: {
             speeds: [
-              { speed_name: 'low_speed',  speed_values: [{ speed_synonym: ['low', 'slow', 'speed one'],  lang: 'en' }] },
-              { speed_name: 'high_speed', speed_values: [{ speed_synonym: ['high', 'fast', 'speed two'], lang: 'en' }] },
+              {
+                speed_name: 'low_speed',
+                speed_values: [{ speed_synonym: ['low', 'slow', 'speed one'], lang: 'en' }],
+              },
+              {
+                speed_name: 'high_speed',
+                speed_values: [{ speed_synonym: ['high', 'fast', 'speed two'], lang: 'en' }],
+              },
             ],
             ordered: true,
           },

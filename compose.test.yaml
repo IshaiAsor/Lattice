@@ -110,8 +110,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: rabbitmq-test
     ports:
-      - '25672:5672'   # AMQP
-      - '35672:15672'  # Management UI → http://localhost:35672
+      - '25672:5672' # AMQP
+      - '35672:15672' # Management UI → http://localhost:35672
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}

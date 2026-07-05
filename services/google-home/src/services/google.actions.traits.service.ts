@@ -1,5 +1,4 @@
-import { capabilityTraitRepository } from '../dal/action.type.traits.repository';
-import { googleTraitsRepository } from '../dal/google.action.traits.repository';
+import { db } from '@lattice/prisma-client';
 
 export interface GoogleActionTraitView {
   id: number;
@@ -11,8 +10,8 @@ export interface GoogleActionTraitView {
 class GoogleActionsTraitsService {
   async GetActionDefinitionTraits(capabilityId: number): Promise<GoogleActionTraitView[]> {
     const [traits, capabilityTraits] = await Promise.all([
-      googleTraitsRepository.getAll(),
-      capabilityTraitRepository.GetByCapabilityId(capabilityId),
+      db.googleDeviceTrait.findMany(),
+      db.deviceCapabilityTrait.findMany({ where: { capability_id: capabilityId } }),
     ]);
     return capabilityTraits.map((capabilityTrait) => {
       const traitDef = traits.find((t) => t.id === capabilityTrait.google_trait_id);

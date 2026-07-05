@@ -17,7 +17,13 @@ module.exports = {
       'ts-jest',
       {
         diagnostics: false,
-        tsconfig: { allowJs: true, esModuleInterop: true, module: 'commonjs', target: 'es2021', isolatedModules: true },
+        tsconfig: {
+          allowJs: true,
+          esModuleInterop: true,
+          module: 'commonjs',
+          target: 'es2021',
+          isolatedModules: true,
+        },
       },
     ],
   },

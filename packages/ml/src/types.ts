@@ -12,8 +12,17 @@ export interface ModelId {
 }
 
 // VLM output types
-export interface BoundingBox { x: number; y: number; w: number; h: number; }
-export interface Detection { label: string; confidence: number; box?: BoundingBox; }
+export interface BoundingBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+export interface Detection {
+  label: string;
+  confidence: number;
+  box?: BoundingBox;
+}
 
 // Unified inference response for HTTP and the single-shot path of the Redis transport.
 export interface InferResponse {

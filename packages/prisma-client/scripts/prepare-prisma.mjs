@@ -20,10 +20,7 @@ const src = readFileSync(rootSchema, 'utf8');
 
 // Output is relative to the schema's own directory (<pkgRoot>/prisma), so
 // ../node_modules/.prisma/client lands in this package's node_modules.
-const rewritten = src.replace(
-  /output\s*=\s*".*?"/,
-  'output   = "../node_modules/.prisma/client"',
-);
+const rewritten = src.replace(/output\s*=\s*".*?"/, 'output   = "../node_modules/.prisma/client"');
 
 if (rewritten === src) {
   throw new Error('prepare-prisma: could not find generator output line to rewrite');

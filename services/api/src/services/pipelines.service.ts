@@ -1,7 +1,12 @@
 import { db, Prisma } from '@lattice/prisma-client';
 import { deriveValidParameters } from '@lattice/capability-validation';
 import { CreatePipelineDto } from './pipelines.types';
-import { validate, validateStageOrdering, ensureActionOwnership, err } from './pipelines.validation';
+import {
+  validate,
+  validateStageOrdering,
+  ensureActionOwnership,
+  err,
+} from './pipelines.validation';
 
 // DeviceCapability.implementation_type value that produces image/camera-frame telemetry
 // (mirrors pipelines.validation.ts / digest-service/resolve.ts / the backoffice pipeline editor)
@@ -9,7 +14,7 @@ const IMAGE_IMPL_TYPES = new Set(['CameraAction']);
 
 function windowToMinutes(value: number, unit: string): number {
   if (unit === 'hours') return value * 60;
-  if (unit === 'days')  return value * 60 * 24;
+  if (unit === 'days') return value * 60 * 24;
   return value;
 }
 
@@ -17,34 +22,39 @@ function toPipelineWriteData(dto: CreatePipelineDto) {
   return {
     stages: {
       create: dto.stages.map((s) => ({
-        ordinal:     s.ordinal,
-        kind:        s.kind,
+        ordinal: s.ordinal,
+        kind: s.kind,
         ml_model_id: s.kind === 'infer' ? s.ml_model_id : null,
-        config:      s.kind === 'enrich' ? Prisma.DbNull : (s.config ? (s.config as Prisma.InputJsonValue) : Prisma.DbNull),
+        config:
+          s.kind === 'enrich'
+            ? Prisma.DbNull
+            : s.config
+              ? (s.config as Prisma.InputJsonValue)
+              : Prisma.DbNull,
       })),
     },
     sensors: {
       create: dto.sensors.map((s) => ({
-        group_name:            s.group_name.trim(),
-        description:           s.description.trim(),
+        group_name: s.group_name.trim(),
+        description: s.description.trim(),
         user_device_action_id: s.user_device_action_id,
-        inject_as_sensor:      s.inject_as_sensor,
-        inject_as_action:      s.inject_as_action,
-        min_value:             s.min_value ?? null,
-        max_value:             s.max_value ?? null,
-        compression:           s.compression,
-        window_minutes:        windowToMinutes(s.window_value, s.window_unit),
-        n:                     s.n ?? null,
+        inject_as_sensor: s.inject_as_sensor,
+        inject_as_action: s.inject_as_action,
+        min_value: s.min_value ?? null,
+        max_value: s.max_value ?? null,
+        compression: s.compression,
+        window_minutes: windowToMinutes(s.window_value, s.window_unit),
+        n: s.n ?? null,
       })),
     },
     triggers: {
       create: dto.triggers.map((t) => ({
-        trigger_type:          t.trigger_type,
+        trigger_type: t.trigger_type,
         user_device_action_id: t.user_device_action_id ?? null,
-        operator:              t.operator ?? null,
-        threshold_value:       t.threshold_value ?? null,
-        schedule_cron:         t.schedule_cron ?? null,
-        min_interval_sec:      t.min_interval_sec ?? null,
+        operator: t.operator ?? null,
+        threshold_value: t.threshold_value ?? null,
+        schedule_cron: t.schedule_cron ?? null,
+        min_interval_sec: t.min_interval_sec ?? null,
       })),
     },
   };
@@ -75,9 +85,9 @@ class PipelinesService {
       },
     });
     return pipelines.map((p) => ({
-      id:         p.id,
-      name:       p.name,
-      enabled:    p.enabled,
+      id: p.id,
+      name: p.name,
+      enabled: p.enabled,
       stage_count: p.stages.length,
       trigger_types: [...new Set(p.triggers.map((t) => t.trigger_type))],
       last_run: p.runs[0] ?? null,
@@ -88,13 +98,14 @@ class PipelinesService {
     const p = await db.pipeline.findUnique({
       where: { id },
       include: {
-        stages:  { orderBy: { ordinal: 'asc' }, include: { ml_model: true } },
+        stages: { orderBy: { ordinal: 'asc' }, include: { ml_model: true } },
         sensors: {
           orderBy: { id: 'asc' },
           include: {
             user_device_action: {
               select: {
-                action_name: true, mqtt_action_name: true,
+                action_name: true,
+                mqtt_action_name: true,
                 capability: {
                   select: {
                     implementation_type: true,
@@ -137,11 +148,11 @@ class PipelinesService {
     return db.pipeline.create({
       data: {
         user_id: userId,
-        name:    dto.name.trim(),
+        name: dto.name.trim(),
         ...toPipelineWriteData(dto),
       },
       include: {
-        stages:  { orderBy: { ordinal: 'asc' } },
+        stages: { orderBy: { ordinal: 'asc' } },
         sensors: true,
         triggers: true,
       },
@@ -162,12 +173,12 @@ class PipelinesService {
       return tx.pipeline.update({
         where: { id },
         data: {
-          name:       dto.name.trim(),
+          name: dto.name.trim(),
           updated_at: new Date(),
           ...toPipelineWriteData(dto),
         },
         include: {
-          stages:  { orderBy: { ordinal: 'asc' } },
+          stages: { orderBy: { ordinal: 'asc' } },
           sensors: true,
           triggers: true,
         },

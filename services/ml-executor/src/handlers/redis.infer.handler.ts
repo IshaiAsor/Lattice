@@ -17,7 +17,10 @@ const resultPublisher = createRedisClient(log, 'infer resultPublisher');
 const llmCache = new Map<string, ILlmProvider>();
 function getLlmProvider(modelName: string): ILlmProvider {
   let p = llmCache.get(modelName);
-  if (!p) { p = new OllamaProviderService(modelName); llmCache.set(modelName, p); }
+  if (!p) {
+    p = new OllamaProviderService(modelName);
+    llmCache.set(modelName, p);
+  }
   return p;
 }
 
@@ -25,7 +28,10 @@ const vlmCache = new Map<string, IVlmProvider>();
 function getVlmProvider(cfg: ModelConfig): IVlmProvider {
   const key = modelKey(cfg);
   let p = vlmCache.get(key);
-  if (!p) { p = new OnnxVlmProvider(cfg); vlmCache.set(key, p); }
+  if (!p) {
+    p = new OnnxVlmProvider(cfg);
+    vlmCache.set(key, p);
+  }
   return p;
 }
 
@@ -46,7 +52,8 @@ export async function initInferWorker(): Promise<void> {
 
     try {
       const cfg = getModel(modelId.kind, modelId.name, modelId.version);
-      if (!cfg) throw new Error(`model ${modelId.kind}/${modelId.name}/${modelId.version} not found`);
+      if (!cfg)
+        throw new Error(`model ${modelId.kind}/${modelId.name}/${modelId.version} not found`);
 
       if (cfg.kind === 'vlm') {
         const detections = await getVlmProvider(cfg).detect(messages);

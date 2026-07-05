@@ -34,50 +34,57 @@ const { compact, loadFleetConfig } = require('./lib/fleet-config');
 
 const num = (v, d) => (v === undefined ? d : parseInt(v, 10));
 const bool = (v, d) => (v === undefined ? d : v !== 'false');
-const list = (v) => (v === undefined ? undefined : v.split(',').map((s) => s.trim()).filter(Boolean));
+const list = (v) =>
+  v === undefined
+    ? undefined
+    : v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Shared connection/credential opts, sourced from env. Built via `compact` so an unset var is
 // simply an absent key — spreading an explicit `undefined` value would overwrite SimDevice's
 // own defaults instead of falling back to them.
 const baseOpts = compact({
-  apiUrl:          process.env.API_URL,
-  gatewayUrl:      process.env.DEVICE_GATEWAY_URL,
-  mqttHost:        process.env.MQTT_SERVER_NAME,
-  mqttPort:        num(process.env.MQTT_PORT, undefined),
+  apiUrl: process.env.API_URL,
+  gatewayUrl: process.env.DEVICE_GATEWAY_URL,
+  mqttHost: process.env.MQTT_SERVER_NAME,
+  mqttPort: num(process.env.MQTT_PORT, undefined),
   // Default to the seeded owner (OWNER_USERNAME/OWNER_PASSWORD) so the sim logs in as the exact
   // credential admin the seed created; SIM_USER/SIM_PASS override, then a last-resort admin/admin.
-  user:            process.env.SIM_USER || process.env.OWNER_USERNAME || 'admin',
-  pass:            process.env.SIM_PASS || process.env.OWNER_PASSWORD || 'admin',
-  telemetryMs:     num(process.env.TELEMETRY_MS, undefined),
-  cameraMs:        num(process.env.CAMERA_MS, undefined),
+  user: process.env.SIM_USER || process.env.OWNER_USERNAME || 'admin',
+  pass: process.env.SIM_PASS || process.env.OWNER_PASSWORD || 'admin',
+  telemetryMs: num(process.env.TELEMETRY_MS, undefined),
+  cameraMs: num(process.env.CAMERA_MS, undefined),
   cameraResolution: process.env.CAMERA_RESOLUTION,
-  cameraTransport:  process.env.CAMERA_TRANSPORT,
+  cameraTransport: process.env.CAMERA_TRANSPORT,
   configRefreshMs: num(process.env.CONFIG_REFRESH_MS, undefined),
-  refreshLeadMs:   num(process.env.REFRESH_LEAD_MS, undefined),
-  activateAll:     bool(process.env.ACTIVATE_ALL, undefined),
-  capabilities:    list(process.env.CAPABILITIES),
-  camera:          bool(process.env.CAMERA, undefined),
-  restartOnLoss:   bool(process.env.RESTART_ON_LOSS, undefined),
-  otaFail:         bool(process.env.OTA_FAIL, undefined),
-  persist:         bool(process.env.PERSIST, undefined),
+  refreshLeadMs: num(process.env.REFRESH_LEAD_MS, undefined),
+  activateAll: bool(process.env.ACTIVATE_ALL, undefined),
+  capabilities: list(process.env.CAPABILITIES),
+  camera: bool(process.env.CAMERA, undefined),
+  restartOnLoss: bool(process.env.RESTART_ON_LOSS, undefined),
+  otaFail: bool(process.env.OTA_FAIL, undefined),
+  persist: bool(process.env.PERSIST, undefined),
 });
 
 const CLEANUP_ON_EXIT = process.env.CLEANUP_ON_EXIT === 'true';
 
 const configFlagIdx = process.argv.indexOf('--config');
-const configPath = (configFlagIdx !== -1 && process.argv[configFlagIdx + 1])
-  || process.argv.slice(2).find((a) => !a.startsWith('-'))
-  || process.env.FLEET_CONFIG
-  || null;
+const configPath =
+  (configFlagIdx !== -1 && process.argv[configFlagIdx + 1]) ||
+  process.argv.slice(2).find((a) => !a.startsWith('-')) ||
+  process.env.FLEET_CONFIG ||
+  null;
 
 if (!configPath) {
   // ── legacy single-device mode (unchanged behavior) ─────────────────────────
   const dev = new SimDevice({
     ...baseOpts,
     deviceType: process.env.DEVICE_TYPE || 'ESP32S3_MINI',
-    mac:        process.env.MAC || 'SIM-AA:BB:CC:DD:EE:01',
-    log:        console.log,
+    mac: process.env.MAC || 'SIM-AA:BB:CC:DD:EE:01',
+    log: console.log,
   });
 
   dev.on('error', (e) => console.error('✗', e.message || e));
@@ -87,14 +94,19 @@ if (!configPath) {
   });
 
   const shutdown = async () => {
-    if (CLEANUP_ON_EXIT) { await dev.cleanup(); console.log('cleaned up device'); }
-    else await dev.stop();
+    if (CLEANUP_ON_EXIT) {
+      await dev.cleanup();
+      console.log('cleaned up device');
+    } else await dev.stop();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  dev.start().catch((e) => { console.error('✗', e.message || e); process.exit(1); });
+  dev.start().catch((e) => {
+    console.error('✗', e.message || e);
+    process.exit(1);
+  });
   return; // top-level return is valid here — Node wraps CJS modules in a function
 }
 

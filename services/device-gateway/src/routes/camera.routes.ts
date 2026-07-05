@@ -20,7 +20,13 @@ cameraRouter.post(
       return;
     }
     const commandId = req.query['commandId'] ? String(req.query['commandId']) : undefined;
-    cameraService.publishFrame(Number(device.userid), Number(device.clientid), action, req.body as Buffer, commandId);
+    cameraService.publishFrame(
+      Number(device.userid),
+      Number(device.clientid),
+      action,
+      req.body as Buffer,
+      commandId,
+    );
     res.status(200).end();
   },
 );

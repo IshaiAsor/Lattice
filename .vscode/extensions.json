@@ -1,6 +1,3 @@
 {
-    "recommendations": [
-        "platformio.platformio-ide",
-        "ms-vscode.cpptools"
-    ]
+  "recommendations": ["platformio.platformio-ide", "ms-vscode.cpptools"]
 }

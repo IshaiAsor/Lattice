@@ -32,7 +32,9 @@ function loadFleetConfig(config, baseOpts) {
     throw new Error('fleet config: "devices" must be a non-empty array');
   }
   if (config.defaults && Object.prototype.hasOwnProperty.call(config.defaults, 'mac')) {
-    throw new Error('fleet config: "defaults.mac" is not supported — set "mac" per device group instead');
+    throw new Error(
+      'fleet config: "defaults.mac" is not supported — set "mac" per device group instead',
+    );
   }
   const defaults = config.defaults || {};
 
@@ -50,12 +52,19 @@ function loadFleetConfig(config, baseOpts) {
     }
     const count = group.count === undefined ? 1 : group.count;
     if (!Number.isInteger(count) || count <= 0) {
-      throw new Error(`fleet config: devices[${gi}] ("${group.type}") has invalid "count" ${JSON.stringify(group.count)} — must be a positive integer`);
+      throw new Error(
+        `fleet config: devices[${gi}] ("${group.type}") has invalid "count" ${JSON.stringify(group.count)} — must be a positive integer`,
+      );
     }
     const { type, count: _count, mac: groupMac, ...overrides } = group;
-    if (overrides.capabilities !== undefined
-      && (!Array.isArray(overrides.capabilities) || !overrides.capabilities.every((c) => typeof c === 'string'))) {
-      throw new Error(`fleet config: devices[${gi}] ("${group.type}") "capabilities" must be an array of capability_key strings`);
+    if (
+      overrides.capabilities !== undefined &&
+      (!Array.isArray(overrides.capabilities) ||
+        !overrides.capabilities.every((c) => typeof c === 'string'))
+    ) {
+      throw new Error(
+        `fleet config: devices[${gi}] ("${group.type}") "capabilities" must be an array of capability_key strings`,
+      );
     }
 
     for (let i = 1; i <= count; i++) {
@@ -64,7 +73,9 @@ function loadFleetConfig(config, baseOpts) {
       // { type: "ESP32S3_MINI", count: 2 } entries yield #01-#02 then #03-#04).
       const idx = nextTypeIndex(type);
       const mac = groupMac
-        ? (count === 1 ? groupMac : `${groupMac}-${pad(idx)}`)
+        ? count === 1
+          ? groupMac
+          : `${groupMac}-${pad(idx)}`
         : `SIM-${type}-${pad(idx)}`;
       const opts = {
         ...compact(baseOpts),
@@ -85,7 +96,9 @@ function checkMacCollisions(instances) {
   const seen = new Map();
   for (const { opts } of instances) {
     if (seen.has(opts.mac)) {
-      throw new Error(`fleet config: duplicate mac "${opts.mac}" (devices ${seen.get(opts.mac)} and ${opts.deviceType}) — give each device group a unique "mac" or omit it to auto-generate one`);
+      throw new Error(
+        `fleet config: duplicate mac "${opts.mac}" (devices ${seen.get(opts.mac)} and ${opts.deviceType}) — give each device group a unique "mac" or omit it to auto-generate one`,
+      );
     }
     seen.set(opts.mac, opts.deviceType);
   }

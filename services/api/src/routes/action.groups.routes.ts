@@ -26,7 +26,9 @@ actionGroupsRouter.post('/', async (req, res, next) => {
 actionGroupsRouter.post('/assign', async (req, res, next) => {
   try {
     const { name, actionIds } = req.body ?? {};
-    res.status(201).json(await actionGroupsService.assignActions(req.user!.id, name, actionIds?.map(Number)));
+    res
+      .status(201)
+      .json(await actionGroupsService.assignActions(req.user!.id, name, actionIds?.map(Number)));
   } catch (err) {
     next(err);
   }
@@ -50,7 +52,12 @@ actionGroupsRouter.put('/order', async (req, res, next) => {
 actionGroupsRouter.patch('/:id', async (req, res, next) => {
   try {
     const { name, sort_order } = req.body ?? {};
-    res.json(await actionGroupsService.updateGroup(req.user!.id, Number(req.params.id), { name, sort_order }));
+    res.json(
+      await actionGroupsService.updateGroup(req.user!.id, Number(req.params.id), {
+        name,
+        sort_order,
+      }),
+    );
   } catch (err) {
     next(err);
   }

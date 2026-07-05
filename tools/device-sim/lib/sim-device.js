@@ -30,7 +30,11 @@ const isHttpCamera = (a) => (a.camera_transport || 'http') !== 'ws';
 
 // Strictly-greater semver compare ("v2.0.165"), matching firmware OtaService::isNewerVersion.
 function isNewer(a, b) {
-  const p = (s) => String(s).replace(/^[vV]/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const p = (s) =>
+    String(s)
+      .replace(/^[vV]/, '')
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
   const [aM, aMi, aP] = p(a);
   const [bM, bMi, bP] = p(b);
   if (aM !== bM) return aM > bM;
@@ -40,13 +44,13 @@ function isNewer(a, b) {
 
 // Plausible per-implementation_type readings with a slow sine drift so threshold rules can cross.
 const BANDS = {
-  TemperatureAction:    [18, 30],
+  TemperatureAction: [18, 30],
   AirTemperatureAction: [18, 32],
-  HumidityAction:       [35, 75],
-  WaterLevelAction:     [0, 100],
-  PhLevelAction:        [5.5, 7.5],
-  TdsLevelAction:       [400, 1200],
-  CO2LevelAction:       [400, 1500],
+  HumidityAction: [35, 75],
+  WaterLevelAction: [0, 100],
+  PhLevelAction: [5.5, 7.5],
+  TdsLevelAction: [400, 1200],
+  CO2LevelAction: [400, 1500],
 };
 function reading(impl, seed, t) {
   const [lo, hi] = BANDS[impl] || [0, 100];
@@ -57,7 +61,9 @@ function reading(impl, seed, t) {
 
 function decodeJwtExp(token) {
   try {
-    const payload = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8'));
+    const payload = JSON.parse(
+      Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8'),
+    );
     return typeof payload.exp === 'number' ? payload.exp : null;
   } catch {
     return null;
@@ -68,7 +74,11 @@ function decodeJwtExp(token) {
 // WebSocket (Node >=22). Normalises the two event APIs.
 function makeWs(url, { onOpen, onClose, onError }) {
   let Impl;
-  try { Impl = require('ws'); } catch { Impl = global.WebSocket; }
+  try {
+    Impl = require('ws');
+  } catch {
+    Impl = global.WebSocket;
+  }
   if (!Impl) throw new Error("no WebSocket available — install 'ws' or use Node >=22");
   const ws = new Impl(url);
   if (typeof ws.on === 'function') {
@@ -76,7 +86,9 @@ function makeWs(url, { onOpen, onClose, onError }) {
     ws.on('close', onClose);
     ws.on('error', onError || (() => {}));
   } else {
-    try { ws.binaryType = 'arraybuffer'; } catch {}
+    try {
+      ws.binaryType = 'arraybuffer';
+    } catch {}
     ws.addEventListener('open', onOpen);
     ws.addEventListener('close', onClose);
     ws.addEventListener('error', onError || (() => {}));
@@ -95,17 +107,17 @@ const DEFAULTS = {
   mac: 'SIM-AA:BB:CC:DD:EE:01',
   telemetryMs: 5000,
   cameraMs: 2000,
-  cameraResolution: 'SVGA',   // sent when auto-activating a CameraAction capability
-  cameraTransport: 'http',    // 'http' or 'ws'
+  cameraResolution: 'SVGA', // sent when auto-activating a CameraAction capability
+  cameraTransport: 'http', // 'http' or 'ws'
   configRefreshMs: 60000, // 0 disables the periodic re-pull (real firmware only pulls at boot)
   activateAll: true,
-  autoTelemetry: true,   // run telemetry + config-refresh loops in start()
-  camera: true,          // stream camera frames for activated camera capabilities
-  persist: true,         // NVS analog: persist command state to disk
-  statePath: null,       // defaults to a per-MAC file under os.tmpdir()
-  restartOnLoss: false,  // mimic firmware ESP.restart on connection loss (vs auto-reconnect)
-  otaFail: false,        // simulate a failed OTA (ack failed, no reboot)
-  rebootMs: 1500,        // simulated reboot downtime
+  autoTelemetry: true, // run telemetry + config-refresh loops in start()
+  camera: true, // stream camera frames for activated camera capabilities
+  persist: true, // NVS analog: persist command state to disk
+  statePath: null, // defaults to a per-MAC file under os.tmpdir()
+  restartOnLoss: false, // mimic firmware ESP.restart on connection loss (vs auto-reconnect)
+  otaFail: false, // simulate a failed OTA (ack failed, no reboot)
+  rebootMs: 1500, // simulated reboot downtime
   refreshLeadMs: 450000, // refresh the device JWT this long before exp (firmware JWT_REFRESH_POLICY)
   log: () => {},
 };
@@ -141,8 +153,13 @@ class SimDevice extends EventEmitter {
     this._configTimer = null;
     this._t = 0;
     this._intentionalClose = false;
-    this._stateFile = this.opts.statePath ||
-      path.join(os.tmpdir(), 'lattice-sim-state', `${String(this.opts.mac).replace(/[^\w.-]/g, '_')}.json`);
+    this._stateFile =
+      this.opts.statePath ||
+      path.join(
+        os.tmpdir(),
+        'lattice-sim-state',
+        `${String(this.opts.mac).replace(/[^\w.-]/g, '_')}.json`,
+      );
   }
 
   // ── lifecycle ──────────────────────────────────────────────────────────
@@ -150,61 +167,95 @@ class SimDevice extends EventEmitter {
     await this.login();
     this._log(`✔ logged in as ${this.opts.user}`);
     await this.loadCatalog();
-    this._log(`✔ catalog ${this.opts.deviceType} ${this.version} — ${this.catalogCaps.length} capabilities`);
+    this._log(
+      `✔ catalog ${this.opts.deviceType} ${this.version} — ${this.catalogCaps.length} capabilities`,
+    );
     await this.provision();
     this._log(`✔ provisioned — deviceId ${this.deviceId}`);
     // `capabilities` (a list of catalog capability_keys) activates just those, even if
     // activateAll is off — an explicit list is an explicit request to activate them.
-    const wantsSelected = Array.isArray(this.opts.capabilities) && this.opts.capabilities.length > 0;
+    const wantsSelected =
+      Array.isArray(this.opts.capabilities) && this.opts.capabilities.length > 0;
     if (this.opts.activateAll || wantsSelected) {
       const { activated, skipped } = await this.activateAll();
-      this._log(`✔ activated ${activated} capabilit${activated === 1 ? 'y' : 'ies'} via api (skipped ${skipped} already configured)`);
+      this._log(
+        `✔ activated ${activated} capabilit${activated === 1 ? 'y' : 'ies'} via api (skipped ${skipped} already configured)`,
+      );
     }
     this._loadStateFile();
     const { tel, cmd, cam } = await this.pullConfig();
-    this._log(`✔ pulled config — ${this.actions.length} action(s): ${tel} telemetry, ${cmd} command, ${cam} camera`);
+    this._log(
+      `✔ pulled config — ${this.actions.length} action(s): ${tel} telemetry, ${cmd} command, ${cam} camera`,
+    );
     if (this.actions.length === 0) {
-      this._log(`  (nothing activated yet — activate capabilities in the device-config UI; re-pulls every ${this.opts.configRefreshMs}ms)`);
+      this._log(
+        `  (nothing activated yet — activate capabilities in the device-config UI; re-pulls every ${this.opts.configRefreshMs}ms)`,
+      );
     }
     await this.connect();
     this._scheduleRefresh();
     if (this.opts.autoTelemetry) this._startLoops();
     if (this.opts.camera) this._startCamera();
-    this._log('▶ running — honours per-type commands, duration auto-off, refresh, camera, restart/soft-reset/hard-reset/OTA');
+    this._log(
+      '▶ running — honours per-type commands, duration auto-off, refresh, camera, restart/soft-reset/hard-reset/OTA',
+    );
     return this;
   }
 
   async login() {
     const r = await this._http('POST', `${this.opts.apiUrl}/api/auth/login`, null, {
-      username: this.opts.user, password: this.opts.pass,
+      username: this.opts.user,
+      password: this.opts.pass,
     });
     // /auth/login returns { token, refreshToken }; older builds returned a bare JWT string.
     this.appToken = r && typeof r === 'object' && r.token ? r.token : r;
   }
 
   async loadCatalog() {
-    const devices = await this._http('GET', `${this.opts.apiUrl}/api/admin/catalog/devices`, this.appToken);
+    const devices = await this._http(
+      'GET',
+      `${this.opts.apiUrl}/api/admin/catalog/devices`,
+      this.appToken,
+    );
     const dev = devices
       .filter((d) => d.type === this.opts.deviceType)
       .sort((a, b) => (isNewer(a.version, b.version) ? -1 : 1))[0];
-    if (!dev) throw new Error(`no catalog device for type ${this.opts.deviceType} — seed the catalog first`);
+    if (!dev)
+      throw new Error(
+        `no catalog device for type ${this.opts.deviceType} — seed the catalog first`,
+      );
     this.version = dev.version;
-    this.catalogCaps = await this._http('GET', `${this.opts.apiUrl}/api/admin/catalog/devices/${dev.id}/capabilities`, this.appToken);
+    this.catalogCaps = await this._http(
+      'GET',
+      `${this.opts.apiUrl}/api/admin/catalog/devices/${dev.id}/capabilities`,
+      this.appToken,
+    );
   }
 
   async provision() {
-    const { provisioningToken, userId } = await this._http('GET', `${this.opts.gatewayUrl}/api/provisioning/provision-token`, this.appToken);
+    const { provisioningToken, userId } = await this._http(
+      'GET',
+      `${this.opts.gatewayUrl}/api/provisioning/provision-token`,
+      this.appToken,
+    );
     this.userId = userId;
-    const prov = await this._http('POST', `${this.opts.gatewayUrl}/api/provisioning/provision`, provisioningToken, {
-      macAddress: this.opts.mac,
-      deviceType: this.opts.deviceType,
-      version: this.version,
-      capabilities: this.catalogCaps.map((c) => ({
-        capability_key: c.capability_key, label: c.label,
-        implementation_type: c.implementation_type, mqtt_action_type: c.mqtt_action_type,
-        mqtt_action_name: c.mqtt_action_name,
-      })),
-    });
+    const prov = await this._http(
+      'POST',
+      `${this.opts.gatewayUrl}/api/provisioning/provision`,
+      provisioningToken,
+      {
+        macAddress: this.opts.mac,
+        deviceType: this.opts.deviceType,
+        version: this.version,
+        capabilities: this.catalogCaps.map((c) => ({
+          capability_key: c.capability_key,
+          label: c.label,
+          implementation_type: c.implementation_type,
+          mqtt_action_type: c.mqtt_action_type,
+          mqtt_action_name: c.mqtt_action_name,
+        })),
+      },
+    );
     this.deviceId = prov.deviceId;
     this.mqttToken = prov.mqttToken;
     this.refreshToken = prov.refreshToken;
@@ -219,24 +270,43 @@ class SimDevice extends EventEmitter {
   // With `opts.capabilities` set (an array of catalog `capability_key`s, e.g. "outlet",
   // "temperature"), only those are activated; otherwise every catalog capability is.
   async activateAll() {
-    const view = await this._http('GET', `${this.opts.apiUrl}/api/devices/${this.deviceId}/capabilities`, this.appToken);
+    const view = await this._http(
+      'GET',
+      `${this.opts.apiUrl}/api/devices/${this.deviceId}/capabilities`,
+      this.appToken,
+    );
     const filter = Array.isArray(this.opts.capabilities) ? this.opts.capabilities : null;
     const candidates = filter ? view.filter((cap) => filter.includes(cap.capability_key)) : view;
     if (filter) {
       const found = new Set(candidates.map((c) => c.capability_key));
-      for (const key of filter) if (!found.has(key)) this._log(`⚠ requested capability "${key}" not found in catalog for ${this.opts.deviceType} — skipping`);
+      for (const key of filter)
+        if (!found.has(key))
+          this._log(
+            `⚠ requested capability "${key}" not found in catalog for ${this.opts.deviceType} — skipping`,
+          );
     }
     let activated = 0;
     for (const cap of candidates) {
       if (cap.instances.length > 0) continue; // idempotent across runs
       const camera = isCamera(cap.implementation_type);
-      await this._http('POST', `${this.opts.apiUrl}/api/devices/${this.deviceId}/actions`, this.appToken, {
-        capability_id: cap.id,
-        telemetry_interval_ms: cap.mqtt_action_type === 'telemetry' ? (cap.min_telemetry_interval_ms ?? this.opts.telemetryMs) : null,
-        pins: cap.configurable_pins.map((p, i) => ({ capability_pin_id: p.id, pin_number: 10 + i })),
-        camera_resolution: camera ? this.opts.cameraResolution : null,
-        camera_transport:  camera ? this.opts.cameraTransport : null,
-      });
+      await this._http(
+        'POST',
+        `${this.opts.apiUrl}/api/devices/${this.deviceId}/actions`,
+        this.appToken,
+        {
+          capability_id: cap.id,
+          telemetry_interval_ms:
+            cap.mqtt_action_type === 'telemetry'
+              ? (cap.min_telemetry_interval_ms ?? this.opts.telemetryMs)
+              : null,
+          pins: cap.configurable_pins.map((p, i) => ({
+            capability_pin_id: p.id,
+            pin_number: 10 + i,
+          })),
+          camera_resolution: camera ? this.opts.cameraResolution : null,
+          camera_transport: camera ? this.opts.cameraTransport : null,
+        },
+      );
       activated++;
     }
     return { activated, skipped: candidates.length - activated };
@@ -244,14 +314,22 @@ class SimDevice extends EventEmitter {
 
   // PULL configuration — only the device's own active actions (firmware loadFromServer).
   async pullConfig() {
-    const cfg = await this._http('GET', `${this.deviceConfigUrl}?deviceId=${this.deviceId}&version=${this.version}`, this.mqttToken);
+    const cfg = await this._http(
+      'GET',
+      `${this.deviceConfigUrl}?deviceId=${this.deviceId}&version=${this.version}`,
+      this.mqttToken,
+    );
     this.actions = cfg.actions || [];
     for (const a of this.actions) {
       if (a.pins && a.pins.length) {
-        this._log(`[Config] ${a.mqtt_action_name} (${a.implementation_type}) pins: ${a.pins.map((p) => `GPIO${p.pinNumber}/${p.pinMode}`).join(', ')}`);
+        this._log(
+          `[Config] ${a.mqtt_action_name} (${a.implementation_type}) pins: ${a.pins.map((p) => `GPIO${p.pinNumber}/${p.pinMode}`).join(', ')}`,
+        );
       }
     }
-    const tel = this.actions.filter((a) => a.mqtt_action_type === 'telemetry' && !isCamera(a.implementation_type)).length;
+    const tel = this.actions.filter(
+      (a) => a.mqtt_action_type === 'telemetry' && !isCamera(a.implementation_type),
+    ).length;
     const cmd = this.actions.filter((a) => a.mqtt_action_type === 'command').length;
     const cam = this.actions.filter((a) => isCamera(a.implementation_type)).length;
     this.emit('config', { actions: this.actions, tel, cmd, cam });
@@ -263,7 +341,9 @@ class SimDevice extends EventEmitter {
       let resolved = false;
       this._intentionalClose = false;
       this.client = mqtt.connect(`mqtt://${this.opts.mqttHost}:${this.opts.mqttPort}`, {
-        username: String(this.userId), clientId: String(this.deviceId), password: this.mqttToken,
+        username: String(this.userId),
+        clientId: String(this.deviceId),
+        password: this.mqttToken,
         reconnectPeriod: this.opts.restartOnLoss ? 0 : 2000,
         will: { topic: this._statusTopic(), payload: 'offline', retain: true, qos: 0 },
       });
@@ -287,7 +367,10 @@ class SimDevice extends EventEmitter {
           this._publishAck(action, { status: 'ok', value, unsolicited: true });
         }
         this.emit('connect', { version: this.version });
-        if (!resolved) { resolved = true; resolve(); }
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
       });
     });
   }
@@ -325,7 +408,11 @@ class SimDevice extends EventEmitter {
     }
     if (action === 'take_picture') {
       let cmd;
-      try { cmd = JSON.parse(msg); } catch { cmd = {}; }
+      try {
+        cmd = JSON.parse(msg);
+      } catch {
+        cmd = {};
+      }
       const camAction = this.actions.find((a) => isCamera(a.implementation_type));
       if (!camAction) {
         this._log('📷 take_picture received but no camera configured — ignoring');
@@ -338,15 +425,29 @@ class SimDevice extends EventEmitter {
 
     // Normal action command: { value, duration, commandId }.
     let cmd;
-    try { cmd = JSON.parse(msg); } catch { cmd = { value: msg }; }
-    const impl = (this.actions.find((a) => a.mqtt_action_name === action) || {}).implementation_type;
+    try {
+      cmd = JSON.parse(msg);
+    } catch {
+      cmd = { value: msg };
+    }
+    const impl = (this.actions.find((a) => a.mqtt_action_name === action) || {})
+      .implementation_type;
     const ok = validate(impl, cmd.value);
     const value = ok ? normalize(cmd.value) : cmd.value;
     const ack = { status: ok ? 'ok' : 'error', value };
     if (cmd.commandId) ack.commandId = cmd.commandId;
-    this._log(`⇐ command ${action} = ${JSON.stringify(cmd.value)}${ok ? '' : ' (INVALID)'}${cmd.commandId ? ` (cmd ${cmd.commandId})` : ''} → ack ${ack.status}`);
+    this._log(
+      `⇐ command ${action} = ${JSON.stringify(cmd.value)}${ok ? '' : ' (INVALID)'}${cmd.commandId ? ` (cmd ${cmd.commandId})` : ''} → ack ${ack.status}`,
+    );
     this._publishAck(action, ack);
-    this.emit('command', { action, value: cmd.value, commandId: cmd.commandId, duration: cmd.duration, valid: ok, impl });
+    this.emit('command', {
+      action,
+      value: cmd.value,
+      commandId: cmd.commandId,
+      duration: cmd.duration,
+      valid: ok,
+      impl,
+    });
     if (!ok) return; // firmware does not change state on an invalid payload
 
     this._lastState.set(action, value);
@@ -358,21 +459,31 @@ class SimDevice extends EventEmitter {
     const dur = cmd.duration;
     if (dur !== undefined && dur !== '*' && Number(dur) > 0) {
       this._log(`  duration ${dur}s — will auto-off`);
-      this._durationTimers.set(action, setTimeout(() => {
-        this._durationTimers.delete(action);
-        this._lastState.set(action, 'off');
-        this._saveStateFile();
-        if (this.client && this.client.connected) {
-          this._publishAck(action, { status: 'ok', value: 'off', unsolicited: true });
-          this._log(`⏲ ${action} duration elapsed → auto-off (unsolicited ack)`);
-        }
-      }, Number(dur) * 1000));
+      this._durationTimers.set(
+        action,
+        setTimeout(
+          () => {
+            this._durationTimers.delete(action);
+            this._lastState.set(action, 'off');
+            this._saveStateFile();
+            if (this.client && this.client.connected) {
+              this._publishAck(action, { status: 'ok', value: 'off', unsolicited: true });
+              this._log(`⏲ ${action} duration elapsed → auto-off (unsolicited ack)`);
+            }
+          },
+          Number(dur) * 1000,
+        ),
+      );
     }
   }
 
   async _handleOta(msg) {
     let p;
-    try { p = JSON.parse(msg); } catch { return; }
+    try {
+      p = JSON.parse(msg);
+    } catch {
+      return;
+    }
     if (!p.version || !p.url) return;
     if (!isNewer(p.version, this.version)) {
       this._log(`⊘ OTA ${p.version} ignored (current ${this.version}, not newer)`);
@@ -389,8 +500,8 @@ class SimDevice extends EventEmitter {
     this._log(`⇩ OTA ${this.version} → ${p.version} from ${p.url} — "flashing"...`);
     this._publishAck('ota', { status: 'ok', value: `starting:${p.version}` });
     this.emit('ota', { from: this.version, to: p.version, accepted: true });
-    this.version = p.version;       // adopt new firmware version
-    await this.reboot();            // reconnect on the NEW version topic → current_firmware_version
+    this.version = p.version; // adopt new firmware version
+    await this.reboot(); // reconnect on the NEW version topic → current_firmware_version
   }
 
   // ── simulated reboot ─────────────────────────────────────────────────────
@@ -398,10 +509,15 @@ class SimDevice extends EventEmitter {
     this._clearDurationTimers();
     this._stopCamera();
     this._intentionalClose = true;
-    try { this.client && this.client.publish(this._statusTopic(), 'offline', { retain: true }); } catch {}
+    try {
+      this.client && this.client.publish(this._statusTopic(), 'offline', { retain: true });
+    } catch {}
     if (this.client) await new Promise((r) => this.client.end(true, {}, r));
     await sleep(this.opts.rebootMs);
-    if (reprovision) { await this.provision(); this._log(`  re-provisioned — deviceId ${this.deviceId}`); }
+    if (reprovision) {
+      await this.provision();
+      this._log(`  re-provisioned — deviceId ${this.deviceId}`);
+    }
     await this.connect();
     const { tel, cmd } = await this.pullConfig();
     this._scheduleRefresh();
@@ -412,18 +528,26 @@ class SimDevice extends EventEmitter {
 
   // ── telemetry + config-refresh loops ─────────────────────────────────────
   _startLoops() {
-    this._timers.push(setInterval(() => {
-      this._t += 1;
-      if (!this.client || !this.client.connected) return;
-      const now = Date.now();
-      for (const a of this.actions) {
-        if (a.mqtt_action_type !== 'telemetry' || isCamera(a.implementation_type)) continue;
-        const interval = a.telemetry_interval_ms && a.telemetry_interval_ms > 0 ? a.telemetry_interval_ms : this.opts.telemetryMs;
-        if (now - (this._lastPub.get(a.mqtt_action_name) ?? 0) < interval) continue;
-        this._lastPub.set(a.mqtt_action_name, now);
-        this.publishTelemetry(a.mqtt_action_name, reading(a.implementation_type, a.mqtt_action_name.length, this._t));
-      }
-    }, 1000));
+    this._timers.push(
+      setInterval(() => {
+        this._t += 1;
+        if (!this.client || !this.client.connected) return;
+        const now = Date.now();
+        for (const a of this.actions) {
+          if (a.mqtt_action_type !== 'telemetry' || isCamera(a.implementation_type)) continue;
+          const interval =
+            a.telemetry_interval_ms && a.telemetry_interval_ms > 0
+              ? a.telemetry_interval_ms
+              : this.opts.telemetryMs;
+          if (now - (this._lastPub.get(a.mqtt_action_name) ?? 0) < interval) continue;
+          this._lastPub.set(a.mqtt_action_name, now);
+          this.publishTelemetry(
+            a.mqtt_action_name,
+            reading(a.implementation_type, a.mqtt_action_name.length, this._t),
+          );
+        }
+      }, 1000),
+    );
 
     // Periodic config re-pull is a sim convenience (real firmware only pulls at boot). It's a
     // no-op unless configRefreshMs > 0, and it never overlaps: it reschedules itself only after
@@ -434,7 +558,9 @@ class SimDevice extends EventEmitter {
           if (this.client && this.client.connected) {
             try {
               const { tel, cmd, cam } = await this.pullConfig();
-              this._log(`↻ config refreshed — ${this.actions.length} action(s): ${tel} telemetry, ${cmd} command, ${cam} camera`);
+              this._log(
+                `↻ config refreshed — ${this.actions.length} action(s): ${tel} telemetry, ${cmd} command, ${cam} camera`,
+              );
               if (this.opts.camera) this._startCamera();
             } catch (e) {
               this._emitErr(e);
@@ -448,7 +574,8 @@ class SimDevice extends EventEmitter {
   }
 
   publishTelemetry(name, value) {
-    if (this.client) this.client.publish(`${this._base()}/${this.version}/telemetry/${name}`, String(value));
+    if (this.client)
+      this.client.publish(`${this._base()}/${this.version}/telemetry/${name}`, String(value));
     this.emit('telemetry', { action: name, value });
   }
 
@@ -459,16 +586,29 @@ class SimDevice extends EventEmitter {
   // ── camera (WS + HTTP) ───────────────────────────────────────────────────
   _startCamera() {
     const camActions = this.actions.filter((a) => isCamera(a.implementation_type));
-    const wanted = new Set(camActions.map((a) => (isHttpCamera(a) ? `http:${a.mqtt_action_name}` : a.mqtt_action_name)));
+    const wanted = new Set(
+      camActions.map((a) => (isHttpCamera(a) ? `http:${a.mqtt_action_name}` : a.mqtt_action_name)),
+    );
     for (const [key, conn] of this._cameraConns) {
-      if (!wanted.has(key)) { try { conn.close(); } catch {} this._cameraConns.delete(key); }
+      if (!wanted.has(key)) {
+        try {
+          conn.close();
+        } catch {}
+        this._cameraConns.delete(key);
+      }
     }
     for (const a of camActions) {
       if (isHttpCamera(a)) {
         const key = `http:${a.mqtt_action_name}`;
         if (this._cameraConns.has(key)) continue;
-        const interval = a.telemetry_interval_ms && a.telemetry_interval_ms > 0 ? a.telemetry_interval_ms : this.opts.cameraMs;
-        const tmr = setInterval(() => this._sendHttpFrame(a.mqtt_action_name).catch((e) => this._emitErr(e)), interval);
+        const interval =
+          a.telemetry_interval_ms && a.telemetry_interval_ms > 0
+            ? a.telemetry_interval_ms
+            : this.opts.cameraMs;
+        const tmr = setInterval(
+          () => this._sendHttpFrame(a.mqtt_action_name).catch((e) => this._emitErr(e)),
+          interval,
+        );
         this._cameraConns.set(key, { close: () => clearInterval(tmr) });
       } else {
         if (this._cameraConns.has(a.mqtt_action_name)) continue;
@@ -482,7 +622,10 @@ class SimDevice extends EventEmitter {
     // ws/camera-stream.ts republishes either the same way) — CameraAction always connects
     // to /ws/stream now that the old per-purpose action classes are gone.
     const url = `${this.wsStreamUrl.replace(/^http/, 'ws')}/ws/stream?token=${encodeURIComponent(this.mqttToken)}&action=${encodeURIComponent(a.mqtt_action_name)}`;
-    const interval = a.telemetry_interval_ms && a.telemetry_interval_ms > 0 ? a.telemetry_interval_ms : this.opts.cameraMs;
+    const interval =
+      a.telemetry_interval_ms && a.telemetry_interval_ms > 0
+        ? a.telemetry_interval_ms
+        : this.opts.cameraMs;
     let frameTmr = null;
     let sending = false; // re-entrancy guard: skip a tick if the previous frame is still encoding
     const ws = makeWs(url, {
@@ -493,22 +636,46 @@ class SimDevice extends EventEmitter {
           sending = true;
           makeFrame()
             .then((frame) => {
-              try { ws.send(frame); this.emit('camera-frame', { action: a.mqtt_action_name, transport: 'ws', bytes: frame.length }); } catch {}
+              try {
+                ws.send(frame);
+                this.emit('camera-frame', {
+                  action: a.mqtt_action_name,
+                  transport: 'ws',
+                  bytes: frame.length,
+                });
+              } catch {}
             })
             .catch((e) => this._emitErr(e))
-            .finally(() => { sending = false; });
+            .finally(() => {
+              sending = false;
+            });
         }, interval);
       },
-      onClose: () => { if (frameTmr) clearInterval(frameTmr); },
+      onClose: () => {
+        if (frameTmr) clearInterval(frameTmr);
+      },
       onError: (e) => this._log(`📷 ${a.mqtt_action_name} WS error: ${(e && e.message) || e}`),
     });
-    this._cameraConns.set(a.mqtt_action_name, { ws, close: () => { if (frameTmr) clearInterval(frameTmr); try { ws.close(); } catch {} } });
+    this._cameraConns.set(a.mqtt_action_name, {
+      ws,
+      close: () => {
+        if (frameTmr) clearInterval(frameTmr);
+        try {
+          ws.close();
+        } catch {}
+      },
+    });
   }
 
   async _sendHttpFrame(name, commandId) {
     const frame = await makeFrame();
     const qs = commandId ? `&commandId=${encodeURIComponent(commandId)}` : '';
-    await this._httpRaw(`${this.cameraHttpUrl}/api/camera/frame?action=${encodeURIComponent(name)}${qs}`, this.mqttToken, frame, 'image/jpeg');
+    await this._httpRaw(
+      `${this.cameraHttpUrl}/api/camera/frame?action=${encodeURIComponent(name)}${qs}`,
+      this.mqttToken,
+      frame,
+      'image/jpeg',
+    );
     this.emit('camera-frame', { action: name, transport: 'http', bytes: frame.length, commandId });
   }
 
@@ -529,8 +696,15 @@ class SimDevice extends EventEmitter {
       try {
         existing.ws.send(JSON.stringify({ commandId }));
         existing.ws.send(frame);
-        this.emit('camera-frame', { action: a.mqtt_action_name, transport: 'ws', bytes: frame.length, commandId });
-      } catch (e) { this._emitErr(e); }
+        this.emit('camera-frame', {
+          action: a.mqtt_action_name,
+          transport: 'ws',
+          bytes: frame.length,
+          commandId,
+        });
+      } catch (e) {
+        this._emitErr(e);
+      }
       return;
     }
     const url = `${this.wsStreamUrl.replace(/^http/, 'ws')}/ws/stream?token=${encodeURIComponent(this.mqttToken)}&action=${encodeURIComponent(a.mqtt_action_name)}`;
@@ -540,18 +714,37 @@ class SimDevice extends EventEmitter {
           try {
             ws.send(JSON.stringify({ commandId }));
             ws.send(frame);
-            this.emit('camera-frame', { action: a.mqtt_action_name, transport: 'ws', bytes: frame.length, commandId });
-          } catch (e) { this._emitErr(e); }
-          setTimeout(() => { try { ws.close(); } catch {} resolve(); }, 200);
+            this.emit('camera-frame', {
+              action: a.mqtt_action_name,
+              transport: 'ws',
+              bytes: frame.length,
+              commandId,
+            });
+          } catch (e) {
+            this._emitErr(e);
+          }
+          setTimeout(() => {
+            try {
+              ws.close();
+            } catch {}
+            resolve();
+          }, 200);
         },
-        onError: (e) => { this._log(`📷 ${a.mqtt_action_name} on-demand WS error: ${(e && e.message) || e}`); resolve(); },
+        onError: (e) => {
+          this._log(`📷 ${a.mqtt_action_name} on-demand WS error: ${(e && e.message) || e}`);
+          resolve();
+        },
         onClose: () => resolve(),
       });
     });
   }
 
   _stopCamera() {
-    for (const conn of this._cameraConns.values()) { try { conn.close(); } catch {} }
+    for (const conn of this._cameraConns.values()) {
+      try {
+        conn.close();
+      } catch {}
+    }
     this._cameraConns.clear();
   }
 
@@ -565,7 +758,10 @@ class SimDevice extends EventEmitter {
       this._refreshTimer = setTimeout(() => this._scheduleRefresh(), MAX_TIMEOUT_MS);
       return;
     }
-    this._refreshTimer = setTimeout(() => this.refreshTokenNow().catch((e) => this._emitErr(e)), delay);
+    this._refreshTimer = setTimeout(
+      () => this.refreshTokenNow().catch((e) => this._emitErr(e)),
+      delay,
+    );
   }
 
   async refreshTokenNow() {
@@ -588,10 +784,18 @@ class SimDevice extends EventEmitter {
     for (const tm of this._timers) clearInterval(tm);
     this._timers = [];
     this._clearDurationTimers();
-    if (this._refreshTimer) { clearTimeout(this._refreshTimer); this._refreshTimer = null; }
-    if (this._configTimer) { clearTimeout(this._configTimer); this._configTimer = null; }
+    if (this._refreshTimer) {
+      clearTimeout(this._refreshTimer);
+      this._refreshTimer = null;
+    }
+    if (this._configTimer) {
+      clearTimeout(this._configTimer);
+      this._configTimer = null;
+    }
     this._stopCamera();
-    try { this.client && this.client.publish(this._statusTopic(), 'offline', { retain: true }); } catch {}
+    try {
+      this.client && this.client.publish(this._statusTopic(), 'offline', { retain: true });
+    } catch {}
     if (this.client) await new Promise((r) => this.client.end(false, {}, r));
     this.client = null;
   }
@@ -599,7 +803,11 @@ class SimDevice extends EventEmitter {
   async cleanup() {
     await this.stop();
     if (this.deviceId && this.appToken) {
-      await this._http('DELETE', `${this.opts.apiUrl}/api/devices/${this.deviceId}`, this.appToken).catch(() => {});
+      await this._http(
+        'DELETE',
+        `${this.opts.apiUrl}/api/devices/${this.deviceId}`,
+        this.appToken,
+      ).catch(() => {});
     }
   }
 
@@ -608,21 +816,37 @@ class SimDevice extends EventEmitter {
   // predicate), rejecting after `timeoutMs`.
   waitFor(event, predicate, timeoutMs = 5000) {
     return new Promise((resolve, reject) => {
-      const onEvt = (p) => { if (!predicate || predicate(p)) { cleanup(); resolve(p); } };
-      const timer = setTimeout(() => { cleanup(); reject(new Error(`waitFor('${event}') timed out after ${timeoutMs}ms`)); }, timeoutMs);
-      const cleanup = () => { clearTimeout(timer); this.off(event, onEvt); };
+      const onEvt = (p) => {
+        if (!predicate || predicate(p)) {
+          cleanup();
+          resolve(p);
+        }
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error(`waitFor('${event}') timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.off(event, onEvt);
+      };
       this.on(event, onEvt);
     });
   }
 
   // ── internals ────────────────────────────────────────────────────────────
-  _base() { return `users/${this.userId}/devices/${this.deviceId}`; }
-  _statusTopic() { return `${this._base()}/${this.version}/status`; }
+  _base() {
+    return `users/${this.userId}/devices/${this.deviceId}`;
+  }
+  _statusTopic() {
+    return `${this._base()}/${this.version}/status`;
+  }
 
   _publishAck(action, { status, value, commandId, unsolicited }) {
     const body = { status, value };
     if (commandId) body.commandId = commandId;
-    if (this.client) this.client.publish(`${this._base()}/${this.version}/ack/${action}`, JSON.stringify(body));
+    if (this.client)
+      this.client.publish(`${this._base()}/${this.version}/ack/${action}`, JSON.stringify(body));
     this.emit('ack', { action, status, value, commandId, unsolicited: !!unsolicited });
   }
 
@@ -636,8 +860,11 @@ class SimDevice extends EventEmitter {
     try {
       const data = JSON.parse(fs.readFileSync(this._stateFile, 'utf8'));
       for (const [k, v] of Object.entries(data)) this._lastState.set(k, v);
-      if (this._lastState.size) this._log(`[NVS] restored ${this._lastState.size} saved action state(s)`);
-    } catch { /* no saved state */ }
+      if (this._lastState.size)
+        this._log(`[NVS] restored ${this._lastState.size} saved action state(s)`);
+    } catch {
+      /* no saved state */
+    }
   }
 
   _saveStateFile() {
@@ -645,7 +872,9 @@ class SimDevice extends EventEmitter {
     try {
       fs.mkdirSync(path.dirname(this._stateFile), { recursive: true });
       fs.writeFileSync(this._stateFile, JSON.stringify(Object.fromEntries(this._lastState)));
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   }
 
   _emitErr(e) {
@@ -665,7 +894,9 @@ class SimDevice extends EventEmitter {
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
     } catch (e) {
-      throw new Error(`${method} ${url} → ${(e.cause && e.cause.code) || e.message} (is the service running?)`);
+      throw new Error(
+        `${method} ${url} → ${(e.cause && e.cause.code) || e.message} (is the service running?)`,
+      );
     }
     if (!res.ok) throw new Error(`${method} ${url} → ${res.status}: ${await res.text()}`);
     const text = await res.text();
@@ -675,7 +906,10 @@ class SimDevice extends EventEmitter {
   async _httpRaw(url, token, buf, contentType) {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': contentType, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: {
+        'Content-Type': contentType,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: buf,
     });
     if (!res.ok) throw new Error(`POST ${url} → ${res.status}: ${await res.text()}`);

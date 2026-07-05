@@ -52,7 +52,9 @@ class ActionGroupsService {
         select: { id: true },
       });
       if (conflict && conflict.id !== id) {
-        throw Object.assign(new Error('A group with this name already exists'), { statusCode: 409 });
+        throw Object.assign(new Error('A group with this name already exists'), {
+          statusCode: 409,
+        });
       }
     }
     return db.userActionGroup.update({
@@ -96,11 +98,13 @@ class ActionGroupsService {
       throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
     }
 
-    const group = await db.userActionGroup.findUnique({
-      where: { user_id_name: { user_id: userId, name: trimmed } },
-    }) ?? await db.userActionGroup.create({
-      data: { user_id: userId, name: trimmed, sort_order: 0 },
-    });
+    const group =
+      (await db.userActionGroup.findUnique({
+        where: { user_id_name: { user_id: userId, name: trimmed } },
+      })) ??
+      (await db.userActionGroup.create({
+        data: { user_id: userId, name: trimmed, sort_order: 0 },
+      }));
 
     await db.userDeviceAction.updateMany({
       where: { id: { in: actionIds } },

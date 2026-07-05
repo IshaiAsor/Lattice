@@ -52,7 +52,10 @@ async function onTrigger(t: PipelineTriggerPayload): Promise<void> {
   // The API marks the run 'cancelled' synchronously before publishing PIPELINE_CANCEL, but
   // message delivery order across queues isn't guaranteed — re-check here so a cancel that
   // beats the trigger message here doesn't get silently overwritten back to 'running'.
-  const existing = await db.pipelineRun.findUnique({ where: { id: runId }, select: { status: true } });
+  const existing = await db.pipelineRun.findUnique({
+    where: { id: runId },
+    select: { status: true },
+  });
   if (existing?.status === 'cancelled') {
     log.info({ runId }, 'pipeline run was cancelled before dispatch — skipping');
     return;
@@ -60,17 +63,17 @@ async function onTrigger(t: PipelineTriggerPayload): Promise<void> {
 
   await db.pipelineRun.update({
     where: { id: runId },
-    data:  { status: 'running' },
+    data: { status: 'running' },
   });
 
   const plan = await loadPipeline(pipelineId);
   const run: Run = {
-    userId:          plan.userId,
+    userId: plan.userId,
     pipelineId,
     runId,
     plan,
-    index:           0,
-    context:         {},
+    index: 0,
+    context: {},
     isDryRun,
     sensorOverrides,
   };
@@ -82,7 +85,10 @@ async function onTrigger(t: PipelineTriggerPayload): Promise<void> {
 async function advance(run: Run): Promise<void> {
   while (run.index < run.plan.stages.length) {
     const stage = run.plan.stages[run.index];
-    log.info({ runId: run.runId, stageId: stage.dbId, stageType: stage.type, index: run.index }, 'advancing to stage');
+    log.info(
+      { runId: run.runId, stageId: stage.dbId, stageType: stage.type, index: run.index },
+      'advancing to stage',
+    );
 
     if (stage.type === 'enrich') {
       await runEnrich(channel, run, stage);
@@ -104,14 +110,20 @@ async function advance(run: Run): Promise<void> {
     // VLM stage with nothing to look at — enrich already tried a live/override capture and
     // the sensor_history fallback, so if run.context still has no image there's truly none.
     if (stage.model.kind === 'vlm' && !('image' in run.context)) {
-      const skippedOutput = { skipped: true, reason: 'no camera frame available (live capture and history both empty)' };
+      const skippedOutput = {
+        skipped: true,
+        reason: 'no camera frame available (live capture and history both empty)',
+      };
       await db.pipelineRunStage.upsert({
-        where:  { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
+        where: { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
         update: { status: 'skipped', output: skippedOutput, completed_at: new Date() },
         create: {
-          run_id: run.runId, stage_id: stage.dbId,
-          status: 'skipped', output: skippedOutput,
-          started_at: new Date(), completed_at: new Date(),
+          run_id: run.runId,
+          stage_id: stage.dbId,
+          status: 'skipped',
+          output: skippedOutput,
+          started_at: new Date(),
+          completed_at: new Date(),
         },
       });
       log.info({ runId: run.runId, stageId: stage.dbId }, 'VLM stage skipped — no image available');
@@ -122,23 +134,32 @@ async function advance(run: Run): Promise<void> {
     // dispatch infer to executor — always write input so the built prompt is persisted
     const stageInput = run.context as Prisma.InputJsonValue;
     await db.pipelineRunStage.upsert({
-      where:  { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
+      where: { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
       update: { status: 'running', started_at: new Date(), input: stageInput },
-      create: { run_id: run.runId, stage_id: stage.dbId, status: 'running', started_at: new Date(), input: stageInput },
+      create: {
+        run_id: run.runId,
+        stage_id: stage.dbId,
+        status: 'running',
+        started_at: new Date(),
+        input: stageInput,
+      },
     });
 
     const payload: PipelineStagePayload = {
-      userId:        String(run.userId),
-      deviceId:      '',
-      pipelineId:    String(run.pipelineId),
+      userId: String(run.userId),
+      deviceId: '',
+      pipelineId: String(run.pipelineId),
       pipelineRunId: String(run.runId),
-      stageId:       String(stage.dbId),
-      stageName:     `${stage.model.kind}/${stage.model.name}/${stage.model.version}`,
-      stageKind:     stage.model.kind,
-      context:       run.context,
+      stageId: String(stage.dbId),
+      stageName: `${stage.model.kind}/${stage.model.name}/${stage.model.version}`,
+      stageKind: stage.model.kind,
+      context: run.context,
     };
     publish(channel, mlStageRK(stage.model.kind, stage.model.name, stage.model.version), payload);
-    log.info({ runId: run.runId, stageId: stage.dbId, model: stage.model }, 'pipeline stage dispatched');
+    log.info(
+      { runId: run.runId, stageId: stage.dbId, model: stage.model },
+      'pipeline stage dispatched',
+    );
     return;
   }
 
@@ -147,23 +168,36 @@ async function advance(run: Run): Promise<void> {
 
 async function onStageDone(d: PipelineStageDonePayload): Promise<void> {
   const runId = Number(d.pipelineRunId);
-  const run   = runs.get(runId);
+  const run = runs.get(runId);
   log.info({ runId, stageId: d.stageId, status: d.status }, 'PIPELINE_STAGE_DONE received');
   if (!run) {
-    log.warn({ runId, stageId: d.stageId }, 'PIPELINE_STAGE_DONE for unknown/finished run — dropped');
+    log.warn(
+      { runId, stageId: d.stageId },
+      'PIPELINE_STAGE_DONE for unknown/finished run — dropped',
+    );
     return;
   }
 
   const stageDbId = Number(d.stageId);
   const stageOutput = d.output
-    ? (d.error ? { ...(d.output as Record<string, unknown>), _error: d.error } : d.output)
-    : (d.error ? { _error: d.error } : undefined);
+    ? d.error
+      ? { ...(d.output as Record<string, unknown>), _error: d.error }
+      : d.output
+    : d.error
+      ? { _error: d.error }
+      : undefined;
   await db.pipelineRunStage.upsert({
-    where:  { run_id_stage_id: { run_id: runId, stage_id: stageDbId } },
-    update: { status: d.status, output: stageOutput as Prisma.InputJsonValue | undefined, completed_at: new Date() },
+    where: { run_id_stage_id: { run_id: runId, stage_id: stageDbId } },
+    update: {
+      status: d.status,
+      output: stageOutput as Prisma.InputJsonValue | undefined,
+      completed_at: new Date(),
+    },
     create: {
-      run_id: runId, stage_id: stageDbId,
-      status: d.status, output: stageOutput as Prisma.InputJsonValue | undefined,
+      run_id: runId,
+      stage_id: stageDbId,
+      status: d.status,
+      output: stageOutput as Prisma.InputJsonValue | undefined,
       completed_at: new Date(),
     },
   });
@@ -183,16 +217,21 @@ async function finish(run: Run, status: 'completed' | 'failed', error?: string):
   runs.delete(run.runId);
   await db.pipelineRun.update({
     where: { id: run.runId },
-    data:  { status, completed_at: new Date() },
+    data: { status, completed_at: new Date() },
   });
   const result: PipelineResultPayload = {
-    userId:        String(run.userId),
-    pipelineId:    String(run.pipelineId),
+    userId: String(run.userId),
+    pipelineId: String(run.pipelineId),
     pipelineRunId: String(run.runId),
     status,
     error,
   };
   publish(channel, RK.PIPELINE_RESULT, result);
-  emitPipelineRunUpdate(run.userId, { runId: run.runId, pipelineId: run.pipelineId, status, error });
+  emitPipelineRunUpdate(run.userId, {
+    runId: run.runId,
+    pipelineId: run.pipelineId,
+    status,
+    error,
+  });
   log.info({ runId: run.runId, status }, 'pipeline run finished');
 }

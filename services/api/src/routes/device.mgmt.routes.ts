@@ -43,7 +43,8 @@ deviceMgmtRouter.get('/:id/capabilities', async (req, res, next) => {
 
 deviceMgmtRouter.post('/:id/actions', async (req, res, next) => {
   try {
-    const { capability_id, telemetry_interval_ms, pins, camera_resolution, camera_transport } = req.body ?? {};
+    const { capability_id, telemetry_interval_ms, pins, camera_resolution, camera_transport } =
+      req.body ?? {};
     res.status(201).json(
       await deviceMgmtService.activateCapability(req.user!.id, Number(req.params.id), {
         capability_id,
@@ -60,7 +61,8 @@ deviceMgmtRouter.post('/:id/actions', async (req, res, next) => {
 
 deviceMgmtRouter.patch('/:id/actions/:actionId', async (req, res, next) => {
   try {
-    const { name, telemetry_interval_ms, pins, camera_resolution, camera_transport } = req.body ?? {};
+    const { name, telemetry_interval_ms, pins, camera_resolution, camera_transport } =
+      req.body ?? {};
     await deviceMgmtService.updateActivatedAction(
       req.user!.id,
       Number(req.params.id),

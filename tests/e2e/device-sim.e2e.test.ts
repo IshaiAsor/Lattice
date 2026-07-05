@@ -5,8 +5,18 @@
 // Run: `npm run test:e2e` (requires `docker compose up -d` + the backend services + seeded catalog).
 
 import {
-  SimDevice, itStack, stackUp, login, apiGet, poll, backendPublisher, publishCommand,
-  API_URL, GATEWAY_URL, MQTT_HOST, MQTT_PORT,
+  SimDevice,
+  itStack,
+  stackUp,
+  login,
+  apiGet,
+  poll,
+  backendPublisher,
+  publishCommand,
+  API_URL,
+  GATEWAY_URL,
+  MQTT_HOST,
+  MQTT_PORT,
 } from './helpers/stack';
 import type { MqttClient } from 'mqtt';
 
@@ -28,8 +38,8 @@ describe('device-sim e2e', () => {
       mqttPort: MQTT_PORT,
       mac: MAC,
       deviceType: process.env.DEVICE_TYPE || 'ESP32S3_MINI',
-      persist: false,        // don't touch the on-disk NVS file during tests
-      autoTelemetry: false,  // tests drive telemetry explicitly for determinism
+      persist: false, // don't touch the on-disk NVS file during tests
+      autoTelemetry: false, // tests drive telemetry explicitly for determinism
       camera: false,
     });
     await dev.start();
@@ -51,25 +61,49 @@ describe('device-sim e2e', () => {
 
   itStack('telemetry updates the action current state', async () => {
     const sensor = dev.actions.find(
-      (a: any) => a.mqtt_action_type === 'telemetry' && !/camera|stream|picture/i.test(a.implementation_type),
+      (a: any) =>
+        a.mqtt_action_type === 'telemetry' && !/camera|stream|picture/i.test(a.implementation_type),
     );
-    if (!sensor) { console.warn('no telemetry action in catalog — skipping'); return; }
+    if (!sensor) {
+      console.warn('no telemetry action in catalog — skipping');
+      return;
+    }
 
     dev.publishTelemetry(sensor.mqtt_action_name, 42);
     const actions = await poll(
       () => apiGet('/api/actions', token),
-      (list: any[]) => list.some((a) => a.deviceId === dev.deviceId && a.mqttName === sensor.mqtt_action_name && a.state === '42'),
+      (list: any[]) =>
+        list.some(
+          (a) =>
+            a.deviceId === dev.deviceId &&
+            a.mqttName === sensor.mqtt_action_name &&
+            a.state === '42',
+        ),
     );
-    expect(actions.find((a: any) => a.deviceId === dev.deviceId && a.mqttName === sensor.mqtt_action_name).state).toBe('42');
+    expect(
+      actions.find(
+        (a: any) => a.deviceId === dev.deviceId && a.mqttName === sensor.mqtt_action_name,
+      ).state,
+    ).toBe('42');
   });
 
   itStack('valid command → ok ack (echoes commandId) and state update', async () => {
-    if (!pub) { console.warn('no app MQTT creds (MQTT_APP_*) — skipping command round-trip'); return; }
+    if (!pub) {
+      console.warn('no app MQTT creds (MQTT_APP_*) — skipping command round-trip');
+      return;
+    }
     const outlet = dev.actions.find((a: any) => a.implementation_type === 'OutletCommandAction');
-    if (!outlet) { console.warn('no outlet command in catalog — skipping'); return; }
+    if (!outlet) {
+      console.warn('no outlet command in catalog — skipping');
+      return;
+    }
 
     const commandId = `e2e-${Date.now()}`;
-    const ackP = dev.waitFor('ack', (a: any) => a.action === outlet.mqtt_action_name && a.commandId === commandId, 8000);
+    const ackP = dev.waitFor(
+      'ack',
+      (a: any) => a.action === outlet.mqtt_action_name && a.commandId === commandId,
+      8000,
+    );
     publishCommand(pub, dev, outlet.mqtt_action_name, { value: 'on', commandId });
     const ack = await ackP;
     expect(ack.status).toBe('ok');
@@ -77,15 +111,31 @@ describe('device-sim e2e', () => {
 
     const actions = await poll(
       () => apiGet('/api/actions', token),
-      (list: any[]) => list.some((a) => a.deviceId === dev.deviceId && a.mqttName === outlet.mqtt_action_name && a.state === 'on'),
+      (list: any[]) =>
+        list.some(
+          (a) =>
+            a.deviceId === dev.deviceId &&
+            a.mqttName === outlet.mqtt_action_name &&
+            a.state === 'on',
+        ),
     );
-    expect(actions.find((a: any) => a.deviceId === dev.deviceId && a.mqttName === outlet.mqtt_action_name).state).toBe('on');
+    expect(
+      actions.find(
+        (a: any) => a.deviceId === dev.deviceId && a.mqttName === outlet.mqtt_action_name,
+      ).state,
+    ).toBe('on');
   });
 
   itStack('invalid command → error ack (no state change)', async () => {
-    if (!pub) { console.warn('no app MQTT creds — skipping'); return; }
+    if (!pub) {
+      console.warn('no app MQTT creds — skipping');
+      return;
+    }
     const outlet = dev.actions.find((a: any) => a.implementation_type === 'OutletCommandAction');
-    if (!outlet) { console.warn('no outlet command in catalog — skipping'); return; }
+    if (!outlet) {
+      console.warn('no outlet command in catalog — skipping');
+      return;
+    }
 
     const commandId = `e2e-bad-${Date.now()}`;
     const ackP = dev.waitFor('ack', (a: any) => a.commandId === commandId, 8000);
@@ -95,9 +145,15 @@ describe('device-sim e2e', () => {
   });
 
   itStack('duration command auto-offs with an unsolicited ack', async () => {
-    if (!pub) { console.warn('no app MQTT creds — skipping'); return; }
+    if (!pub) {
+      console.warn('no app MQTT creds — skipping');
+      return;
+    }
     const outlet = dev.actions.find((a: any) => a.implementation_type === 'OutletCommandAction');
-    if (!outlet) { console.warn('no outlet command in catalog — skipping'); return; }
+    if (!outlet) {
+      console.warn('no outlet command in catalog — skipping');
+      return;
+    }
 
     const commandId = `e2e-dur-${Date.now()}`;
     const okP = dev.waitFor('ack', (a: any) => a.commandId === commandId, 8000);

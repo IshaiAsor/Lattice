@@ -14,8 +14,9 @@ declare global {
 }
 
 const jwtService = new JwtService(config.jwt.secret, {
-  [JwtPurpose.google_cloud_to_cloud_login]:         config.jwt.googleCloudToCloudLoginExpiresIn,
-  [JwtPurpose.google_cloud_to_cloud_login_refresh]: config.jwt.googleCloudToCloudLoginRefreshExpiresIn,
+  [JwtPurpose.google_cloud_to_cloud_login]: config.jwt.googleCloudToCloudLoginExpiresIn,
+  [JwtPurpose.google_cloud_to_cloud_login_refresh]:
+    config.jwt.googleCloudToCloudLoginRefreshExpiresIn,
 });
 
 function extractToken(req: Request): string {

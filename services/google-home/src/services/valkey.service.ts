@@ -13,7 +13,11 @@ export const valkeyService = {
   async get<T>(key: string): Promise<T | null> {
     const raw = await client.get(key);
     if (!raw) return null;
-    try { return JSON.parse(raw) as T; } catch { return raw as unknown as T; }
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return raw as unknown as T;
+    }
   },
   async del(key: string): Promise<void> {
     await client.del(key);

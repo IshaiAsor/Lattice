@@ -19,7 +19,11 @@ async function main() {
   const ch = await connect(config.rabbitmqUrl);
   log.info('RabbitMQ connected');
 
-  await consume<ActionResultPayload>(ch, QUEUES.ACTION_RESULT_GOOGLE_HOME, actionResultConsumer(ch));
+  await consume<ActionResultPayload>(
+    ch,
+    QUEUES.ACTION_RESULT_GOOGLE_HOME,
+    actionResultConsumer(ch),
+  );
   log.info('action-result consumer started');
 
   const app = express();
@@ -43,4 +47,3 @@ main().catch((err) => {
   log.error({ err }, 'Fatal startup error');
   process.exit(1);
 });
-

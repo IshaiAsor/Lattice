@@ -55,7 +55,10 @@ export function deviceStatusConsumer() {
             },
           }),
         ]);
-        log.info({ userDeviceId, version }, 'OTA confirmed — actions activated, firmware version updated');
+        log.info(
+          { userDeviceId, version },
+          'OTA confirmed — actions activated, firmware version updated',
+        );
       }
     }
 

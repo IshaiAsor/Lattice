@@ -14,7 +14,10 @@ export async function runEnrich(
   run: Run,
   stage: Extract<PipelineStagePlan, { type: 'enrich' }>,
 ): Promise<void> {
-  log.info({ runId: run.runId, stageId: stage.dbId, isDryRun: run.isDryRun }, 'enrich stage starting');
+  log.info(
+    { runId: run.runId, stageId: stage.dbId, isDryRun: run.isDryRun },
+    'enrich stage starting',
+  );
   const started = new Date();
   let currentState: Record<string, Record<string, unknown>>;
   let sensorDigest: Record<string, Record<string, unknown>>;
@@ -36,7 +39,10 @@ export async function runEnrich(
       currentState[sensor.group_name]![sensor.action_name] = value;
       if (sensor.inject_as_sensor) {
         if (!sensorDigest[sensor.group_name]) sensorDigest[sensor.group_name] = {};
-        sensorDigest[sensor.group_name]![sensor.action_name] = { value, description: sensor.description };
+        sensorDigest[sensor.group_name]![sensor.action_name] = {
+          value,
+          description: sensor.description,
+        };
       }
     }
     log.info({ runId: run.runId }, '[dry-run] using simulated sensor values');
@@ -46,12 +52,15 @@ export async function runEnrich(
   }
 
   const enrichOutput: Record<string, unknown> = {
-    current_state:     currentState,
-    sensors:            sensorDigest,
+    current_state: currentState,
+    sensors: sensorDigest,
     available_actions: await enrichActions(
       run.plan.sensors
         .filter((s) => s.inject_as_action)
-        .map((s) => ({ user_device_action_id: s.user_device_action_id, description: s.description })),
+        .map((s) => ({
+          user_device_action_id: s.user_device_action_id,
+          description: s.description,
+        })),
     ),
     ...(await buildImageContext(channel, run)),
   };
@@ -59,12 +68,19 @@ export async function runEnrich(
   run.context = { ...run.context, ...enrichOutput };
 
   await db.pipelineRunStage.upsert({
-    where:  { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
-    update: { status: 'completed', output: enrichOutput as Prisma.InputJsonValue, completed_at: new Date() },
+    where: { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
+    update: {
+      status: 'completed',
+      output: enrichOutput as Prisma.InputJsonValue,
+      completed_at: new Date(),
+    },
     create: {
-      run_id: run.runId, stage_id: stage.dbId,
-      status: 'completed', output: enrichOutput as Prisma.InputJsonValue,
-      started_at: started, completed_at: new Date(),
+      run_id: run.runId,
+      stage_id: stage.dbId,
+      status: 'completed',
+      output: enrichOutput as Prisma.InputJsonValue,
+      started_at: started,
+      completed_at: new Date(),
     },
   });
   log.info({ runId: run.runId, stageId: stage.dbId }, 'enrich stage complete');
@@ -78,14 +94,21 @@ export async function runEnrich(
 async function enrichActions(
   actions: { user_device_action_id: number; description: string }[],
 ): Promise<Record<string, unknown>[]> {
-  log.trace({ actionCount: actions.length }, 'enriching available actions with traits/valid_parameters');
+  log.trace(
+    { actionCount: actions.length },
+    'enriching available actions with traits/valid_parameters',
+  );
   return Promise.all(
     actions.map(async (a) => {
       const action = await db.userDeviceAction.findUnique({
         where: { id: a.user_device_action_id },
         include: {
           capability: {
-            include: { traits: { include: { google_trait: { select: { value: true, valid_parameters: true } } } } },
+            include: {
+              traits: {
+                include: { google_trait: { select: { value: true, valid_parameters: true } } },
+              },
+            },
           },
         },
       });
@@ -108,7 +131,9 @@ async function enrichActions(
 // action-flagged alike — cheap single-column read of the authoritative UserDeviceAction.current_state
 // (kept in sync with sensor_history by digest-service's writeScalarState for both telemetry and
 // command acks), no history query needed.
-async function buildCurrentState(plan: PipelinePlan): Promise<Record<string, Record<string, unknown>>> {
+async function buildCurrentState(
+  plan: PipelinePlan,
+): Promise<Record<string, Record<string, unknown>>> {
   const actionIds = plan.sensors.map((s) => s.user_device_action_id);
   const actions = await db.userDeviceAction.findMany({
     where: { id: { in: actionIds } },
@@ -119,7 +144,8 @@ async function buildCurrentState(plan: PipelinePlan): Promise<Record<string, Rec
   const state: Record<string, Record<string, unknown>> = {};
   for (const sensor of plan.sensors) {
     if (!state[sensor.group_name]) state[sensor.group_name] = {};
-    state[sensor.group_name]![sensor.action_name] = stateById.get(sensor.user_device_action_id) ?? null;
+    state[sensor.group_name]![sensor.action_name] =
+      stateById.get(sensor.user_device_action_id) ?? null;
   }
   return state;
 }
@@ -140,10 +166,16 @@ async function buildImageContext(channel: Channel, run: Run): Promise<Record<str
   }
 
   const result = await requestPicture(
-    channel, run.userId, imageSensor.user_device_action_id, env.pictureRequestTimeoutMs,
+    channel,
+    run.userId,
+    imageSensor.user_device_action_id,
+    env.pictureRequestTimeoutMs,
   );
   if (result.status === 'ok' && result.image) {
-    log.info({ runId: run.runId, actionId: imageSensor.user_device_action_id }, 'live camera capture succeeded');
+    log.info(
+      { runId: run.runId, actionId: imageSensor.user_device_action_id },
+      'live camera capture succeeded',
+    );
     return { image: result.image, image_source: 'live', image_captured_at: result.capturedAt };
   }
 
@@ -154,17 +186,25 @@ async function buildImageContext(channel: Channel, run: Run): Promise<Record<str
   return await imageFallbackFromHistory(imageSensor);
 }
 
-async function imageFallbackFromHistory(sensor: PipelineSensorPlan): Promise<Record<string, unknown>> {
+async function imageFallbackFromHistory(
+  sensor: PipelineSensorPlan,
+): Promise<Record<string, unknown>> {
   const row = await db.sensorHistory.findFirst({
-    where:   { user_device_action_id: sensor.user_device_action_id },
+    where: { user_device_action_id: sensor.user_device_action_id },
     orderBy: { recorded_at: 'desc' },
-    select:  { value: true, recorded_at: true },
+    select: { value: true, recorded_at: true },
   });
   if (!row) return {};
-  return { image: row.value, image_source: 'fallback_db', image_captured_at: row.recorded_at.toISOString() };
+  return {
+    image: row.value,
+    image_source: 'fallback_db',
+    image_captured_at: row.recorded_at.toISOString(),
+  };
 }
 
-async function buildSensorDigest(plan: PipelinePlan): Promise<Record<string, Record<string, unknown>>> {
+async function buildSensorDigest(
+  plan: PipelinePlan,
+): Promise<Record<string, Record<string, unknown>>> {
   const digest: Record<string, Record<string, unknown>> = {};
   // Camera items are excluded here: sensor_history holds base64 frames for them, and nothing
   // downstream (LLM or VLM) consumes a compressed historic digest of raw frames — the VLM stage
@@ -173,7 +213,11 @@ async function buildSensorDigest(plan: PipelinePlan): Promise<Record<string, Rec
   for (const sensor of plan.sensors.filter((s) => s.inject_as_sensor && !s.is_image)) {
     const since = new Date(Date.now() - sensor.window_minutes * 60 * 1000);
     log.trace(
-      { pipelineId: plan.pipelineId, actionId: sensor.user_device_action_id, sinceMinutes: sensor.window_minutes },
+      {
+        pipelineId: plan.pipelineId,
+        actionId: sensor.user_device_action_id,
+        sinceMinutes: sensor.window_minutes,
+      },
       'querying sensor history',
     );
     const rows = await db.sensorHistory.findMany({
@@ -185,7 +229,12 @@ async function buildSensorDigest(plan: PipelinePlan): Promise<Record<string, Rec
     const values = rows.map((r) => r.value);
     const compressed = compressReadings(values, sensor.compression, sensor.n);
     log.trace(
-      { pipelineId: plan.pipelineId, actionId: sensor.user_device_action_id, rowCount: rows.length, compression: sensor.compression },
+      {
+        pipelineId: plan.pipelineId,
+        actionId: sensor.user_device_action_id,
+        rowCount: rows.length,
+        compression: sensor.compression,
+      },
       'sensor readings compressed',
     );
     if (!digest[sensor.group_name]) digest[sensor.group_name] = {};

@@ -23,7 +23,7 @@ export function createSmarthomeRouter(ch: Channel) {
 
   appSmarthome.onQuery(async (body: any, _headers: any, frameworkData: any) => {
     const userId = frameworkData.express.request.user.id;
-    const actions = await deviceActionsService.getUserActions(parseInt(userId));
+    const actions = await deviceActionsService.getUserActions(parseInt(userId), '');
     const queryDevices: Record<string, any> = {};
     actions.forEach((action) => {
       queryDevices[action.id.toString()] = googleStateService.buildState(action);
@@ -37,7 +37,11 @@ export function createSmarthomeRouter(ch: Channel) {
     return {
       requestId: body.requestId,
       payload: {
-        commands: await googleExecuteDeviceService.ExecuteDeviceCommands(ch, parseInt(userId), commands),
+        commands: await googleExecuteDeviceService.ExecuteDeviceCommands(
+          ch,
+          parseInt(userId),
+          commands,
+        ),
       },
     };
   });

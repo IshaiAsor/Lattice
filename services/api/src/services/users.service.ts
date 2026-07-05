@@ -15,11 +15,11 @@ export interface PublicUser {
 
 export function toPublicUser(user: User): PublicUser {
   return {
-    id:           user.id,
-    username:     user.user_name ?? user.full_name,
-    email:        user.email,
-    role:         user.user_role,
-    user_type:    user.user_type,
+    id: user.id,
+    username: user.user_name ?? user.full_name,
+    email: user.email,
+    role: user.user_role,
+    user_type: user.user_type,
     profileImage: user.profile_picture_url,
   };
 }
@@ -49,16 +49,21 @@ class UsersService {
     return null;
   }
 
-  createGoogleUser(profile: { sub: string; email: string; name: string; picture: string }): Promise<User> {
+  createGoogleUser(profile: {
+    sub: string;
+    email: string;
+    name: string;
+    picture: string;
+  }): Promise<User> {
     return db.user.create({
       data: {
-        user_type:           1,
-        user_role:           'user',
-        google_id:           profile.sub,
-        email:               profile.email,
-        full_name:           profile.name,
+        user_type: 1,
+        user_role: 'user',
+        google_id: profile.sub,
+        email: profile.email,
+        full_name: profile.name,
         profile_picture_url: profile.picture || '',
-        terms_accepted_at:   new Date(),
+        terms_accepted_at: new Date(),
       },
     });
   }
@@ -67,10 +72,10 @@ class UsersService {
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     return db.user.create({
       data: {
-        user_type:         0,
-        user_role:         'user',
-        user_name:         username,
-        password:          hashedPassword,
+        user_type: 0,
+        user_role: 'user',
+        user_name: username,
+        password: hashedPassword,
         email,
         terms_accepted_at: new Date(),
       },
@@ -89,7 +94,10 @@ class UsersService {
   }
 
   // Admin-editable fields only — never touches credentials or google identity.
-  async updateUser(id: number, patch: { role?: string; user_type?: number; full_name?: string }): Promise<PublicUser> {
+  async updateUser(
+    id: number,
+    patch: { role?: string; user_type?: number; full_name?: string },
+  ): Promise<PublicUser> {
     if (!(await this.getById(id))) {
       throw Object.assign(new Error('User not found'), { statusCode: 404 });
     }

@@ -10,8 +10,10 @@ describe('command-models validate()', () => {
   });
 
   test('LightDimmerAction accepts on/off and 0..100, rejects out-of-range / non-numeric', () => {
-    for (const v of ['on', 'off', 0, 50, 100, '0', '100']) expect(validate('LightDimmerAction', v)).toBe(true);
-    for (const v of [101, -1, 'bright', '12.5']) expect(validate('LightDimmerAction', v)).toBe(false);
+    for (const v of ['on', 'off', 0, 50, 100, '0', '100'])
+      expect(validate('LightDimmerAction', v)).toBe(true);
+    for (const v of [101, -1, 'bright', '12.5'])
+      expect(validate('LightDimmerAction', v)).toBe(false);
   });
 
   test('OneDirectionalMotorAction behaves like the dimmer range', () => {

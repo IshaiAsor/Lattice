@@ -47,7 +47,10 @@ export function actionResultConsumer(ch: Channel) {
             data: { pending_firmware_version: null, pending_device_type_id: null },
           }),
         ]);
-        log.warn({ userDeviceId, value }, 'OTA failed — staged actions removed, old actions restored');
+        log.warn(
+          { userDeviceId, value },
+          'OTA failed — staged actions removed, old actions restored',
+        );
         return;
       }
 
@@ -67,7 +70,17 @@ export function actionResultConsumer(ch: Channel) {
       throw new Error(`unresolved action ${deviceId}/${actionName}`);
     }
 
-    await writeScalarState(ch, resolved.id, { userId, deviceId, actionName, value, timestamp, commandId });
-    log.info({ userId, deviceId, actionName, commandId }, 'action result processed — state updated');
+    await writeScalarState(ch, resolved.id, {
+      userId,
+      deviceId,
+      actionName,
+      value,
+      timestamp,
+      commandId,
+    });
+    log.info(
+      { userId, deviceId, actionName, commandId },
+      'action result processed — state updated',
+    );
   };
 }

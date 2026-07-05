@@ -25,13 +25,13 @@ export function actionRequestedConsumer(ch: Channel) {
     log.info({ userId, actionId, value, duration }, 'action.requested received');
 
     const row = await db.userDeviceAction.findUnique({
-      where:  { id: actionId },
+      where: { id: actionId },
       select: {
-        current_state:   true,
-        user_device_id:   true,
+        current_state: true,
+        user_device_id: true,
         mqtt_action_name: true,
         user_device: { select: { device: { select: { version: true } } } },
-        capability:       {
+        capability: {
           select: { traits: { select: { google_trait: { select: { valid_parameters: true } } } } },
         },
       },
@@ -43,15 +43,20 @@ export function actionRequestedConsumer(ch: Channel) {
     }
 
     const stateValue = asString(value);
-    const deviceId   = String(row.user_device_id);
-    const commandId  = randomUUID();
+    const deviceId = String(row.user_device_id);
+    const commandId = randomUUID();
 
     // A value outside the capability's declared constraint is expected user/UI error, not an
     // infra fault — reject it directly to the requesting client instead of dispatching or
     // routing to the DLQ.
-    const validParameters = deriveValidParameters(row.capability.traits.map((t) => t.google_trait.valid_parameters));
+    const validParameters = deriveValidParameters(
+      row.capability.traits.map((t) => t.google_trait.valid_parameters),
+    );
     if (!validateValue(stateValue, validParameters)) {
-      log.warn({ userId, actionId, value }, 'action.requested rejected — value outside valid_parameters');
+      log.warn(
+        { userId, actionId, value },
+        'action.requested rejected — value outside valid_parameters',
+      );
       socket.emitActionStateFailed(parseInt(userId, 10), actionId, commandId, row.current_state);
       return;
     }
@@ -60,7 +65,11 @@ export function actionRequestedConsumer(ch: Channel) {
     //    ack timeout so a crash can't leak the key.
     const ttlSeconds = Math.ceil(env.actionAckTimeoutMs / 1000) + 30;
     try {
-      await setPending(commandId, { userId, actionId, deviceId, actionName: row.mqtt_action_name, value }, ttlSeconds);
+      await setPending(
+        commandId,
+        { userId, actionId, deviceId, actionName: row.mqtt_action_name, value },
+        ttlSeconds,
+      );
     } catch (err) {
       log.error({ err, actionId, commandId }, 'pending command set failed');
     }
@@ -77,8 +86,8 @@ export function actionRequestedConsumer(ch: Channel) {
     const dispatch: ActionDispatchPayload = {
       userId,
       deviceId,
-      actionName:      row.mqtt_action_name,
-      command:         { value: stateValue, duration: duration ?? '*', commandId },
+      actionName: row.mqtt_action_name,
+      command: { value: stateValue, duration: duration ?? '*', commandId },
       commandId,
       firmwareVersion: row.user_device.device.version,
     };
@@ -96,7 +105,12 @@ export function actionRequestedConsumer(ch: Channel) {
         .then((pending) => {
           if (pending === null) return; // already acked
           log.warn({ actionId, commandId }, 'command timed out with no device ack → failed');
-          socket.emitActionStateFailed(parseInt(userId, 10), actionId, commandId, row.current_state);
+          socket.emitActionStateFailed(
+            parseInt(userId, 10),
+            actionId,
+            commandId,
+            row.current_state,
+          );
         })
         .catch((err) => log.error({ err, commandId }, 'pending timeout resolution failed'));
     });

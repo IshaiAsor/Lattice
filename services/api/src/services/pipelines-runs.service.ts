@@ -17,8 +17,12 @@ class PipelinesRunsService {
       skip: offset,
       take: Math.min(limit, 100),
       select: {
-        id: true, status: true, trigger_type: true, is_dry_run: true,
-        started_at: true, completed_at: true,
+        id: true,
+        status: true,
+        trigger_type: true,
+        is_dry_run: true,
+        started_at: true,
+        completed_at: true,
       },
     });
   }
@@ -45,7 +49,11 @@ class PipelinesRunsService {
       data: { status: 'cancelled', completed_at: new Date() },
     });
     const ch = await getChannel();
-    publish(ch, RK.PIPELINE_CANCEL, { userId: String(userId), pipelineId: String(pipelineId), runId });
+    publish(ch, RK.PIPELINE_CANCEL, {
+      userId: String(userId),
+      pipelineId: String(pipelineId),
+      runId,
+    });
   }
 
   async removeRun(userId: number, pipelineId: number, runId: number): Promise<void> {
@@ -75,27 +83,30 @@ class PipelinesRunsService {
   async dryRun(userId: number, pipelineId: number, dto: DryRunDto): Promise<{ runId: number }> {
     const pipeline = await this.ensureOwned(userId, pipelineId);
 
-    const sensorActionIds = pipeline.sensors.map((s: { user_device_action_id: number }) => s.user_device_action_id);
+    const sensorActionIds = pipeline.sensors.map(
+      (s: { user_device_action_id: number }) => s.user_device_action_id,
+    );
     const overrideKeys = Object.keys(dto.sensor_overrides).map(Number);
     const unknown = overrideKeys.filter((k) => !sensorActionIds.includes(k));
-    if (unknown.length > 0) throw err(400, `unknown sensor action ids in overrides: ${unknown.join(', ')}`);
+    if (unknown.length > 0)
+      throw err(400, `unknown sensor action ids in overrides: ${unknown.join(', ')}`);
     await validateSensorOverrides(sensorActionIds, dto.sensor_overrides);
 
     const run = await db.pipelineRun.create({
       data: {
-        pipeline_id:      pipelineId,
-        status:           'queued',
-        trigger_type:     'manual',
-        is_dry_run:       true,
+        pipeline_id: pipelineId,
+        status: 'queued',
+        trigger_type: 'manual',
+        is_dry_run: true,
         sensor_overrides: dto.sensor_overrides,
       },
     });
     const ch = await getChannel();
     publish(ch, RK.PIPELINE_TRIGGER, {
-      userId:          String(userId),
-      pipelineId:      String(pipelineId),
-      runId:           run.id,
-      isDryRun:        true,
+      userId: String(userId),
+      pipelineId: String(pipelineId),
+      runId: run.id,
+      isDryRun: true,
       sensorOverrides: dto.sensor_overrides,
     });
     return { runId: run.id };

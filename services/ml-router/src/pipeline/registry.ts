@@ -78,7 +78,9 @@ export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
         type: 'infer',
         dbId: s.id,
         model: { kind: s.ml_model.kind, name: s.ml_model.name, version: s.ml_model.version },
-        config: cfg['prompt_template'] ? { prompt_template: cfg['prompt_template'] as string } : undefined,
+        config: cfg['prompt_template']
+          ? { prompt_template: cfg['prompt_template'] as string }
+          : undefined,
       } satisfies InferStagePlan;
     }
     // command_exec
@@ -86,26 +88,26 @@ export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
       type: 'command_exec',
       dbId: s.id,
       config: {
-        notify:            (cfg['notify'] as string) ?? 'none',
+        notify: (cfg['notify'] as string) ?? 'none',
         execute_condition: (cfg['execute_condition'] as string) ?? 'always',
       },
     } satisfies CommandExecStagePlan;
   });
 
   const sensors: PipelineSensorPlan[] = pipeline.sensors.map((s) => ({
-    dbId:                  s.id,
+    dbId: s.id,
     user_device_action_id: s.user_device_action_id,
-    action_name:           s.user_device_action.action_name,
-    group_name:            s.group_name,
-    compression:           s.compression,
-    window_minutes:        s.window_minutes,
-    n:                     s.n,
-    min_value:             s.min_value,
-    max_value:             s.max_value,
-    description:           s.description,
-    inject_as_sensor:      s.inject_as_sensor,
-    inject_as_action:      s.inject_as_action,
-    is_image:              IMAGE_IMPL_TYPES.has(s.user_device_action.capability.implementation_type),
+    action_name: s.user_device_action.action_name,
+    group_name: s.group_name,
+    compression: s.compression,
+    window_minutes: s.window_minutes,
+    n: s.n,
+    min_value: s.min_value,
+    max_value: s.max_value,
+    description: s.description,
+    inject_as_sensor: s.inject_as_sensor,
+    inject_as_action: s.inject_as_action,
+    is_image: IMAGE_IMPL_TYPES.has(s.user_device_action.capability.implementation_type),
   }));
 
   return { pipelineId: pipeline.id, userId: pipeline.user_id, stages, sensors };

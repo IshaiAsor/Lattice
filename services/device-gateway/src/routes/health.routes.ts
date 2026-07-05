@@ -6,8 +6,8 @@ export const healthRouter = Router();
 
 healthRouter.get('/health', (_req, res) => {
   res.json({
-    status:  'ok',
+    status: 'ok',
     service: 'device-gateway',
-    uptime:  Math.floor((Date.now() - startedAt) / 1000),
+    uptime: Math.floor((Date.now() - startedAt) / 1000),
   });
 });

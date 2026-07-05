@@ -29,7 +29,7 @@ export function initCameraStream(server: Server): void {
 
 function handleConnection(ws: WebSocket, req: IncomingMessage): void {
   const url = new URL(req.url ?? '', 'http://localhost');
-  const token  = url.searchParams.get('token')  ?? '';
+  const token = url.searchParams.get('token') ?? '';
   const action = url.searchParams.get('action') ?? '';
 
   const decoded = jwtService.verifyToken(token, JwtPurpose.device_usage);
@@ -42,7 +42,7 @@ function handleConnection(ws: WebSocket, req: IncomingMessage): void {
     return;
   }
 
-  const userId   = Number(decoded.decoded.userid);
+  const userId = Number(decoded.decoded.userid);
   const deviceId = Number(decoded.decoded.clientid);
 
   // On-demand captures (CameraAction::triggerCapture) send a small JSON text frame

@@ -19,8 +19,8 @@ interface Route {
 function patternToRegex(pattern: string): RegExp {
   const escaped = pattern
     .replace(/[.^${}()|[\]\\]/g, '\\$&') // escape regex specials except + and #
-    .replace(/\+/g, '[^/]+')               // MQTT single-level wildcard
-    .replace(/#/g, '.+');                  // MQTT multi-level wildcard
+    .replace(/\+/g, '[^/]+') // MQTT single-level wildcard
+    .replace(/#/g, '.+'); // MQTT multi-level wildcard
   return new RegExp(`^${escaped}$`);
 }
 

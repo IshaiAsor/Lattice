@@ -21,7 +21,7 @@ const noop = new NoopEnricher();
 // Named enrichers referenced by plans.json enrich stages. All stubbed for now.
 const ENRICHERS: Record<string, Enricher> = {
   'device-context': noop,
-  'build': noop,
+  build: noop,
 };
 
 export function getEnricher(name: string): Enricher {

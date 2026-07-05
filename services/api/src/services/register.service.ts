@@ -11,7 +11,9 @@ class RegisterService {
     termsAccepted: boolean,
   ): Promise<{ token: string; refreshToken: string; user: PublicUser }> {
     if (!termsAccepted) {
-      throw Object.assign(new Error('You must accept the Terms of Service to register'), { statusCode: 400 });
+      throw Object.assign(new Error('You must accept the Terms of Service to register'), {
+        statusCode: 400,
+      });
     }
     if (!username || username.trim().length < 3) {
       throw Object.assign(new Error('Username must be at least 3 characters'), { statusCode: 400 });
@@ -32,7 +34,13 @@ class RegisterService {
 
     const user = await usersService.createRegularUser(username, email, password);
     const token = jwtService.generateToken(
-      { id: user.id, username: user.user_name, role: user.user_role, email: user.email, user_type: user.user_type },
+      {
+        id: user.id,
+        username: user.user_name,
+        role: user.user_role,
+        email: user.email,
+        user_type: user.user_type,
+      },
       JwtPurpose.app_usage,
     );
     const refreshToken = jwtService.generateToken({ id: user.id }, JwtPurpose.app_usage_refresh);

@@ -5,8 +5,14 @@ import type { ModelId } from '@lattice/ml';
 // A plan is the orchestrator's policy: which model handles a given chatMode, and what
 // enrichment runs before inference. Keyed by the client's chatMode (e.g. 'free',
 // 'device-context', 'build'). Analogous to the executor's models.json registry.
-export interface InferStage { type: 'infer'; model: ModelId; }
-export interface EnrichStage { type: 'enrich'; enricher: string; }
+export interface InferStage {
+  type: 'infer';
+  model: ModelId;
+}
+export interface EnrichStage {
+  type: 'enrich';
+  enricher: string;
+}
 export type PlanStage = InferStage | EnrichStage;
 
 export interface Plan {

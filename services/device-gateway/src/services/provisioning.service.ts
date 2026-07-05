@@ -6,7 +6,10 @@ import { createLogger } from '@lattice/logger';
 const log = createLogger('device-gateway');
 
 export class HttpError extends Error {
-  constructor(public statusCode: number, message: string) {
+  constructor(
+    public statusCode: number,
+    message: string,
+  ) {
     super(message);
     this.name = 'HttpError';
   }
@@ -58,7 +61,10 @@ class ProvisioningService {
 
     // 4. Return permanent JWT + URLs.
     const tokenData = this.generatePermanentToken(userId, userDevice.id, version);
-    log.info({ userId, macAddress, deviceType, version, userDeviceId: userDevice.id }, 'provisioned device');
+    log.info(
+      { userId, macAddress, deviceType, version, userDeviceId: userDevice.id },
+      'provisioned device',
+    );
     return tokenData;
   }
 

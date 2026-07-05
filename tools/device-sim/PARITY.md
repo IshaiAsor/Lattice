@@ -7,68 +7,76 @@ firmware capability/behavior, update the sim **and** this table in the same chan
 Legend: ✓ mirrored · ◐ partial / functional-equivalent · ✗ not simulated (by design)
 
 ## Provisioning & identity
-| Firmware behavior | Source | Sim |
-|---|---|---|
-| BLE provisioning (WiFi creds + token over BLE) | `main.cpp` setupBleProvisioning | ✗ — HTTP provision stands in (no BLE/WiFi) |
-| Single provision call → deviceId, mqttToken, URLs | `JwtService::Provision` → `provisioning.routes` | ✓ |
+
+| Firmware behavior                                     | Source                                                                                        | Sim                                                                   |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| BLE provisioning (WiFi creds + token over BLE)        | `main.cpp` setupBleProvisioning                                                               | ✗ — HTTP provision stands in (no BLE/WiFi)                            |
+| Single provision call → deviceId, mqttToken, URLs     | `JwtService::Provision` → `provisioning.routes`                                               | ✓                                                                     |
 | Permanent `device_usage` JWT + refresh-token rotation | `JwtService::RefreshJwtTokenIfNeeded` (450s pre-exp), `provisioning.service.refreshMqttToken` | ✓ — decodes JWT exp, refreshes ~450s before via `POST /refresh-token` |
-| Physical button factory reset (BUTTON_PIN) | `main.cpp` handleReset/performFactoryReset | ✗ — N/A (no hardware); use `hard-reset` cmd |
+| Physical button factory reset (BUTTON_PIN)            | `main.cpp` handleReset/performFactoryReset                                                    | ✗ — N/A (no hardware); use `hard-reset` cmd                           |
 
 ## Config pull
-| Firmware behavior | Source | Sim |
-|---|---|---|
-| Pull config from `deviceConfigUrl` on boot | `DynamicDeviceActionsService::loadFromServer` | ✓ |
-| Drive only *active* actions (UI-configured) | `device-configuration.service` (status=active) | ✓ |
-| Pin/blueprint validation + GPIO mapping log | `validateAndLogPins` | ◐ — logs each action's pin slots; no real GPIO |
-| Re-pull config after boot | (boot only) | ◐ — sim adds periodic re-pull for live UI iteration |
+
+| Firmware behavior                           | Source                                         | Sim                                                 |
+| ------------------------------------------- | ---------------------------------------------- | --------------------------------------------------- |
+| Pull config from `deviceConfigUrl` on boot  | `DynamicDeviceActionsService::loadFromServer`  | ✓                                                   |
+| Drive only _active_ actions (UI-configured) | `device-configuration.service` (status=active) | ✓                                                   |
+| Pin/blueprint validation + GPIO mapping log | `validateAndLogPins`                           | ◐ — logs each action's pin slots; no real GPIO      |
+| Re-pull config after boot                   | (boot only)                                    | ◐ — sim adds periodic re-pull for live UI iteration |
 
 ## MQTT lifecycle
-| Firmware behavior | Source | Sim |
-|---|---|---|
-| Connect w/ JWT (username=userId, clientId=deviceId) | `mqtt.h` testMqtt | ✓ |
-| Last-Will = `offline` on status topic | `mqtt.h` connect will | ✓ |
-| `status` = `online` (retained) | `mqtt.h` | ✓ |
-| Restart on WiFi/MQTT loss | `loop()` ESP.restart | ✓ — opt-in `restartOnLoss`/`RESTART_ON_LOSS` (else auto-reconnect) |
+
+| Firmware behavior                                   | Source                | Sim                                                                |
+| --------------------------------------------------- | --------------------- | ------------------------------------------------------------------ |
+| Connect w/ JWT (username=userId, clientId=deviceId) | `mqtt.h` testMqtt     | ✓                                                                  |
+| Last-Will = `offline` on status topic               | `mqtt.h` connect will | ✓                                                                  |
+| `status` = `online` (retained)                      | `mqtt.h`              | ✓                                                                  |
+| Restart on WiFi/MQTT loss                           | `loop()` ESP.restart  | ✓ — opt-in `restartOnLoss`/`RESTART_ON_LOSS` (else auto-reconnect) |
 
 ## Telemetry
-| Firmware behavior | Source | Sim |
-|---|---|---|
-| Per-action interval publish on `telemetry/<name>` | `handleTelametryReading` | ✓ |
-| Scalar sensors (Temperature, AirTemperature, Humidity, WaterLevel, PhLevel, TdsLevel, CO2Level) | `actions/telemtries/*` | ✓ — plausible per-type values, slow sine drift |
-| Camera telemetry — unified `CameraAction`, periodic snapshot over WS or HTTP (per-instance `camera_transport`) | `CameraAction.h`, `device-gateway/ws/camera-stream.ts`, `routes/camera.routes.ts` | ✓ — binary JPEG over `/ws/stream`, and `POST /api/camera/frame`. Mock frame is a real small JPEG (320x240) with the generation timestamp burned into the pixels (sim-only cosmetic aid for visually confirming delivery — real firmware sends actual camera-sensor bytes with no overlay) |
-| On-demand capture — `command/take_picture` → immediate frame tagged with `commandId`, answers a pipeline's live picture request | `CameraAction::triggerCapture`, `digest-service/picture-requested.consumer.ts` | ✓ — `_sendOnDemandFrame`, works over whichever transport (`camera_transport`) the instance is configured for, independent of whether periodic streaming (`camera`/`CAMERA`) is enabled |
+
+| Firmware behavior                                                                                                               | Source                                                                            | Sim                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-action interval publish on `telemetry/<name>`                                                                               | `handleTelametryReading`                                                          | ✓                                                                                                                                                                                                                                                                                         |
+| Scalar sensors (Temperature, AirTemperature, Humidity, WaterLevel, PhLevel, TdsLevel, CO2Level)                                 | `actions/telemtries/*`                                                            | ✓ — plausible per-type values, slow sine drift                                                                                                                                                                                                                                            |
+| Camera telemetry — unified `CameraAction`, periodic snapshot over WS or HTTP (per-instance `camera_transport`)                  | `CameraAction.h`, `device-gateway/ws/camera-stream.ts`, `routes/camera.routes.ts` | ✓ — binary JPEG over `/ws/stream`, and `POST /api/camera/frame`. Mock frame is a real small JPEG (320x240) with the generation timestamp burned into the pixels (sim-only cosmetic aid for visually confirming delivery — real firmware sends actual camera-sensor bytes with no overlay) |
+| On-demand capture — `command/take_picture` → immediate frame tagged with `commandId`, answers a pipeline's live picture request | `CameraAction::triggerCapture`, `digest-service/picture-requested.consumer.ts`    | ✓ — `_sendOnDemandFrame`, works over whichever transport (`camera_transport`) the instance is configured for, independent of whether periodic streaming (`camera`/`CAMERA`) is enabled                                                                                                    |
 
 ## Commands
-| Firmware behavior | Source | Sim |
-|---|---|---|
-| Parse `{value, duration, commandId}` | `BaseCommandAction::execute` | ✓ |
-| Ack `{commandId, status, value}` on `ack/<name>` | `mqtt.h` publishAck | ✓ |
-| Payload validation / valid params / numeric range | `validateActionPayload` (per command class) | ✓ — `lib/command-models.js` (Outlet/Dimmer/Motor); invalid → `status:"error"` |
-| Duration auto-off → unsolicited ack `value:"off"` | `BaseCommandAction::loop` | ✓ |
-| Boot state restore → unsolicited ack (from NVS) | `BaseCommandAction::loadState` | ✓ — persisted to disk (NVS analog), restored across full restarts |
-| Per-type physical effect (Outlet, Motor, LightDimmer, OnboardLed) | `actions/commands/*` | ◐ — validated + state tracked; no physical GPIO effect |
+
+| Firmware behavior                                                 | Source                                      | Sim                                                                           |
+| ----------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------- |
+| Parse `{value, duration, commandId}`                              | `BaseCommandAction::execute`                | ✓                                                                             |
+| Ack `{commandId, status, value}` on `ack/<name>`                  | `mqtt.h` publishAck                         | ✓                                                                             |
+| Payload validation / valid params / numeric range                 | `validateActionPayload` (per command class) | ✓ — `lib/command-models.js` (Outlet/Dimmer/Motor); invalid → `status:"error"` |
+| Duration auto-off → unsolicited ack `value:"off"`                 | `BaseCommandAction::loop`                   | ✓                                                                             |
+| Boot state restore → unsolicited ack (from NVS)                   | `BaseCommandAction::loadState`              | ✓ — persisted to disk (NVS analog), restored across full restarts             |
+| Per-type physical effect (Outlet, Motor, LightDimmer, OnboardLed) | `actions/commands/*`                        | ◐ — validated + state tracked; no physical GPIO effect                        |
 
 ## Control commands
-| Firmware behavior | Source | Sim |
-|---|---|---|
-| `restart` → reboot, keep creds | `MqttActionsHandlerService` | ✓ |
-| `soft-reset` / `reprovision` → clear creds, re-provision | ″ | ✓ |
-| `hard-reset` → wipe NVS, offline | ″ | ✓ — emits `hard-reset`; CLI exits |
+
+| Firmware behavior                                        | Source                      | Sim                               |
+| -------------------------------------------------------- | --------------------------- | --------------------------------- |
+| `restart` → reboot, keep creds                           | `MqttActionsHandlerService` | ✓                                 |
+| `soft-reset` / `reprovision` → clear creds, re-provision | ″                           | ✓                                 |
+| `hard-reset` → wipe NVS, offline                         | ″                           | ✓ — emits `hard-reset`; CLI exits |
 
 ## OTA
-| Firmware behavior | Source | Sim |
-|---|---|---|
-| Subscribe `ota/updates/<deviceType>` | `mqtt.h` / `OtaService` | ✓ |
-| Strictly-newer semver gate | `OtaService::isNewerVersion` | ✓ |
-| Ack `starting:` / `rejected:` / `failed:` on `ack/ota` | `OtaService` onStatus | ✓ — `starting`/`rejected`; `failed` via opt-in `otaFail`/`OTA_FAIL` |
-| Reboot + reconnect at new version (→ `current_firmware_version`) | reboot + `device-status.consumer` | ✓ |
-| Actual firmware download + flash | `OtaService::performUpdate` | ✗ — simulated (no real binary) |
+
+| Firmware behavior                                                | Source                            | Sim                                                                 |
+| ---------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| Subscribe `ota/updates/<deviceType>`                             | `mqtt.h` / `OtaService`           | ✓                                                                   |
+| Strictly-newer semver gate                                       | `OtaService::isNewerVersion`      | ✓                                                                   |
+| Ack `starting:` / `rejected:` / `failed:` on `ack/ota`           | `OtaService` onStatus             | ✓ — `starting`/`rejected`; `failed` via opt-in `otaFail`/`OTA_FAIL` |
+| Reboot + reconnect at new version (→ `current_firmware_version`) | reboot + `device-status.consumer` | ✓                                                                   |
+| Actual firmware download + flash                                 | `OtaService::performUpdate`       | ✗ — simulated (no real binary)                                      |
 
 ## The rail (keep this honest)
+
 - Firmware feature surfaces to mirror live in:
   `ESP32Code/src/{main.cpp, actions/DynamicDeviceActionsService.h, actions/commands/BaseCommandAction.h
-  (+ subclasses), services/MqttActionsHandlerService.h, services/OtaService.h, services/mqtt.h,
-  services/JwtService.h, config/settings.h}`.
+(+ subclasses), services/MqttActionsHandlerService.h, services/OtaService.h, services/mqtt.h,
+services/JwtService.h, config/settings.h}`.
 - A new sensor **implementation_type** needs only a band in `lib/sim-device.js` `BANDS` + a row here.
 - A new **command** impl type → add its valid-params/range to `lib/command-models.js` (mirror the
   firmware command class) + a row here.

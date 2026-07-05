@@ -2,16 +2,16 @@ name: Build and Push Migrations Image
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: ['main', 'master']
     paths:
       - 'prisma/**'
   # Firmware CI bumps platformio.ini via GITHUB_TOKEN, which doesn't trigger push events
   # in other workflows. Use workflow_run instead so a successful firmware build always
   # rebuilds the migrations image with fresh manifests baked in.
   workflow_run:
-    workflows: ["ESP32 Firmware CI/CD"]
+    workflows: ['ESP32 Firmware CI/CD']
     types: [completed]
-    branches: ["main", "master"]
+    branches: ['main', 'master']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.event.workflow_run.head_branch }}

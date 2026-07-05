@@ -176,9 +176,7 @@
     {
       "type": "PlatformIO",
       "task": "Build",
-      "problemMatcher": [
-        "$platformio"
-      ],
+      "problemMatcher": ["$platformio"],
       "options": {
         "cwd": "${workspaceFolder:ESP32 Firmware}"
       },

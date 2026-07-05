@@ -1,401 +1,466 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
     {
-        "name": "Start SSH Tunnel",
-        "type": "node",
-        "request": "launch",
-        "preLaunchTask": "ssh-postgres-tunnel",
-        "runtimeExecutable": "node",
-        "runtimeArgs": [
-            "-e",
-            "console.log('✅ SSH tunnel task started in the background.');"
-        ]
+      "name": "Start SSH Tunnel",
+      "type": "node",
+      "request": "launch",
+      "preLaunchTask": "ssh-postgres-tunnel",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "console.log('✅ SSH tunnel task started in the background.');"]
     },
     {
-        "type": "node",
-        "request": "launch",
-        "name": "Debug DB Seed (ts-node)",
-        "runtimeArgs": [
-            "-r",
-            "ts-node/register"
-        ],
-        "program": "${workspaceFolder:Prisma}/seed.ts",
-        "cwd": "${workspaceFolder:Prisma}",
-        "outFiles": ["${workspaceFolder:Prisma}/**/*.js"],
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "env": {
-            "TS_NODE_PROJECT": "${workspaceFolder:Prisma}/tsconfig.json"
-        },
-        "skipFiles": ["<node_internals>/**"]
+      "type": "node",
+      "request": "launch",
+      "name": "Debug DB Seed (ts-node)",
+      "runtimeArgs": ["-r", "ts-node/register"],
+      "program": "${workspaceFolder:Prisma}/seed.ts",
+      "cwd": "${workspaceFolder:Prisma}",
+      "outFiles": ["${workspaceFolder:Prisma}/**/*.js"],
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder:Prisma}/tsconfig.json"
+      },
+      "skipFiles": ["<node_internals>/**"]
     },
     {
-        "type": "node",
-        "request": "launch",
-        "name": "Catalog: Generate Manifests",
-        "runtimeExecutable": "node",
-        "program": "${workspaceFolder:ESP32 Firmware}/tools/generate-manifests.mjs",
-        "cwd": "${workspaceFolder:Prisma}",
-        "skipFiles": ["<node_internals>/**"],
-        "presentation": { "group": "catalog" }
+      "type": "node",
+      "request": "launch",
+      "name": "Catalog: Generate Manifests",
+      "runtimeExecutable": "node",
+      "program": "${workspaceFolder:ESP32 Firmware}/tools/generate-manifests.mjs",
+      "cwd": "${workspaceFolder:Prisma}",
+      "skipFiles": ["<node_internals>/**"],
+      "presentation": { "group": "catalog" }
     },
     {
-        "type": "node",
-        "request": "launch",
-        "name": "Catalog: Seed DB",
-        "runtimeArgs": [
-            "-r",
-            "ts-node/register"
-        ],
-        "program": "${workspaceFolder:Prisma}/seed-catalog.ts",
-        "cwd": "${workspaceFolder:Prisma}",
-        "outFiles": ["${workspaceFolder:Prisma}/**/*.js"],
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "env": {
-            "TS_NODE_PROJECT": "${workspaceFolder:Prisma}/tsconfig.json"
-        },
-        "preLaunchTask": "catalog:gen",
-        "skipFiles": ["<node_internals>/**"],
-        "presentation": { "group": "catalog" }
+      "type": "node",
+      "request": "launch",
+      "name": "Catalog: Seed DB",
+      "runtimeArgs": ["-r", "ts-node/register"],
+      "program": "${workspaceFolder:Prisma}/seed-catalog.ts",
+      "cwd": "${workspaceFolder:Prisma}",
+      "outFiles": ["${workspaceFolder:Prisma}/**/*.js"],
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "TS_NODE_PROJECT": "${workspaceFolder:Prisma}/tsconfig.json"
+      },
+      "preLaunchTask": "catalog:gen",
+      "skipFiles": ["<node_internals>/**"],
+      "presentation": { "group": "catalog" }
     },
     {
-        "name": "Debug FrontEnd (Chrome)",
-        "type": "pwa-chrome",
-        "request": "launch",
-        "url": "http://localhost:4200",
-        "webRoot": "${workspaceFolder:Backoffice UI}",
-        "preLaunchTask": "serve-backoffice"
+      "name": "Debug FrontEnd (Chrome)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:4200",
+      "webRoot": "${workspaceFolder:Backoffice UI}",
+      "preLaunchTask": "serve-backoffice"
     },
     {
-        "type": "platformio-debug",
-        "request": "launch",
-        "name": "ESP32: PIO Debug (test)",
-        "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-test/firmware.elf",
-        "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-test",
-        "projectDir": "${workspaceFolder:ESP32 Firmware}",
-        "cwd": "${workspaceFolder:ESP32 Firmware}",
-        "preLaunchTask": "PlatformIO: Build (ESP32Code)",
-        "internalConsoleOptions": "openOnSessionStart"
+      "type": "platformio-debug",
+      "request": "launch",
+      "name": "ESP32: PIO Debug (test)",
+      "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-test/firmware.elf",
+      "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-test",
+      "projectDir": "${workspaceFolder:ESP32 Firmware}",
+      "cwd": "${workspaceFolder:ESP32 Firmware}",
+      "preLaunchTask": "PlatformIO: Build (ESP32Code)",
+      "internalConsoleOptions": "openOnSessionStart"
     },
     {
-        "name": "Debug ML Executor (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/ml-executor",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3002" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-ml-executor",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:ML Executor}/**/*.js"]
+      "name": "Debug ML Executor (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/ml-executor",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3002" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-ml-executor",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:ML Executor}/**/*.js"]
     },
     {
-        "name": "Debug ML Router (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/ml-router",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3009" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-ml-router",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:ML Router}/**/*.js"]
+      "name": "Debug ML Router (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/ml-router",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3009" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-ml-router",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:ML Router}/**/*.js"]
     },
     {
-        "name": "Debug Device Gateway (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/device-gateway",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        // DEVICE_GATEWAY_URL is embedded in provisioning responses (device config / ws / camera
-        // URLs). Pin it to localhost for local dev so devices/sim call back to this machine — the
-        // launch env wins because dotenvx does not overwrite already-set vars (the root .env may
-        // point at a remote host).
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3004", "DEVICE_GATEWAY_URL": "http://localhost:3004" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-device-gateway",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:Device Gateway}/**/*.js"]
+      "name": "Debug Device Gateway (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/device-gateway",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      // DEVICE_GATEWAY_URL is embedded in provisioning responses (device config / ws / camera
+      // URLs). Pin it to localhost for local dev so devices/sim call back to this machine — the
+      // launch env wins because dotenvx does not overwrite already-set vars (the root .env may
+      // point at a remote host).
+      "env": {
+        "TS_NODE_PROJECT": "tsconfig.json",
+        "PORT": "3004",
+        "DEVICE_GATEWAY_URL": "http://localhost:3004"
+      },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-device-gateway",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:Device Gateway}/**/*.js"]
     },
     {
-        "name": "Debug MQTT Service (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/mqtt-service",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3005" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-mqtt-service",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:MQTT Service}/**/*.js"]
+      "name": "Debug MQTT Service (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/mqtt-service",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3005" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-mqtt-service",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:MQTT Service}/**/*.js"]
     },
     {
-        "name": "Debug Digest Service (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/digest-service",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3006" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-digest-service",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:Digest Service}/**/*.js"]
+      "name": "Debug Digest Service (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/digest-service",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3006" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-digest-service",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:Digest Service}/**/*.js"]
     },
     {
-        "name": "Debug Socket Server (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/socket-server",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3007" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-socket-server",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:Socket Server}/**/*.js"]
+      "name": "Debug Socket Server (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/socket-server",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3007" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-socket-server",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:Socket Server}/**/*.js"]
     },
     {
-        "name": "Debug Automation Worker (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/automation-worker",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3008" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-automation-worker",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:Automation Worker}/**/*.js"]
+      "name": "Debug Automation Worker (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/automation-worker",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3008" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-automation-worker",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:Automation Worker}/**/*.js"]
     },
     {
-        "name": "Debug Google Home (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/google-home",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3010" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-google-home",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:Google Home}/**/*.js"]
+      "name": "Debug Google Home (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/google-home",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3010" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-google-home",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:Google Home}/**/*.js"]
     },
     {
-        "name": "Debug API (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/api",
-            "--exec", "node -r ts-node/register",
-            "--ext", "ts,json",
-            "src/index.ts"
-        ],
-        "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3100" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-api",
-        "skipFiles": ["<node_internals>/**"],
-        "sourceMaps": true,
-        "outFiles": ["${workspaceFolder:API}/**/*.js"]
+      "name": "Debug API (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/api",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3100" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-api",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:API}/**/*.js"]
     },
     {
-        "name": "Debug OTA Manager (dev + hot reload)",
-        "type": "node",
-        "request": "launch",
-        "cwd": "${workspaceFolder:Project Root}",
-        "runtimeExecutable": "npx",
-        "runtimeArgs": [
-            "@dotenvx/dotenvx", "run", "--",
-            "npx", "nodemon",
-            "--cwd", "services/ota-manager",
-            "--exec", "node",
-            "--ext", "js,json",
-            "index.js"
-        ],
-        "env": { "PORT": "3001" },
-        "console": "internalConsole",
-        "outputCapture": "std",
-        "autoAttachChildProcesses": true,
-        "restart": true,
-        "preLaunchTask": "prep-ota-manager",
-        "skipFiles": ["<node_internals>/**"],
-        "outFiles": ["${workspaceFolder:OTA Manager}/**/*.js"]
+      "name": "Debug OTA Manager (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/ota-manager",
+        "--exec",
+        "node",
+        "--ext",
+        "js,json",
+        "index.js"
+      ],
+      "env": { "PORT": "3001" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-ota-manager",
+      "skipFiles": ["<node_internals>/**"],
+      "outFiles": ["${workspaceFolder:OTA Manager}/**/*.js"]
     },
     {
-        // Software ESP simulator — start AFTER 'All Backend Services (dev)' is up.
-        // envFile loads .env, but `env` below OVERRIDES it to pin the LOCAL stack (the root .env
-        // may target a remote stack: API_URL=3010 is google-home, gateway/MQTT at a LAN IP).
-        // api=3100, device-gateway=3004, EMQX=127.0.0.1:1883. Add DEVICE_TYPE / MAC / ACTIVATE_ALL
-        // / TELEMETRY_MS / etc. here to override too.
-        "name": "Run Device Sim",
-        "type": "node",
-        "request": "launch",
-        "program": "${workspaceFolder:Project Root}/tools/device-sim/index.js",
-        "cwd": "${workspaceFolder:Project Root}",
-        "console": "integratedTerminal",
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "env": {
-            "API_URL": "http://localhost:3100",
-            "DEVICE_GATEWAY_URL": "http://localhost:3004",
-            "MQTT_SERVER_NAME": "127.0.0.1",
-            "MQTT_PORT": "1883"
-        },
-        "skipFiles": ["<node_internals>/**"],
-        "presentation": { "group": "tools" }
+      // Software ESP simulator — start AFTER 'All Backend Services (dev)' is up.
+      // envFile loads .env, but `env` below OVERRIDES it to pin the LOCAL stack (the root .env
+      // may target a remote stack: API_URL=3010 is google-home, gateway/MQTT at a LAN IP).
+      // api=3100, device-gateway=3004, EMQX=127.0.0.1:1883. Add DEVICE_TYPE / MAC / ACTIVATE_ALL
+      // / TELEMETRY_MS / etc. here to override too.
+      "name": "Run Device Sim",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder:Project Root}/tools/device-sim/index.js",
+      "cwd": "${workspaceFolder:Project Root}",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "API_URL": "http://localhost:3100",
+        "DEVICE_GATEWAY_URL": "http://localhost:3004",
+        "MQTT_SERVER_NAME": "127.0.0.1",
+        "MQTT_PORT": "1883"
+      },
+      "skipFiles": ["<node_internals>/**"],
+      "presentation": { "group": "tools" }
     },
     {
-        // Multiple devices at once, driven by tools/device-sim/fleet.json (gitignored — copy
-        // from fleet.example.json first). Same local-stack env overrides as "Run Device Sim".
-        "name": "Run Device Fleet",
-        "type": "node",
-        "request": "launch",
-        "program": "${workspaceFolder:Project Root}/tools/device-sim/index.js",
-        "cwd": "${workspaceFolder:Project Root}",
-        "console": "integratedTerminal",
-        "envFile": "${workspaceFolder:Project Root}/.env",
-        "env": {
-            "API_URL": "http://localhost:3100",
-            "DEVICE_GATEWAY_URL": "http://localhost:3004",
-            "MQTT_SERVER_NAME": "127.0.0.1",
-            "MQTT_PORT": "1883",
-            "FLEET_CONFIG": "${workspaceFolder:Project Root}/tools/device-sim/fleet.json"
-        },
-        "skipFiles": ["<node_internals>/**"],
-        "presentation": { "group": "tools" }
+      // Multiple devices at once, driven by tools/device-sim/fleet.json (gitignored — copy
+      // from fleet.example.json first). Same local-stack env overrides as "Run Device Sim".
+      "name": "Run Device Fleet",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder:Project Root}/tools/device-sim/index.js",
+      "cwd": "${workspaceFolder:Project Root}",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder:Project Root}/.env",
+      "env": {
+        "API_URL": "http://localhost:3100",
+        "DEVICE_GATEWAY_URL": "http://localhost:3004",
+        "MQTT_SERVER_NAME": "127.0.0.1",
+        "MQTT_PORT": "1883",
+        "FLEET_CONFIG": "${workspaceFolder:Project Root}/tools/device-sim/fleet.json"
+      },
+      "skipFiles": ["<node_internals>/**"],
+      "presentation": { "group": "tools" }
     },
     {
-        "type": "debugpy",
-        "request": "launch",
-        "name": "Train ML Executor Model",
-        "program": "${workspaceFolder:ML Executor}/training/train.py",
-        "cwd": "${workspaceFolder:ML Executor}",
-        "console": "integratedTerminal",
-        "args": []
+      "type": "debugpy",
+      "request": "launch",
+      "name": "Train ML Executor Model",
+      "program": "${workspaceFolder:ML Executor}/training/train.py",
+      "cwd": "${workspaceFolder:ML Executor}",
+      "console": "integratedTerminal",
+      "args": []
     },
     {
-        "type": "platformio-debug",
-        "request": "launch",
-        "name": "ESP32: PIO Debug (prod)",
-        "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-prod/firmware.elf",
-        "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-prod",
-        "projectDir": "${workspaceFolder:ESP32 Firmware}",
-        "cwd": "${workspaceFolder:ESP32 Firmware}",
-        "internalConsoleOptions": "openOnSessionStart"
+      "type": "platformio-debug",
+      "request": "launch",
+      "name": "ESP32: PIO Debug (prod)",
+      "executable": "${workspaceFolder:ESP32 Firmware}/.pio/build/4d_systems_esp32s3_gen4_r8n16-prod/firmware.elf",
+      "projectEnvName": "4d_systems_esp32s3_gen4_r8n16-prod",
+      "projectDir": "${workspaceFolder:ESP32 Firmware}",
+      "cwd": "${workspaceFolder:ESP32 Firmware}",
+      "internalConsoleOptions": "openOnSessionStart"
     }
-    ],    "compounds": [
+  ],
+  "compounds": [
     {
-        "name": "Full Stack Debug (dev)",
-        "configurations": ["Debug API (dev + hot reload)", "Debug FrontEnd (Chrome)"]
+      "name": "Full Stack Debug (dev)",
+      "configurations": ["Debug API (dev + hot reload)", "Debug FrontEnd (Chrome)"]
     },
     {
-        // google-home (3010) and ota-manager (3001) are served by docker compose containers, so
-        // they are intentionally NOT in this compound (running them here too = EADDRINUSE). To
-        // debug either locally, `docker compose stop google-home ota-manager` first, then launch
-        // its individual "Debug …" config.
-        "name": "All Backend Services (dev)",
-        "configurations": ["Debug API (dev + hot reload)", "Debug ML Executor (dev + hot reload)", "Debug ML Router (dev + hot reload)", "Debug Device Gateway (dev + hot reload)", "Debug MQTT Service (dev + hot reload)", "Debug Digest Service (dev + hot reload)", "Debug Socket Server (dev + hot reload)", "Debug Automation Worker (dev + hot reload)"]
+      // google-home (3010) and ota-manager (3001) are served by docker compose containers, so
+      // they are intentionally NOT in this compound (running them here too = EADDRINUSE). To
+      // debug either locally, `docker compose stop google-home ota-manager` first, then launch
+      // its individual "Debug …" config.
+      "name": "All Backend Services (dev)",
+      "configurations": [
+        "Debug API (dev + hot reload)",
+        "Debug ML Executor (dev + hot reload)",
+        "Debug ML Router (dev + hot reload)",
+        "Debug Device Gateway (dev + hot reload)",
+        "Debug MQTT Service (dev + hot reload)",
+        "Debug Digest Service (dev + hot reload)",
+        "Debug Socket Server (dev + hot reload)",
+        "Debug Automation Worker (dev + hot reload)"
+      ]
     }
-    ]
+  ]
 }

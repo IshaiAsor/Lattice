@@ -23,7 +23,10 @@ export function actionResultConsumer(_ch: Channel) {
 
       if (!action || !action.googleType) return;
 
-      log.info({ userId, deviceId, actionName, actionId: action.id }, 'reporting device state to Google HomeGraph');
+      log.info(
+        { userId, deviceId, actionName, actionId: action.id },
+        'reporting device state to Google HomeGraph',
+      );
       await googleHomegraphService.reportState(userId, action);
     } catch (err) {
       log.error({ deviceId, actionName, err }, 'actionResultConsumer failed');

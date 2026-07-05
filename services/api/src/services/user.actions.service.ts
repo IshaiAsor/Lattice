@@ -15,15 +15,15 @@ export interface ActionView {
   id: number;
   deviceId: number;
   deviceName: string;
-  name: string;            // action_name (user-facing label)
-  mqttName: string;        // mqtt_action_name
+  name: string; // action_name (user-facing label)
+  mqttName: string; // mqtt_action_name
   implementation_type: string;
   validParameters: unknown;
   googleTypeId: number | null;
   googleType: { id: number; name: string; value: string } | null;
   googleTraits: GoogleTraitView[];
   defaultTraitId: number | null;
-  state: string | null;    // current_state
+  state: string | null; // current_state
   online: boolean;
   lastOnlineDate: Date | null;
   sortOrder: number;
@@ -47,37 +47,44 @@ class UserActionsService {
 
     return actions.map((a) => {
       const traits = a.capability.traits.map((t) => ({
-        id:    t.google_trait.id,
-        name:  t.google_trait.name,
+        id: t.google_trait.id,
+        name: t.google_trait.name,
         value: t.google_trait.value,
       }));
       // Resolve active trait: user override → catalog default → first trait
       const resolvedDefaultTraitId =
         a.default_trait_id ??
-        (a.capability.traits.find((t) => t.is_default)?.google_trait_id ?? null) ??
-        (traits[0]?.id ?? null);
+        a.capability.traits.find((t) => t.is_default)?.google_trait_id ??
+        traits[0]?.id ??
+        null;
 
       return {
-        id:                  a.id,
-        deviceId:            a.user_device_id,
-        deviceName:          a.user_device.name,
-        name:                a.action_name,
-        mqttName:            a.mqtt_action_name,
+        id: a.id,
+        deviceId: a.user_device_id,
+        deviceName: a.user_device.name,
+        name: a.action_name,
+        mqttName: a.mqtt_action_name,
         implementation_type: a.capability.implementation_type,
-        validParameters:     deriveValidParameters(a.capability.traits.map((t) => t.google_trait.valid_parameters)),
-        googleTypeId:        a.capability.google_type_id,
-        googleType:          a.capability.google_type
-          ? { id: a.capability.google_type.id, name: a.capability.google_type.name, value: a.capability.google_type.value }
+        validParameters: deriveValidParameters(
+          a.capability.traits.map((t) => t.google_trait.valid_parameters),
+        ),
+        googleTypeId: a.capability.google_type_id,
+        googleType: a.capability.google_type
+          ? {
+              id: a.capability.google_type.id,
+              name: a.capability.google_type.name,
+              value: a.capability.google_type.value,
+            }
           : null,
-        googleTraits:        traits,
-        defaultTraitId:      resolvedDefaultTraitId,
-        state:               a.current_state,
-        online:              a.user_device.online,
-        lastOnlineDate:      a.user_device.last_online_date,
-        sortOrder:           a.sort_order,
-        status:              a.status,
-        groupId:             a.group_id,
-        groupName:           a.group?.name ?? null,
+        googleTraits: traits,
+        defaultTraitId: resolvedDefaultTraitId,
+        state: a.current_state,
+        online: a.user_device.online,
+        lastOnlineDate: a.user_device.last_online_date,
+        sortOrder: a.sort_order,
+        status: a.status,
+        groupId: a.group_id,
+        groupName: a.group?.name ?? null,
         telemetryIntervalMs: a.telemetry_interval_ms,
       };
     });
@@ -86,7 +93,12 @@ class UserActionsService {
   async updateAction(
     userId: number,
     actionId: number,
-    patch: { name?: string; group_id?: number | null; telemetry_interval_ms?: number | null; default_trait_id?: number | null },
+    patch: {
+      name?: string;
+      group_id?: number | null;
+      telemetry_interval_ms?: number | null;
+      default_trait_id?: number | null;
+    },
   ): Promise<void> {
     const action = await this.ensureOwned(userId, actionId);
 
@@ -116,20 +128,24 @@ class UserActionsService {
     await db.userDeviceAction.update({
       where: { id: actionId },
       data: {
-        action_name:           patch.name?.trim(),
-        group_id:              patch.group_id,
+        action_name: patch.name?.trim(),
+        group_id: patch.group_id,
         telemetry_interval_ms: patch.telemetry_interval_ms,
-        default_trait_id:      patch.default_trait_id,
-        updated_at:            new Date(),
+        default_trait_id: patch.default_trait_id,
+        updated_at: new Date(),
       },
     });
   }
 
   async reorderActions(userId: number, orderedIds: number[]): Promise<void> {
-    const owned = new Set((await db.userDeviceAction.findMany({
-      where: { user_device: { user_id: userId } },
-      select: { id: true },
-    })).map((a) => a.id));
+    const owned = new Set(
+      (
+        await db.userDeviceAction.findMany({
+          where: { user_device: { user_id: userId } },
+          select: { id: true },
+        })
+      ).map((a) => a.id),
+    );
     if (orderedIds.some((id) => !owned.has(id))) {
       throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
     }
@@ -151,7 +167,8 @@ class UserActionsService {
       select: { capability_id: true, user_device: { select: { user_id: true } } },
     });
     if (!action) throw Object.assign(new Error('Action not found'), { statusCode: 404 });
-    if (action.user_device.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
+    if (action.user_device.user_id !== userId)
+      throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
     return action;
   }
 }

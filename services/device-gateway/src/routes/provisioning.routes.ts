@@ -34,10 +34,18 @@ provisioningRouter.post(
       const userId = Number((req.device as { userId?: string | number }).userId);
       const { macAddress, deviceType, version, capabilities } = req.body ?? {};
       if (!macAddress || !deviceType || !version || !Array.isArray(capabilities)) {
-        res.status(400).json({ error: 'Missing required fields: macAddress, deviceType, version, capabilities' });
+        res.status(400).json({
+          error: 'Missing required fields: macAddress, deviceType, version, capabilities',
+        });
         return;
       }
-      const result = await provisioningService.provisionDevice(userId, macAddress, deviceType, version, capabilities);
+      const result = await provisioningService.provisionDevice(
+        userId,
+        macAddress,
+        deviceType,
+        version,
+        capabilities,
+      );
       res.json(result);
     } catch (err) {
       next(err);

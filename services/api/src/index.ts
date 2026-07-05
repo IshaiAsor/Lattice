@@ -35,7 +35,10 @@ function main() {
       res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     }
-    if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
     next();
   });
 
@@ -55,7 +58,9 @@ function main() {
   app.use(exceptionMiddleware);
 
   // Pre-connect to RabbitMQ so the first pipeline trigger isn't slow.
-  getChannel().catch((err) => log.warn({ err }, 'RabbitMQ not yet available — will retry on first pipeline trigger'));
+  getChannel().catch((err) =>
+    log.warn({ err }, 'RabbitMQ not yet available — will retry on first pipeline trigger'),
+  );
 
   app.listen(env.port, () => {
     log.info({ port: env.port }, 'api listening');

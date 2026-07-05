@@ -21,19 +21,19 @@ export function createMqttClient(cfg: MqttEnv): MqttClient {
   const useTls = Boolean(cfg.caCertPath) || cfg.port === 8883;
 
   const options = {
-    host:              cfg.host,
-    port:              cfg.port,
-    protocol:          useTls ? 'mqtts' : 'mqtt',
-    username:          cfg.username,
-    password:          cfg.password,
-    clientId:          cfg.clientId,
+    host: cfg.host,
+    port: cfg.port,
+    protocol: useTls ? 'mqtts' : 'mqtt',
+    username: cfg.username,
+    password: cfg.password,
+    clientId: cfg.clientId,
     rejectUnauthorized: cfg.validateCert,
-    servername:        cfg.serverName,
+    servername: cfg.serverName,
     checkServerIdentity: (host: string, cert: tls.PeerCertificate) => {
       const nameToCheck = cfg.serverName ?? host;
       return tls.checkServerIdentity(nameToCheck, cert);
     },
-    keepalive:      60,
+    keepalive: 60,
     reconnectPeriod: 1000,
   } as mqtt.IClientOptions;
 

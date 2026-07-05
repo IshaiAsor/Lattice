@@ -4,8 +4,7 @@ class GoogleStateService {
   public buildState(action: DeviceActionView): any {
     const state: any = { online: action.online ?? false };
 
-    const hasTrait = (value: string) =>
-      action.googleTraits.some((t) => t.value === value);
+    const hasTrait = (value: string) => action.googleTraits.some((t) => t.value === value);
 
     if (hasTrait('action.devices.traits.OnOff')) {
       state.on = action.state === 'on' || action.state === '1';
@@ -31,9 +30,7 @@ class GoogleStateService {
 
     if (hasTrait('action.devices.traits.OpenClose')) {
       const pct = parseInt(action.state, 10);
-      state.openPercent = isNaN(pct)
-        ? (action.state === 'on' ? 100 : 0)
-        : pct;
+      state.openPercent = isNaN(pct) ? (action.state === 'on' ? 100 : 0) : pct;
     }
 
     if (hasTrait('action.devices.traits.LockUnlock')) {
@@ -78,8 +75,11 @@ class GoogleStateService {
 
     if (hasTrait('action.devices.traits.ColorSetting')) {
       const COLOR_MAP: Record<string, number> = {
-        red: 0xFF0000, green: 0x00FF00, blue: 0x0000FF,
-        orange: 0xFF6A00, off: 0x000000,
+        red: 0xff0000,
+        green: 0x00ff00,
+        blue: 0x0000ff,
+        orange: 0xff6a00,
+        off: 0x000000,
       };
       const rgb = COLOR_MAP[action.state as string];
       if (rgb !== undefined) state.color = { spectrumRGB: rgb };

@@ -9,13 +9,15 @@ import type { Logger } from 'pino';
 
 function makeConsumer(model: ModelConfig, ch: Channel, log: Logger) {
   const vlmProvider = model.kind === 'vlm' ? new OnnxVlmProvider(model) : null;
-  const llmProvider = model.kind === 'llm' && model.ollamaModel
-    ? new OllamaProviderService(model.ollamaModel)
-    : null;
+  const llmProvider =
+    model.kind === 'llm' && model.ollamaModel ? new OllamaProviderService(model.ollamaModel) : null;
 
   return async (payload: PipelineStagePayload): Promise<void> => {
     const label = `${model.kind}/${model.name}/${model.version}`;
-    log.info({ pipelineRunId: payload.pipelineRunId, stageId: payload.stageId }, `[${label}] stage received`);
+    log.info(
+      { pipelineRunId: payload.pipelineRunId, stageId: payload.stageId },
+      `[${label}] stage received`,
+    );
 
     try {
       let output: Record<string, unknown>;
@@ -50,7 +52,10 @@ function makeConsumer(model: ModelConfig, ch: Channel, log: Logger) {
       }
 
       await advancePipeline(ch, payload, output, stageError);
-      log.info({ pipelineRunId: payload.pipelineRunId }, `[${label}] stage ${stageError ? 'failed' : 'completed'}`);
+      log.info(
+        { pipelineRunId: payload.pipelineRunId },
+        `[${label}] stage ${stageError ? 'failed' : 'completed'}`,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log.error({ pipelineRunId: payload.pipelineRunId, err: message }, `[${label}] stage failed`);

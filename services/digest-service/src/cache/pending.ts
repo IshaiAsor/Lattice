@@ -4,11 +4,11 @@ import { valkey, keys } from './valkey';
 // commandId so either the ack consumer or the timeout can resolve it — whichever calls
 // takePending first wins (atomic GETDEL), guaranteeing the UI is settled exactly once.
 export interface PendingCommand {
-  userId:     string;
-  actionId:   number;
-  deviceId:   string;
+  userId: string;
+  actionId: number;
+  deviceId: string;
   actionName: string;
-  value:      unknown;
+  value: unknown;
 }
 
 // Persist the pending command with a TTL slightly longer than the ack timeout, so a
@@ -38,7 +38,7 @@ export async function takePending(commandId: string): Promise<PendingCommand | n
 // Same setPending/takePending/timeout shape as PendingCommand, kept separate since the
 // request/response fields don't overlap (no value/actionName to echo, just who to notify).
 export interface PendingPicture {
-  userId:   string;
+  userId: string;
   actionId: number;
 }
 

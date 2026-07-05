@@ -50,12 +50,12 @@ The service listens on `http://localhost:3000` by default (Docker Compose maps i
 
 ## Environment variables
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `PORT` | `3000` | HTTP listen port |
-| `FIRMWARE_PATH` | `./firmware` | Where `.bin` files are stored |
-| `RABBITMQ_URL` | `amqp://localhost` | Broker to announce firmware on (`q.ota.incoming`) |
-| `JWT_SECRET` | (required for auth) | Verifies device `device_usage` JWTs on `/download` and `/check` |
+| Variable        | Default             | Purpose                                                         |
+| --------------- | ------------------- | --------------------------------------------------------------- |
+| `PORT`          | `3000`              | HTTP listen port                                                |
+| `FIRMWARE_PATH` | `./firmware`        | Where `.bin` files are stored                                   |
+| `RABBITMQ_URL`  | `amqp://localhost`  | Broker to announce firmware on (`q.ota.incoming`)               |
+| `JWT_SECRET`    | (required for auth) | Verifies device `device_usage` JWTs on `/download` and `/check` |
 
 ## Authentication
 
@@ -73,10 +73,10 @@ The service does **not** accept firmware uploads. Publishing is GitOps/Kargo-dri
 
 ## API endpoints
 
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/check?deviceType=ESP32S3_Mini` | Get latest firmware metadata (device JWT) |
-| `GET` | `/download/{deviceType}/{version}.bin` | Download a firmware binary (device JWT) |
+| Method | Path                                   | Purpose                                   |
+| ------ | -------------------------------------- | ----------------------------------------- |
+| `GET`  | `/check?deviceType=ESP32S3_Mini`       | Get latest firmware metadata (device JWT) |
+| `GET`  | `/download/{deviceType}/{version}.bin` | Download a firmware binary (device JWT)   |
 
 ### Check latest firmware
 

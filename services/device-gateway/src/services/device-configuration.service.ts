@@ -50,21 +50,28 @@ class DeviceConfigurationService {
       const modeByPinId = new Map(ua.capability.pins.map((p) => [p.id, p.mode]));
       const pins: PinConfigDto[] = ua.pins.map((p) => ({
         pinNumber: p.pin_number,
-        pinMode:   (modeByPinId.get(p.capability_pin_id) ?? 'OUTPUT') as PinConfigDto['pinMode'],
+        pinMode: (modeByPinId.get(p.capability_pin_id) ?? 'OUTPUT') as PinConfigDto['pinMode'],
       }));
       return {
-        mqtt_action_name:      ua.mqtt_action_name,
-        implementation_type:   ua.capability.implementation_type,
-        mqtt_action_type:      ua.capability.mqtt_action_type ?? 'command',
+        mqtt_action_name: ua.mqtt_action_name,
+        implementation_type: ua.capability.implementation_type,
+        mqtt_action_type: ua.capability.mqtt_action_type ?? 'command',
         pins,
-        telemetry_interval_ms: ua.telemetry_interval_ms ?? ua.capability.min_telemetry_interval_ms ?? null,
-        valid_parameters: deriveValidParameters(ua.capability.traits.map((t) => t.google_trait.valid_parameters)),
+        telemetry_interval_ms:
+          ua.telemetry_interval_ms ?? ua.capability.min_telemetry_interval_ms ?? null,
+        valid_parameters: deriveValidParameters(
+          ua.capability.traits.map((t) => t.google_trait.valid_parameters),
+        ),
         camera_resolution: ua.camera_resolution,
-        camera_transport:  ua.camera_transport,
+        camera_transport: ua.camera_transport,
       };
     });
 
-    return { device_type: userDevice.device.type ?? '', device_version: userDevice.device.version, actions };
+    return {
+      device_type: userDevice.device.type ?? '',
+      device_version: userDevice.device.version,
+      actions,
+    };
   }
 }
 

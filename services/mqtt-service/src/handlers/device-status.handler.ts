@@ -12,12 +12,12 @@ export function deviceStatusHandler(ch: Channel): MqttHandler {
     handle: async ({ parsed, payload }) => {
       const state = payload.toString().trim() === 'online';
       const msg: DeviceStateChangedPayload = {
-        userId:     parsed.userId,
-        deviceId:   parsed.deviceId,
+        userId: parsed.userId,
+        deviceId: parsed.deviceId,
         actionName: 'status',
         state,
-        timestamp:  new Date().toISOString(),
-        version:    parsed.version,
+        timestamp: new Date().toISOString(),
+        version: parsed.version,
       };
       publish(ch, RK.DEVICE_STATE_CHANGED, msg);
       log.info({ topic: parsed, msg }, 'device status received and forwarded');

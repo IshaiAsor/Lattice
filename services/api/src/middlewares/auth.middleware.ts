@@ -19,8 +19,7 @@ declare global {
 // Verifies an app_usage JWT and attaches { id, role, email } to req.user.
 export const requireAppToken: RequestHandler = (req, res, next) => {
   const token =
-    req.headers.authorization?.split(' ')[1] ??
-    (req.query['token'] as string | undefined);
+    req.headers.authorization?.split(' ')[1] ?? (req.query['token'] as string | undefined);
 
   if (!token) {
     res.sendStatus(401);

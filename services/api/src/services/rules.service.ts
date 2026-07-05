@@ -62,14 +62,14 @@ function validate(dto: CreateRuleDto): void {
 
 function conditionCreateData(c: RuleConditionDto) {
   return {
-    condition_type:        c.condition_type,
+    condition_type: c.condition_type,
     user_device_action_id: c.user_device_action_id ?? null,
-    operator:              c.operator ?? null,
-    threshold_value:       c.threshold_value ?? null,
-    user_device_id:        c.user_device_id ?? null,
-    status_value:          c.status_value ?? null,
-    schedule_time:         c.schedule_time ?? null,
-    schedule_days:         c.schedule_days ?? [],
+    operator: c.operator ?? null,
+    threshold_value: c.threshold_value ?? null,
+    user_device_id: c.user_device_id ?? null,
+    status_value: c.status_value ?? null,
+    schedule_time: c.schedule_time ?? null,
+    schedule_days: c.schedule_days ?? [],
   };
 }
 
@@ -87,17 +87,17 @@ class RulesService {
     validate(dto);
     const rule = await db.userRule.create({
       data: {
-        user_id:            userId,
-        name:               dto.name.trim(),
+        user_id: userId,
+        name: dto.name.trim(),
         condition_operator: dto.condition_operator === 'OR' ? 'OR' : 'AND',
-        cooldown_seconds:   dto.cooldown_seconds ?? 60,
-        is_emergency:       dto.is_emergency ?? false,
+        cooldown_seconds: dto.cooldown_seconds ?? 60,
+        is_emergency: dto.is_emergency ?? false,
         conditions: { create: dto.conditions.map(conditionCreateData) },
         actions: {
           create: dto.actions.map((a) => ({
             user_device_action_id: a.user_device_action_id,
-            target_state:          a.target_state,
-            delay_seconds:         a.delay_seconds ?? 0,
+            target_state: a.target_state,
+            delay_seconds: a.delay_seconds ?? 0,
           })),
         },
       },
@@ -116,17 +116,17 @@ class RulesService {
       return tx.userRule.update({
         where: { id },
         data: {
-          name:               dto.name.trim(),
+          name: dto.name.trim(),
           condition_operator: dto.condition_operator === 'OR' ? 'OR' : 'AND',
-          cooldown_seconds:   dto.cooldown_seconds ?? 60,
-          is_emergency:       dto.is_emergency ?? false,
-          updated_at:         new Date(),
+          cooldown_seconds: dto.cooldown_seconds ?? 60,
+          is_emergency: dto.is_emergency ?? false,
+          updated_at: new Date(),
           conditions: { create: dto.conditions.map(conditionCreateData) },
           actions: {
             create: dto.actions.map((a) => ({
               user_device_action_id: a.user_device_action_id,
-              target_state:          a.target_state,
-              delay_seconds:         a.delay_seconds ?? 0,
+              target_state: a.target_state,
+              delay_seconds: a.delay_seconds ?? 0,
             })),
           },
         },
@@ -169,39 +169,55 @@ class RulesService {
   }
 
   private toView(r: {
-    id: number; name: string; enabled: boolean; is_emergency: boolean;
-    condition_operator: string; cooldown_seconds: number; last_triggered: Date | null;
+    id: number;
+    name: string;
+    enabled: boolean;
+    is_emergency: boolean;
+    condition_operator: string;
+    cooldown_seconds: number;
+    last_triggered: Date | null;
     conditions: {
-      id: number; condition_type: string; user_device_action_id: number | null;
-      operator: string | null; threshold_value: string | null; user_device_id: number | null;
-      status_value: string | null; schedule_time: string | null; schedule_days: number[];
+      id: number;
+      condition_type: string;
+      user_device_action_id: number | null;
+      operator: string | null;
+      threshold_value: string | null;
+      user_device_id: number | null;
+      status_value: string | null;
+      schedule_time: string | null;
+      schedule_days: number[];
     }[];
-    actions: { id: number; user_device_action_id: number; target_state: string; delay_seconds: number }[];
+    actions: {
+      id: number;
+      user_device_action_id: number;
+      target_state: string;
+      delay_seconds: number;
+    }[];
   }): RuleView {
     return {
-      id:                 r.id,
-      name:               r.name,
-      enabled:            r.enabled,
-      is_emergency:       r.is_emergency,
+      id: r.id,
+      name: r.name,
+      enabled: r.enabled,
+      is_emergency: r.is_emergency,
       condition_operator: r.condition_operator,
-      cooldown_seconds:   r.cooldown_seconds,
-      last_triggered:     r.last_triggered,
+      cooldown_seconds: r.cooldown_seconds,
+      last_triggered: r.last_triggered,
       conditions: r.conditions.map((c) => ({
-        id:                    c.id,
-        condition_type:        c.condition_type,
+        id: c.id,
+        condition_type: c.condition_type,
         user_device_action_id: c.user_device_action_id,
-        operator:              c.operator,
-        threshold_value:       c.threshold_value,
-        user_device_id:        c.user_device_id,
-        status_value:          c.status_value,
-        schedule_time:         c.schedule_time,
-        schedule_days:         c.schedule_days,
+        operator: c.operator,
+        threshold_value: c.threshold_value,
+        user_device_id: c.user_device_id,
+        status_value: c.status_value,
+        schedule_time: c.schedule_time,
+        schedule_days: c.schedule_days,
       })),
       actions: r.actions.map((a) => ({
-        id:                    a.id,
+        id: a.id,
         user_device_action_id: a.user_device_action_id,
-        target_state:          a.target_state,
-        delay_seconds:         a.delay_seconds,
+        target_state: a.target_state,
+        delay_seconds: a.delay_seconds,
       })),
     };
   }

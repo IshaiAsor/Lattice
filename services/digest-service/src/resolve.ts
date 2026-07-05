@@ -15,7 +15,7 @@ export function resolveUserDeviceAction(
 ): Promise<ResolvedAction | null> {
   return resolveAction(deviceId, actionName, async () => {
     const row = await db.userDeviceAction.findFirst({
-      where:  { user_device_id: parseInt(deviceId, 10), mqtt_action_name: actionName },
+      where: { user_device_id: parseInt(deviceId, 10), mqtt_action_name: actionName },
       select: { id: true, capability: { select: { implementation_type: true } } },
     });
     if (!row) return null;

@@ -1,6 +1,10 @@
 import type { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
-import type { OtaIncomingPayload, OtaDispatchPayload, NotificationPublishPayload } from '@lattice/queue';
+import type {
+  OtaIncomingPayload,
+  OtaDispatchPayload,
+  NotificationPublishPayload,
+} from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 
 const log = createLogger('digest-service:ota-incoming');

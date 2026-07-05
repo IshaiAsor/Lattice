@@ -22,7 +22,7 @@ async function getSession(model: ModelConfig): Promise<ort.InferenceSession> {
 }
 
 const CONF_THRESHOLD = 0.25;
-const IOU_THRESHOLD  = 0.45;
+const IOU_THRESHOLD = 0.45;
 
 function iou(a: BoundingBox, b: BoundingBox): number {
   const ix1 = Math.max(a.x, b.x);
@@ -65,8 +65,8 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<Detecti
   const numPixels = 640 * 640;
   const float32 = new Float32Array(3 * numPixels);
   for (let i = 0; i < numPixels; i++) {
-    float32[i]                = raw[i * 3]!     / 255.0;  // R plane
-    float32[numPixels + i]    = raw[i * 3 + 1]! / 255.0;  // G plane
+    float32[i] = raw[i * 3]! / 255.0; // R plane
+    float32[numPixels + i] = raw[i * 3 + 1]! / 255.0; // G plane
     float32[2 * numPixels + i] = raw[i * 3 + 2]! / 255.0; // B plane
   }
 
@@ -98,14 +98,23 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<Detecti
   // Diagnostic: log dims and sample raw values so layout issues are visible in service logs.
   // Sample the "class score" field for the first anchor in each possible layout so the
   // correct one (values in logit range ~-10..+10) is identifiable.
-  const sampleColumnar   = data[4 * na + 0];
+  const sampleColumnar = data[4 * na + 0];
   const sampleTransposed = data[0 * (4 + nc) + 4];
-  log.debug({ dims: Array.from(dims), nc, na, columnar, dataLen: data.length, sampleColumnar, sampleTransposed }, 'ONNX tensor layout');
+  log.debug(
+    {
+      dims: Array.from(dims),
+      nc,
+      na,
+      columnar,
+      dataLen: data.length,
+      sampleColumnar,
+      sampleTransposed,
+    },
+    'ONNX tensor layout',
+  );
 
   function getVal(anchor: number, field: number): number {
-    return columnar
-      ? data[field * na + anchor]!
-      : data[anchor * (4 + nc) + field]!;
+    return columnar ? data[field * na + anchor]! : data[anchor * (4 + nc) + field]!;
   }
 
   // Class scores are raw logits — apply sigmoid before thresholding.
@@ -120,15 +129,18 @@ async function runOnnx(model: ModelConfig, imageBase64: string): Promise<Detecti
     let bestScore = sigmoid(getVal(a, 4));
     for (let c = 1; c < nc; c++) {
       const score = sigmoid(getVal(a, 4 + c));
-      if (score > bestScore) { bestScore = score; bestClass = c; }
+      if (score > bestScore) {
+        bestScore = score;
+        bestClass = c;
+      }
     }
     // NaN arises from out-of-bounds reads (na slightly larger than actual anchor count).
     if (!isFinite(bestScore) || bestScore < CONF_THRESHOLD) continue;
 
     const cx = getVal(a, 0);
     const cy = getVal(a, 1);
-    const w  = getVal(a, 2);
-    const h  = getVal(a, 3);
+    const w = getVal(a, 2);
+    const h = getVal(a, 3);
     // Skip degenerate boxes — zero/negative w or h breaks IOU and produces garbage output.
     if (!isFinite(cx) || !isFinite(cy) || w <= 0 || h <= 0) continue;
     detections.push({

@@ -1,6 +1,5 @@
 import { deriveValidParameters } from '@lattice/capability-validation';
-import { googleActionTypesRepository, GoogleActionTypeEntity } from '../dal/google.action.types.repository';
-import { userDevicesActionsRepository } from '../dal/user.devices.actions.repository';
+import { db } from '@lattice/prisma-client';
 import { googleActionsTraitsService, GoogleActionTraitView } from './google.actions.traits.service';
 
 export interface DeviceActionView {
@@ -9,7 +8,7 @@ export interface DeviceActionView {
   deviceName: string;
   name: string;
   type?: string;
-  googleType?: GoogleActionTypeEntity;
+  googleType?: { id: number; name: string; value: string };
   googleTraits: GoogleActionTraitView[];
   actionName: string;
   implementation_type: string;
@@ -21,43 +20,63 @@ export interface DeviceActionView {
 }
 
 class DeviceActionsService {
-  async getUserActions(userId: number): Promise<DeviceActionView[]> {
+  async getUserActions(userId: number, _token: string): Promise<DeviceActionView[]> {
     const [googleActionTypes, actions] = await Promise.all([
-      googleActionTypesRepository.getAll(),
-      userDevicesActionsRepository.getAllByUserId(userId),
+      db.googleActionType.findMany(),
+      db.userDeviceAction.findMany({
+        where: { user_device: { user_id: userId } },
+        include: { capability: true, user_device: true, group: true },
+        orderBy: { sort_order: 'asc' },
+      }),
     ]);
-    return Promise.all(actions.map(async (a) => {
-      const googleTraits = await googleActionsTraitsService.GetActionDefinitionTraits(a.capability_id);
-      return {
-        id: a.id,
-        name: a.action_name,
-        deviceName: a.user_device?.name ?? '',
-        type: googleActionTypes.find((g) => g.id === a.capability.google_type_id)?.name,
-        googleType: googleActionTypes.find((g) => g.id === a.capability.google_type_id),
-        googleTraits,
-        actionName: a.action_name,
-        implementation_type: a.capability.implementation_type,
-        validParameters: deriveValidParameters(googleTraits.map((t) => t.validParameters)),
-        state: a.current_state,
-        deviceId: a.user_device_id,
-        online: a.user_device?.online ?? false,
-        sortOrder: a.sort_order,
-        groupName: a.group?.name ?? null,
-      };
-    }));
+
+    return Promise.all(
+      actions.map(async (a) => {
+        const googleTraits = await googleActionsTraitsService.GetActionDefinitionTraits(
+          a.capability_id,
+        );
+        return {
+          id: a.id,
+          name: a.action_name,
+          deviceName: a.user_device?.name ?? '',
+          type: googleActionTypes.find((g) => g.id === a.capability.google_type_id)?.name,
+          googleType: googleActionTypes.find((g) => g.id === a.capability.google_type_id),
+          googleTraits,
+          actionName: a.action_name,
+          implementation_type: a.capability.implementation_type,
+          validParameters: deriveValidParameters(googleTraits.map((t) => t.validParameters)),
+          state: a.current_state,
+          deviceId: a.user_device_id,
+          online: a.user_device?.online ?? false,
+          sortOrder: a.sort_order,
+          groupName: a.group?.name ?? null,
+        };
+      }),
+    );
   }
 
-  async getActionByDeviceAndName(deviceId: number, actionName: string): Promise<DeviceActionView | null> {
+  async getActionByDeviceAndName(
+    deviceId: number,
+    actionName: string,
+  ): Promise<DeviceActionView | null> {
     const [googleActionTypes, action] = await Promise.all([
-      googleActionTypesRepository.getAll(),
-      userDevicesActionsRepository.getByDeviceAndActionName(deviceId, actionName),
+      db.googleActionType.findMany(),
+      db.userDeviceAction.findFirst({
+        where: { user_device_id: deviceId, mqtt_action_name: actionName },
+        include: { capability: true, user_device: true, group: true },
+      }),
     ]);
+
     if (!action) return null;
-    const googleTraits = await googleActionsTraitsService.GetActionDefinitionTraits(action.capability_id);
+
+    const googleTraits = await googleActionsTraitsService.GetActionDefinitionTraits(
+      action.capability_id,
+    );
+
     return {
       id: action.id,
       name: action.action_name,
-      deviceName: '',
+      deviceName: action.user_device?.name ?? '',
       type: googleActionTypes.find((g) => g.id === action.capability.google_type_id)?.name,
       googleType: googleActionTypes.find((g) => g.id === action.capability.google_type_id),
       googleTraits,
@@ -66,7 +85,7 @@ class DeviceActionsService {
       validParameters: deriveValidParameters(googleTraits.map((t) => t.validParameters)),
       state: action.current_state,
       deviceId: action.user_device_id,
-      online: false,
+      online: action.user_device?.online ?? false,
       sortOrder: action.sort_order,
       groupName: action.group?.name ?? null,
     };

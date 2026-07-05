@@ -35,8 +35,7 @@ const manifestDir = join(__dirname, '..', 'ESP32Code', 'tools', 'manifest-gen', 
 // Mirrors GoogleTraitDef's constraint shape (ESP32Code ActionPinsSetup.h) as serialized by
 // CapabilitySerializer.h: an enum of accepted string values, or a numeric range.
 type TraitConstraint =
-  | { type: 'enum'; values: string[] }
-  | { type: 'range'; min: number; max: number; step?: number };
+  { type: 'enum'; values: string[] } | { type: 'range'; min: number; max: number; step?: number };
 
 interface GoogleTraitManifestEntry {
   value: string;
@@ -71,7 +70,8 @@ function loadManifests(): DeviceManifest[] {
     );
   }
   const files = readdirSync(manifestDir).filter((f) => f.endsWith('.json'));
-  if (files.length === 0) throw new Error(`No *.json manifests in ${manifestDir}. Run the generator first.`);
+  if (files.length === 0)
+    throw new Error(`No *.json manifests in ${manifestDir}. Run the generator first.`);
   return files.map((f) => JSON.parse(readFileSync(join(manifestDir, f), 'utf8')) as DeviceManifest);
 }
 
@@ -101,7 +101,11 @@ async function upsertGoogleDeviceTrait(
     `INSERT INTO google_device_traits (name, value, valid_parameters) VALUES ($1, $2, $3::jsonb)
      ON CONFLICT (value) DO UPDATE SET value = EXCLUDED.value
      RETURNING id`,
-    [fallbackName(trait.value), trait.value, trait.constraint ? JSON.stringify(trait.constraint) : null],
+    [
+      fallbackName(trait.value),
+      trait.value,
+      trait.constraint ? JSON.stringify(trait.constraint) : null,
+    ],
   );
   return res.rows[0].id;
 }

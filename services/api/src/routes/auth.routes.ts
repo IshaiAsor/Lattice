@@ -5,10 +5,17 @@ import { authRateLimiter } from '../middlewares/rate.limiter.middleware';
 
 export const authRouter = Router();
 
-function clientIp(req: { headers: Record<string, unknown>; socket: { remoteAddress?: string } }): string {
+function clientIp(req: {
+  headers: Record<string, unknown>;
+  socket: { remoteAddress?: string };
+}): string {
   const fwd = req.headers['x-forwarded-for'];
   const ip = Array.isArray(fwd) ? fwd[0] : fwd;
-  return (typeof ip === 'string' ? ip.split(',')[0].trim() : undefined) ?? req.socket.remoteAddress ?? 'unknown';
+  return (
+    (typeof ip === 'string' ? ip.split(',')[0].trim() : undefined) ??
+    req.socket.remoteAddress ??
+    'unknown'
+  );
 }
 
 // Username/password login. Returns { token, refreshToken }.
@@ -45,7 +52,12 @@ authRouter.post('/google', authRateLimiter, async (req, res, next) => {
 authRouter.post('/register', authRateLimiter, async (req, res, next) => {
   try {
     const { username, email, password, termsAccepted } = req.body ?? {};
-    const result = await registerService.register(username, email, password, termsAccepted === true);
+    const result = await registerService.register(
+      username,
+      email,
+      password,
+      termsAccepted === true,
+    );
     res.status(201).json({ token: result.token, refreshToken: result.refreshToken });
   } catch (err) {
     next(err);

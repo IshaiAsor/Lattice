@@ -4,8 +4,12 @@ const config = {
   valkeyUrl: process.env['VALKEY_URL'] ?? 'redis://localhost:6379',
   jwt: {
     secret: process.env['JWT_SECRET'] ?? '',
-    googleCloudToCloudLoginExpiresIn: +(process.env['JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_EXPIRES_IN'] ?? 3600),
-    googleCloudToCloudLoginRefreshExpiresIn: +(process.env['JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_REFRESH'] ?? 0),
+    googleCloudToCloudLoginExpiresIn: +(
+      process.env['JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_EXPIRES_IN'] ?? 3600
+    ),
+    googleCloudToCloudLoginRefreshExpiresIn: +(
+      process.env['JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_REFRESH'] ?? 0
+    ),
   },
   google: {
     authClientId: process.env['GOOGLE_AUTH_CLIENT_ID'] ?? '',

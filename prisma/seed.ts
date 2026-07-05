@@ -67,7 +67,7 @@ async function main() {
     `INSERT INTO mqtt_user (username, password_hash, is_superuser)
      VALUES ($1, $2, true)
      ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash, is_superuser = EXCLUDED.is_superuser`,
-    [mqttUsername, await bcrypt.hash(mqttPassword, 10)]
+    [mqttUsername, await bcrypt.hash(mqttPassword, 10)],
   );
 
   // Pre-seed the owner as a Google-type admin placeholder (no password, no google_id yet).
@@ -79,7 +79,7 @@ async function main() {
       `INSERT INTO users (email, user_role, user_type)
        VALUES ($1, 'admin', 1)
        ON CONFLICT (email) DO NOTHING`,
-      [ownerEmail]
+      [ownerEmail],
     );
   }
 
@@ -97,7 +97,7 @@ async function main() {
       `INSERT INTO users (user_name, email, password, user_role, user_type, terms_accepted_at)
        VALUES ($1, $2, $3, 'admin', 0, now())
        ON CONFLICT (user_name) DO UPDATE SET password = EXCLUDED.password, user_role = 'admin'`,
-      [adminUser, `${adminUser}@lattice.local`, await bcrypt.hash(adminPass, 10)]
+      [adminUser, `${adminUser}@lattice.local`, await bcrypt.hash(adminPass, 10)],
     );
   } else {
     console.log('ℹ️  OWNER_USERNAME/OWNER_PASSWORD not set — skipping credential admin seed');
@@ -107,8 +107,13 @@ async function main() {
   // On conflict (kind, name, version) the row is updated so config changes are picked up on re-seed.
   const modelsPath = join(__dirname, '..', 'services', 'ml-executor', 'models.json');
   const mlModels = JSON.parse(readFileSync(modelsPath, 'utf8')) as {
-    kind: string; name: string; version: string; backend: string;
-    modelFile?: string; ollamaModel?: string; classes?: string[];
+    kind: string;
+    name: string;
+    version: string;
+    backend: string;
+    modelFile?: string;
+    ollamaModel?: string;
+    classes?: string[];
   }[];
   console.log(`🌱 Seeding ML models from models.json (${mlModels.length} entries)`);
   for (const m of mlModels) {
@@ -120,8 +125,15 @@ async function main() {
              model_file   = EXCLUDED.model_file,
              ollama_model = EXCLUDED.ollama_model,
              classes      = EXCLUDED.classes`,
-      [m.kind, m.name, m.version, m.backend, m.modelFile ?? null, m.ollamaModel ?? null,
-       m.classes ? JSON.stringify(m.classes) : null],
+      [
+        m.kind,
+        m.name,
+        m.version,
+        m.backend,
+        m.modelFile ?? null,
+        m.ollamaModel ?? null,
+        m.classes ? JSON.stringify(m.classes) : null,
+      ],
     );
     console.log(`   ✓ ${m.kind}/${m.name}/${m.version} (${m.backend})`);
   }
@@ -129,7 +141,12 @@ async function main() {
   // Prune rows left behind by a rename/removal in models.json (upsert above never deletes).
   // Skip any still referenced by a pipeline_stage instead of failing the whole seed run.
   const current = mlModels.map((m) => `${m.kind}|${m.name}|${m.version}`);
-  const { rows: stale } = await pool.query<{ id: number; kind: string; name: string; version: string }>(
+  const { rows: stale } = await pool.query<{
+    id: number;
+    kind: string;
+    name: string;
+    version: string;
+  }>(
     `SELECT id, kind, name, version FROM ml_models
      WHERE (kind || '|' || name || '|' || version) <> ALL($1::text[])`,
     [current],
@@ -139,7 +156,9 @@ async function main() {
       await pool.query('DELETE FROM ml_models WHERE id = $1', [s.id]);
       console.log(`   🗑️  Pruned stale ml_model ${s.kind}/${s.name}/${s.version}`);
     } catch {
-      console.log(`   ⚠️  Skipped pruning ${s.kind}/${s.name}/${s.version} — still referenced by a pipeline stage`);
+      console.log(
+        `   ⚠️  Skipped pruning ${s.kind}/${s.name}/${s.version} — still referenced by a pipeline stage`,
+      );
     }
   }
 

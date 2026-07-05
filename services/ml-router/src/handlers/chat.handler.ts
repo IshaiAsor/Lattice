@@ -22,7 +22,7 @@ interface Inflight {
   userId: string;
   chatMode: string;
   clientChannel: string; // chat:response:<id> that socket-server listens on
-  text: string;          // accumulated answer, for audit at completion
+  text: string; // accumulated answer, for audit at completion
 }
 const inflight = new Map<string, Inflight>();
 
@@ -118,7 +118,13 @@ export async function initChatWorker(): Promise<void> {
       await publisher.publish(INFER_CHANNELS.INFER_JOBS, JSON.stringify(job));
 
       log.info(
-        { requestId: intent.requestId, chatMode, model: inferStage.model, stream: intent.stream, enriched: enrichMsgs.length },
+        {
+          requestId: intent.requestId,
+          chatMode,
+          model: inferStage.model,
+          stream: intent.stream,
+          enriched: enrichMsgs.length,
+        },
         'chat intent dispatched',
       );
     } catch (error) {

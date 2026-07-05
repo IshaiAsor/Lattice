@@ -27,7 +27,8 @@ export type ValidParameters = EnumConstraint | RangeConstraint | PatternConstrai
 // open (return true): bad catalog data shouldn't brick command dispatch, only a properly
 // declared, recognized constraint blocks a value.
 export function validateValue(value: string, constraint: unknown): boolean {
-  if (constraint === null || constraint === undefined || typeof constraint !== 'object') return true;
+  if (constraint === null || constraint === undefined || typeof constraint !== 'object')
+    return true;
 
   const type = (constraint as { type?: unknown }).type;
   switch (type) {
@@ -61,7 +62,9 @@ export function validateValue(value: string, constraint: unknown): boolean {
 function asConstraint(value: unknown): ValidParameters | null {
   if (value === null || value === undefined || typeof value !== 'object') return null;
   const type = (value as { type?: unknown }).type;
-  return type === 'enum' || type === 'range' || type === 'pattern' ? (value as ValidParameters) : null;
+  return type === 'enum' || type === 'range' || type === 'pattern'
+    ? (value as ValidParameters)
+    : null;
 }
 
 // A capability's actual accepted values are the union of every trait it declares — accepted

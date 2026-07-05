@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
+import bcrypt from 'bcryptjs';
+import { db } from '@lattice/prisma-client';
 import config from '../config/env.config';
-import { usersRepository } from '../dal/users.repository';
 
 const googleOAuth = new OAuth2Client(
   config.google.signInClientId,
@@ -10,22 +11,35 @@ const googleOAuth = new OAuth2Client(
 
 export const authService = {
   async validateUser(username: string, password: string) {
-    const user = await usersRepository.findByUsername(username);
+    const user = await db.user.findUnique({ where: { user_name: username } });
     if (!user?.password) return null;
-    return (await usersRepository.validatePassword(user.password, password)) ? user : null;
+    return (await bcrypt.compare(password, user.password)) ? user : null;
   },
 
   async loginWithGoogle(code: string) {
     const { tokens } = await googleOAuth.getToken(code);
     googleOAuth.setCredentials(tokens);
     const { data } = await googleOAuth.request<{
-      sub: string; email: string; name: string; picture: string;
+      sub: string;
+      email: string;
+      name: string;
+      picture: string;
     }>({ url: 'https://www.googleapis.com/oauth2/v3/userinfo' });
 
-    let user = await usersRepository.findByGoogleId(data.sub);
+    let user = await db.user.findUnique({ where: { google_id: data.sub } });
     if (!user) {
-      if (await usersRepository.findByEmail(data.email)) throw new Error('Email already in use');
-      user = await usersRepository.createGoogleUser(data.sub, data.email, data.name, data.picture ?? '');
+      if (await db.user.findUnique({ where: { email: data.email } }))
+        throw new Error('Email already in use');
+      user = await db.user.create({
+        data: {
+          user_type: 1,
+          user_role: 'user',
+          google_id: data.sub,
+          email: data.email,
+          full_name: data.name,
+          profile_picture_url: data.picture ?? '',
+        },
+      });
     }
     return user;
   },

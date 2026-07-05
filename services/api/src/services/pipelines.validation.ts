@@ -9,8 +9,13 @@ const IMAGE_IMPL_TYPES = new Set(['CameraAction']);
 // Read-only sensor types — cannot receive commands, so they can never be an "available action"
 // for the LLM (mirrors the backoffice pipeline editor's SENSOR_IMPL_TYPES).
 const SENSOR_IMPL_TYPES = new Set([
-  'TemperatureAction', 'AirTemperatureAction', 'HumidityAction',
-  'WaterLevelAction', 'PhLevelAction', 'TdsLevelAction', 'CO2LevelAction',
+  'TemperatureAction',
+  'AirTemperatureAction',
+  'HumidityAction',
+  'WaterLevelAction',
+  'PhLevelAction',
+  'TdsLevelAction',
+  'CO2LevelAction',
 ]);
 
 export function err(statusCode: number, message: string): Error {
@@ -19,9 +24,12 @@ export function err(statusCode: number, message: string): Error {
 
 export function validate(dto: CreatePipelineDto): void {
   if (!dto.name?.trim()) throw err(400, 'name is required');
-  if (!Array.isArray(dto.stages) || dto.stages.length === 0) throw err(400, 'at least one stage is required');
-  if (!Array.isArray(dto.sensors) || dto.sensors.length === 0) throw err(400, 'at least one sensor is required');
-  if (!Array.isArray(dto.triggers) || dto.triggers.length === 0) throw err(400, 'at least one trigger is required');
+  if (!Array.isArray(dto.stages) || dto.stages.length === 0)
+    throw err(400, 'at least one stage is required');
+  if (!Array.isArray(dto.sensors) || dto.sensors.length === 0)
+    throw err(400, 'at least one sensor is required');
+  if (!Array.isArray(dto.triggers) || dto.triggers.length === 0)
+    throw err(400, 'at least one trigger is required');
 
   const ordinals = dto.stages.map((s) => s.ordinal);
   if (new Set(ordinals).size !== ordinals.length) throw err(400, 'stage ordinals must be unique');
@@ -31,13 +39,17 @@ export function validate(dto: CreatePipelineDto): void {
   }
 
   for (const s of dto.sensors) {
-    if (!s.description?.trim()) throw err(400, 'every sensor/action item requires context (description)');
+    if (!s.description?.trim())
+      throw err(400, 'every sensor/action item requires context (description)');
   }
 
   for (const t of dto.triggers) {
     if (t.trigger_type === 'sensor_threshold') {
       if (!t.user_device_action_id || !t.operator || t.threshold_value == null) {
-        throw err(400, 'sensor_threshold trigger requires user_device_action_id, operator, threshold_value');
+        throw err(
+          400,
+          'sensor_threshold trigger requires user_device_action_id, operator, threshold_value',
+        );
       }
     }
     if (t.trigger_type === 'schedule' && !t.schedule_cron) {
@@ -50,11 +62,16 @@ export function validate(dto: CreatePipelineDto): void {
 // checks only require the prerequisite stage to appear anywhere earlier in ordinal order — not
 // immediately before — and must be re-checked here since the frontend can't be trusted alone.
 export async function validateStageOrdering(dto: CreatePipelineDto): Promise<void> {
-  const modelIds = [...new Set(
-    dto.stages.filter((s): s is InferStageDto => s.kind === 'infer').map((s) => s.ml_model_id)
-  )];
+  const modelIds = [
+    ...new Set(
+      dto.stages.filter((s): s is InferStageDto => s.kind === 'infer').map((s) => s.ml_model_id),
+    ),
+  ];
   const models = modelIds.length
-    ? await db.mlModel.findMany({ where: { id: { in: modelIds } }, select: { id: true, kind: true } })
+    ? await db.mlModel.findMany({
+        where: { id: { in: modelIds } },
+        select: { id: true, kind: true },
+      })
     : [];
   const modelKindById = new Map(models.map((m) => [m.id, m.kind]));
 
@@ -81,9 +98,13 @@ export async function validateStageOrdering(dto: CreatePipelineDto): Promise<voi
   // to flip these, but re-derive and enforce here rather than trusting it.
   for (const s of dto.sensors) {
     const implType = implTypeById.get(s.user_device_action_id);
-    const isForced = implType !== undefined && (SENSOR_IMPL_TYPES.has(implType) || IMAGE_IMPL_TYPES.has(implType));
+    const isForced =
+      implType !== undefined && (SENSOR_IMPL_TYPES.has(implType) || IMAGE_IMPL_TYPES.has(implType));
     if (isForced && (!s.inject_as_sensor || s.inject_as_action)) {
-      throw err(400, `telemetry/image item ${s.user_device_action_id} must have inject_as_sensor=true and inject_as_action=false`);
+      throw err(
+        400,
+        `telemetry/image item ${s.user_device_action_id} must have inject_as_sensor=true and inject_as_action=false`,
+      );
     }
   }
 
@@ -133,9 +154,14 @@ export async function validateSensorOverrides(
     const value = overrides[String(action.id)];
     if (value === undefined || value === '') continue;
     if (IMAGE_IMPL_TYPES.has(action.capability.implementation_type)) continue;
-    const constraint = deriveValidParameters(action.capability.traits.map((t) => t.google_trait.valid_parameters));
+    const constraint = deriveValidParameters(
+      action.capability.traits.map((t) => t.google_trait.valid_parameters),
+    );
     if (constraint && !validateValue(value, constraint)) {
-      throw err(400, `override value '${value}' for sensor action ${action.id} does not satisfy its constraint`);
+      throw err(
+        400,
+        `override value '${value}' for sensor action ${action.id} does not satisfy its constraint`,
+      );
     }
   }
 }
@@ -147,5 +173,6 @@ export async function ensureActionOwnership(userId: number, actionIds: number[])
     where: { id: { in: unique }, user_device: { user_id: userId } },
     select: { id: true },
   });
-  if (owned.length !== unique.length) throw err(403, 'one or more actions do not belong to this user');
+  if (owned.length !== unique.length)
+    throw err(403, 'one or more actions do not belong to this user');
 }

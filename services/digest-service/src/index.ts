@@ -32,7 +32,9 @@ async function main() {
   await consume(ch, QUEUES.ACTION_RESULT, actionResultConsumer(ch));
   await consume(ch, QUEUES.PICTURE_REQUESTED, pictureRequestedConsumer(ch));
   await consume(ch, QUEUES.OTA_INCOMING, otaIncomingConsumer(ch));
-  log.info('consumers started (telemetry, device-status, action-requested, action-result, picture-requested, ota-incoming)');
+  log.info(
+    'consumers started (telemetry, device-status, action-requested, action-result, picture-requested, ota-incoming)',
+  );
 
   const app = express();
   app.use(createHttpLogger(log));

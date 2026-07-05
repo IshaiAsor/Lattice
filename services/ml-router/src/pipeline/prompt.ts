@@ -50,5 +50,8 @@ export async function prepareLlmPrompt(
 
   const finalPrompt = buildPrompt(currentState, historic, actions, detections, userContext);
   run.context['prompt'] = finalPrompt;
-  log.info({ runId: run.runId, stageId: stage.dbId, prompt: run.context['prompt'] }, 'LLM prompt prepared');
+  log.info(
+    { runId: run.runId, stageId: stage.dbId, prompt: run.context['prompt'] },
+    'LLM prompt prepared',
+  );
 }

@@ -4,7 +4,7 @@ const otelEndpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
 // Needed for the (deferred) telemetry pipeline dispatch onto the existing RMQ ML stages.
 const rabbitmqUrl = process.env['RABBITMQ_URL'] ?? 'amqp://localhost';
 const valkeyConfig = {
-  url:      process.env['VALKEY_URL'] ?? process.env['REDIS_URL'] ?? 'redis://localhost:6379',
+  url: process.env['VALKEY_URL'] ?? process.env['REDIS_URL'] ?? 'redis://localhost:6379',
   username: process.env['VALKEY_USER'] ?? process.env['REDIS_USER'],
   password: process.env['VALKEY_PASSWORD'] ?? process.env['REDIS_PASSWORD'],
 };
@@ -12,4 +12,11 @@ const valkeyConfig = {
 // the last durably-stored frame. Mirrors digest-service's own PICTURE_ACK_TIMEOUT_MS default.
 const pictureRequestTimeoutMs = parseInt(process.env['PICTURE_ACK_TIMEOUT_MS'] ?? '15000', 10);
 
-export const env = { port, logLevel, otelEndpoint, rabbitmqUrl, valkeyConfig, pictureRequestTimeoutMs };
+export const env = {
+  port,
+  logLevel,
+  otelEndpoint,
+  rabbitmqUrl,
+  valkeyConfig,
+  pictureRequestTimeoutMs,
+};

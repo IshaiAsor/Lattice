@@ -1,17 +1,17 @@
 import jwt from 'jsonwebtoken';
 
 export const JwtPurpose = {
-  app_usage:                          'app_usage',
-  app_usage_refresh:                  'app_usage_refresh',
-  device_provisioning:                'device_provisioning',
-  device_usage:                       'device_usage',
-  device_temp_usage:                  'device_temp_usage',
-  device_usage_refresh:               'device_usage_refresh',
-  google_cloud_to_cloud_login:        'google_cloud_to_cloud_login',
-  google_cloud_to_cloud_login_refresh:'google_cloud_to_cloud_login_refresh',
+  app_usage: 'app_usage',
+  app_usage_refresh: 'app_usage_refresh',
+  device_provisioning: 'device_provisioning',
+  device_usage: 'device_usage',
+  device_temp_usage: 'device_temp_usage',
+  device_usage_refresh: 'device_usage_refresh',
+  google_cloud_to_cloud_login: 'google_cloud_to_cloud_login',
+  google_cloud_to_cloud_login_refresh: 'google_cloud_to_cloud_login_refresh',
 } as const;
 
-export type JwtPurpose = typeof JwtPurpose[keyof typeof JwtPurpose];
+export type JwtPurpose = (typeof JwtPurpose)[keyof typeof JwtPurpose];
 
 export interface AppTokenPayload {
   userId: string;
@@ -29,11 +29,7 @@ export interface GoogleTokenPayload {
   purpose: 'google_cloud_to_cloud_login' | 'google_cloud_to_cloud_login_refresh';
 }
 
-export function signJwt(
-  payload: object,
-  secret: string,
-  expiresIn: string | number,
-): string {
+export function signJwt(payload: object, secret: string, expiresIn: string | number): string {
   return jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
 }
 
@@ -65,7 +61,10 @@ export class JwtService {
     return signJwt({ ...payload, purpose }, this.secret, expiresIn);
   }
 
-  verifyToken(token: string, purpose: JwtPurpose): { valid: boolean; decoded: any; err?: string | null } {
+  verifyToken(
+    token: string,
+    purpose: JwtPurpose,
+  ): { valid: boolean; decoded: any; err?: string | null } {
     const result = verifyJwt<any>(token, purpose, this.secret);
     return result.valid
       ? { valid: true, decoded: result.decoded }

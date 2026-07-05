@@ -12,7 +12,10 @@ export function actionDispatchConsumer(client: MqttClient) {
     log.info({ topic, commandId: payload.commandId }, 'publishing action command to MQTT');
     client.publish(topic, JSON.stringify(payload.command), { qos: 1 }, (err) => {
       if (err) {
-        log.error({ err, topic, commandId: payload.commandId }, 'failed to publish command to MQTT');
+        log.error(
+          { err, topic, commandId: payload.commandId },
+          'failed to publish command to MQTT',
+        );
       } else {
         log.info({ topic, commandId: payload.commandId }, 'command dispatched');
       }

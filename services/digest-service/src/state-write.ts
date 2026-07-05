@@ -9,11 +9,11 @@ import { socket } from './socket/emitter';
 const log = createLogger('digest-service:state-write');
 
 export interface ScalarStateInput {
-  userId:     string;
-  deviceId:   string;
+  userId: string;
+  deviceId: string;
   actionName: string;
-  value:      unknown;
-  timestamp:  string;
+  value: unknown;
+  timestamp: string;
   // Present for device acks, absent for telemetry. Forwarded to the UI so it can ignore
   // stale updates when two commands for the same action are in flight concurrently.
   commandId?: string;
@@ -36,7 +36,7 @@ export async function writeScalarState(
   // 1. Authoritative state write — failure nacks → DLQ.
   await db.userDeviceAction.update({
     where: { id: userActionId },
-    data:  { current_state: stateValue, updated_at: new Date() },
+    data: { current_state: stateValue, updated_at: new Date() },
   });
 
   // 2. Append to sensor history (best-effort).
@@ -44,8 +44,8 @@ export async function writeScalarState(
     await db.sensorHistory.create({
       data: {
         user_device_action_id: userActionId,
-        value:                 stateValue,
-        recorded_at:           new Date(timestamp),
+        value: stateValue,
+        recorded_at: new Date(timestamp),
       },
     });
   } catch (err) {

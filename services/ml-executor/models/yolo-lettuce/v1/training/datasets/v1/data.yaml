@@ -7,8 +7,8 @@
 
 path: ./datasets/v1
 train: train/images
-val:   valid/images
-test:  test/images
+val: valid/images
+test: test/images
 
 nc: 3
 names: ['immature', 'mature', 'damaged']

@@ -33,8 +33,7 @@ if (!JWT_SECRET) {
 function requireDeviceToken(req, res, next) {
   if (!JWT_SECRET) return res.sendStatus(503);
   const token =
-    (req.headers.authorization && req.headers.authorization.split(' ')[1]) ||
-    req.query.token;
+    (req.headers.authorization && req.headers.authorization.split(' ')[1]) || req.query.token;
   if (!token) return res.sendStatus(401);
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
@@ -46,7 +45,12 @@ function requireDeviceToken(req, res, next) {
   }
 }
 
-const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 app.use(globalLimiter);
 
@@ -68,7 +72,10 @@ async function announceFirmware() {
     if (!fs.existsSync(metaFile)) continue;
     const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
     publish(ch, RK.OTA_INCOMING, meta);
-    log.info({ deviceType: device, version: meta.version }, 'Announced OTA release → q.ota.incoming');
+    log.info(
+      { deviceType: device, version: meta.version },
+      'Announced OTA release → q.ota.incoming',
+    );
   }
 }
 
@@ -78,7 +85,10 @@ async function announceWithRetry(attempt = 1) {
     await announceFirmware();
   } catch (err) {
     const delay = Math.min(30_000, 1000 * 2 ** (attempt - 1));
-    log.error({ err, attempt, retryInMs: delay }, 'Failed to announce firmware to RabbitMQ — retrying');
+    log.error(
+      { err, attempt, retryInMs: delay },
+      'Failed to announce firmware to RabbitMQ — retrying',
+    );
     setTimeout(() => announceWithRetry(attempt + 1), delay);
   }
 }

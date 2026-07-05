@@ -1,6 +1,10 @@
 import type { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
-import type { PictureRequestedPayload, ActionDispatchPayload, PictureResultPayload } from '@lattice/queue';
+import type {
+  PictureRequestedPayload,
+  ActionDispatchPayload,
+  PictureResultPayload,
+} from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import { db } from '../db/client';
 import { setPendingPicture, takePendingPicture } from '../cache/pending';
@@ -19,9 +23,9 @@ export function pictureRequestedConsumer(ch: Channel) {
     log.info({ userId, actionId, commandId, timeoutMs }, 'picture.requested received');
 
     const row = await db.userDeviceAction.findUnique({
-      where:  { id: actionId },
+      where: { id: actionId },
       select: {
-        user_device_id:   true,
+        user_device_id: true,
         mqtt_action_name: true,
         user_device: { select: { device: { select: { version: true } } } },
       },
@@ -49,8 +53,8 @@ export function pictureRequestedConsumer(ch: Channel) {
     const dispatch: ActionDispatchPayload = {
       userId,
       deviceId,
-      actionName:      'take_picture',
-      command:         { commandId },
+      actionName: 'take_picture',
+      command: { commandId },
       commandId,
       firmwareVersion: row.user_device.device.version,
     };

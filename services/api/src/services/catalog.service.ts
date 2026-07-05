@@ -35,9 +35,7 @@ class CatalogService {
     await db.device.delete({ where: { id } }); // cascades capabilities/pins/traits
   }
 
-  listCapabilities(
-    deviceId: number,
-  ): Promise<
+  listCapabilities(deviceId: number): Promise<
     Prisma.DeviceCapabilityGetPayload<{
       include: { pins: true; traits: true; google_type: true };
     }>[]

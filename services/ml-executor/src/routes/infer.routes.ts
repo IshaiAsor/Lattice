@@ -22,7 +22,10 @@ inferRouter.post('/api/infer', async (req, res) => {
     return;
   }
 
-  log.info({ model: `${model.kind}/${model.name}/${model.version}` }, 'HTTP infer request received');
+  log.info(
+    { model: `${model.kind}/${model.name}/${model.version}` },
+    'HTTP infer request received',
+  );
 
   try {
     let result: InferResponse;
@@ -34,7 +37,10 @@ inferRouter.post('/api/infer', async (req, res) => {
       if (!cfg.ollamaModel) throw new Error(`llm ${cfg.name} has no ollamaModel`);
       result = await new OllamaProviderService(cfg.ollamaModel).generate(messages as any);
     }
-    log.info({ model: `${model.kind}/${model.name}/${model.version}`, durationMs: result.durationMs }, 'HTTP infer complete');
+    log.info(
+      { model: `${model.kind}/${model.name}/${model.version}`, durationMs: result.durationMs },
+      'HTTP infer complete',
+    );
     res.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

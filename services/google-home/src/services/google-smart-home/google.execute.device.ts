@@ -11,48 +11,59 @@ type ValueMapper = (params: any) => string | undefined;
 
 const IMPLEMENTATION_COMMAND_MAP: Record<string, Record<string, ValueMapper>> = {
   OutletAction: {
-    'action.devices.commands.OnOff':      p => p.on ? 'on' : 'off',
-    'action.devices.commands.LockUnlock': p => p.lock ? 'on' : 'off',
-    'action.devices.commands.StartStop':  p => p.start ? 'on' : 'off',
-    'action.devices.commands.OpenClose':  p => p.openPercent > 0 ? 'on' : 'off',
-    'action.devices.commands.ArmDisarm':  p => p.arm ? 'arm' : 'disarm',
+    'action.devices.commands.OnOff': (p) => (p.on ? 'on' : 'off'),
+    'action.devices.commands.LockUnlock': (p) => (p.lock ? 'on' : 'off'),
+    'action.devices.commands.StartStop': (p) => (p.start ? 'on' : 'off'),
+    'action.devices.commands.OpenClose': (p) => (p.openPercent > 0 ? 'on' : 'off'),
+    'action.devices.commands.ArmDisarm': (p) => (p.arm ? 'arm' : 'disarm'),
   },
   LightDimmerAction: {
-    'action.devices.commands.OnOff':              p => p.on ? 'on' : 'off',
-    'action.devices.commands.BrightnessAbsolute': p => String(p.brightness),
+    'action.devices.commands.OnOff': (p) => (p.on ? 'on' : 'off'),
+    'action.devices.commands.BrightnessAbsolute': (p) => String(p.brightness),
   },
   OneDirectionalMotorAction: {
-    'action.devices.commands.OnOff':       p => p.on ? 'on' : 'off',
-    'action.devices.commands.SetFanSpeed': p => p.fanSpeedPercent !== undefined
-      ? String(p.fanSpeedPercent)
-      : p.fanSpeed === 'high_speed' ? '100' : '50',
-    'action.devices.commands.StartStop':   p => p.start ? 'on' : 'off',
+    'action.devices.commands.OnOff': (p) => (p.on ? 'on' : 'off'),
+    'action.devices.commands.SetFanSpeed': (p) =>
+      p.fanSpeedPercent !== undefined
+        ? String(p.fanSpeedPercent)
+        : p.fanSpeed === 'high_speed'
+          ? '100'
+          : '50',
+    'action.devices.commands.StartStop': (p) => (p.start ? 'on' : 'off'),
   },
-  TemperatureAction:    {},
-  WaterLevelAction:     {},
-  PhLevelAction:        {},
-  TdsLevelAction:       {},
-  HumidityAction:       {},
+  TemperatureAction: {},
+  WaterLevelAction: {},
+  PhLevelAction: {},
+  TdsLevelAction: {},
+  HumidityAction: {},
   AirTemperatureAction: {},
-  CO2LevelAction:       {},
-  CameraAction:         {},
+  CO2LevelAction: {},
+  CameraAction: {},
 };
 
 class GoogleExecuteDeviceService {
   public async ExecuteDeviceCommands(ch: Channel, userId: number, commands: any[]): Promise<any> {
     log.info({ userId, commandCount: commands.length }, 'Google EXECUTE intent received');
-    const actions = await deviceActionsService.getUserActions(userId);
+    const actions = await deviceActionsService.getUserActions(userId, '');
     const responses: any[] = [];
 
     for (const command of commands) {
       const deviceIds = command.devices.map((d: any) => parseInt(d.id));
       for (const execution of command.execution) {
-        const invalidIds = await this.handleExecuteCommand(ch, userId, execution, actions, deviceIds);
+        const invalidIds = await this.handleExecuteCommand(
+          ch,
+          userId,
+          execution,
+          actions,
+          deviceIds,
+        );
         const validIds = deviceIds.filter((id: number) => !invalidIds.includes(id));
-        if (validIds.length) responses.push({ ids: validIds, status: 'SUCCESS', states: { online: true } });
+        if (validIds.length)
+          responses.push({ ids: validIds, status: 'SUCCESS', states: { online: true } });
         // Value failed the capability's declared valid_parameters constraint — Google's
         // documented error code for this case.
-        if (invalidIds.length) responses.push({ ids: invalidIds, status: 'ERROR', errorCode: 'valueOutOfRange' });
+        if (invalidIds.length)
+          responses.push({ ids: invalidIds, status: 'ERROR', errorCode: 'valueOutOfRange' });
       }
     }
 
@@ -71,15 +82,22 @@ class GoogleExecuteDeviceService {
     const invalidIds: number[] = [];
     for (const deviceId of deviceIds) {
       try {
-        const userAction = actions.find(a => a.id === deviceId);
+        const userAction = actions.find((a) => a.id === deviceId);
         if (!userAction) {
           log.error({ deviceId, userId }, 'action not found for user');
           continue;
         }
 
-        const deviceValue = this.mapExecutionToValue(execution, userAction.implementation_type, deviceId);
+        const deviceValue = this.mapExecutionToValue(
+          execution,
+          userAction.implementation_type,
+          deviceId,
+        );
         if (deviceValue === undefined) {
-          log.warn({ command: execution.command, implType: userAction.implementation_type, deviceId }, 'no mapping for command');
+          log.warn(
+            { command: execution.command, implType: userAction.implementation_type, deviceId },
+            'no mapping for command',
+          );
           continue;
         }
 

@@ -35,7 +35,10 @@ async function main() {
       res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     }
-    if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
     next();
   });
 

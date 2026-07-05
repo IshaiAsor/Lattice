@@ -36,13 +36,14 @@ export function deviceAckHandler(ch: Channel): MqttHandler {
       }
 
       const msg: ActionResultPayload = {
-        userId:     parsed.userId,
-        deviceId:   parsed.deviceId,
+        userId: parsed.userId,
+        deviceId: parsed.deviceId,
         actionName: parsed.actionName ?? '',
-        commandId:  typeof raw.commandId === 'string' && raw.commandId.length > 0 ? raw.commandId : undefined,
+        commandId:
+          typeof raw.commandId === 'string' && raw.commandId.length > 0 ? raw.commandId : undefined,
         status,
-        value:      raw.value,
-        timestamp:  new Date().toISOString(),
+        value: raw.value,
+        timestamp: new Date().toISOString(),
       };
       publish(ch, RK.ACTION_RESULT, msg);
       log.info({ topic: parsed, msg }, 'ack received and forwarded as action.result');
