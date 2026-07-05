@@ -1,0 +1,48 @@
+name: Checks
+
+# Quality gate: typecheck, lint, format, tests. Runs alongside the per-service image
+# workflows without touching them or the shared version-tag bump.
+on:
+  push:
+    branches: ['master', 'v2.2']
+  pull_request:
+    branches: ['master']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared packages
+        run: npm run build:libs
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Non-blocking until the one-time `npm run format` normalization lands (181 legacy
+      # files predate prettier enforcement). lint-staged formats files as they're touched;
+      # drop continue-on-error once the tree is clean.
+      - name: Format check
+        continue-on-error: true
+        run: npm run format:check
+
+      # e2e suites self-skip when the stack is down (tests/e2e/helpers/stack.ts),
+      # so this runs unit tests only in CI.
+      - name: Tests
+        run: npm test

@@ -8,6 +8,11 @@
             "type": "command",
             "command": "powershell.exe -NonInteractive -File \"C:\\Projects\\iot-smart-home\\.claude\\hooks\\backoffice-lint.ps1\"",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NonInteractive -File \"C:\\Projects\\iot-smart-home\\.claude\\hooks\\service-check.ps1\"",
+            "timeout": 60
           }
         ]
       }

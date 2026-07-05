@@ -13,10 +13,14 @@ const router = express.Router();
 
 const jwtService = new JwtService(config.jwt.secret, {
   [JwtPurpose.google_cloud_to_cloud_login]: config.jwt.googleCloudToCloudLoginExpiresIn,
-  [JwtPurpose.google_cloud_to_cloud_login_refresh]: config.jwt.googleCloudToCloudLoginRefreshExpiresIn,
+  [JwtPurpose.google_cloud_to_cloud_login_refresh]:
+    config.jwt.googleCloudToCloudLoginRefreshExpiresIn,
 });
 
-const authRateLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }) as unknown as express.RequestHandler;
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+}) as unknown as express.RequestHandler;
 
 router.get('/auth', (req: Request, res: Response) => {
   const { redirect_uri, state, client_id, response_type } = req.query as Record<string, string>;
@@ -31,19 +35,18 @@ router.get('/auth', (req: Request, res: Response) => {
     return res.status(400).send('Invalid redirect_uri');
   }
 
-  res.send(renderAuthPage('/api/google/auth/login', { redirect_uri, state, client_id, response_type }));
+  res.send(
+    renderAuthPage('/api/google/auth/login', { redirect_uri, state, client_id, response_type }),
+  );
 });
 
 router.post('/auth/login', authRateLimiter, async (req: Request, res: Response) => {
-  const { username, password, googleCode, redirect_uri, state, client_id, response_type } = req.body;
+  const { username, password, googleCode, redirect_uri, state, client_id, response_type } =
+    req.body;
 
   if (!redirect_uri || !redirect_uri.startsWith('https://oauth-redirect.googleusercontent.com/')) {
     return res.status(400).send('Invalid redirect_uri');
   }
-
-  const ip = (Array.isArray(req.headers['x-forwarded-for'])
-    ? req.headers['x-forwarded-for'][0]
-    : req.headers['x-forwarded-for']) ?? req.socket.remoteAddress ?? 'unknown';
 
   try {
     let user: { id: number } | null = null;
@@ -56,14 +59,24 @@ router.post('/auth/login', authRateLimiter, async (req: Request, res: Response) 
 
     if (user) {
       const authCode = crypto.randomBytes(16).toString('hex');
-      await valkeyService.set(`oauth_code:${authCode}`, { userId: user.id, redirectUri: redirect_uri }, 600);
+      await valkeyService.set(
+        `oauth_code:${authCode}`,
+        { userId: user.id, redirectUri: redirect_uri },
+        600,
+      );
       return res.redirect(`${redirect_uri}?code=${authCode}&state=${state}`);
     }
   } catch (err) {
     log.error({ err }, 'login error');
   }
 
-  res.send(renderAuthPage('/api/google/auth/login', { redirect_uri, state, client_id, response_type }, 'Invalid credentials'));
+  res.send(
+    renderAuthPage(
+      '/api/google/auth/login',
+      { redirect_uri, state, client_id, response_type },
+      'Invalid credentials',
+    ),
+  );
 });
 
 router.post('/token', async (req: Request, res: Response) => {
@@ -81,7 +94,8 @@ router.post('/token', async (req: Request, res: Response) => {
   const expectedId = config.google.authClientId;
   const expectedSecret = config.google.authClientSecret ?? '';
 
-  const secretValid = clientSecret?.length === expectedSecret.length &&
+  const secretValid =
+    clientSecret?.length === expectedSecret.length &&
     crypto.timingSafeEqual(Buffer.from(clientSecret), Buffer.from(expectedSecret));
 
   if (clientId !== expectedId || !secretValid) {
@@ -94,30 +108,41 @@ router.post('/token', async (req: Request, res: Response) => {
     if (grant_type === 'authorization_code') {
       if (!code) return res.status(400).json({ error: 'invalid_request' });
 
-      const cached = await valkeyService.get<{ userId: number; redirectUri: string }>(`oauth_code:${code}`);
+      const cached = await valkeyService.get<{ userId: number; redirectUri: string }>(
+        `oauth_code:${code}`,
+      );
       if (!cached) return res.status(401).json({ error: 'invalid_grant' });
 
       if (redirect_uri && redirect_uri !== cached.redirectUri) {
         await valkeyService.del(`oauth_code:${code}`);
-        return res.status(400).json({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
+        return res
+          .status(400)
+          .json({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
       }
 
       userId = cached.userId.toString();
       await valkeyService.del(`oauth_code:${code}`);
-
     } else if (grant_type === 'refresh_token') {
       if (!refresh_token) return res.status(400).json({ error: 'invalid_request' });
 
-      const result = jwtService.verifyToken(refresh_token, JwtPurpose.google_cloud_to_cloud_login_refresh);
+      const result = jwtService.verifyToken(
+        refresh_token,
+        JwtPurpose.google_cloud_to_cloud_login_refresh,
+      );
       if (!result.valid) return res.status(401).json({ error: 'invalid_grant' });
       userId = result.decoded.id;
-
     } else {
       return res.status(400).json({ error: 'unsupported_grant_type' });
     }
 
-    const accessToken = jwtService.generateToken({ id: userId, user: 'google' }, JwtPurpose.google_cloud_to_cloud_login);
-    const newRefreshToken = jwtService.generateToken({ id: userId, user: 'google' }, JwtPurpose.google_cloud_to_cloud_login_refresh);
+    const accessToken = jwtService.generateToken(
+      { id: userId, user: 'google' },
+      JwtPurpose.google_cloud_to_cloud_login,
+    );
+    const newRefreshToken = jwtService.generateToken(
+      { id: userId, user: 'google' },
+      JwtPurpose.google_cloud_to_cloud_login_refresh,
+    );
 
     res.json({
       token_type: 'Bearer',

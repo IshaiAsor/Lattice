@@ -31,9 +31,12 @@ class GoogleHomegraphService {
       }
 
       const auth = new google.auth.GoogleAuth(authConfig);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       this.homegraph = google.homegraph({ version: 'v1', auth: auth as any });
-      log.info({ source: credentials ? 'env key' : keyFilename ? 'key file' : 'ADC' }, 'initialized');
+      log.info(
+        { source: credentials ? 'env key' : keyFilename ? 'key file' : 'ADC' },
+        'initialized',
+      );
     } catch (error) {
       log.error({ err: error }, 'failed to initialize — check service account config');
     }
@@ -62,7 +65,15 @@ class GoogleHomegraphService {
       const res = await this.homegraph.devices.reportStateAndNotification({ requestBody });
       log.info({ agentUserId, actionId: action.id, data: res.data }, 'reportState succeeded');
     } catch (error: any) {
-      log.error({ agentUserId, actionId: action.id, err: error.message, googleErr: error.response?.data?.error }, 'reportState failed');
+      log.error(
+        {
+          agentUserId,
+          actionId: action.id,
+          err: error.message,
+          googleErr: error.response?.data?.error,
+        },
+        'reportState failed',
+      );
     }
   }
 }

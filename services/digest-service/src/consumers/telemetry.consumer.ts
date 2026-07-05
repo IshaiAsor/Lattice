@@ -18,9 +18,9 @@ const CAMERA_FRAME_TTL_SECONDS = 60;
 
 export function telemetryConsumer(ch: Channel) {
   return async (payload: TelemetryArrivedPayload): Promise<void> => {
-    const { userId, deviceId, actionName, value, timestamp } = payload;
+    const { userId, deviceId, actionName, timestamp } = payload;
 
-    // value can be a base64 image frame — never log it raw here, before the kind
+    // payload.value can be a base64 image frame — never log it raw here, before the kind
     // (scalar vs image) is known. handleScalar/handleImage log their own specifics.
     log.info({ userId, deviceId, actionName, timestamp }, 'telemetry received');
 
@@ -60,8 +60,8 @@ async function handleImage(
   await db.sensorHistory.create({
     data: {
       user_device_action_id: userActionId,
-      value:                 frame,
-      recorded_at:           new Date(timestamp),
+      value: frame,
+      recorded_at: new Date(timestamp),
     },
   });
 
@@ -90,7 +90,12 @@ async function handleImage(
     try {
       const pending = await takePendingPicture(commandId);
       if (pending !== null) {
-        const result: PictureResultPayload = { commandId, status: 'ok', image: frame, capturedAt: timestamp };
+        const result: PictureResultPayload = {
+          commandId,
+          status: 'ok',
+          image: frame,
+          capturedAt: timestamp,
+        };
         publish(ch, RK.PICTURE_RESULT, result);
       }
     } catch (err) {
@@ -99,7 +104,10 @@ async function handleImage(
   }
 
   // Never log `frame` itself — it's a base64 JPEG, easily hundreds of KB.
-  log.info({ userDeviceId, userActionId, frameSizeBytes: frame.length, commandId }, 'camera frame stored');
+  log.info(
+    { userDeviceId, userActionId, frameSizeBytes: frame.length, commandId },
+    'camera frame stored',
+  );
 }
 
 // Scalar sensor reading. Delegates to the shared authoritative-state writer (also used
@@ -119,13 +127,19 @@ function evaluateThreshold(value: unknown, operator: string, threshold: string):
   const t = parseFloat(threshold);
   if (isNaN(v) || isNaN(t)) return String(value) === threshold;
   switch (operator) {
-    case '>':  return v > t;
-    case '<':  return v < t;
-    case '>=': return v >= t;
-    case '<=': return v <= t;
+    case '>':
+      return v > t;
+    case '<':
+      return v < t;
+    case '>=':
+      return v >= t;
+    case '<=':
+      return v <= t;
     case '=':
-    case '==': return v === t;
-    default:   return false;
+    case '==':
+      return v === t;
+    default:
+      return false;
   }
 }
 
@@ -138,8 +152,8 @@ async function firePipelineTriggers(
   try {
     const triggers = await db.pipelineTrigger.findMany({
       where: {
-        pipeline:              { enabled: true, user_id: parseInt(userId, 10) },
-        trigger_type:          'sensor_threshold',
+        pipeline: { enabled: true, user_id: parseInt(userId, 10) },
+        trigger_type: 'sensor_threshold',
         user_device_action_id: userActionId,
       },
       include: { pipeline: { select: { id: true, user_id: true } } },
@@ -157,21 +171,25 @@ async function firePipelineTriggers(
 
       const run = await db.pipelineRun.create({
         data: {
-          pipeline_id:     trigger.pipeline.id,
-          status:          'queued',
-          trigger_type:    'sensor_threshold',
-          trigger_payload: { triggerId: trigger.id, actionId: userActionId, value: String(value) } as Prisma.InputJsonValue,
+          pipeline_id: trigger.pipeline.id,
+          status: 'queued',
+          trigger_type: 'sensor_threshold',
+          trigger_payload: {
+            triggerId: trigger.id,
+            actionId: userActionId,
+            value: String(value),
+          } as Prisma.InputJsonValue,
         },
       });
 
       publish(ch, RK.PIPELINE_TRIGGER, {
-        userId:     String(trigger.pipeline.user_id),
+        userId: String(trigger.pipeline.user_id),
         pipelineId: String(trigger.pipeline.id),
-        runId:      run.id,
-        deviceId:   undefined,
+        runId: run.id,
+        deviceId: undefined,
         actionName: undefined,
         value,
-        timestamp:  new Date().toISOString(),
+        timestamp: new Date().toISOString(),
       });
     }
   } catch (err) {

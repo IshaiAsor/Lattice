@@ -10,33 +10,33 @@ const DLQ_EXCHANGE = 'iot.dlq';
 
 // Static routing keys — no userId anywhere; userId lives in the payload.
 export const RK = {
-  TELEMETRY_ARRIVED:            'telemetry.arrived',
-  RULES_EVALUATE:               'rules.evaluate',
-  PIPELINE_TRIGGER:             'pipeline.trigger',
-  PIPELINE_CANCEL:              'pipeline.cancel',
-  PIPELINE_RESULT:              'pipeline.result',
-  DEVICE_STATE_CHANGED:         'device.state.changed',
+  TELEMETRY_ARRIVED: 'telemetry.arrived',
+  RULES_EVALUATE: 'rules.evaluate',
+  PIPELINE_TRIGGER: 'pipeline.trigger',
+  PIPELINE_CANCEL: 'pipeline.cancel',
+  PIPELINE_RESULT: 'pipeline.result',
+  DEVICE_STATE_CHANGED: 'device.state.changed',
   // A UI client's intent to change an action's state, keyed by UserDeviceAction id.
   // digest resolves it (→ device/version/mqtt name), writes optimistic state + echoes,
   // then publishes ACTION_DISPATCH for the device.
-  ACTION_REQUESTED:             'action.requested',
-  ACTION_DISPATCH:              'action.dispatch',
+  ACTION_REQUESTED: 'action.requested',
+  ACTION_DISPATCH: 'action.dispatch',
   // A device's ack that it executed (or rejected) a command. digest writes the
   // authoritative current_state on success and resolves the in-flight pending request.
-  ACTION_RESULT:                'action.result',
+  ACTION_RESULT: 'action.result',
   // ml-router's request for a fresh camera frame (not a cached/periodic one), and digest's
   // correlated response — same request/response shape as ACTION_REQUESTED/ACTION_RESULT,
   // but for camera captures triggered by a pipeline's enrich stage.
-  PICTURE_REQUESTED:            'picture.requested',
-  PICTURE_RESULT:               'picture.result',
+  PICTURE_REQUESTED: 'picture.requested',
+  PICTURE_RESULT: 'picture.result',
   PIPELINE_STAGE_SENSOR_DIGEST: 'pipeline.stage.sensor_digest',
-  PIPELINE_STAGE_COMMAND_EXEC:  'pipeline.stage.command_exec',
-  PIPELINE_STAGE_DONE:          'pipeline.stage.done.v1',
-  OTA_INCOMING:                 'ota.incoming',
-  OTA_DISPATCH:                 'ota.dispatch',
+  PIPELINE_STAGE_COMMAND_EXEC: 'pipeline.stage.command_exec',
+  PIPELINE_STAGE_DONE: 'pipeline.stage.done.v1',
+  OTA_INCOMING: 'ota.incoming',
+  OTA_DISPATCH: 'ota.dispatch',
   // Best-effort event published by digest when an OTA release passes validation.
   // notification-service (F15) binds q.notification.publish to this key.
-  NOTIFICATION_PUBLISH:         'notification.publish',
+  NOTIFICATION_PUBLISH: 'notification.publish',
 } as const;
 
 export type RoutingKey = (typeof RK)[keyof typeof RK];
@@ -47,25 +47,25 @@ export function mlStageRK(kind: string, name: string, version: string): string {
 }
 
 export const QUEUES = {
-  TELEMETRY_ARRIVED:            'q.telemetry.arrived',
-  RULES_EVALUATE:               'q.rules.evaluate',
-  PIPELINE_TRIGGER:             'q.pipeline.trigger',
-  PIPELINE_CANCEL:              'q.pipeline.cancel',
-  PIPELINE_RESULT:              'q.pipeline.result',
-  DEVICE_STATE_CHANGED:         'q.device.state.changed',
-  ACTION_REQUESTED:             'q.action.requested',
-  ACTION_DISPATCH:              'q.action.dispatch',
-  ACTION_RESULT:                'q.action.result',
-  ACTION_RESULT_GOOGLE_HOME:    'q.action.result.google-home',
-  PICTURE_REQUESTED:            'q.picture.requested',
-  PICTURE_RESULT:               'q.picture.result',
+  TELEMETRY_ARRIVED: 'q.telemetry.arrived',
+  RULES_EVALUATE: 'q.rules.evaluate',
+  PIPELINE_TRIGGER: 'q.pipeline.trigger',
+  PIPELINE_CANCEL: 'q.pipeline.cancel',
+  PIPELINE_RESULT: 'q.pipeline.result',
+  DEVICE_STATE_CHANGED: 'q.device.state.changed',
+  ACTION_REQUESTED: 'q.action.requested',
+  ACTION_DISPATCH: 'q.action.dispatch',
+  ACTION_RESULT: 'q.action.result',
+  ACTION_RESULT_GOOGLE_HOME: 'q.action.result.google-home',
+  PICTURE_REQUESTED: 'q.picture.requested',
+  PICTURE_RESULT: 'q.picture.result',
   PIPELINE_STAGE_SENSOR_DIGEST: 'q.pipeline.stage.sensor_digest',
-  PIPELINE_STAGE_COMMAND_EXEC:  'q.pipeline.stage.command_exec',
-  PIPELINE_STAGE_DONE:          'q.pipeline.stage.done',
-  OTA_INCOMING:                 'q.ota.incoming',
-  OTA_DISPATCH:                 'q.ota.dispatch',
-  NOTIFICATION_PUBLISH:         'q.notification.publish',
-  DLQ:                          'q.dlq',
+  PIPELINE_STAGE_COMMAND_EXEC: 'q.pipeline.stage.command_exec',
+  PIPELINE_STAGE_DONE: 'q.pipeline.stage.done',
+  OTA_INCOMING: 'q.ota.incoming',
+  OTA_DISPATCH: 'q.ota.dispatch',
+  NOTIFICATION_PUBLISH: 'q.notification.publish',
+  DLQ: 'q.dlq',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -83,23 +83,23 @@ export const DLQ_ARGS = {
 
 // Static queue → routing key mapping (same key names, parallel arrays).
 const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
-  [QUEUES.TELEMETRY_ARRIVED,            RK.TELEMETRY_ARRIVED],
-  [QUEUES.RULES_EVALUATE,               RK.RULES_EVALUATE],
-  [QUEUES.PIPELINE_TRIGGER,             RK.PIPELINE_TRIGGER],
-  [QUEUES.PIPELINE_CANCEL,              RK.PIPELINE_CANCEL],
-  [QUEUES.PIPELINE_RESULT,              RK.PIPELINE_RESULT],
-  [QUEUES.DEVICE_STATE_CHANGED,         RK.DEVICE_STATE_CHANGED],
-  [QUEUES.ACTION_REQUESTED,             RK.ACTION_REQUESTED],
-  [QUEUES.ACTION_DISPATCH,              RK.ACTION_DISPATCH],
-  [QUEUES.ACTION_RESULT,                RK.ACTION_RESULT],
-  [QUEUES.ACTION_RESULT_GOOGLE_HOME,    RK.ACTION_RESULT],
-  [QUEUES.PICTURE_REQUESTED,            RK.PICTURE_REQUESTED],
-  [QUEUES.PICTURE_RESULT,               RK.PICTURE_RESULT],
+  [QUEUES.TELEMETRY_ARRIVED, RK.TELEMETRY_ARRIVED],
+  [QUEUES.RULES_EVALUATE, RK.RULES_EVALUATE],
+  [QUEUES.PIPELINE_TRIGGER, RK.PIPELINE_TRIGGER],
+  [QUEUES.PIPELINE_CANCEL, RK.PIPELINE_CANCEL],
+  [QUEUES.PIPELINE_RESULT, RK.PIPELINE_RESULT],
+  [QUEUES.DEVICE_STATE_CHANGED, RK.DEVICE_STATE_CHANGED],
+  [QUEUES.ACTION_REQUESTED, RK.ACTION_REQUESTED],
+  [QUEUES.ACTION_DISPATCH, RK.ACTION_DISPATCH],
+  [QUEUES.ACTION_RESULT, RK.ACTION_RESULT],
+  [QUEUES.ACTION_RESULT_GOOGLE_HOME, RK.ACTION_RESULT],
+  [QUEUES.PICTURE_REQUESTED, RK.PICTURE_REQUESTED],
+  [QUEUES.PICTURE_RESULT, RK.PICTURE_RESULT],
   [QUEUES.PIPELINE_STAGE_SENSOR_DIGEST, RK.PIPELINE_STAGE_SENSOR_DIGEST],
-  [QUEUES.PIPELINE_STAGE_COMMAND_EXEC,  RK.PIPELINE_STAGE_COMMAND_EXEC],
-  [QUEUES.PIPELINE_STAGE_DONE,          RK.PIPELINE_STAGE_DONE],
-  [QUEUES.OTA_INCOMING,                 RK.OTA_INCOMING],
-  [QUEUES.OTA_DISPATCH,                 RK.OTA_DISPATCH],
+  [QUEUES.PIPELINE_STAGE_COMMAND_EXEC, RK.PIPELINE_STAGE_COMMAND_EXEC],
+  [QUEUES.PIPELINE_STAGE_DONE, RK.PIPELINE_STAGE_DONE],
+  [QUEUES.OTA_INCOMING, RK.OTA_INCOMING],
+  [QUEUES.OTA_DISPATCH, RK.OTA_DISPATCH],
 ];
 
 function withHeartbeat(url: string, seconds = 60): string {
@@ -150,24 +150,23 @@ export async function assertMlQueue(
   prefetch = 1,
 ): Promise<string> {
   const queue = mlStageQueue(kind, name, version);
-  const rk    = mlStageRK(kind, name, version);
+  const rk = mlStageRK(kind, name, version);
   await ch.assertQueue(queue, { durable: true, arguments: DLQ_ARGS });
   await ch.bindQueue(queue, EXCHANGE, rk);
-  ch.prefetch(prefetch);
+  await ch.prefetch(prefetch);
   return queue;
 }
 
 export function publish<T>(ch: Channel, routingKey: string, payload: T): void {
-  const ok = ch.publish(
-    EXCHANGE,
-    routingKey,
-    Buffer.from(JSON.stringify(payload)),
-    { persistent: true, contentType: 'application/json' },
-  );
-  if (!ok) 
-    {
-      throw new Error(`RabbitMQ publish rejected (flow control / channel not writable) for routing key: ${routingKey}`);
-    }
+  const ok = ch.publish(EXCHANGE, routingKey, Buffer.from(JSON.stringify(payload)), {
+    persistent: true,
+    contentType: 'application/json',
+  });
+  if (!ok) {
+    throw new Error(
+      `RabbitMQ publish rejected (flow control / channel not writable) for routing key: ${routingKey}`,
+    );
+  }
 }
 
 export async function consume<T>(

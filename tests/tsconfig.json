@@ -1,0 +1,14 @@
+{
+  // Lint/editor tsconfig for the root test suites (jest runs via ts-jest, not tsc).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node", "jest"]
+  },
+  "include": ["**/*.ts"]
+}

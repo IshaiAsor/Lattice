@@ -4,7 +4,10 @@ import type { Device, DeviceCapability } from '@lattice/prisma-client';
 // Explicit return types below: the Json valid_parameters field makes the query results'
 // inferred type unnameable across the monorepo's per-package Prisma client (TS2742).
 type DeviceWithCapabilities = Device & {
-  capabilities: (DeviceCapability & Prisma.DeviceCapabilityGetPayload<{ include: { pins: true; traits: true; google_type: true } }>)[];
+  capabilities: (DeviceCapability &
+    Prisma.DeviceCapabilityGetPayload<{
+      include: { pins: true; traits: true; google_type: true };
+    }>)[];
 };
 
 class CatalogService {
@@ -32,7 +35,13 @@ class CatalogService {
     await db.device.delete({ where: { id } }); // cascades capabilities/pins/traits
   }
 
-  listCapabilities(deviceId: number): Promise<Prisma.DeviceCapabilityGetPayload<{ include: { pins: true; traits: true; google_type: true } }>[]> {
+  listCapabilities(
+    deviceId: number,
+  ): Promise<
+    Prisma.DeviceCapabilityGetPayload<{
+      include: { pins: true; traits: true; google_type: true };
+    }>[]
+  > {
     return db.deviceCapability.findMany({
       where: { device_id: deviceId },
       orderBy: { id: 'asc' },
@@ -76,11 +85,7 @@ class CatalogService {
     });
   }
 
-  private async ensureExists(
-    model: 'device',
-    id: number,
-  ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async ensureExists(model: 'device', id: number): Promise<void> {
     const found = await (db as any)[model].findUnique({ where: { id } });
     if (!found) throw Object.assign(new Error('Not found'), { statusCode: 404 });
   }

@@ -1,0 +1,24 @@
+{
+  // Solution file for `tsc -b` (npm run typecheck) — builds every composite workspace.
+  // prisma/ and services/ota-manager are excluded: not composite (plain scripts / JS).
+  "files": [],
+  "references": [
+    { "path": "packages/otel" },
+    { "path": "packages/logger" },
+    { "path": "packages/queue" },
+    { "path": "packages/jwt" },
+    { "path": "packages/prisma-client" },
+    { "path": "packages/ml" },
+    { "path": "packages/ioredis" },
+    { "path": "packages/capability-validation" },
+    { "path": "services/api" },
+    { "path": "services/automation-worker" },
+    { "path": "services/device-gateway" },
+    { "path": "services/digest-service" },
+    { "path": "services/google-home" },
+    { "path": "services/ml-executor" },
+    { "path": "services/ml-router" },
+    { "path": "services/mqtt-service" },
+    { "path": "services/socket-server" }
+  ]
+}

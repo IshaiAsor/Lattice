@@ -26,19 +26,21 @@ type UserDeviceActionFull = UserDeviceAction & {
 };
 
 class RulesEngine {
-
   async evaluateForUser(ch: Channel, userId: number): Promise<void> {
     try {
-      const rules = await db.userRule.findMany({
+      const rules = (await db.userRule.findMany({
         where: { user_id: userId, enabled: true },
         include: { conditions: true, actions: true },
-      }) as UserRuleWithDetails[];
+      })) as UserRuleWithDetails[];
       for (const rule of rules) {
         if (!this.isCooldownExpired(rule)) continue;
         const triggered = await this.evaluateRule(rule);
         if (triggered) {
           await this.executeRule(ch, userId, rule);
-          await db.userRule.update({ where: { id: rule.id }, data: { last_triggered: new Date(), updated_at: new Date() } });
+          await db.userRule.update({
+            where: { id: rule.id },
+            data: { last_triggered: new Date(), updated_at: new Date() },
+          });
         }
       }
     } catch (err) {
@@ -80,10 +82,15 @@ class RulesEngine {
       return this.matchesScheduleNow(condition.schedule_time, condition.schedule_days);
     }
 
-    if (condition.condition_type === 'device_state' || condition.condition_type === 'device_status') {
+    if (
+      condition.condition_type === 'device_state' ||
+      condition.condition_type === 'device_status'
+    ) {
       if (!condition.user_device_id || !condition.status_value) return false;
       try {
-        const device = await db.userDevice.findUniqueOrThrow({ where: { id: condition.user_device_id } });
+        const device = await db.userDevice.findUniqueOrThrow({
+          where: { id: condition.user_device_id },
+        });
         return condition.status_value === 'online' ? !!device.online : !device.online;
       } catch {
         return false;
@@ -91,19 +98,27 @@ class RulesEngine {
     }
 
     if (condition.condition_type === 'vlm_result' || condition.condition_type === 'vlm_decision') {
-      log.warn({ condition_type: condition.condition_type }, 'vlm conditions not yet supported — F8 pending');
+      log.warn(
+        { condition_type: condition.condition_type },
+        'vlm conditions not yet supported — F8 pending',
+      );
       return false;
     }
 
     if (condition.condition_type === 'threshold') {
-      if (!condition.user_device_action_id || !condition.operator || condition.threshold_value == null) return false;
+      if (
+        !condition.user_device_action_id ||
+        !condition.operator ||
+        condition.threshold_value == null
+      )
+        return false;
       const action = await db.userDeviceAction.findUnique({
         where: { id: condition.user_device_action_id },
         include: { capability: true },
       });
       if (!action) return false;
       const current = parseFloat(action.current_state ?? '');
-      const target  = parseFloat(condition.threshold_value);
+      const target = parseFloat(condition.threshold_value);
       if (isNaN(current) || isNaN(target)) return false;
       return this.compare(current, condition.operator, target);
     }
@@ -114,8 +129,8 @@ class RulesEngine {
   private matchesScheduleNow(time: string | null, days: number[]): boolean {
     if (!time) return false;
     const now = new Date();
-    const hh  = now.getHours().toString().padStart(2, '0');
-    const mm  = now.getMinutes().toString().padStart(2, '0');
+    const hh = now.getHours().toString().padStart(2, '0');
+    const mm = now.getMinutes().toString().padStart(2, '0');
     if (`${hh}:${mm}` !== time) return false;
     if (!days || days.length === 0) return true;
     return days.includes(now.getDay());
@@ -123,13 +138,20 @@ class RulesEngine {
 
   private compare(a: number, op: string, b: number): boolean {
     switch (op) {
-      case '>':  return a > b;
-      case '<':  return a < b;
-      case '>=': return a >= b;
-      case '<=': return a <= b;
-      case '=':  return a === b;
-      case '!=': return a !== b;
-      default:   return false;
+      case '>':
+        return a > b;
+      case '<':
+        return a < b;
+      case '>=':
+        return a >= b;
+      case '<=':
+        return a <= b;
+      case '=':
+        return a === b;
+      case '!=':
+        return a !== b;
+      default:
+        return false;
     }
   }
 
@@ -137,25 +159,38 @@ class RulesEngine {
     for (const ruleAction of rule.actions) {
       const dispatch = async () => {
         try {
-          const uda = await db.userDeviceAction.findUnique({
+          const uda = (await db.userDeviceAction.findUnique({
             where: { id: ruleAction.user_device_action_id },
             include: { capability: true, user_device: { include: { device: true } } },
-          }) as UserDeviceActionFull | null;
+          })) as UserDeviceActionFull | null;
           if (!uda) {
-            log.warn({ actionId: ruleAction.user_device_action_id }, 'rule action target not found');
+            log.warn(
+              { actionId: ruleAction.user_device_action_id },
+              'rule action target not found',
+            );
             return;
           }
           const payload: ActionDispatchPayload = {
-            userId:          String(userId),
-            deviceId:        String(uda.user_device_id),
-            actionName:      uda.mqtt_action_name,
-            command:         { value: ruleAction.target_state, duration: '*' },
+            userId: String(userId),
+            deviceId: String(uda.user_device_id),
+            actionName: uda.mqtt_action_name,
+            command: { value: ruleAction.target_state, duration: '*' },
             firmwareVersion: uda.user_device.device.version ?? undefined,
           };
-          await publish(ch, RK.ACTION_DISPATCH, payload);
-          log.info({ rule: rule.name, actionId: ruleAction.user_device_action_id, target: ruleAction.target_state }, 'rule fired');
+          publish(ch, RK.ACTION_DISPATCH, payload);
+          log.info(
+            {
+              rule: rule.name,
+              actionId: ruleAction.user_device_action_id,
+              target: ruleAction.target_state,
+            },
+            'rule fired',
+          );
         } catch (err) {
-          log.error({ err, rule: rule.name, actionId: ruleAction.user_device_action_id }, 'error executing rule action');
+          log.error(
+            { err, rule: rule.name, actionId: ruleAction.user_device_action_id },
+            'error executing rule action',
+          );
         }
       };
 

@@ -1,0 +1,13 @@
+# Generated / vendored
+node_modules/
+dist/
+coverage/
+package-lock.json
+prisma/migrations/
+
+# Own toolchains and formatting conventions
+backoffice/
+ESP32Code/
+
+# Firmware artifacts
+services/ota-manager/firmware/

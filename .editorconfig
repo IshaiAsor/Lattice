@@ -1,0 +1,22 @@
+# Mirrors .prettierrc for editors and non-prettier file types.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{h,hpp,c,cpp,ino}]
+indent_size = 4
+
+[*.{ini,csv}]
+insert_final_newline = false
+
+[Makefile]
+indent_style = tab

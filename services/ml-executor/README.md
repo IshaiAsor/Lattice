@@ -1,4 +1,4 @@
-# ml-router
+# ml-executor
 
 Generic ML inference service for the Lattice platform. Handles both VLM (vision) and LLM
 inference via two interfaces:
@@ -12,14 +12,15 @@ inference via two interfaces:
 
 ## Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Status + loaded model list |
-| POST | `/api/infer` | Run inference on a registered model |
+| Method | Path         | Description                         |
+| ------ | ------------ | ----------------------------------- |
+| GET    | `/health`    | Status + loaded model list          |
+| POST   | `/api/infer` | Run inference on a registered model |
 
 ### POST /api/infer
 
 **VLM request:**
+
 ```json
 {
   "kind": "vlm",
@@ -30,6 +31,7 @@ inference via two interfaces:
 ```
 
 **LLM request:**
+
 ```json
 {
   "kind": "llm",
@@ -44,6 +46,7 @@ inference via two interfaces:
 ```
 
 **Response (both):**
+
 ```json
 {
   "output": { ... },
@@ -91,11 +94,11 @@ Models are registered in `models.json` at the service root. Two backends are sup
 
 YOLOv8-nano trained on lettuce health detection.
 
-| Class ID | Label | Meaning |
-|----------|-------|---------|
-| 0 | Belum Matang | Immature |
-| 1 | Matang | Mature |
-| 2 | Rusak | Damaged |
+| Class ID | Label        | Meaning  |
+| -------- | ------------ | -------- |
+| 0        | Belum Matang | Immature |
+| 1        | Matang       | Mature   |
+| 2        | Rusak        | Damaged  |
 
 - **Input:** 640×640 JPEG (auto-resized by the handler)
 - **Model file:** `models/yolo.onnx` (9.8 MB)
@@ -105,14 +108,14 @@ YOLOv8-nano trained on lettuce health detection.
 
 ## Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3002` | HTTP listen port |
-| `RABBITMQ_URL` | `amqp://localhost` | RabbitMQ connection |
-| `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
-| `ONNX_MODELS_DIR` | `./models` | Directory containing `.onnx` files |
-| `LOG_LEVEL` | `info` | Pino log level |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | _(unset)_ | OTel collector (no-op if unset) |
+| Variable                      | Default                  | Description                        |
+| ----------------------------- | ------------------------ | ---------------------------------- |
+| `PORT`                        | `3002`                   | HTTP listen port                   |
+| `RABBITMQ_URL`                | `amqp://localhost`       | RabbitMQ connection                |
+| `OLLAMA_URL`                  | `http://localhost:11434` | Ollama endpoint                    |
+| `ONNX_MODELS_DIR`             | `./models`               | Directory containing `.onnx` files |
+| `LOG_LEVEL`                   | `info`                   | Pino log level                     |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | _(unset)_                | OTel collector (no-op if unset)    |
 
 ---
 
@@ -147,5 +150,6 @@ Each consumer receives a `PipelineStagePayload` from `@lattice/queue`, runs the 
 then publishes a `PipelineStageDonePayload` to `pipeline.stage.done.v1`.
 
 Required context fields per kind:
+
 - **vlm:** `context.image` (base64 JPEG)
 - **llm:** `context.prompt` (string); `context.image` and `context.sensor_data` optional

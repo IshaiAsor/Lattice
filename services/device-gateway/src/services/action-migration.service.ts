@@ -39,7 +39,10 @@ function isCompatible(
   }
   for (let i = 0; i < existingPins.length; i++) {
     if (existingPins[i].key !== newPins[i].key) {
-      return { compatible: false, reason: `pin slot "${existingPins[i].key}" renamed to "${newPins[i].key}"` };
+      return {
+        compatible: false,
+        reason: `pin slot "${existingPins[i].key}" renamed to "${newPins[i].key}"`,
+      };
     }
   }
   return { compatible: true };
@@ -56,14 +59,15 @@ async function resolveVersions(userDeviceId: number) {
     where: { type: userDevice.device.type },
     orderBy: { created_at: 'desc' },
   });
-  if (!latest) throw Object.assign(new Error('No catalog entry for this device type'), { statusCode: 500 });
+  if (!latest)
+    throw Object.assign(new Error('No catalog entry for this device type'), { statusCode: 500 });
 
   return { userDevice, currentDevice: userDevice.device, latestDevice: latest };
 }
 
 class ActionMigrationService {
   async previewUpdate(userDeviceId: number): Promise<UpdatePreview | { up_to_date: true }> {
-    const { userDevice, currentDevice, latestDevice } = await resolveVersions(userDeviceId);
+    const { currentDevice, latestDevice } = await resolveVersions(userDeviceId);
 
     if (currentDevice.id === latestDevice.id) {
       return { up_to_date: true };
@@ -85,7 +89,13 @@ class ActionMigrationService {
     const actions: ActionPreview[] = activeActions.map((ua) => {
       const bp = capabilityByMqttName.get(ua.capability.mqtt_action_name ?? '');
       if (!bp) {
-        return { id: ua.id, name: ua.action_name, mqttName: ua.mqtt_action_name, status: 'deprecated', reason: 'removed from new version' };
+        return {
+          id: ua.id,
+          name: ua.action_name,
+          mqttName: ua.mqtt_action_name,
+          status: 'deprecated',
+          reason: 'removed from new version',
+        };
       }
       const existingPins = ua.capability.pins as PinSlot[];
       const check = isCompatible(ua.capability.implementation_type, existingPins, bp);
@@ -116,7 +126,10 @@ class ActionMigrationService {
     );
 
     const [capabilities, activeActions] = await Promise.all([
-      db.deviceCapability.findMany({ where: { device_id: latestDevice.id }, include: { pins: true } }),
+      db.deviceCapability.findMany({
+        where: { device_id: latestDevice.id },
+        include: { pins: true },
+      }),
       db.userDeviceAction.findMany({
         where: { user_device_id: userDeviceId, status: 'active' },
         include: { capability: { include: { pins: true } }, pins: true },
@@ -139,13 +152,19 @@ class ActionMigrationService {
         const bp = capabilityByMqttName.get(ua.capability.mqtt_action_name ?? '');
         if (!bp) {
           // Incompatible — stage for deprecation; leave active until OTA confirms.
-          await tx.userDeviceAction.update({ where: { id: ua.id }, data: { status: 'staged_deprecated' } });
+          await tx.userDeviceAction.update({
+            where: { id: ua.id },
+            data: { status: 'staged_deprecated' },
+          });
           continue;
         }
         const existingPins = ua.capability.pins as PinSlot[];
         const { compatible } = isCompatible(ua.capability.implementation_type, existingPins, bp);
         if (!compatible) {
-          await tx.userDeviceAction.update({ where: { id: ua.id }, data: { status: 'staged_deprecated' } });
+          await tx.userDeviceAction.update({
+            where: { id: ua.id },
+            data: { status: 'staged_deprecated' },
+          });
           continue;
         }
 
@@ -160,7 +179,9 @@ class ActionMigrationService {
           .map((p) => {
             const key = oldPinIdToKey.get(p.capability_pin_id);
             const newPinId = key !== undefined ? newKeyToPinId.get(key) : undefined;
-            return newPinId !== undefined ? { capability_pin_id: newPinId, pin_number: p.pin_number } : null;
+            return newPinId !== undefined
+              ? { capability_pin_id: newPinId, pin_number: p.pin_number }
+              : null;
           })
           .filter((p): p is { capability_pin_id: number; pin_number: number } => p !== null);
 
@@ -189,7 +210,10 @@ class ActionMigrationService {
         },
       });
     });
-    log.info({ userDeviceId, to: latestDevice.version, actionsStaged: activeActions.length }, 'device action migration staged');
+    log.info(
+      { userDeviceId, to: latestDevice.version, actionsStaged: activeActions.length },
+      'device action migration staged',
+    );
 
     // Best-effort OTA dispatch — failure is logged but not fatal.
     try {
@@ -200,9 +224,15 @@ class ActionMigrationService {
         timestamp: new Date().toISOString(),
       };
       publish(getChannel(), RK.OTA_DISPATCH, payload);
-      log.info({ deviceType: latestDevice.type, version: latestDevice.version }, 'OTA dispatch sent');
+      log.info(
+        { deviceType: latestDevice.type, version: latestDevice.version },
+        'OTA dispatch sent',
+      );
     } catch (err) {
-      log.warn({ err }, 'OTA dispatch failed — firmware will be picked up on next device reconnect');
+      log.warn(
+        { err },
+        'OTA dispatch failed — firmware will be picked up on next device reconnect',
+      );
     }
   }
 }

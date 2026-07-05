@@ -12,7 +12,7 @@ import { initOTel } from '@lattice/otel';
 import { CHAT_CHANNELS } from '@lattice/ioredis';
 import type { ChatIntentPayload } from '@lattice/ml';
 
-const { metricsHandler } = initOTel('socket-server');
+initOTel('socket-server'); // /metrics is wired in index.ts; called here so OTel init precedes createLogger
 
 const log = createLogger('socket-server');
 
@@ -72,50 +72,59 @@ export async function initSocket(httpServer: http.Server, ch: Channel): Promise<
 
   io.on('connection', (socket) => {
     const userId = socket.data.userId as string;
-    socket.join(`user_${userId}`);
+    void socket.join(`user_${userId}`);
     log.info({ userId }, 'socket connected');
 
-    socket.on(CHAT_CHANNELS.CHAT_REQUEST, async (payload: { chatMode: string; messages: any[]; stream?: boolean }) => {
-      const requestId = `req_${socket.id}_${Date.now()}`;
-      const responseChannel = `${CHAT_CHANNELS.CHAT_RESPONSE}${requestId}`;
-      const stream = payload.stream ?? true;
+    socket.on(
+      CHAT_CHANNELS.CHAT_REQUEST,
+      async (payload: { chatMode: string; messages: any[]; stream?: boolean }) => {
+        const requestId = `req_${socket.id}_${Date.now()}`;
+        const responseChannel = `${CHAT_CHANNELS.CHAT_RESPONSE}${requestId}`;
+        const stream = payload.stream ?? true;
 
-      log.info({ requestId, userId, chatMode: payload.chatMode }, 'chat request received from client');
+        log.info(
+          { requestId, userId, chatMode: payload.chatMode },
+          'chat request received from client',
+        );
 
-      await subClient.subscribe(responseChannel);
+        await subClient.subscribe(responseChannel);
 
-      const messageHandler = (channel: string, message: string) => {
-        if (channel !== responseChannel) return;
+        const messageHandler = (channel: string, message: string) => {
+          if (channel !== responseChannel) return;
 
-        if (message === '[DONE]') {
-          socket.emit(CHAT_CHANNELS.CHAT_DONE);
-          subClient.unsubscribe(responseChannel);
+          if (message === '[DONE]') {
+            socket.emit(CHAT_CHANNELS.CHAT_DONE);
+            void subClient.unsubscribe(responseChannel);
+            subClient.off('message', messageHandler);
+          } else {
+            socket.emit(CHAT_CHANNELS.CHAT_TOKEN, message);
+          }
+        };
+
+        subClient.on('message', messageHandler);
+
+        const intentPayload: ChatIntentPayload = {
+          requestId,
+          userId,
+          chatMode: payload.chatMode,
+          messages: payload.messages,
+          stream,
+        };
+
+        try {
+          await pubClient.publish(CHAT_CHANNELS.CHAT_INTENT, JSON.stringify(intentPayload));
+          log.info(
+            { requestId, userId, chatMode: payload.chatMode, stream },
+            'chat intent published',
+          );
+        } catch (err) {
+          log.error({ err, requestId, userId }, 'failed to publish chat intent to Redis');
+          void subClient.unsubscribe(responseChannel);
           subClient.off('message', messageHandler);
-        } else {
-          socket.emit(CHAT_CHANNELS.CHAT_TOKEN, message);
+          socket.emit(CHAT_CHANNELS.CHAT_ERROR, 'Failed to dispatch chat request');
         }
-      };
-
-      subClient.on('message', messageHandler);
-
-      const intentPayload: ChatIntentPayload = {
-        requestId,
-        userId,
-        chatMode: payload.chatMode,
-        messages: payload.messages,
-        stream,
-      };
-
-      try {
-        await pubClient.publish(CHAT_CHANNELS.CHAT_INTENT, JSON.stringify(intentPayload));
-        log.info({ requestId, userId, chatMode: payload.chatMode, stream }, 'chat intent published');
-      } catch (err) {
-        log.error({ err, requestId, userId }, 'failed to publish chat intent to Redis');
-        subClient.unsubscribe(responseChannel);
-        subClient.off('message', messageHandler);
-        socket.emit(CHAT_CHANNELS.CHAT_ERROR, 'Failed to dispatch chat request');
-      }
-    });
+      },
+    );
 
     socket.on('disconnect', () => log.info({ userId }, 'socket disconnected'));
 
@@ -131,7 +140,10 @@ export async function initSocket(httpServer: http.Server, ch: Channel): Promise<
       };
       try {
         publish(ch, RK.ACTION_REQUESTED, payload);
-        log.info({ userId, actionId: data.actionId, state: data.state }, 'action.requested published');
+        log.info(
+          { userId, actionId: data.actionId, state: data.state },
+          'action.requested published',
+        );
       } catch (err) {
         log.error({ err, userId }, 'failed to publish action.requested');
       }

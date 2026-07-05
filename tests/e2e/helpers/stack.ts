@@ -13,13 +13,18 @@ import * as mqtt from 'mqtt';
 // match this ephemeral one) when both exist.
 function loadEnv(): void {
   const root = path.join(__dirname, '..', '..', '..');
-  const envPath = fs.existsSync(path.join(root, '.env.test')) ? path.join(root, '.env.test') : path.join(root, '.env');
+  const envPath = fs.existsSync(path.join(root, '.env.test'))
+    ? path.join(root, '.env.test')
+    : path.join(root, '.env');
   try {
     for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
       const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/);
-      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+      if (m && process.env[m[1]] === undefined)
+        process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
     }
-  } catch { /* no env file — rely on the ambient environment */ }
+  } catch {
+    /* no env file — rely on the ambient environment */
+  }
 }
 loadEnv();
 
@@ -28,32 +33,47 @@ const withScheme = (u: string) => (u && !/^https?:\/\//i.test(u) ? `http://${u}`
 
 // Env names match the root .env (DEVICE_GATEWAY_URL / MQTT_SERVER_NAME), with older aliases as fallback.
 export const API_URL = withScheme(process.env.API_URL || 'http://localhost:3100');
-export const GATEWAY_URL = withScheme(process.env.DEVICE_GATEWAY_URL || process.env.GATEWAY_URL || 'http://localhost:3004');
+export const GATEWAY_URL = withScheme(
+  process.env.DEVICE_GATEWAY_URL || process.env.GATEWAY_URL || 'http://localhost:3004',
+);
 export const MQTT_HOST = process.env.MQTT_SERVER_NAME || process.env.MQTT_HOST || '127.0.0.1';
 export const MQTT_PORT = parseInt(process.env.MQTT_PORT || '1883', 10);
 
 // The device simulator under test (plain JS lib; required so TS needs no declarations).
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+
 export const { SimDevice } = require('../../../tools/device-sim/lib/sim-device');
 
 export async function stackUp(): Promise<boolean> {
   for (const url of [`${API_URL}/health`, `${GATEWAY_URL}/health`]) {
-    try { const r = await fetch(url); if (!r.ok) return false; } catch { return false; }
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return false;
+    } catch {
+      return false;
+    }
   }
   return true;
 }
 
 // Test wrapper that runs the body only when the stack is reachable, otherwise logs and passes.
 export function itStack(name: string, fn: () => Promise<void>, timeout?: number): void {
-  it(name, async () => {
-    if (!(await stackUp())) { console.warn(`SKIP (stack down): ${name}`); return; }
-    await fn();
-  }, timeout);
+  it(
+    name,
+    async () => {
+      if (!(await stackUp())) {
+        console.warn(`SKIP (stack down): ${name}`);
+        return;
+      }
+      await fn();
+    },
+    timeout,
+  );
 }
 
 export async function login(user = 'admin', pass = 'admin'): Promise<string> {
   const r = await fetch(`${API_URL}/api/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: user, password: pass }),
   });
   if (!r.ok) throw new Error(`login → ${r.status}`);
@@ -74,7 +94,7 @@ export async function poll<T>(
   { timeoutMs = 10000, intervalMs = 500 }: { timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<T> {
   const start = Date.now();
-  // eslint-disable-next-line no-constant-condition
+
   while (true) {
     const v = await fn();
     if (predicate(v)) return v;
@@ -89,10 +109,19 @@ export function backendPublisher(): mqtt.MqttClient | null {
   const username = process.env.MQTT_APP_USERNAME;
   const password = process.env.MQTT_APP_PASSWORD;
   if (!username || !password) return null;
-  return mqtt.connect(`mqtt://${MQTT_HOST}:${MQTT_PORT}`, { username, password, reconnectPeriod: 0 });
+  return mqtt.connect(`mqtt://${MQTT_HOST}:${MQTT_PORT}`, {
+    username,
+    password,
+    reconnectPeriod: 0,
+  });
 }
 
-export function publishCommand(pub: mqtt.MqttClient, dev: any, actionName: string, payload: unknown): void {
+export function publishCommand(
+  pub: mqtt.MqttClient,
+  dev: any,
+  actionName: string,
+  payload: unknown,
+): void {
   const topic = `users/${dev.userId}/devices/${dev.deviceId}/${dev.version}/command/${actionName}`;
   pub.publish(topic, JSON.stringify(payload), { qos: 1 });
 }

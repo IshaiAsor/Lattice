@@ -10,6 +10,10 @@
   "scripts": {
     "build:libs": "npm run build -w @lattice/otel && npm run build -w @lattice/logger && npm run build -w @lattice/queue && npm run build -w @lattice/jwt && npm run build -w @lattice/prisma-client && npm run build -w @lattice/ml && npm run build -w @lattice/ioredis && npm run build -w @lattice/capability-validation",
     "test": "jest",
+    "lint": "eslint .",
+    "typecheck": "tsc -b",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test:e2e": "jest tests/e2e",
     "test:e2e:up": "docker compose -f compose.test.yaml --env-file .env.test up -d postgres rabbitmq emqx cache && docker compose -f compose.test.yaml --env-file .env.test run --rm migrate && docker compose -f compose.test.yaml --env-file .env.test up -d",
     "test:e2e:down": "docker compose -f compose.test.yaml --env-file .env.test down -v",
@@ -18,14 +22,29 @@
     "dev:up": "docker compose -f compose.yaml -f compose.dev.yaml up -d",
     "dev:down": "docker compose -f compose.yaml -f compose.dev.yaml down",
     "dev:hard-restart": "docker compose -f compose.yaml -f compose.dev.yaml down -v && docker compose -f compose.yaml -f compose.dev.yaml up -d --build --force-recreate && docker compose run --rm migrate",
-    "dev:restart": "docker compose -f compose.yaml -f compose.dev.yaml restart"
+    "dev:restart": "docker compose -f compose.yaml -f compose.dev.yaml restart",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,js,mjs,cjs}": [
+      "eslint --fix --no-warn-ignored",
+      "prettier --write --ignore-unknown"
+    ],
+    "*.{json,md,yaml,yml}": "prettier --write --ignore-unknown"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.0",
+    "@commitlint/config-conventional": "^21.2.0",
     "@types/jest": "^29.5.12",
     "@types/supertest": "^6.0.2",
+    "eslint": "^10.6.0",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.9.4",
     "supertest": "^7.0.0",
-    "ts-jest": "^29.2.5"
+    "ts-jest": "^29.2.5",
+    "typescript-eslint": "^8.62.1"
   },
   "engines": {
     "node": ">=20"
