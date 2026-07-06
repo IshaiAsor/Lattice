@@ -68,6 +68,24 @@ class UsersService {
     });
   }
 
+  // Attach a Google identity to an existing row (the seeded owner placeholder). Preserves the
+  // existing user_role/user_type — never downgrades the admin placeholder to a plain user.
+  linkGoogleId(
+    id: number,
+    profile: { sub: string; email: string; name: string; picture: string },
+  ): Promise<User> {
+    return db.user.update({
+      where: { id },
+      data: {
+        google_id: profile.sub,
+        full_name: profile.name,
+        profile_picture_url: profile.picture || '',
+        terms_accepted_at: new Date(),
+        updated_at: new Date(),
+      },
+    });
+  }
+
   async createRegularUser(username: string, email: string, password: string): Promise<User> {
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     return db.user.create({

@@ -13,10 +13,7 @@ import {
   poll,
   backendPublisher,
   publishCommand,
-  API_URL,
-  GATEWAY_URL,
-  MQTT_HOST,
-  MQTT_PORT,
+  simOpts,
 } from './helpers/stack';
 import type { MqttClient } from 'mqtt';
 
@@ -31,17 +28,14 @@ describe('device-sim e2e', () => {
   beforeAll(async () => {
     if (!(await stackUp())) return; // suite bodies are guarded by itStack
     token = await login();
-    dev = new SimDevice({
-      apiUrl: API_URL,
-      gatewayUrl: GATEWAY_URL,
-      mqttHost: MQTT_HOST,
-      mqttPort: MQTT_PORT,
-      mac: MAC,
-      deviceType: process.env.DEVICE_TYPE || 'ESP32S3_MINI',
-      persist: false, // don't touch the on-disk NVS file during tests
-      autoTelemetry: false, // tests drive telemetry explicitly for determinism
-      camera: false,
-    });
+    dev = new SimDevice(
+      simOpts({
+        mac: MAC,
+        deviceType: process.env.DEVICE_TYPE || 'ESP32S3_MINI',
+        autoTelemetry: false, // tests drive telemetry explicitly for determinism
+        camera: false,
+      }),
+    );
     await dev.start();
     pub = backendPublisher();
   });

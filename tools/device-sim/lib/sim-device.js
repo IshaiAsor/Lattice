@@ -101,6 +101,7 @@ const DEFAULTS = {
   gatewayUrl: 'http://localhost:3004',
   mqttHost: '127.0.0.1',
   mqttPort: 1883,
+  mqttUrl: null, // full broker URL (e.g. mqtts://host:8883 for TLS); overrides mqttHost/mqttPort
   user: 'admin',
   pass: 'admin',
   deviceType: 'ESP32S3_MINI',
@@ -340,7 +341,8 @@ class SimDevice extends EventEmitter {
     return new Promise((resolve) => {
       let resolved = false;
       this._intentionalClose = false;
-      this.client = mqtt.connect(`mqtt://${this.opts.mqttHost}:${this.opts.mqttPort}`, {
+      const brokerUrl = this.opts.mqttUrl || `mqtt://${this.opts.mqttHost}:${this.opts.mqttPort}`;
+      this.client = mqtt.connect(brokerUrl, {
         username: String(this.userId),
         clientId: String(this.deviceId),
         password: this.mqttToken,

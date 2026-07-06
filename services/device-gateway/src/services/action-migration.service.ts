@@ -4,12 +4,9 @@ import type { OtaDispatchPayload } from '@lattice/queue';
 import { getChannel } from '../queue';
 import { env } from '../config/env.config';
 import { createLogger } from '@lattice/logger';
+import { isCompatible, migratePins, type PinSlot } from './action-compatibility';
 
 const log = createLogger('device-gateway:migration');
-
-interface PinSlot {
-  key: string;
-}
 
 export interface ActionPreview {
   id: number;
@@ -23,29 +20,6 @@ export interface UpdatePreview {
   current_version: string;
   new_version: string;
   actions: ActionPreview[];
-}
-
-function isCompatible(
-  implType: string,
-  existingPins: PinSlot[],
-  capability: { implementation_type: string; pins: PinSlot[] },
-): { compatible: boolean; reason?: string } {
-  if (implType !== capability.implementation_type) {
-    return { compatible: false, reason: 'implementation type changed' };
-  }
-  const newPins = capability.pins ?? [];
-  if (existingPins.length !== newPins.length) {
-    return { compatible: false, reason: 'pin count changed' };
-  }
-  for (let i = 0; i < existingPins.length; i++) {
-    if (existingPins[i].key !== newPins[i].key) {
-      return {
-        compatible: false,
-        reason: `pin slot "${existingPins[i].key}" renamed to "${newPins[i].key}"`,
-      };
-    }
-  }
-  return { compatible: true };
 }
 
 async function resolveVersions(userDeviceId: number) {
@@ -171,19 +145,7 @@ class ActionMigrationService {
         // Create new action as staged_active, pointing at the new version's capability —
         // not yet live until the device confirms OTA. (No separate action template: the
         // DeviceCapability catalog row IS the per-version template since F1.5.)
-        // Map old pin IDs → keys using the old capability's catalog pins,
-        // then find the corresponding pin in the new capability by key.
-        const oldPinIdToKey = new Map(ua.capability.pins.map((p) => [p.id, p.key]));
-        const newKeyToPinId = new Map(bp.pins.map((p) => [p.key, p.id]));
-        const migratedPins = ua.pins
-          .map((p) => {
-            const key = oldPinIdToKey.get(p.capability_pin_id);
-            const newPinId = key !== undefined ? newKeyToPinId.get(key) : undefined;
-            return newPinId !== undefined
-              ? { capability_pin_id: newPinId, pin_number: p.pin_number }
-              : null;
-          })
-          .filter((p): p is { capability_pin_id: number; pin_number: number } => p !== null);
+        const migratedPins = migratePins(ua.capability.pins, bp.pins, ua.pins);
 
         await tx.userDeviceAction.create({
           data: {

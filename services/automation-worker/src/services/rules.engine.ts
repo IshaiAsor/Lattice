@@ -3,6 +3,7 @@ import { publish, RK } from '@lattice/queue';
 import type { ActionDispatchPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import { db } from '../db/client';
+import { compare, isCooldownExpired, matchesScheduleAt } from './rules-logic';
 import type {
   UserRule,
   UserRuleCondition,
@@ -67,9 +68,7 @@ class RulesEngine {
   }
 
   private isCooldownExpired(rule: UserRuleWithDetails): boolean {
-    if (!rule.last_triggered) return true;
-    const elapsed = (Date.now() - rule.last_triggered.getTime()) / 1000;
-    return elapsed >= rule.cooldown_seconds;
+    return isCooldownExpired(rule.last_triggered, rule.cooldown_seconds);
   }
 
   private async evaluateRule(rule: UserRuleWithDetails): Promise<boolean> {
@@ -79,7 +78,7 @@ class RulesEngine {
 
   private async evaluateCondition(condition: UserRuleCondition): Promise<boolean> {
     if (condition.condition_type === 'schedule') {
-      return this.matchesScheduleNow(condition.schedule_time, condition.schedule_days);
+      return matchesScheduleAt(condition.schedule_time, condition.schedule_days);
     }
 
     if (
@@ -120,39 +119,10 @@ class RulesEngine {
       const current = parseFloat(action.current_state ?? '');
       const target = parseFloat(condition.threshold_value);
       if (isNaN(current) || isNaN(target)) return false;
-      return this.compare(current, condition.operator, target);
+      return compare(current, condition.operator, target);
     }
 
     return false;
-  }
-
-  private matchesScheduleNow(time: string | null, days: number[]): boolean {
-    if (!time) return false;
-    const now = new Date();
-    const hh = now.getHours().toString().padStart(2, '0');
-    const mm = now.getMinutes().toString().padStart(2, '0');
-    if (`${hh}:${mm}` !== time) return false;
-    if (!days || days.length === 0) return true;
-    return days.includes(now.getDay());
-  }
-
-  private compare(a: number, op: string, b: number): boolean {
-    switch (op) {
-      case '>':
-        return a > b;
-      case '<':
-        return a < b;
-      case '>=':
-        return a >= b;
-      case '<=':
-        return a <= b;
-      case '=':
-        return a === b;
-      case '!=':
-        return a !== b;
-      default:
-        return false;
-    }
   }
 
   private async executeRule(ch: Channel, userId: number, rule: UserRuleWithDetails): Promise<void> {

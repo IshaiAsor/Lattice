@@ -64,10 +64,18 @@ class LoginService {
           { statusCode: 403 },
         );
       }
-      if (await usersService.findByEmail(profile.email)) {
-        throw Object.assign(new Error('Email already in use'), { statusCode: 409 });
+      const existing = await usersService.findByEmail(profile.email);
+      if (existing) {
+        // Only an unclaimed placeholder (no password, no google_id) — e.g. the seeded owner — may
+        // be linked. Auto-linking a credential/already-linked account would be an account-takeover
+        // vector, so anything else is a genuine collision.
+        if (existing.password || existing.google_id) {
+          throw Object.assign(new Error('Email already in use'), { statusCode: 409 });
+        }
+        user = await usersService.linkGoogleId(existing.id, profile);
+      } else {
+        user = await usersService.createGoogleUser(profile);
       }
-      user = await usersService.createGoogleUser(profile);
     }
 
     await this.recordLogin(user.id, ipAddress);

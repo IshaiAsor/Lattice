@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@lattice/logger": "*",
-    "amqplib": "^0.10.7"
+    "amqplib": "^0.10.7",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/amqplib": "^0.10.7",

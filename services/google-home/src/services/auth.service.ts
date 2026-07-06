@@ -28,18 +28,32 @@ export const authService = {
 
     let user = await db.user.findUnique({ where: { google_id: data.sub } });
     if (!user) {
-      if (await db.user.findUnique({ where: { email: data.email } }))
-        throw new Error('Email already in use');
-      user = await db.user.create({
-        data: {
-          user_type: 1,
-          user_role: 'user',
-          google_id: data.sub,
-          email: data.email,
-          full_name: data.name,
-          profile_picture_url: data.picture ?? '',
-        },
-      });
+      const existing = await db.user.findUnique({ where: { email: data.email } });
+      if (existing) {
+        // Only an unclaimed placeholder (no password, no google_id) — e.g. the seeded owner — may
+        // be linked. Linking a credential/already-linked account would be an account-takeover
+        // vector, so anything else is a genuine collision.
+        if (existing.password || existing.google_id) throw new Error('Email already in use');
+        user = await db.user.update({
+          where: { id: existing.id },
+          data: {
+            google_id: data.sub,
+            full_name: data.name,
+            profile_picture_url: data.picture ?? '',
+          },
+        });
+      } else {
+        user = await db.user.create({
+          data: {
+            user_type: 1,
+            user_role: 'user',
+            google_id: data.sub,
+            email: data.email,
+            full_name: data.name,
+            profile_picture_url: data.picture ?? '',
+          },
+        });
+      }
     }
     return user;
   },

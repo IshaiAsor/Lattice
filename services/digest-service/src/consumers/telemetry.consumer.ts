@@ -10,6 +10,7 @@ import { socket } from '../socket/emitter';
 import { writeScalarState } from '../state-write';
 import { takePendingPicture } from '../cache/pending';
 import * as timeout from '../pending-timeout';
+import { evaluateThreshold } from '../threshold';
 
 const log = createLogger('digest-service:telemetry');
 
@@ -120,27 +121,6 @@ async function handleScalar(
   const { userId, deviceId, actionName, value, timestamp } = payload;
   await writeScalarState(ch, userActionId, { userId, deviceId, actionName, value, timestamp });
   await firePipelineTriggers(ch, userId, userActionId, value);
-}
-
-function evaluateThreshold(value: unknown, operator: string, threshold: string): boolean {
-  const v = parseFloat(String(value));
-  const t = parseFloat(threshold);
-  if (isNaN(v) || isNaN(t)) return String(value) === threshold;
-  switch (operator) {
-    case '>':
-      return v > t;
-    case '<':
-      return v < t;
-    case '>=':
-      return v >= t;
-    case '<=':
-      return v <= t;
-    case '=':
-    case '==':
-      return v === t;
-    default:
-      return false;
-  }
 }
 
 async function firePipelineTriggers(
