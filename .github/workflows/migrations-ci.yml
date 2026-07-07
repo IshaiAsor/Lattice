@@ -5,6 +5,10 @@ on:
     branches: ['main', 'master']
     paths:
       - 'prisma/**'
+      # The image bakes in the ML model registry (see prisma/Dockerfile) and seed.ts syncs it
+      # into ml_models — so a models.json change must rebuild this image too, or new models
+      # never reach the DB the UI/orchestrator read from.
+      - 'services/ml-executor/models.json'
   # Firmware CI bumps platformio.ini via GITHUB_TOKEN, which doesn't trigger push events
   # in other workflows. Use workflow_run instead so a successful firmware build always
   # rebuilds the migrations image with fresh manifests baked in.
@@ -12,6 +16,8 @@ on:
     workflows: ['ESP32 Firmware CI/CD']
     types: [completed]
     branches: ['main', 'master']
+  # Manual rebuild — e.g. to re-seed after a registry change that predates this path trigger.
+  workflow_dispatch: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.event.workflow_run.head_branch }}
