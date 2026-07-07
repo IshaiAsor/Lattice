@@ -31,6 +31,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,6 +57,7 @@ services:
       - MQTT_SERVER_NAME=localhost
       - MQTT_PORT=1883
       - MQTT_VALIDATE_CERT=false
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,6 +81,7 @@ services:
       - MQTT_APP_PASSWORD=${MQTT_APP_PASSWORD}
       - MQTT_CLIENT_ID=mqtt-service
       - MQTT_VALIDATE_CERT=false
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       - emqx
       - rabbitmq
@@ -96,6 +99,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       - rabbitmq
       - cache
@@ -113,6 +117,7 @@ services:
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
       - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:
         condition: service_healthy
@@ -133,6 +138,7 @@ services:
       - PORT=3008
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:
         condition: service_healthy
@@ -152,6 +158,7 @@ services:
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
       - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:
         condition: service_healthy
@@ -180,6 +187,7 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       - rabbitmq
       - cache

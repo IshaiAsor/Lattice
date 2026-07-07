@@ -139,6 +139,7 @@ services:
       - FIRMWARE_PATH=/app/firmware
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - JWT_SECRET=${JWT_SECRET}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     volumes:
       - ./firmware-storage:/app/firmware
     depends_on:
@@ -166,11 +167,25 @@ services:
       - GOOGLE_SIGN_IN_CLIENT_ID=${GOOGLE_SIGN_IN_CLIENT_ID}
       - GOOGLE_SIGN_IN_CLIENT_SECRET=${GOOGLE_SIGN_IN_CLIENT_SECRET}
       - GOOGLE_SERVICE_ACCOUNT_KEY=${GOOGLE_SERVICE_ACCOUNT_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_started
+    restart: always
+
+  # Jaeger all-in-one — local trace backend. Every service exports OTLP traces here when
+  # OTEL_EXPORTER_OTLP_ENDPOINT is set (see each service's env). Trace UI: http://localhost:16686.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - '16686:16686' # web UI
+      - '4318:4318' # OTLP HTTP
+      - '4317:4317' # OTLP gRPC
     restart: always
 
   # SSH tunnel to staging cluster for ollama models

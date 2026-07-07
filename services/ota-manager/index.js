@@ -1,3 +1,7 @@
+// Initialised before any app module loads so auto-instrumentation can patch express/http.
+const { initOTel } = require('@lattice/otel');
+const { metricsHandler } = initOTel('ota-manager');
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -10,6 +14,9 @@ const log = createLogger('ota-manager');
 
 const app = express();
 app.use(createHttpLogger(log));
+
+// Prometheus scrape endpoint (metrics always on; traces export only when OTEL endpoint set).
+app.get('/metrics', (req, res) => metricsHandler(req, res));
 const port = process.env.PORT || 3000;
 const firmwarePath = process.env.FIRMWARE_PATH || './firmware';
 
