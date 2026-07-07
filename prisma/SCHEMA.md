@@ -324,10 +324,17 @@ erDiagram
 
 #### `ml_models` (`MlModel`) — system ML registry. Unique `(kind, name, version)`. `classes`/`config` JSON = per-model metadata.
 
-| id  | kind | name | version | backend | model_file          | ollama_model   | classes                |
-| --- | ---- | ---- | ------- | ------- | ------------------- | -------------- | ---------------------- |
-| 1   | vlm  | yolo | v1      | onnx    | `yolo/v1/yolo.onnx` | NULL           | `["person","package"]` |
-| 2   | llm  | qwen | v1      | ollama  | NULL                | `qwen2.5vl:7b` | NULL                   |
+| id  | kind | name       | version | backend | model_file          | ollama_model   | classes                |
+| --- | ---- | ---------- | ------- | ------- | ------------------- | -------------- | ---------------------- |
+| 1   | vlm  | yolo       | v1      | onnx    | `yolo/v1/yolo.onnx` | NULL           | `["person","package"]` |
+| 2   | llm  | qwen       | v1      | ollama  | NULL                | `qwen2.5vl:7b` | NULL                   |
+| 3   | llm  | groq       | v1      | openai  | NULL                | NULL           | NULL                   |
+| 4   | llm  | gemini     | v1      | openai  | NULL                | NULL           | NULL                   |
+| 5   | llm  | cerebras   | v1      | openai  | NULL                | NULL           | NULL                   |
+| 6   | llm  | openrouter | v1      | openai  | NULL                | NULL           | NULL                   |
+
+> `openai`-backend rows carry no `ollama_model`; the executor resolves their remote endpoint
+> (`baseUrl`/`apiModel`/`apiKeyEnv`) from `services/ml-executor/models.json`, the seed source.
 
 ### Tier 2 — Identity
 
