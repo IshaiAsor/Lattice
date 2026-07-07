@@ -37,7 +37,7 @@
     "name": "cerebras",
     "version": "v1",
     "backend": "openai",
-    "apiModel": "llama-3.3-70b",
+    "apiModel": "gpt-oss-120b",
     "baseUrl": "https://api.cerebras.ai/v1",
     "apiKeyEnv": "CEREBRAS_API_KEY"
   },
