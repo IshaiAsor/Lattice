@@ -174,6 +174,12 @@ services:
       - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
       # Ollama models via cluster tunnel (started automatically with compose)
       - OLLAMA_URL=${OLLAMA_URL:-http://cluster-tunnel:11434}
+      # Remote OpenAI-compatible LLM keys (optional — a model whose key is unset just errors
+      # when invoked). Pass through from host env / root .env; see models.json entries.
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
     depends_on:
       - rabbitmq
       - cache

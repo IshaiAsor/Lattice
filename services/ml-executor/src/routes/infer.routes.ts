@@ -3,7 +3,7 @@ import { createLogger } from '@lattice/logger';
 import type { ModelId, InferResponse } from '@lattice/ml';
 import { getModel } from '../models';
 import { OnnxVlmProvider } from '../handlers/onnx-provider.service';
-import { OllamaProviderService } from '../handlers/ollama-provider.service';
+import { createLlmProvider } from '../handlers/llm-provider.factory';
 
 const log = createLogger('ml-executor:http');
 export const inferRouter = Router();
@@ -34,8 +34,7 @@ inferRouter.post('/api/infer', async (req, res) => {
       const detections = await new OnnxVlmProvider(cfg).detect(messages as any);
       result = { detections, durationMs: Date.now() - start };
     } else {
-      if (!cfg.ollamaModel) throw new Error(`llm ${cfg.name} has no ollamaModel`);
-      result = await new OllamaProviderService(cfg.ollamaModel).generate(messages as any);
+      result = await createLlmProvider(cfg).generate(messages as any);
     }
     log.info(
       { model: `${model.kind}/${model.name}/${model.version}`, durationMs: result.durationMs },

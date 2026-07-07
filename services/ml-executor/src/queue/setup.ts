@@ -2,15 +2,17 @@ import type { Channel } from 'amqplib';
 import { assertMlQueue, type PipelineStagePayload } from '@lattice/queue';
 import { loadRegistry, type ModelConfig } from '../models';
 import { OnnxVlmProvider } from '../handlers/onnx-provider.service';
-import { OllamaProviderService } from '../handlers/ollama-provider.service';
+import type { ILlmProvider } from '../handlers/ILlmProvider';
+import { createLlmProvider } from '../handlers/llm-provider.factory';
 import { parseLlmOutput } from '../handlers/parse-llm-output';
 import { advancePipeline } from './advance-pipeline';
 import type { Logger } from 'pino';
 
 function makeConsumer(model: ModelConfig, ch: Channel, log: Logger) {
   const vlmProvider = model.kind === 'vlm' ? new OnnxVlmProvider(model) : null;
-  const llmProvider =
-    model.kind === 'llm' && model.ollamaModel ? new OllamaProviderService(model.ollamaModel) : null;
+  // Built lazily on first stage: remote providers need an env key that may not be present at
+  // startup, and we don't want a missing key to take down the whole executor's queue setup.
+  let llmProvider: ILlmProvider | null = null;
 
   return async (payload: PipelineStagePayload): Promise<void> => {
     const label = `${model.kind}/${model.name}/${model.version}`;
@@ -29,7 +31,8 @@ function makeConsumer(model: ModelConfig, ch: Channel, log: Logger) {
         const start = Date.now();
         const detections = await vlmProvider.detect([{ role: 'user', content: '', image }]);
         output = { detections, durationMs: Date.now() - start };
-      } else if (llmProvider) {
+      } else if (model.kind === 'llm') {
+        llmProvider ??= createLlmProvider(model);
         const prompt = payload.context['prompt'] as string;
         if (!prompt) throw new Error('context.prompt missing for llm stage');
         // TODO: current cluster hardware can't run qwen2.5vl multimodal inference (with the raw

@@ -5,7 +5,7 @@ import { getModel, modelKey } from '../models';
 import { createRedisClient } from '../redis/pubsub';
 import type { ILlmProvider } from './ILlmProvider';
 import type { IVlmProvider } from './IVlmProvider';
-import { OllamaProviderService } from './ollama-provider.service';
+import { createLlmProvider } from './llm-provider.factory';
 import { OnnxVlmProvider } from './onnx-provider.service';
 import type { ModelConfig } from '../models';
 
@@ -15,11 +15,12 @@ const jobSubscriber = createRedisClient(log, 'infer jobSubscriber');
 const resultPublisher = createRedisClient(log, 'infer resultPublisher');
 
 const llmCache = new Map<string, ILlmProvider>();
-function getLlmProvider(modelName: string): ILlmProvider {
-  let p = llmCache.get(modelName);
+function getLlmProvider(cfg: ModelConfig): ILlmProvider {
+  const key = modelKey(cfg);
+  let p = llmCache.get(key);
   if (!p) {
-    p = new OllamaProviderService(modelName);
-    llmCache.set(modelName, p);
+    p = createLlmProvider(cfg);
+    llmCache.set(key, p);
   }
   return p;
 }
@@ -59,8 +60,7 @@ export async function initInferWorker(): Promise<void> {
         const detections = await getVlmProvider(cfg).detect(messages);
         await emit({ type: 'result', result: { detections, durationMs: Date.now() - start } });
       } else {
-        if (!cfg.ollamaModel) throw new Error(`llm ${cfg.name} has no ollamaModel`);
-        const provider = getLlmProvider(cfg.ollamaModel);
+        const provider = getLlmProvider(cfg);
         if (stream) {
           for await (const text of provider.generateStream(messages)) {
             await emit({ type: 'token', text });

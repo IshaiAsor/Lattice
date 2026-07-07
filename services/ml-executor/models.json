@@ -13,5 +13,41 @@
     "version": "v1",
     "backend": "ollama",
     "ollamaModel": "qwen2.5vl:7b"
+  },
+  {
+    "kind": "llm",
+    "name": "groq",
+    "version": "v1",
+    "backend": "openai",
+    "apiModel": "llama-3.3-70b-versatile",
+    "baseUrl": "https://api.groq.com/openai/v1",
+    "apiKeyEnv": "GROQ_API_KEY"
+  },
+  {
+    "kind": "llm",
+    "name": "gemini",
+    "version": "v1",
+    "backend": "openai",
+    "apiModel": "gemini-2.5-flash",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "apiKeyEnv": "GEMINI_API_KEY"
+  },
+  {
+    "kind": "llm",
+    "name": "cerebras",
+    "version": "v1",
+    "backend": "openai",
+    "apiModel": "llama-3.3-70b",
+    "baseUrl": "https://api.cerebras.ai/v1",
+    "apiKeyEnv": "CEREBRAS_API_KEY"
+  },
+  {
+    "kind": "llm",
+    "name": "openrouter",
+    "version": "v1",
+    "backend": "openai",
+    "apiModel": "meta-llama/llama-3.3-70b-instruct:free",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "apiKeyEnv": "OPENROUTER_API_KEY"
   }
 ]
