@@ -2,7 +2,7 @@ name: Build and Push API Image
 
 on:
   push:
-    branches: ['master', 'v2.2']
+    branches: ['master']
     paths:
       - 'services/api/**'
       - 'packages/**'

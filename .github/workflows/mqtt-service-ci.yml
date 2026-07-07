@@ -2,7 +2,7 @@ name: Build and Push MQTT Service Image
 
 on:
   push:
-    branches: ['master', 'v2.2']
+    branches: ['master']
     paths:
       - 'services/mqtt-service/**'
       - 'packages/**'
