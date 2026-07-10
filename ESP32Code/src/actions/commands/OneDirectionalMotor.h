@@ -4,22 +4,23 @@
 #include <Arduino.h>
 #include "BaseCommandAction.h"
 #include "actions/manifest/CapabilityRegistry.h"
+#include "config/Log.h"
 
 class OneDirectionalMotorAction : public BaseCommandAction
 {
-public:
-    static const PinSlotDef* blueprint()        { return CapabilityRegistry::fan().pins; }
-    static const char* googleActionType()       { return CapabilityRegistry::fan().googleType; }
+  public:
+    static const PinSlotDef*     blueprint() { return CapabilityRegistry::fan().pins; }
+    static const char*           googleActionType() { return CapabilityRegistry::fan().googleType; }
     static const GoogleTraitDef* supportedTraits() { return CapabilityRegistry::fan().traits; }
-    static CapabilityDescriptor capability()    { return CapabilityRegistry::fan(); }
-    static const char* implType()               { return capability().implType; }
+    static CapabilityDescriptor  capability() { return CapabilityRegistry::fan(); }
+    static const char*           implType() { return capability().implType; }
 
-private:
+  private:
     int in1PinNumber;
     int in2PinNumber;
     int pwmPinNumber;
 
-public:
+  public:
     OneDirectionalMotorAction(String name, std::vector<ActionPinsSetup> pins)
         : BaseCommandAction(name, pins, {"off", "on"}, true, 0, 100)
     {
@@ -35,23 +36,23 @@ public:
             digitalWrite(in1PinNumber, LOW);
             digitalWrite(in2PinNumber, LOW);
             analogWrite(pwmPinNumber, 0);
-            Serial.println("Motor OFF");
+            LOG_D("Cmd", "motor OFF");
         }
         else if (strcmp(action.c_str(), "on") == 0)
         {
             digitalWrite(in1PinNumber, HIGH);
             digitalWrite(in2PinNumber, LOW);
             analogWrite(pwmPinNumber, 255);
-            Serial.println("Motor ON at full speed");
+            LOG_D("Cmd", "motor ON at full speed");
         }
         else
         {
             int parsedValue = atoi(action.c_str());
-            int pwmValue = map(parsedValue, 0, 100, 0, 255);
+            int pwmValue    = map(parsedValue, 0, 100, 0, 255);
             digitalWrite(in1PinNumber, HIGH);
             digitalWrite(in2PinNumber, LOW);
             analogWrite(pwmPinNumber, pwmValue);
-            Serial.println("Motor ON at " + String(parsedValue) + "% speed");
+            LOG_D("Cmd", "motor ON at %d%% speed", parsedValue);
         }
     }
 };

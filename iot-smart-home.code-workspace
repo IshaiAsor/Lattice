@@ -61,6 +61,10 @@
       "path": "services/api",
     },
     {
+      "name": "Notification Service",
+      "path": "services/notification-service",
+    },
+    {
       "name": "Packages",
       "path": "packages",
     },

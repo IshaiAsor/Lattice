@@ -69,14 +69,36 @@ model DeviceCapability {
   google_type_id            Int?
   created_at                DateTime @default(now()) @db.Timestamp(6)
 
-  device              Device                  @relation(fields: [device_id], references: [id], onDelete: Cascade)
-  google_type         GoogleActionType?       @relation(fields: [google_type_id], references: [id], onDelete: SetNull)
+  device              Device                     @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  google_type         GoogleActionType?          @relation(fields: [google_type_id], references: [id], onDelete: SetNull)
   traits              DeviceCapabilityTrait[]
   pins                DeviceCapabilityPin[]
+  configurations      CapabilityConfiguration[]
   user_device_actions UserDeviceAction[]
 
   @@unique([device_id, capability_key])
   @@map("device_capabilities")
+}
+
+// One row per behavior a capability supports (catalog-declared, firmware-generated). An
+// action is no longer "a command" or "a telemetry" — it exposes a set of behaviors:
+//   • command   — actuator: accepts value commands (validation comes from the capability's traits)
+//   • interval  — cyclic sensor read (min_interval_ms = hardware floor from firmware)
+//   • on_demand — server-triggered read / camera capture
+// Per-behavior limits are TYPED columns (nullable, set only where meaningful — same pattern as
+// user_rule_conditions / pipeline_triggers), not JSON. New behavior fields get a migration.
+model CapabilityConfiguration {
+  id              Int      @id @default(autoincrement())
+  capability_id   Int
+  behavior        String   @db.VarChar(20)
+  min_interval_ms Int?
+  created_at      DateTime @default(now()) @db.Timestamp(6)
+
+  capability          DeviceCapability          @relation(fields: [capability_id], references: [id], onDelete: Cascade)
+  user_configurations UserActionConfiguration[]
+
+  @@unique([capability_id, behavior])
+  @@map("capability_configurations")
 }
 
 model DeviceCapabilityTrait {
@@ -136,17 +158,63 @@ model User {
   email               String            @unique @db.VarChar(255)
   full_name           String?           @db.VarChar(255)
   profile_picture_url String?
+  // Credential accounts start unverified and must confirm via an email link (F15.8) before
+  // they can log in; Google accounts are created with email_verified = true (Google verified).
+  email_verified             Boolean   @default(false)
+  email_verification_token   String?   @unique @db.VarChar(255)
+  // Password-reset flow (F15.9): single-use token + expiry, cleared on use.
+  password_reset_token       String?   @unique @db.VarChar(255)
+  password_reset_expires     DateTime? @db.Timestamptz(6)
   terms_accepted_at   DateTime?         @db.Timestamptz(6)
   created_at          DateTime?         @default(now()) @db.Timestamptz(6)
   updated_at          DateTime?         @default(now()) @db.Timestamptz(6)
 
-  user_devices     UserDevice[]
-  user_login_audit UserLoginAudit[]
-  user_rules       UserRule[]
-  action_groups    UserActionGroup[]
-  pipelines        Pipeline[]
+  user_devices          UserDevice[]
+  user_login_audit      UserLoginAudit[]
+  user_rules            UserRule[]
+  action_groups         UserActionGroup[]
+  pipelines             Pipeline[]
+  notification_prefs    NotificationPreference[]
+  notification_history  NotificationHistory[]
 
   @@map("users")
+}
+
+// Per-user, per-channel, per-event-type opt-in matrix (F15). A missing row means "use the
+// service default" for that (channel, event_type); notification-service never assumes a row
+// exists. enabled = false is an explicit opt-out.
+model NotificationPreference {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  channel    String   @db.VarChar(32)  // in_app | email | push | sms
+  event_type String   @db.VarChar(64)  // emergency | rule_fired | device_offline | ota_available | ...
+  enabled    Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, channel, event_type])
+  @@map("notification_preferences")
+}
+
+// Delivered/attempted notifications, backing the in-app inbox + unread badge (F15). One row per
+// (user, notification) regardless of how many channels it fanned out to.
+model NotificationHistory {
+  id         Int       @id @default(autoincrement())
+  user_id    Int
+  event_type String    @db.VarChar(64)
+  title      String    @db.VarChar(255)
+  body       String
+  data       Json?     // rendering context / deep-link payload
+  channels   String[]  // channels this notification was delivered on
+  read_at    DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
+  @@map("notification_history")
 }
 
 model MqttUser {
@@ -179,6 +247,10 @@ model UserDevice {
   name                     String    @db.VarChar(255)
   online                   Boolean   @default(false)
   last_online_date         DateTime? @db.Timestamp(6)
+  // Latest diagnostics from the device's MQTT heartbeat (WiFi RSSI in dBm + when it arrived).
+  // Live-only — surfaced by the UI while online, ignored/nulled when offline.
+  rssi                     Int?
+  last_heartbeat_at        DateTime? @db.Timestamp(6)
   current_firmware_version String?   @db.VarChar(64)
   pending_device_type_id   Int?
   pending_firmware_version String?   @db.VarChar(64)
@@ -227,19 +299,43 @@ model UserDeviceAction {
   created_at            DateTime @default(now()) @db.Timestamp(6)
   updated_at            DateTime @default(now()) @db.Timestamp(6)
 
-  user_device       UserDevice            @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
-  capability        DeviceCapability      @relation(fields: [capability_id], references: [id], onDelete: Cascade)
-  group             UserActionGroup?      @relation(fields: [group_id], references: [id], onDelete: SetNull)
-  default_trait     GoogleDeviceTrait?    @relation(fields: [default_trait_id], references: [id], onDelete: SetNull)
+  user_device       UserDevice                @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+  capability        DeviceCapability          @relation(fields: [capability_id], references: [id], onDelete: Cascade)
+  group             UserActionGroup?          @relation(fields: [group_id], references: [id], onDelete: SetNull)
+  default_trait     GoogleDeviceTrait?        @relation(fields: [default_trait_id], references: [id], onDelete: SetNull)
   pins              UserDeviceActionPin[]
+  configurations    UserActionConfiguration[]
   rule_actions      UserRuleAction[]
   rule_conditions   UserRuleCondition[]
   sensor_history    SensorHistory[]
   pipeline_sensors  PipelineSensor[]
-  pipeline_triggers PipelineTrigger[]     @relation("PipelineTrig")
+  pipeline_triggers PipelineTrigger[]         @relation("PipelineTrig")
 
   @@index([user_device_id, mqtt_action_name])
   @@map("user_device_actions")
+}
+
+// One row per behavior the user has ENABLED on their action, with the chosen values (typed
+// columns, nullable per behavior). Enabling interval + on_demand on a sensor is two rows; an
+// on-demand-only sensor has one. Validated on save against the capability's
+// CapabilityConfiguration rows (device-gateway). camera_resolution/camera_transport fold here
+// off user_device_actions (an on_demand camera row); interval_ms is the chosen cadence.
+model UserActionConfiguration {
+  id                          Int      @id @default(autoincrement())
+  user_device_action_id       Int
+  capability_configuration_id Int
+  behavior                    String   @db.VarChar(20)
+  interval_ms                 Int?
+  camera_resolution           String?  @db.VarChar(20)
+  camera_transport            String?  @db.VarChar(10)
+  created_at                  DateTime @default(now()) @db.Timestamp(6)
+  updated_at                  DateTime @default(now()) @db.Timestamp(6)
+
+  user_device_action       UserDeviceAction        @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
+  capability_configuration CapabilityConfiguration @relation(fields: [capability_configuration_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_device_action_id, behavior])
+  @@map("user_action_configurations")
 }
 
 model UserDeviceActionPin {
@@ -441,7 +537,9 @@ model PipelineRunStage {
 model SensorHistory {
   id                    Int              @id @default(autoincrement())
   user_device_action_id Int
-  value                 String           @db.Text
+  value                 String?          @db.Text // null on a fault reading (is_error)
+  is_error              Boolean          @default(false)
+  error_code            String?          @db.VarChar(100) // fault envelope's error code, e.g. "read_failed"
   recorded_at           DateTime         @default(now()) @db.Timestamp(6)
   user_device_action    UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
 

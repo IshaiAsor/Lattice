@@ -12,7 +12,8 @@
 // set_reg/get_reg SCCB accessors, porting the exact register protocol and firmware blob
 // from espressif/esp32-camera (Apache-2.0) sensors/ov5640_af.c +
 // private_include/ov5640_af_firmware.h.
-namespace Ov5640AutoFocus {
+namespace Ov5640AutoFocus
+{
 
 // clang-format off
 static const uint8_t FIRMWARE[] = {
@@ -282,80 +283,96 @@ static const int CMD_FW_STATUS = 0x3029;
 static const int FW_STATUS_IDLE = 0x70;
 static const int AF_CONTINUOUS  = 0x04;
 
-static bool regWrite(sensor_t *s, int reg, int value)
+static bool regWrite(sensor_t* s, int reg, int value)
 {
     return s->set_reg(s, reg, 0xff, value) >= 0;
 }
 
-static bool regRead(sensor_t *s, int reg, int &out)
+static bool regRead(sensor_t* s, int reg, int& out)
 {
     int v = s->get_reg(s, reg, 0xff);
-    if (v < 0) return false;
+    if (v < 0)
+        return false;
     out = v;
     return true;
 }
 
-static bool waitAckClear(sensor_t *s, uint32_t timeoutMs)
+static bool waitAckClear(sensor_t* s, uint32_t timeoutMs)
 {
     unsigned long start = millis();
-    int ack = 0;
-    while (regRead(s, CMD_ACK, ack)) {
-        if (ack == 0x00) return true;
-        if (millis() - start > timeoutMs) return false;
+    int           ack   = 0;
+    while (regRead(s, CMD_ACK, ack))
+    {
+        if (ack == 0x00)
+            return true;
+        if (millis() - start > timeoutMs)
+            return false;
         delay(5);
     }
     return false;
 }
 
-static bool waitFwIdle(sensor_t *s, uint32_t timeoutMs)
+static bool waitFwIdle(sensor_t* s, uint32_t timeoutMs)
 {
-    unsigned long start = millis();
-    int status = 0;
-    while (regRead(s, CMD_FW_STATUS, status)) {
-        if (status == FW_STATUS_IDLE) return true;
-        if (millis() - start > timeoutMs) return false;
+    unsigned long start  = millis();
+    int           status = 0;
+    while (regRead(s, CMD_FW_STATUS, status))
+    {
+        if (status == FW_STATUS_IDLE)
+            return true;
+        if (millis() - start > timeoutMs)
+            return false;
         delay(5);
     }
     return false;
 }
 
-static bool loadFirmware(sensor_t *s, uint32_t timeoutMs)
+static bool loadFirmware(sensor_t* s, uint32_t timeoutMs)
 {
-    if (!regWrite(s, 0x3000, 0x20)) return false;  // hold VCM MCU in reset
+    if (!regWrite(s, 0x3000, 0x20))
+        return false; // hold VCM MCU in reset
 
     uint16_t addr = 0x8000;
-    for (size_t i = 0; i < sizeof(FIRMWARE); i++, addr++) {
-        if (!regWrite(s, addr, FIRMWARE[i])) return false;
+    for (size_t i = 0; i < sizeof(FIRMWARE); i++, addr++)
+    {
+        if (!regWrite(s, addr, FIRMWARE[i]))
+            return false;
     }
 
     regWrite(s, CMD_MAIN, 0x00);
-    regWrite(s, CMD_ACK,  0x00);
+    regWrite(s, CMD_ACK, 0x00);
     regWrite(s, CMD_FW_STATUS, 0x7f);
-    regWrite(s, 0x3000, 0x00);  // release VCM MCU to start running the uploaded firmware
+    regWrite(s, 0x3000, 0x00); // release VCM MCU to start running the uploaded firmware
 
     return waitFwIdle(s, timeoutMs);
 }
 
 // Kicks off continuous internal AF. Mirrors the trigger sequence in
 // espressif/esp32-camera's ov5640_af_start(sensor, continuous=true, ...).
-static bool startContinuous(sensor_t *s, uint32_t timeoutMs)
+static bool startContinuous(sensor_t* s, uint32_t timeoutMs)
 {
-    if (!regWrite(s, CMD_MAIN, 0x01)) return false;
-    if (!regWrite(s, CMD_MAIN, 0x08)) return false;
-    if (!waitAckClear(s, timeoutMs)) return false;
-    if (!regWrite(s, CMD_ACK, 0x01)) return false;
-    if (!regWrite(s, CMD_MAIN, AF_CONTINUOUS)) return false;
+    if (!regWrite(s, CMD_MAIN, 0x01))
+        return false;
+    if (!regWrite(s, CMD_MAIN, 0x08))
+        return false;
+    if (!waitAckClear(s, timeoutMs))
+        return false;
+    if (!regWrite(s, CMD_ACK, 0x01))
+        return false;
+    if (!regWrite(s, CMD_MAIN, AF_CONTINUOUS))
+        return false;
     return waitAckClear(s, timeoutMs);
 }
 
 // Uploads the VCM firmware and starts continuous autofocus. Fixed-focus OV5640 boards
 // have no VCM lens to respond, so this just times out harmlessly (bounded by timeoutMs).
-inline bool init(sensor_t *s, uint32_t timeoutMs = 3000)
+inline bool init(sensor_t* s, uint32_t timeoutMs = 3000)
 {
-    if (!s || !s->set_reg || !s->get_reg) return false;
+    if (!s || !s->set_reg || !s->get_reg)
+        return false;
     return loadFirmware(s, timeoutMs) && startContinuous(s, timeoutMs);
 }
 
-}  // namespace Ov5640AutoFocus
+} // namespace Ov5640AutoFocus
 
 #endif // HAS_CAMERA

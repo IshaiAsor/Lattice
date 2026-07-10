@@ -31,6 +31,15 @@ export interface ActionView {
   groupId: number | null;
   groupName: string | null;
   telemetryIntervalMs: number | null;
+  // Unified action model (6d): the behaviors this capability supports, and which the user has
+  // enabled (with chosen values). The device-config UI renders a toggle per available behavior.
+  availableBehaviors: { behavior: string; minIntervalMs: number | null }[];
+  enabledBehaviors: {
+    behavior: string;
+    intervalMs: number | null;
+    cameraResolution: string | null;
+    cameraTransport: string | null;
+  }[];
 }
 
 class UserActionsService {
@@ -41,7 +50,14 @@ class UserActionsService {
       include: {
         user_device: true,
         group: true,
-        capability: { include: { google_type: true, traits: { include: { google_trait: true } } } },
+        capability: {
+          include: {
+            google_type: true,
+            traits: { include: { google_trait: true } },
+            configurations: true,
+          },
+        },
+        configurations: true,
       },
     });
 
@@ -86,6 +102,16 @@ class UserActionsService {
         groupId: a.group_id,
         groupName: a.group?.name ?? null,
         telemetryIntervalMs: a.telemetry_interval_ms,
+        availableBehaviors: a.capability.configurations.map((c) => ({
+          behavior: c.behavior,
+          minIntervalMs: c.min_interval_ms,
+        })),
+        enabledBehaviors: a.configurations.map((uc) => ({
+          behavior: uc.behavior,
+          intervalMs: uc.interval_ms,
+          cameraResolution: uc.camera_resolution,
+          cameraTransport: uc.camera_transport,
+        })),
       };
     });
   }
@@ -134,6 +160,84 @@ class UserActionsService {
         default_trait_id: patch.default_trait_id,
         updated_at: new Date(),
       },
+    });
+  }
+
+  // Replace the action's enabled behaviors (unified action model). Declarative: the passed set
+  // becomes the full set — behaviors absent from it are disabled. Each is validated against the
+  // capability's catalog rows (capability_configurations) so a user can't enable a behavior the
+  // firmware doesn't support, nor pick an interval below the hardware floor.
+  async setActionBehaviors(
+    userId: number,
+    actionId: number,
+    behaviors: {
+      behavior: string;
+      interval_ms?: number | null;
+      camera_resolution?: string | null;
+      camera_transport?: string | null;
+    }[],
+  ): Promise<void> {
+    const action = await this.ensureOwned(userId, actionId);
+
+    const catalog = await db.capabilityConfiguration.findMany({
+      where: { capability_id: action.capability_id },
+    });
+    const byBehavior = new Map(catalog.map((c) => [c.behavior, c]));
+
+    for (const b of behaviors) {
+      const cc = byBehavior.get(b.behavior);
+      if (!cc) {
+        throw Object.assign(
+          new Error(`behavior '${b.behavior}' not supported by this capability`),
+          {
+            statusCode: 400,
+          },
+        );
+      }
+      if (
+        b.behavior === 'interval' &&
+        b.interval_ms != null &&
+        cc.min_interval_ms != null &&
+        b.interval_ms < cc.min_interval_ms
+      ) {
+        throw Object.assign(
+          new Error(
+            `interval_ms ${b.interval_ms} is below the capability floor ${cc.min_interval_ms}`,
+          ),
+          { statusCode: 400 },
+        );
+      }
+    }
+
+    const wanted = behaviors.map((b) => b.behavior);
+
+    await db.$transaction(async (tx) => {
+      await tx.userActionConfiguration.deleteMany({
+        where: { user_device_action_id: actionId, behavior: { notIn: wanted } },
+      });
+      for (const b of behaviors) {
+        const cc = byBehavior.get(b.behavior)!;
+        const values = {
+          interval_ms: b.interval_ms ?? null,
+          camera_resolution: b.camera_resolution ?? null,
+          camera_transport: b.camera_transport ?? null,
+        };
+        await tx.userActionConfiguration.upsert({
+          where: {
+            user_device_action_id_behavior: {
+              user_device_action_id: actionId,
+              behavior: b.behavior,
+            },
+          },
+          create: {
+            user_device_action_id: actionId,
+            capability_configuration_id: cc.id,
+            behavior: b.behavior,
+            ...values,
+          },
+          update: { capability_configuration_id: cc.id, ...values, updated_at: new Date() },
+        });
+      }
     });
   }
 

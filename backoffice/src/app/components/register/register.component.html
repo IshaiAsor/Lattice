@@ -44,6 +44,24 @@
     </div>
 
     <div class="register-card">
+    @if (pendingVerification) {
+      <div class="verify-panel">
+        <div class="verify-icon"><mat-icon>mark_email_unread</mat-icon></div>
+        <div class="card-title">Check your inbox</div>
+        <p class="card-sub">
+          We sent a verification link to <strong>{{ email }}</strong>. Click it to activate your
+          account and sign in.
+        </p>
+        @if (resendState === 'sent') {
+          <div class="verify-sent">Verification email re-sent.</div>
+        } @else {
+          <button type="button" class="btn-sign btn-ghost" (click)="resend()">
+            <mat-icon>refresh</mat-icon> Resend email
+          </button>
+        }
+        <div class="card-foot"><a (click)="goToLogin()" (keyup.enter)="goToLogin()" tabindex="0">Back to sign in</a></div>
+      </div>
+    } @else {
       <div class="card-title">Create account</div>
       <div class="card-sub">Sign up to manage your smart home</div>
 
@@ -127,6 +145,7 @@
       </form>
 
       <div class="card-foot">Already have an account? <a routerLink="/login">Sign in</a></div>
+    }
     </div>
   </div>
 </div>

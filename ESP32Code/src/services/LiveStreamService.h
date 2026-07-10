@@ -6,16 +6,18 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
+#include "config/Log.h"
 
-struct WsFrame {
-    uint8_t *buf;
+struct WsFrame
+{
+    uint8_t* buf;
     size_t   len;
-    char     commandId[40];   // empty = periodic push; set = on-demand capture correlation
+    char     commandId[40]; // empty = periodic push; set = on-demand capture correlation
 };
 
 class LiveStreamService
 {
-private:
+  private:
     WebSocketsClient _ws;
     volatile bool    _connected = false;
     QueueHandle_t    _queue     = nullptr;
@@ -24,9 +26,9 @@ private:
 
     // All WebSocketsClient calls are confined to this task (Core 0).
     // Main loop (Core 1) only interacts via _queue and _connected flag.
-    static void wsTask(void *pv)
+    static void wsTask(void* pv)
     {
-        auto *self = static_cast<LiveStreamService *>(pv);
+        auto*   self = static_cast<LiveStreamService*>(pv);
         WsFrame frame;
         for (;;)
         {
@@ -51,16 +53,16 @@ private:
         }
     }
 
-    static void parseUrl(const String& url, bool validateCACert,
-                         String& host, uint16_t& port, bool& useSSL)
+    static void parseUrl(const String& url, String& host, uint16_t& port, bool& useSSL)
     {
-        useSSL = url.startsWith("https://") && validateCACert;
+        // Prod always validates against the pinned CA; TLS is used iff the URL is https.
+        useSSL          = url.startsWith("https://");
         String stripped = url;
         stripped.replace("https://", "");
-        stripped.replace("http://",  "");
-        int slashIdx = stripped.indexOf('/');
+        stripped.replace("http://", "");
+        int    slashIdx = stripped.indexOf('/');
         String hostPort = slashIdx >= 0 ? stripped.substring(0, slashIdx) : stripped;
-        int colonIdx = hostPort.indexOf(':');
+        int    colonIdx = hostPort.indexOf(':');
         if (colonIdx >= 0)
         {
             host = hostPort.substring(0, colonIdx);
@@ -73,26 +75,37 @@ private:
         }
     }
 
-public:
-    void begin(const String& deviceConfigUrl, const String& token,
-               bool validateCACert, const char* caCert = nullptr,
-               const String& wsPath = "/ws/stream",
-               const String& actionName = "")
+  public:
+    void begin(const String& deviceConfigUrl, const String& token, const char* caCert = nullptr,
+               const String& wsPath = "/ws/stream", const String& actionName = "")
     {
         // Derive a short label and task name from the path for log readability
-        _label = wsPath.endsWith("capture") ? "Capture" : "Stream";
+        _label          = wsPath.endsWith("capture") ? "Capture" : "Stream";
         String taskName = _label == "Capture" ? "wsCapture" : "wsStream";
 
-        String host; uint16_t port; bool useSSL;
-        parseUrl(deviceConfigUrl, validateCACert, host, port, useSSL);
+        String   host;
+        uint16_t port;
+        bool     useSSL;
+        parseUrl(deviceConfigUrl, host, port, useSSL);
         // The device names its own action; the gateway reads it from the query.
         String path = wsPath + "?token=" + token + "&action=" + actionName;
-        Serial.printf("[%s] Connecting to %s:%u%s\n", _label.c_str(), host.c_str(), port, path.c_str());
+        LOG_I("WsCam", "connecting to %s:%u%s", host.c_str(), port, path.c_str());
 
         _ws.onEvent([this](WStype_t type, uint8_t*, size_t) {
-            if (type == WStype_CONNECTED)    { _connected = true;  Serial.printf("[%s] WebSocket connected\n",    _label.c_str()); }
-            if (type == WStype_DISCONNECTED) { _connected = false; Serial.printf("[%s] WebSocket disconnected\n", _label.c_str()); }
-            if (type == WStype_ERROR)        {                     Serial.printf("[%s] WebSocket error\n",        _label.c_str()); }
+            if (type == WStype_CONNECTED)
+            {
+                _connected = true;
+                LOG_I("WsCam", "WebSocket connected");
+            }
+            if (type == WStype_DISCONNECTED)
+            {
+                _connected = false;
+                LOG_W("WsCam", "WebSocket disconnected");
+            }
+            if (type == WStype_ERROR)
+            {
+                LOG_W("WsCam", "WebSocket error");
+            }
         });
 
         _ws.setReconnectInterval(3000);
@@ -100,25 +113,30 @@ public:
         // Keeps the TCP session alive through NAT/router idle-timeout windows.
         _ws.enableHeartbeat(15000, 3000, 2);
 
-        if (useSSL) _ws.beginSslWithCA(host.c_str(), port, path.c_str(), caCert);
-        else        _ws.begin(host.c_str(), port, path.c_str());
+        if (useSSL)
+            _ws.beginSslWithCA(host.c_str(), port, path.c_str(), caCert);
+        else
+            _ws.begin(host.c_str(), port, path.c_str());
 
         _queue = xQueueCreate(3, sizeof(WsFrame));
         xTaskCreatePinnedToCore(wsTask, taskName.c_str(), 16384, this, 2, &_task, 0);
     }
 
-    void loop() {}  // WS loop runs inside wsTask — nothing needed here
+    void loop() {} // WS loop runs inside wsTask — nothing needed here
 
     bool isConnected() const { return _connected; }
 
-    bool sendFrame(const uint8_t *buf, size_t len, const String& commandId = "")
+    bool sendFrame(const uint8_t* buf, size_t len, const String& commandId = "")
     {
-        if (!_connected || !_queue) return false;
+        if (!_connected || !_queue)
+            return false;
 
-        uint8_t *copy = psramFound()
-            ? (uint8_t *)ps_malloc(len)
-            : (uint8_t *)malloc(len);
-        if (!copy) { Serial.printf("[%s] malloc failed — dropping frame\n", _label.c_str()); return false; }
+        uint8_t* copy = psramFound() ? (uint8_t*)ps_malloc(len) : (uint8_t*)malloc(len);
+        if (!copy)
+        {
+            LOG_E("WsCam", "malloc failed — dropping frame");
+            return false;
+        }
 
         memcpy(copy, buf, len);
         WsFrame frame = {copy, len, {0}};
@@ -126,7 +144,7 @@ public:
 
         if (xQueueSend(_queue, &frame, 0) != pdTRUE)
         {
-            free(copy);  // Queue busy — drop
+            free(copy); // Queue busy — drop
             return false;
         }
         return true;

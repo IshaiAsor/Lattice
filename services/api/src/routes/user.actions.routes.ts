@@ -44,6 +44,20 @@ userActionsRouter.patch('/:id', async (req, res, next) => {
   }
 });
 
+userActionsRouter.put('/:id/behaviors', async (req, res, next) => {
+  try {
+    const { behaviors } = req.body ?? {};
+    if (!Array.isArray(behaviors)) {
+      res.status(400).json({ error: 'behaviors array is required' });
+      return;
+    }
+    await userActionsService.setActionBehaviors(req.user!.id, Number(req.params.id), behaviors);
+    res.sendStatus(204);
+  } catch (err) {
+    next(err);
+  }
+});
+
 userActionsRouter.delete('/:id', async (req, res, next) => {
   try {
     await userActionsService.deleteAction(req.user!.id, Number(req.params.id));

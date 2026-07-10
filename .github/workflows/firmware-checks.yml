@@ -1,0 +1,100 @@
+name: Firmware Checks
+
+# Quality gate for ESP32Code — format, native unit tests, static analysis, and a compile
+# smoke test. Separate from esp32-ota-ci.yml (which only builds prod images on push to master)
+# so PRs get a gate without carrying the image/version-tag machinery. Paths-filtered so it
+# only runs when firmware actually changes.
+on:
+  push:
+    branches: ['master']
+    paths: ['ESP32Code/**']
+  pull_request:
+    branches: ['master']
+    paths: ['ESP32Code/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install clang-format (pinned)
+        run: npm ci
+      # src/certs/ is format-disabled via its own .clang-format (PEM literals). --dry-run -Werror
+      # fails the job on any diff, matching the local lint-staged clang-format -i.
+      - name: clang-format check
+        working-directory: ESP32Code
+        run: |
+          FILES=$(find src test tools/manifest-gen/src -type f \( -name '*.h' -o -name '*.cpp' \))
+          npx clang-format --dry-run -Werror --style=file $FILES
+
+  native-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Native unit tests
+        working-directory: ESP32Code
+        run: pio test -e native
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO + cppcheck
+        run: |
+          pip install platformio
+          sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: cppcheck
+        working-directory: ESP32Code
+        run: pio check -e esp32s3_mini-test --fail-on-defect high --fail-on-defect medium
+
+  build-smoke:
+    # PR-only compile check of the two representative envs (plain + HAS_CAMERA). Full prod
+    # builds stay in esp32-ota-ci.yml on push to master.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('ESP32Code/platformio.ini') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Build (mini + cam, test envs)
+        working-directory: ESP32Code
+        run: pio run -e esp32s3_mini-test -e esp32s3_cam-test
+      - name: Firmware size gate
+        working-directory: ESP32Code
+        # The mini OTA slot (ota_partitions.csv ota_0/ota_1) is 0x1E0000 = 1966080 bytes and is
+        # the binding constraint. Fail if the mini image exceeds 95% of it, so "near the ceiling"
+        # is a gated number instead of a surprise at flash time.
+        run: |
+          SLOT=1966080
+          BIN=.pio/build/esp32s3_mini-test/firmware.bin
+          SIZE=$(stat -c%s "$BIN")
+          PCT=$(( SIZE * 100 / SLOT ))
+          echo "mini firmware.bin: $SIZE bytes / $SLOT slot = ${PCT}%"
+          if [ "$PCT" -ge 95 ]; then
+            echo "::error::firmware is ${PCT}% of the OTA slot (>=95%) — shrink before merging"
+            exit 1
+          fi

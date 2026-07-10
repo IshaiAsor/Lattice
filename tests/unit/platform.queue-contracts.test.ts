@@ -71,6 +71,19 @@ const CASES: ContractCase[] = [
     broken: { userId: '1', deviceId: '42', actionName: 'outlet', state: 'on' }, // timestamp missing
   },
   {
+    rk: RK.DEVICE_HEARTBEAT,
+    canonical: {
+      userId: '1',
+      deviceId: '42',
+      version: 'v2.0.1',
+      timestamp: new Date().toISOString(),
+      uptimeMs: 123456,
+      freeHeap: 200000,
+      rssi: -55,
+    },
+    broken: { userId: '1', deviceId: '42', version: 'v2.0.1', timestamp: 'now', rssi: '-55' }, // rssi must be number
+  },
+  {
     rk: RK.ACTION_REQUESTED,
     canonical: { userId: '1', actionId: 5, value: 'on', duration: '30' },
     broken: { userId: '1', actionId: '5', value: 'on' }, // actionId must be number
@@ -200,6 +213,16 @@ const CASES: ContractCase[] = [
     rk: RK.NOTIFICATION_PUBLISH,
     canonical: { type: 'ota_available', deviceType: 'ESP32S3_MINI', version: 'v2.0.9' },
     broken: { type: 'firmware_ready', deviceType: 'ESP32S3_MINI', version: 'v2.0.9' }, // literal mismatch
+  },
+  {
+    rk: RK.NOTIFICATION_SEND,
+    canonical: {
+      userId: '2',
+      eventType: 'ota_available',
+      data: { deviceType: 'ESP32S3_MINI', version: 'v2.0.9' },
+      channels: ['in_app', 'email'],
+    },
+    broken: { userId: 2, eventType: 'ota_available', data: {} }, // userId must be a string
   },
 ];
 

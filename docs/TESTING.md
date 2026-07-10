@@ -207,10 +207,23 @@ run unit tests without infrastructure. Don't break this property. Disruptive cas
 - Tests never hard-depend on a developer's personal `.env` stack — use the harness
   constants and the ephemeral test stack.
 
+## Firmware native unit tests (`ESP32Code`)
+
+Host-compiled Unity tests over the firmware's pure logic — no board required. Run from
+`ESP32Code/` with `pio test -e native` (needs a host g++ on PATH); also run by CI in
+`firmware-checks.yml`.
+
+| Tier | Test                                                                                   | Source under test                          | Status                            |
+| ---- | -------------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------- |
+| Unit | command-payload validation (valid list, range bounds, leading `-`, overflow, lone `-`) | `src/actions/commands/PayloadValidation.h` | ✅ `test/test_payload_validation` |
+| Unit | MQTT topic construction (placeholder fill, `#`→action, device-type)                    | `src/services/TopicBuilder.h`              | ✅ `test/test_topic_builder`      |
+
+`test_payload_validation` is the **firmware side of the command-payload parity contract** — keep
+its case matrix aligned with `tests/unit/commands.command-models.test.js` (the sim side). See
+`ESP32Code/CLAUDE.md` for how to add new native-testable units.
+
 ## Deferred — deliberate decisions, not omissions
 
-- **Firmware native unit tests** (`pio test` host builds for `BaseCommandAction`
-  validation): revisit at the next firmware capability change.
 - **Load/perf (k6)**: telemetry volume doesn't justify it yet; revisit when device count
   grows or ingest latency becomes a question.
 - **Visual regression**: not worth the flake budget at this UI churn rate.

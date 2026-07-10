@@ -7,17 +7,19 @@
 
 class BleNotificationService
 {
-private:
-  BleServer *bleServer;
-  QueueHandle_t *bleResponseQueue;
+  private:
+    BleServer*     bleServer;
+    QueueHandle_t* bleResponseQueue;
 
-public:
-  BleNotificationService(BleServer *bleServer, QueueHandle_t *bleResponseQueue)
-      : bleServer(bleServer), bleResponseQueue(bleResponseQueue) {}
+  public:
+    BleNotificationService(BleServer* bleServer, QueueHandle_t* bleResponseQueue)
+        : bleServer(bleServer), bleResponseQueue(bleResponseQueue)
+    {
+    }
 
-  void NotifyBleDevice(ResponseType type, const char *message)
-  {
-    BluetoothResponse bleResponse(type, message);
-    xQueueSend(*bleResponseQueue, &bleResponse, 0);
-  }
+    void NotifyBleDevice(ResponseType type, const char* message)
+    {
+        BluetoothResponse bleResponse(type, message);
+        xQueueSend(*bleResponseQueue, &bleResponse, 0);
+    }
 };

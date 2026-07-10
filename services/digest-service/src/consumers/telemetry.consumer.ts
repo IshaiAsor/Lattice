@@ -10,7 +10,7 @@ import { socket } from '../socket/emitter';
 import { writeScalarState } from '../state-write';
 import { takePendingPicture } from '../cache/pending';
 import * as timeout from '../pending-timeout';
-import { evaluateThreshold } from '../threshold';
+import { evaluateThreshold, isErrorReading, type ErrorReading } from '../threshold';
 
 const log = createLogger('digest-service:telemetry');
 
@@ -119,8 +119,42 @@ async function handleScalar(
   payload: TelemetryArrivedPayload,
 ): Promise<void> {
   const { userId, deviceId, actionName, value, timestamp } = payload;
+
+  // Fault reading: record it to history (timestamped, so error *duration* is queryable —
+  // the basis for the roadmapped sensor_error_duration trigger) but never touch current_state
+  // or fire value-threshold pipelines. The last good value stays authoritative.
+  if (isErrorReading(value)) {
+    await recordErrorReading(userActionId, value, timestamp);
+    return;
+  }
+
   await writeScalarState(ch, userActionId, { userId, deviceId, actionName, value, timestamp });
   await firePipelineTriggers(ch, userId, userActionId, value);
+}
+
+// A fault reading is persisted to sensor_history as a structured error row (value NULL,
+// is_error true, error_code = the fault envelope's code) and nowhere else — the fault never
+// touches current_state or value thresholds. The history write is authoritative — a throw
+// nacks → DLQ. Keeping faults out of the value column keeps the numeric series clean and makes
+// the roadmapped sensor_error_duration trigger a simple `WHERE is_error = true` query.
+async function recordErrorReading(
+  userActionId: number,
+  reading: ErrorReading,
+  timestamp: string,
+): Promise<void> {
+  log.warn(
+    { userActionId, errorCode: reading.error },
+    'fault telemetry reading — recording to history only',
+  );
+  await db.sensorHistory.create({
+    data: {
+      user_device_action_id: userActionId,
+      value: null,
+      is_error: true,
+      error_code: reading.error.slice(0, 100),
+      recorded_at: new Date(timestamp),
+    },
+  });
 }
 
 async function firePipelineTriggers(

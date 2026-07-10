@@ -1,0 +1,4 @@
+# PEM certificate literals — never reflow. (SortIncludes must be disabled explicitly;
+# DisableFormat alone does not stop include sorting.)
+DisableFormat: true
+SortIncludes: Never

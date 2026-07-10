@@ -43,6 +43,20 @@ function handleRefresh(
   );
 }
 
+// Public auth endpoints never carry a session token, so a 401 from them is a real
+// credential/verification failure — not an expired-session signal. Attempting a refresh here
+// clobbers the actual error (e.g. "Invalid credentials") with an unrelated refresh-token failure.
+const PUBLIC_AUTH_PATHS = [
+  '/api/auth/login',
+  '/api/auth/google',
+  '/api/auth/register',
+  '/api/auth/verify-email',
+  '/api/auth/resend-verification',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/auth/refresh-token',
+];
+
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
   const snackBar = inject(MatSnackBar);
@@ -50,9 +64,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
       if (error.status === 401) {
-        // Don't attempt refresh for the refresh-token endpoint itself.
-        if (req.url.includes('/api/auth/refresh-token')) {
-          authService.logout();
+        if (PUBLIC_AUTH_PATHS.some((path) => req.url.includes(path))) {
+          if (req.url.includes('/api/auth/refresh-token')) {
+            authService.logout();
+          }
           return throwError(() => error);
         }
         return handleRefresh(req, next, authService);

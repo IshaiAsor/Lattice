@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { loginService } from '../services/login.service';
 import { registerService } from '../services/register.service';
+import { authFlowsService } from '../services/auth-flows.service';
 import { authRateLimiter } from '../middlewares/rate.limiter.middleware';
 
 export const authRouter = Router();
@@ -48,17 +49,55 @@ authRouter.post('/google', authRateLimiter, async (req, res, next) => {
   }
 });
 
-// Self-service registration with username/password.
+// Self-service registration with username/password. No JWT is issued — the account is created
+// unverified and a confirmation email is sent (F15.8). 202 = accepted, pending verification.
 authRouter.post('/register', authRateLimiter, async (req, res, next) => {
   try {
     const { username, email, password, termsAccepted } = req.body ?? {};
-    const result = await registerService.register(
-      username,
-      email,
-      password,
-      termsAccepted === true,
-    );
-    res.status(201).json({ token: result.token, refreshToken: result.refreshToken });
+    await registerService.register(username, email, password, termsAccepted === true);
+    res.status(202).json({ pendingVerification: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Confirm an email address via the link token → verifies + logs the user in.
+authRouter.get('/verify-email', async (req, res, next) => {
+  try {
+    const token = String(req.query['token'] ?? '');
+    const result = await authFlowsService.verifyEmail(token);
+    res.json({ token: result.token, refreshToken: result.refreshToken, user: result.user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Resend the verification email for a pending account.
+authRouter.post('/resend-verification', authRateLimiter, async (req, res, next) => {
+  try {
+    await authFlowsService.resendVerification(req.body?.email);
+    res.status(202).json({ sent: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Request a password reset. Always 202 — never reveals whether the account exists.
+authRouter.post('/forgot-password', authRateLimiter, async (req, res, next) => {
+  try {
+    await authFlowsService.forgotPassword(req.body?.email);
+    res.status(202).json({ sent: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Complete a password reset with the emailed token.
+authRouter.post('/reset-password', authRateLimiter, async (req, res, next) => {
+  try {
+    const { token, password } = req.body ?? {};
+    await authFlowsService.resetPassword(token, password);
+    res.sendStatus(204);
   } catch (err) {
     next(err);
   }

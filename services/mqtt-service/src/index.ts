@@ -9,6 +9,7 @@ import { SUBSCRIBE_TOPICS } from './mqtt/subscriptions';
 import { deviceStatusHandler } from './handlers/device-status.handler';
 import { deviceTelemetryHandler } from './handlers/device-telemetry.handler';
 import { deviceAckHandler } from './handlers/device-ack.handler';
+import { deviceHeartbeatHandler } from './handlers/device-heartbeat.handler';
 import { actionDispatchConsumer } from './consumers/action-dispatch.consumer';
 import { otaDispatchConsumer } from './consumers/ota-dispatch.consumer';
 import { healthRouter } from './routes/health.routes';
@@ -46,7 +47,12 @@ async function main() {
   });
   log.info('RabbitMQ connected');
 
-  const handlers = [deviceStatusHandler(ch), deviceTelemetryHandler(ch), deviceAckHandler(ch)];
+  const handlers = [
+    deviceStatusHandler(ch),
+    deviceTelemetryHandler(ch),
+    deviceAckHandler(ch),
+    deviceHeartbeatHandler(ch),
+  ];
 
   const router = new TopicRouter();
   for (const h of handlers) {

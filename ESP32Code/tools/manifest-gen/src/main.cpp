@@ -19,11 +19,12 @@
 #define GEN_DEVICE_VERSION 0.0.0
 #endif
 
-int main() {
+int main()
+{
     JsonDocument doc;
     doc["deviceType"] = STR(GEN_DEVICE_TYPE);
     doc["version"]    = STR(GEN_DEVICE_VERSION);
-    JsonArray caps = doc["capabilities"].to<JsonArray>();
+    JsonArray caps    = doc["capabilities"].to<JsonArray>();
     for (const auto& d : CapabilityRegistry::all())
         serializeCapability(caps, d);
 

@@ -23,6 +23,11 @@ export class LoginComponent implements OnInit {
   error = '';
   termsAccepted = false;
 
+  // Set when login is blocked because the email isn't verified (F15.8) — the template then
+  // offers to resend the verification email to this address.
+  unverifiedEmail = '';
+  resendState: 'idle' | 'sent' = 'idle';
+
   private authService = inject(AuthService);
   private router = inject(Router);
 
@@ -59,12 +64,30 @@ export class LoginComponent implements OnInit {
   }
 
   onSubmit() {
+    this.error = '';
+    this.unverifiedEmail = '';
+    this.resendState = 'idle';
     this.authService.loginWithUserPass(this.username, this.password).subscribe({
       next: () => this.loginSuccess(),
       error: (err) => {
-        this.error = (err as { error?: { message?: string } })?.error?.message || 'Invalid username or password.';
+        const body = (err as { error?: { error?: string; email?: string } })?.error;
+        if (body?.error === 'email_not_verified') {
+          this.unverifiedEmail = body.email ?? '';
+          this.error = 'Please verify your email address before signing in.';
+        } else {
+          this.error = body?.error || 'Invalid username or password.';
+        }
         console.error('Login error:', err);
       },
+    });
+  }
+
+  resendVerification() {
+    const email = this.unverifiedEmail;
+    if (!email) return;
+    this.authService.resendVerification(email).subscribe({
+      next: () => (this.resendState = 'sent'),
+      error: () => (this.resendState = 'sent'),
     });
   }
 

@@ -6,77 +6,78 @@
 // guessing it from a hardcoded backend-side table.
 #include "actions/ActionPinsSetup.h"
 
-namespace GoogleTraits {
+namespace GoogleTraits
+{
 
-inline const GoogleTraitDef& OnOff() {
-    static const char* const values[] = { "on", "off", nullptr };
-    static const GoogleTraitDef def = {
-        "action.devices.traits.OnOff", "OnOff", TraitConstraintType::Enum, values, 0, 0, 0
-    };
+inline const GoogleTraitDef& OnOff()
+{
+    static const char* const    values[] = {"on", "off", nullptr};
+    static const GoogleTraitDef def      = {
+        "action.devices.traits.OnOff", "OnOff", TraitConstraintType::Enum, values, 0, 0, 0};
     return def;
 }
 
-inline const GoogleTraitDef& Brightness() {
+inline const GoogleTraitDef& Brightness()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.Brightness", "Brightness", TraitConstraintType::Range, nullptr, 0, 100, 1
-    };
+        "action.devices.traits.Brightness", "Brightness", TraitConstraintType::Range, nullptr, 0, 100, 1};
     return def;
 }
 
-inline const GoogleTraitDef& FanSpeed() {
+inline const GoogleTraitDef& FanSpeed()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.FanSpeed", "FanSpeed", TraitConstraintType::Range, nullptr, 0, 100, 1
-    };
+        "action.devices.traits.FanSpeed", "FanSpeed", TraitConstraintType::Range, nullptr, 0, 100, 1};
     return def;
 }
 
-inline const GoogleTraitDef& TemperatureSetting() {
+inline const GoogleTraitDef& TemperatureSetting()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.TemperatureSetting", "TemperatureSetting", TraitConstraintType::None, nullptr, 0, 0, 0
-    };
+        "action.devices.traits.TemperatureSetting", "TemperatureSetting", TraitConstraintType::None, nullptr, 0, 0, 0};
     return def;
 }
 
-inline const GoogleTraitDef& HumiditySetting() {
+inline const GoogleTraitDef& HumiditySetting()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.HumiditySetting", "HumiditySetting", TraitConstraintType::None, nullptr, 0, 0, 0
-    };
+        "action.devices.traits.HumiditySetting", "HumiditySetting", TraitConstraintType::None, nullptr, 0, 0, 0};
     return def;
 }
 
-inline const GoogleTraitDef& WaterLevel() {
+inline const GoogleTraitDef& WaterLevel()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.WaterLevel", "WaterLevel", TraitConstraintType::None, nullptr, 0, 0, 0
-    };
+        "action.devices.traits.WaterLevel", "WaterLevel", TraitConstraintType::None, nullptr, 0, 0, 0};
     return def;
 }
 
-inline const GoogleTraitDef& PhLevel() {
+inline const GoogleTraitDef& PhLevel()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.PhLevel", "PhLevel", TraitConstraintType::None, nullptr, 0, 0, 0
-    };
+        "action.devices.traits.PhLevel", "PhLevel", TraitConstraintType::None, nullptr, 0, 0, 0};
     return def;
 }
 
-inline const GoogleTraitDef& TdsLevel() {
+inline const GoogleTraitDef& TdsLevel()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.TdsLevel", "TdsLevel", TraitConstraintType::None, nullptr, 0, 0, 0
-    };
+        "action.devices.traits.TdsLevel", "TdsLevel", TraitConstraintType::None, nullptr, 0, 0, 0};
     return def;
 }
 
-inline const GoogleTraitDef& CO2Level() {
+inline const GoogleTraitDef& CO2Level()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.CO2Level", "CO2Level", TraitConstraintType::None, nullptr, 0, 0, 0
-    };
+        "action.devices.traits.CO2Level", "CO2Level", TraitConstraintType::None, nullptr, 0, 0, 0};
     return def;
 }
 
-inline const GoogleTraitDef& CameraStream() {
+inline const GoogleTraitDef& CameraStream()
+{
     static const GoogleTraitDef def = {
-        "action.devices.traits.CameraStream", "CameraStream", TraitConstraintType::None, nullptr, 0, 0, 0
-    };
+        "action.devices.traits.CameraStream", "CameraStream", TraitConstraintType::None, nullptr, 0, 0, 0};
     return def;
 }
 
-}  // namespace GoogleTraits
+} // namespace GoogleTraits

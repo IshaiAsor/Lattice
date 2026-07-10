@@ -1,6 +1,6 @@
 import { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
-import type { ActionDispatchPayload } from '@lattice/queue';
+import type { ActionDispatchPayload, NotificationSendPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import { db } from '../db/client';
 import { compare, isCooldownExpired, matchesScheduleAt } from './rules-logic';
@@ -42,6 +42,7 @@ class RulesEngine {
             where: { id: rule.id },
             data: { last_triggered: new Date(), updated_at: new Date() },
           });
+          this.notifyRuleFired(ch, userId, rule);
         }
       }
     } catch (err) {
@@ -69,6 +70,27 @@ class RulesEngine {
 
   private isCooldownExpired(rule: UserRuleWithDetails): boolean {
     return isCooldownExpired(rule.last_triggered, rule.cooldown_seconds);
+  }
+
+  // Best-effort user notification when a rule fires (F15.4). Emergency rules use the `emergency`
+  // event; the rest use `rule_fired`. dedupeKey is rule-scoped so distinct rules aren't
+  // cross-suppressed and a flapping rule collapses within the notification dedupe window.
+  // Dropped silently if notification-service isn't deployed (same contract as digest's OTA event).
+  private notifyRuleFired(ch: Channel, userId: number, rule: UserRuleWithDetails): void {
+    try {
+      publish(ch, RK.NOTIFICATION_SEND, {
+        userId: String(userId),
+        eventType: rule.is_emergency ? 'emergency' : 'rule_fired',
+        data: {
+          ruleName: rule.name,
+          title: rule.name,
+          message: `Rule "${rule.name}" was triggered.`,
+        },
+        dedupeKey: `rule:${rule.id}`,
+      } satisfies NotificationSendPayload);
+    } catch (err) {
+      log.warn({ err, rule: rule.name }, 'failed to publish rule-fired notification — skipped');
+    }
   }
 
   private async evaluateRule(rule: UserRuleWithDetails): Promise<boolean> {

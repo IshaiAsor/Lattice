@@ -4,7 +4,7 @@
   "//capabilities": "Omit to activate every catalog capability for that type. Set to a list of catalog capability_keys to activate only those — see the device type's manifest under ESP32Code/tools/manifest-gen/out/<TYPE>.json for valid keys per type, e.g. outlet/fan/dimmer/temperature/humidity/water_level/ph_level/tds_level/air_temp/co2_level for ESP32S3_MINI.",
   "//devices[0]": "3 MINIs, but only outlet + temperature activated (not the type's full catalog)",
   "//devices[1]": "1 camera device — camera:true streams frames for its camera capability",
-  "//devices[2]": "2 WROVERs with faster telemetry (2s) than the library default (5s)",
+  "//devices[2]": "2 Gen4 boards with faster telemetry (2s) than the library default (5s)",
   "//devices[3]": "a single pinned mac — handy when a test/bookmark needs a stable device identity across restarts, instead of the auto-generated SIM-<TYPE>-<NN>",
   "//devices[4]": "1 Gen4 board, full catalog, all defaults — the minimal form of a device entry",
   "defaults": {
@@ -13,7 +13,7 @@
   "devices": [
     { "type": "ESP32S3_MINI", "count": 3, "capabilities": ["outlet", "temperature"] },
     { "type": "ESP32S3_CAM", "count": 1, "camera": true },
-    { "type": "ESP32S3_WROVER", "count": 2, "telemetryMs": 2000 },
+    { "type": "ESP32S3_GEN4_GENERIC", "count": 2, "telemetryMs": 2000 },
     { "type": "ESP32S3_MINI", "count": 1, "mac": "SIM-PINNED-MINI", "capabilities": ["outlet"] },
     { "type": "ESP32S3_GEN4_GENERIC", "count": 1 }
   ]

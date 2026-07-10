@@ -4,44 +4,33 @@
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <type_traits>
-#include "models/JsonModel.h" // Ensure this path points to your JsonModel definition
-extern const char *root_ca;
+#include "models/JsonModel.h"
+#include "config/Log.h"
+extern const char* root_ca;
 
-template <typename TIn, typename TOut>
-class HttpJsonClientService
+template <typename TIn, typename TOut> class HttpJsonClientService
 {
     static_assert(std::is_base_of<JsonModel, TIn>::value, "TIn must inherit from JsonModel");
     static_assert(std::is_base_of<JsonModel, TOut>::value, "TOut must inherit from JsonModel");
 
-private:
-    HTTPClient httpClient;
+  private:
+    HTTPClient       httpClient;
     WiFiClientSecure secureClient;
-    WiFiClient plainClient;
+    WiFiClient       plainClient;
 
-public:
+  public:
     HttpJsonClientService() {}
     ~HttpJsonClientService() {}
 
-    TOut PostJson(const String url, const String token, const TIn *payload, bool validateCACert)
+    TOut PostJson(const String url, const String token, const TIn* payload)
     {
-        Serial.write("Post request");
-        Serial.print("url : ");
-        Serial.println(url);
-        Serial.print("token : ");
-        Serial.println(token);
-        Serial.print("validateCACert : ");
-        Serial.println(validateCACert);
+        // Never log the token itself — length only.
+        LOG_D("Http", "POST %s (token %u chars)", url.c_str(), token.length());
 
         if (url.startsWith("https://"))
         {
-            if (validateCACert)
-            {
-                secureClient.setCACert(root_ca);
-            }
-            else
-            {
-                secureClient.setInsecure();
-            }
+            // Prod always validates against the pinned CA (no insecure fallback).
+            secureClient.setCACert(root_ca);
             httpClient.begin(secureClient, url.c_str());
         }
         else
@@ -58,62 +47,46 @@ public:
 
         String payloadString;
         serializeJson(reqDoc, payloadString);
-        Serial.print("Payload:");
-        Serial.println(payloadString);
+        LOG_D("Http", "payload: %s", payloadString.c_str());
 
         int httpResponseCode = httpClient.POST(payloadString);
 
         if (httpResponseCode == 200)
         {
             String responseBody = httpClient.getString();
-            Serial.println("Received response:");
-            Serial.println(responseBody);
+            LOG_D("Http", "response: %s", responseBody.c_str());
 
-            JsonDocument doc;
+            JsonDocument         doc;
             DeserializationError error = deserializeJson(doc, responseBody);
 
             if (error)
             {
-                Serial.print("Failed to parse JSON response: ");
-                Serial.println(error.c_str());
+                LOG_W("Http", "failed to parse JSON response: %s", error.c_str());
                 httpClient.end();
-                return TOut(); 
+                return TOut();
             }
 
             TOut output;
-            output.fromJson(doc); 
+            output.fromJson(doc);
             httpClient.end();
             return output;
         }
         else
         {
-            Serial.print("HTTP POST failed, code: ");
-            Serial.println(httpResponseCode);
-            httpClient.end(); 
-            return TOut();    
+            LOG_W("Http", "POST failed, code: %d", httpResponseCode);
+            httpClient.end();
+            return TOut();
         }
     }
 
-    TOut GetJson(const String url, const String token, bool validateCACert)
+    TOut GetJson(const String url, const String token)
     {
-        Serial.write("Get request");
-        Serial.print("url : ");
-        Serial.println(url);
-        Serial.print("token : ");
-        Serial.println(token);
-        Serial.print("validateCACert : ");
-        Serial.println(validateCACert);
+        LOG_D("Http", "GET %s (token %u chars)", url.c_str(), token.length());
 
         if (url.startsWith("https://"))
         {
-            if (validateCACert)
-            {
-                secureClient.setCACert(root_ca);
-            }
-            else
-            {
-                secureClient.setInsecure();
-            }
+            // Prod always validates against the pinned CA (no insecure fallback).
+            secureClient.setCACert(root_ca);
             httpClient.begin(secureClient, url.c_str());
         }
         else
@@ -130,31 +103,28 @@ public:
         if (httpResponseCode == 200)
         {
             String responseBody = httpClient.getString();
-            Serial.println("Received response:");
-            Serial.println(responseBody);
+            LOG_D("Http", "response: %s", responseBody.c_str());
 
-            JsonDocument doc;
+            JsonDocument         doc;
             DeserializationError error = deserializeJson(doc, responseBody);
 
             if (error)
             {
-                Serial.print("Failed to parse JSON response: ");
-                Serial.println(error.c_str());
+                LOG_W("Http", "failed to parse JSON response: %s", error.c_str());
                 httpClient.end();
-                return TOut(); 
+                return TOut();
             }
 
             TOut output;
-            output.fromJson(doc); 
+            output.fromJson(doc);
             httpClient.end();
             return output;
         }
         else
         {
-            Serial.print("HTTP GET failed, code: ");
-            Serial.println(httpResponseCode);
-            httpClient.end(); 
-            return TOut();    
+            LOG_W("Http", "GET failed, code: %d", httpResponseCode);
+            httpClient.end();
+            return TOut();
         }
     }
 };

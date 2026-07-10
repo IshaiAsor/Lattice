@@ -9,6 +9,10 @@ import { UserDashboard } from './components/user-dashboard/user-dashboard';
 import { AdminDeviceConfigComponent } from './components/admin-device-config/admin-device-config.component';
 import { DeviceConfigComponent } from './components/device-config/device-config.component';
 import { AutomationsComponent } from './components/automations/automations.component';
+import { NotificationsComponent } from './components/notifications/notifications.component';
+import { VerifyEmailComponent } from './components/verify-email/verify-email.component';
+import { ForgotPasswordComponent } from './components/forgot-password/forgot-password.component';
+import { ResetPasswordComponent } from './components/reset-password/reset-password.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
@@ -38,12 +42,20 @@ export const routes: Routes = [
     canActivate: [authGuard],
   },
   {
+    path: 'notifications',
+    component: NotificationsComponent,
+    canActivate: [authGuard],
+  },
+  {
     path: 'admin/templates',
     component: AdminDeviceConfigComponent,
     canActivate: [authGuard, adminGuard],
   },
   { path: 'login', component: LoginComponent, data: { hideSidebar: true } },
   { path: 'register', component: RegisterComponent, data: { hideSidebar: true } },
+  { path: 'verify-email', component: VerifyEmailComponent, data: { hideSidebar: true } },
+  { path: 'forgot-password', component: ForgotPasswordComponent, data: { hideSidebar: true } },
+  { path: 'reset-password', component: ResetPasswordComponent, data: { hideSidebar: true } },
   { path: 'legal', component: LegalComponent, data: { hideSidebar: true } },
   { path: '**', redirectTo: '/dashboard' },
 ];

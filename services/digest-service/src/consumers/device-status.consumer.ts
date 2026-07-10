@@ -1,4 +1,6 @@
-import type { DeviceStateChangedPayload } from '@lattice/queue';
+import type { Channel } from 'amqplib';
+import { publish, RK } from '@lattice/queue';
+import type { DeviceStateChangedPayload, NotificationSendPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import { db } from '../db/client';
 import { valkey, keys } from '../cache/valkey';
@@ -11,7 +13,7 @@ const log = createLogger('digest-service:device-status');
 // status publish interval.
 const ONLINE_TTL_SECONDS = 90;
 
-export function deviceStatusConsumer() {
+export function deviceStatusConsumer(ch: Channel) {
   return async (payload: DeviceStateChangedPayload): Promise<void> => {
     const { userId, deviceId, state, timestamp, version } = payload;
     const online = state === true;
@@ -78,6 +80,26 @@ export function deviceStatusConsumer() {
       socket.emitDeviceStatusChange(parseInt(userId, 10), userDeviceId, online);
     } catch (err) {
       log.error({ err, userDeviceId }, 'socket emit failed');
+    }
+
+    // 4. Notify the owner when a device drops offline (best-effort; F15.4). dedupeKey is
+    // device-scoped so a flapping link collapses to one alert per dedupe window. Dropped
+    // silently if notification-service isn't deployed.
+    if (!online) {
+      try {
+        const dev = await db.userDevice.findUnique({
+          where: { id: userDeviceId },
+          select: { name: true },
+        });
+        publish(ch, RK.NOTIFICATION_SEND, {
+          userId,
+          eventType: 'device_offline',
+          data: { deviceName: dev?.name ?? 'A device' },
+          dedupeKey: `offline:${userDeviceId}`,
+        } satisfies NotificationSendPayload);
+      } catch (err) {
+        log.warn({ err, userDeviceId }, 'failed to publish device-offline notification — skipped');
+      }
     }
 
     log.info({ userDeviceId, online }, 'device status processed');

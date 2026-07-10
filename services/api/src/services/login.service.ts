@@ -10,20 +10,34 @@ export interface AuthResult {
   user: PublicUser;
 }
 
+// Module-level token issuance so the verification flow (F15.8) can mint an auth result on
+// successful email confirmation without reaching into LoginService's privates.
+function issueToken(user: User, purpose: JwtPurpose): string {
+  // Keep `id` in the claim — socket-server and other verifiers read `decoded.id`.
+  return jwtService.generateToken(
+    {
+      id: user.id,
+      username: user.user_name ?? user.full_name ?? user.email,
+      role: user.user_role,
+      email: user.email,
+      user_type: user.user_type,
+      profileImage: user.profile_picture_url,
+    },
+    purpose,
+  );
+}
+
+export function issueAuthResult(user: User): AuthResult {
+  return {
+    token: issueToken(user, JwtPurpose.app_usage),
+    refreshToken: issueToken(user, JwtPurpose.app_usage_refresh),
+    user: toPublicUser(user),
+  };
+}
+
 class LoginService {
   private issue(user: User, purpose: JwtPurpose): string {
-    // Keep `id` in the claim — socket-server and other verifiers read `decoded.id`.
-    return jwtService.generateToken(
-      {
-        id: user.id,
-        username: user.user_name ?? user.full_name ?? user.email,
-        role: user.user_role,
-        email: user.email,
-        user_type: user.user_type,
-        profileImage: user.profile_picture_url,
-      },
-      purpose,
-    );
+    return issueToken(user, purpose);
   }
 
   private issueRefresh(user: User): string {
@@ -41,6 +55,11 @@ class LoginService {
   ): Promise<AuthResult | null> {
     const user = await usersService.validateUser(username, password);
     if (!user) return null;
+    // Gate: credential accounts must confirm their email first (F15.8). Signal a distinct 403
+    // so the UI can offer to resend the verification email. Google accounts are always verified.
+    if (!user.email_verified) {
+      throw Object.assign(new Error('email_not_verified'), { statusCode: 403, email: user.email });
+    }
     await this.recordLogin(user.id, ipAddress);
     return {
       token: this.issue(user, JwtPurpose.app_usage),

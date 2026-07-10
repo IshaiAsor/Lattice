@@ -1,15 +1,19 @@
-import { JwtPurpose, jwtService } from './jwt.service';
-import { usersService, toPublicUser, PublicUser } from './users.service';
+import { randomUUID } from 'node:crypto';
+import { usersService } from './users.service';
+import { sendVerificationEmail } from './auth-notify';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 class RegisterService {
+  // Self-service registration (F15.8): create the account UNVERIFIED and email a confirmation
+  // link instead of issuing a JWT. The user lands in the app only after clicking the link
+  // (GET /verify-email) — so a mistyped/unowned address can't get a working session.
   async register(
     username: string,
     email: string,
     password: string,
     termsAccepted: boolean,
-  ): Promise<{ token: string; refreshToken: string; user: PublicUser }> {
+  ): Promise<{ pendingVerification: true }> {
     if (!termsAccepted) {
       throw Object.assign(new Error('You must accept the Terms of Service to register'), {
         statusCode: 400,
@@ -32,19 +36,10 @@ class RegisterService {
       throw Object.assign(new Error('Email is already registered'), { statusCode: 409 });
     }
 
-    const user = await usersService.createRegularUser(username, email, password);
-    const token = jwtService.generateToken(
-      {
-        id: user.id,
-        username: user.user_name,
-        role: user.user_role,
-        email: user.email,
-        user_type: user.user_type,
-      },
-      JwtPurpose.app_usage,
-    );
-    const refreshToken = jwtService.generateToken({ id: user.id }, JwtPurpose.app_usage_refresh);
-    return { token, refreshToken, user: toPublicUser(user) };
+    const token = randomUUID();
+    const user = await usersService.createRegularUser(username, email, password, token);
+    await sendVerificationEmail(user.id, username, token);
+    return { pendingVerification: true };
   }
 }
 

@@ -9,6 +9,9 @@ export const RK = {
   PIPELINE_CANCEL: 'pipeline.cancel',
   PIPELINE_RESULT: 'pipeline.result',
   DEVICE_STATE_CHANGED: 'device.state.changed',
+  // A device's periodic liveness ping (independent of telemetry). mqtt-service forwards it;
+  // digest refreshes a short-TTL last-seen cache key so "alive but quiet" ≠ "gone".
+  DEVICE_HEARTBEAT: 'device.heartbeat',
   // A UI client's intent to change an action's state, keyed by UserDeviceAction id.
   // digest resolves it (→ device/version/mqtt name), writes optimistic state + echoes,
   // then publishes ACTION_DISPATCH for the device.
@@ -30,6 +33,11 @@ export const RK = {
   // Best-effort event published by digest when an OTA release passes validation.
   // notification-service (F15) binds q.notification.publish to this key.
   NOTIFICATION_PUBLISH: 'notification.publish',
+  // A user-targeted notification request. Any service that already knows the userId
+  // (emergency, rule-fire, email-verification) publishes this directly; notification-service
+  // resolves prefs and fans out to the enabled channels. Device-scoped events that still need
+  // owner resolution use NOTIFICATION_PUBLISH instead.
+  NOTIFICATION_SEND: 'notification.send',
 } as const;
 
 export type RoutingKey = (typeof RK)[keyof typeof RK];
@@ -46,6 +54,7 @@ export const QUEUES = {
   PIPELINE_CANCEL: 'q.pipeline.cancel',
   PIPELINE_RESULT: 'q.pipeline.result',
   DEVICE_STATE_CHANGED: 'q.device.state.changed',
+  DEVICE_HEARTBEAT: 'q.device.heartbeat',
   ACTION_REQUESTED: 'q.action.requested',
   ACTION_DISPATCH: 'q.action.dispatch',
   ACTION_RESULT: 'q.action.result',
@@ -58,6 +67,7 @@ export const QUEUES = {
   OTA_INCOMING: 'q.ota.incoming',
   OTA_DISPATCH: 'q.ota.dispatch',
   NOTIFICATION_PUBLISH: 'q.notification.publish',
+  NOTIFICATION_SEND: 'q.notification.send',
   DLQ: 'q.dlq',
 } as const;
 

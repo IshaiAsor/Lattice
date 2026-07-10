@@ -18,6 +18,9 @@ export interface DeviceView {
   version: string;
   current_firmware_version: string | null;
   update_available: boolean;
+  // Latest WiFi RSSI (dBm) from the device heartbeat — only while online (null otherwise, so
+  // the UI never shows a stale signal for an offline device).
+  rssi: number | null;
 }
 
 export interface PinSlotView {
@@ -25,6 +28,12 @@ export interface PinSlotView {
   key: string;
   label: string;
   mode: string;
+}
+export interface BehaviorSelectionView {
+  behavior: string;
+  intervalMs: number | null;
+  cameraResolution: string | null;
+  cameraTransport: string | null;
 }
 export interface UserActionView {
   id: number;
@@ -36,6 +45,8 @@ export interface UserActionView {
   // CameraAction only — null for every other implementation_type.
   cameraResolution: string | null;
   cameraTransport: string | null;
+  // Behaviors the user has enabled on this instance (unified action model, 6d).
+  enabledBehaviors: BehaviorSelectionView[];
 }
 export interface CapabilityView {
   id: number; // DeviceCapability id
@@ -46,6 +57,8 @@ export interface CapabilityView {
   mqtt_action_name: string;
   min_telemetry_interval_ms: number | null;
   configurable_pins: PinSlotView[];
+  // Behaviors this capability supports (catalog-declared); the UI renders a toggle per entry.
+  available_behaviors: { behavior: string; min_interval_ms: number | null }[];
   instances: UserActionView[];
 }
 export interface PinInput {
@@ -85,6 +98,7 @@ class DeviceMgmtService {
         version: d.device.version,
         current_firmware_version: d.current_firmware_version,
         update_available: d.device.version !== latestVersion,
+        rssi: d.online ? d.rssi : null,
       };
     });
   }
@@ -114,12 +128,12 @@ class DeviceMgmtService {
     const [caps, actions] = await Promise.all([
       db.deviceCapability.findMany({
         where: { device_id: device.device_type_id },
-        include: { pins: true },
+        include: { pins: true, configurations: true },
         orderBy: { id: 'asc' },
       }),
       db.userDeviceAction.findMany({
         where: { user_device_id: deviceId },
-        include: { pins: true },
+        include: { pins: true, configurations: true },
       }),
     ]);
 
@@ -139,6 +153,10 @@ class DeviceMgmtService {
           label: p.label,
           mode: p.mode,
         })),
+        available_behaviors: cap.configurations.map((c) => ({
+          behavior: c.behavior,
+          min_interval_ms: c.min_interval_ms,
+        })),
         instances: actions
           .filter((a) => a.capability_id === cap.id)
           .map((a) => ({
@@ -153,6 +171,12 @@ class DeviceMgmtService {
             status: a.status,
             cameraResolution: a.camera_resolution,
             cameraTransport: a.camera_transport,
+            enabledBehaviors: a.configurations.map((uc) => ({
+              behavior: uc.behavior,
+              intervalMs: uc.interval_ms,
+              cameraResolution: uc.camera_resolution,
+              cameraTransport: uc.camera_transport,
+            })),
           })),
       };
     });

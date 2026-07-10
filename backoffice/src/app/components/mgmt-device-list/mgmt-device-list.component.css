@@ -243,6 +243,21 @@
   font-size: 11px;
 }
 
+/* ── Signal (RSSI) ───────────────────────────────────────────────── */
+.signal-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.signal-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+.signal-icon.sig-good { color: var(--online, #22c55e); }
+.signal-icon.sig-fair { color: var(--warning, #f59e0b); }
+.signal-icon.sig-weak { color: var(--error, #ef4444); }
+
 /* ── Offline overlay ─────────────────────────────────────────────── */
 .offline-overlay {
   position: absolute;

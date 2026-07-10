@@ -13,6 +13,7 @@ import { userActionsRouter } from './routes/user.actions.routes';
 import { actionGroupsRouter } from './routes/action.groups.routes';
 import { rulesRouter } from './routes/rules.routes';
 import { pipelinesRouter } from './routes/pipelines.routes';
+import { notificationsRouter } from './routes/notifications.routes';
 import { getChannel } from './queue';
 
 // OTel must be initialised before any other imports that could create spans.
@@ -54,6 +55,7 @@ function main() {
   app.use('/api/action-groups', actionGroupsRouter);
   app.use('/api/rules', rulesRouter);
   app.use('/api/pipelines', pipelinesRouter);
+  app.use('/api/notifications', notificationsRouter);
 
   app.use(exceptionMiddleware);
 

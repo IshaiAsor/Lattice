@@ -1,6 +1,6 @@
 // Unit: pipeline sensor-threshold evaluation (digest-service/src/threshold.ts).
 
-import { evaluateThreshold } from '../../services/digest-service/src/threshold';
+import { evaluateThreshold, isErrorReading } from '../../services/digest-service/src/threshold';
 
 describe('evaluateThreshold', () => {
   it.each([
@@ -34,5 +34,29 @@ describe('evaluateThreshold', () => {
   it('returns false for unknown operators on numeric input', () => {
     expect(evaluateThreshold(25, '!=', '20')).toBe(false);
     expect(evaluateThreshold(25, '', '20')).toBe(false);
+  });
+
+  it('never satisfies a threshold for a fault reading', () => {
+    // A fault envelope must not fire a value trigger, whatever the operator/threshold.
+    const fault = { error: 'read_failed', action: 'temperature' };
+    expect(evaluateThreshold(fault, '>', '20')).toBe(false);
+    expect(evaluateThreshold(fault, '<', '20')).toBe(false);
+    expect(evaluateThreshold(fault, '=', '[object Object]')).toBe(false);
+  });
+});
+
+describe('isErrorReading', () => {
+  it('recognizes a fault envelope', () => {
+    expect(isErrorReading({ error: 'read_failed', action: 'temperature' })).toBe(true);
+    expect(isErrorReading({ error: 'anything' })).toBe(true);
+  });
+
+  it('rejects normal scalar/object readings', () => {
+    expect(isErrorReading(23.5)).toBe(false);
+    expect(isErrorReading('23.5')).toBe(false);
+    expect(isErrorReading('on')).toBe(false);
+    expect(isErrorReading(null)).toBe(false);
+    expect(isErrorReading({ value: 'on' })).toBe(false);
+    expect(isErrorReading({ error: 42 })).toBe(false); // error must be a string
   });
 });

@@ -27,6 +27,13 @@ const isCamera = (impl) => /camera|stream|picture/i.test(impl || '');
 // Unified CameraAction picks WS vs HTTP via its own camera_transport config field (default
 // 'http'), not a distinct implementation_type — the old per-transport action classes are gone.
 const isHttpCamera = (a) => (a.camera_transport || 'http') !== 'ws';
+// Whether an action instance has a given behavior enabled (unified action model). The device
+// config serves a `behaviors` list; absent/empty → all enabled (backward compat), mirroring
+// firmware DeviceAction's all-true defaults.
+const hasBehavior = (a, name) =>
+  !Array.isArray(a.behaviors) || a.behaviors.length === 0
+    ? true
+    : a.behaviors.some((b) => b.behavior === name);
 
 // Strictly-greater semver compare ("v2.0.165"), matching firmware OtaService::isNewerVersion.
 function isNewer(a, b) {
@@ -107,6 +114,9 @@ const DEFAULTS = {
   deviceType: 'ESP32S3_MINI',
   mac: 'SIM-AA:BB:CC:DD:EE:01',
   telemetryMs: 5000,
+  heartbeatMs: 60000, // liveness ping cadence (firmware HEARTBEAT_INTERVAL_MS)
+  failTelemetry: [], // action names whose reads emit a fault envelope instead of a value
+
   cameraMs: 2000,
   cameraResolution: 'SVGA', // sent when auto-activating a CameraAction capability
   cameraTransport: 'http', // 'http' or 'ws'
@@ -153,6 +163,10 @@ class SimDevice extends EventEmitter {
     this._refreshTimer = null;
     this._configTimer = null;
     this._t = 0;
+    this._bootAt = Date.now(); // uptime origin for heartbeats
+    // Runtime-toggleable fault injection: reads for these action names emit a fault envelope
+    // (mirrors firmware BaseTelemetryAction on a failed read). Tests mutate this directly.
+    this.faults = new Set(this.opts.failTelemetry || []);
     this._intentionalClose = false;
     this._stateFile =
       this.opts.statePath ||
@@ -432,8 +446,48 @@ class SimDevice extends EventEmitter {
     } catch {
       cmd = { value: msg };
     }
-    const impl = (this.actions.find((a) => a.mqtt_action_name === action) || {})
-      .implementation_type;
+    const meta = this.actions.find((a) => a.mqtt_action_name === action) || {};
+
+    // Reserved `read` verb: report current state without validating or mutating — mirrors
+    // firmware's pre-validation interception. On a command action, answer from _lastState on the
+    // ack topic (state query, e.g. after a restart). On a read-surface (telemetry) action with
+    // the `on_demand` behavior, publish a fresh reading envelope; without it, reject.
+    if (cmd.value === 'read') {
+      if (meta.mqtt_action_type === 'command') {
+        const value = this._lastState.get(action) ?? '';
+        this._log(`⇐ read ${action} → state "${value}" (cmd ${cmd.commandId || ''})`);
+        this._publishAck(action, { status: 'ok', value, commandId: cmd.commandId });
+      } else if (meta.mqtt_action_type === 'telemetry' && !isCamera(meta.implementation_type)) {
+        if (hasBehavior(meta, 'on_demand')) {
+          const value = reading(meta.implementation_type, action.length, this._t);
+          this._log(`⇐ read ${action} → ${value} (cmd ${cmd.commandId || ''})`);
+          this.publishTelemetry(
+            action,
+            JSON.stringify({ value: String(value), commandId: cmd.commandId }),
+          );
+        } else {
+          this._publishAck(action, {
+            status: 'error',
+            value: 'on_demand_disabled',
+            commandId: cmd.commandId,
+          });
+        }
+      }
+      return;
+    }
+
+    // Value commands are gated on the `command` behavior.
+    if (meta.mqtt_action_type === 'command' && !hasBehavior(meta, 'command')) {
+      this._log(`⇐ command ${action} rejected — no command behavior`);
+      this._publishAck(action, {
+        status: 'error',
+        value: 'command_disabled',
+        commandId: cmd.commandId,
+      });
+      return;
+    }
+
+    const impl = meta.implementation_type;
     const ok = validate(impl, cmd.value);
     const value = ok ? normalize(cmd.value) : cmd.value;
     const ack = { status: ok ? 'ok' : 'error', value };
@@ -508,6 +562,7 @@ class SimDevice extends EventEmitter {
 
   // ── simulated reboot ─────────────────────────────────────────────────────
   async reboot({ reprovision = false } = {}) {
+    this._bootAt = Date.now(); // reset uptime origin (firmware millis() resets on reboot)
     this._clearDurationTimers();
     this._stopCamera();
     this._intentionalClose = true;
@@ -537,18 +592,35 @@ class SimDevice extends EventEmitter {
         const now = Date.now();
         for (const a of this.actions) {
           if (a.mqtt_action_type !== 'telemetry' || isCamera(a.implementation_type)) continue;
+          if (!hasBehavior(a, 'interval')) continue; // on-demand-only sensors don't cycle
           const interval =
             a.telemetry_interval_ms && a.telemetry_interval_ms > 0
               ? a.telemetry_interval_ms
               : this.opts.telemetryMs;
           if (now - (this._lastPub.get(a.mqtt_action_name) ?? 0) < interval) continue;
           this._lastPub.set(a.mqtt_action_name, now);
+          if (this.faults.has(a.mqtt_action_name)) {
+            // Fault envelope — same shape firmware publishes on a failed read.
+            this.publishTelemetry(
+              a.mqtt_action_name,
+              JSON.stringify({ error: 'read_failed', action: a.mqtt_action_name }),
+            );
+            continue;
+          }
           this.publishTelemetry(
             a.mqtt_action_name,
             reading(a.implementation_type, a.mqtt_action_name.length, this._t),
           );
         }
       }, 1000),
+    );
+
+    // Liveness heartbeat — independent of telemetry, mirrors firmware handleHeartbeat().
+    this._timers.push(
+      setInterval(() => {
+        if (!this.client || !this.client.connected) return;
+        this.publishHeartbeat();
+      }, this.opts.heartbeatMs),
     );
 
     // Periodic config re-pull is a sim convenience (real firmware only pulls at boot). It's a
@@ -583,6 +655,20 @@ class SimDevice extends EventEmitter {
 
   publishStatus(status) {
     if (this.client) this.client.publish(this._statusTopic(), status, { retain: true });
+  }
+
+  // Mirrors firmware MqttService::publishHeartbeat — best-effort liveness ping with cheap
+  // diagnostics. freeHeap/rssi are plausible fixed-ish values (no real hardware).
+  publishHeartbeat() {
+    if (!this.client) return;
+    const body = {
+      uptimeMs: Date.now() - this._bootAt,
+      freeHeap: 200000,
+      rssi: -55,
+      version: this.version,
+    };
+    this.client.publish(`${this._base()}/${this.version}/heartbeat`, JSON.stringify(body));
+    this.emit('heartbeat', body);
   }
 
   // ── camera (WS + HTTP) ───────────────────────────────────────────────────

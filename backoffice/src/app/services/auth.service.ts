@@ -66,12 +66,33 @@ export class AuthService {
     );
   }
 
+  // Registration no longer logs the user in — it returns { pendingVerification } and an email
+  // confirmation link is sent (F15.8). The user lands in the app via verifyEmail().
   register(username: string, email: string, password: string, termsAccepted: boolean) {
-    return this.http.post<AuthResponse>(`${this.apiUrl}/api/auth/register`, { username, email, password, termsAccepted }).pipe(
-      tap((response) => {
-        this.storeTokens(response);
-      }),
+    return this.http.post<{ pendingVerification: boolean }>(
+      `${this.apiUrl}/api/auth/register`,
+      { username, email, password, termsAccepted },
     );
+  }
+
+  // Confirm the email via the link token → server returns a full session, so the user lands
+  // straight in the app.
+  verifyEmail(token: string) {
+    return this.http
+      .get<AuthResponse>(`${this.apiUrl}/api/auth/verify-email`, { params: { token } })
+      .pipe(tap((response) => this.storeTokens(response)));
+  }
+
+  resendVerification(email: string) {
+    return this.http.post<{ sent: boolean }>(`${this.apiUrl}/api/auth/resend-verification`, { email });
+  }
+
+  forgotPassword(email: string) {
+    return this.http.post<{ sent: boolean }>(`${this.apiUrl}/api/auth/forgot-password`, { email });
+  }
+
+  resetPassword(token: string, password: string) {
+    return this.http.post<void>(`${this.apiUrl}/api/auth/reset-password`, { token, password });
   }
 
   refreshAccessToken(): Observable<AuthResponse> {

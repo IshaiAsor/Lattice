@@ -51,6 +51,17 @@
         @if (error) {
           <div class="error-alert">{{ error }}</div>
         }
+        @if (unverifiedEmail) {
+          <div class="resend-alert">
+            @if (resendState === 'sent') {
+              Verification email sent to {{ unverifiedEmail }}. Check your inbox.
+            } @else {
+              <button type="button" class="resend-link" (click)="resendVerification()">
+                Resend verification email
+              </button>
+            }
+          </div>
+        }
 
         <div class="field">
           <label for="login-email">Email</label>
@@ -84,7 +95,7 @@
 
         <div class="row-opts">
           <label class="remember"><input type="checkbox" /> Remember me</label>
-          <a class="forgot" href="#">Forgot password?</a>
+          <a class="forgot" routerLink="/forgot-password">Forgot password?</a>
         </div>
 
         <div class="terms-group">

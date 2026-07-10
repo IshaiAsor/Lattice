@@ -61,7 +61,7 @@ Config shape:
   "devices": [
     { "type": "ESP32S3_MINI", "count": 3, "capabilities": ["outlet", "temperature"] },
     { "type": "ESP32S3_CAM", "count": 1, "camera": true },
-    { "type": "ESP32S3_WROVER", "count": 2, "telemetryMs": 2000 }
+    { "type": "ESP32S3_GEN4_GENERIC", "count": 2, "telemetryMs": 2000 }
   ]
 }
 ```
@@ -105,7 +105,7 @@ Like firmware, the reset/restart commands are **not** acked (the device reboots 
 ## Env overrides
 
 `API_URL`, `GATEWAY_URL`, `MQTT_HOST`, `MQTT_PORT`, `SIM_USER`/`SIM_PASS`, `DEVICE_TYPE`
-(ESP32S3_MINI/CAM/WROVER/GEN4_GENERIC), `MAC`, `TELEMETRY_MS`, `CAMERA_MS`, `CONFIG_REFRESH_MS`,
+(ESP32S3_MINI/CAM/GEN4_GENERIC), `MAC`, `TELEMETRY_MS`, `CAMERA_MS`, `CONFIG_REFRESH_MS`,
 `CONFIG_REFRESH_MS` (periodic config re-pull; default 60000, `0` disables — real firmware only
 pulls at boot), `ACTIVATE_ALL=false`, `CAPABILITIES=outlet,temperature` (comma-separated catalog
 `capability_key`s — activate only these; see the "Run a fleet" section above for where to find

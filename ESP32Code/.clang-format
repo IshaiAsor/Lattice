@@ -1,0 +1,16 @@
+# Firmware C++ style — matches the pre-existing dominant style (Allman braces, 4-space
+# indent per root .editorconfig, aligned member blocks). One-time normalization applied
+# across src/ and tools/manifest-gen/src/.
+BasedOnStyle: Microsoft
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+PointerAlignment: Left
+DerivePointerAlignment: false
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AllowShortFunctionsOnASingleLine: Inline
+# Include order is semantically significant in Arduino code (framework headers, feature
+# #ifdef blocks) — never reorder.
+SortIncludes: Never

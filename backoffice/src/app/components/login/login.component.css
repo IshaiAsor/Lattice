@@ -336,6 +336,16 @@
   border-radius: 10px; font-size: 13.5px; margin-bottom: 16px; text-align: center;
 }
 
+.resend-alert {
+  background: rgba(79, 70, 229, 0.10); border: 1px solid rgba(79, 70, 229, 0.25);
+  padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 16px; text-align: center;
+}
+.resend-link {
+  background: none; border: none; color: #4f46e5; font-weight: 600; cursor: pointer;
+  font-size: 13px; padding: 0;
+}
+:host-context(.dark-theme) .resend-link { color: #38bdf8; }
+
 /* ── Tablet: single column, show mobile brand ─────────────────────── */
 @media (max-width: 1024px) {
   .login-page { grid-template-columns: 1fr; }

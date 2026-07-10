@@ -53,6 +53,19 @@ export interface DeviceStateChangedPayload {
   version?: string;
 }
 
+// A device's periodic liveness ping, forwarded by mqtt-service off the .../heartbeat topic.
+// Independent of telemetry so a device with no active sensors still proves it's alive; the
+// metrics are cheap diagnostics (best-effort, may be absent on older firmware).
+export interface DeviceHeartbeatPayload {
+  userId: string;
+  deviceId: string;
+  version: string;
+  timestamp: string;
+  uptimeMs?: number;
+  freeHeap?: number;
+  rssi?: number;
+}
+
 // A UI client's request to change an action's state, addressed by UserDeviceAction id
 // (the only handle the UI has). digest resolves it to a device/action/version and a
 // concrete ActionDispatchPayload.
@@ -153,4 +166,20 @@ export interface NotificationPublishPayload {
   type: 'ota_available';
   deviceType: string;
   version: string;
+}
+
+// User-targeted notification request consumed by notification-service. Producers that already
+// know the recipient publish this directly; the service resolves the user's per-channel/per-event
+// preferences and fans out to the enabled channels (in-app socket, email, push).
+//   - eventType keys the template + the preference matrix (e.g. 'emergency', 'rule_fired',
+//     'device_offline', 'ota_available', 'email_verification').
+//   - data is the template payload (rendered per channel); shape depends on eventType.
+//   - dedupeKey (optional) overrides the default (userId, eventType) dedupe window.
+//   - channels (optional) restricts delivery to a subset, still intersected with user prefs.
+export interface NotificationSendPayload {
+  userId: string;
+  eventType: string;
+  data: Record<string, unknown>;
+  dedupeKey?: string;
+  channels?: string[];
 }

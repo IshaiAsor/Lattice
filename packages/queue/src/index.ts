@@ -6,6 +6,7 @@ import { EVENT_SCHEMAS } from './schemas';
 export * from './types';
 export * from './keys';
 export * from './schemas';
+export * from './notifications';
 
 const log = createLogger('queue');
 
@@ -26,6 +27,7 @@ const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.PIPELINE_CANCEL, RK.PIPELINE_CANCEL],
   [QUEUES.PIPELINE_RESULT, RK.PIPELINE_RESULT],
   [QUEUES.DEVICE_STATE_CHANGED, RK.DEVICE_STATE_CHANGED],
+  [QUEUES.DEVICE_HEARTBEAT, RK.DEVICE_HEARTBEAT],
   [QUEUES.ACTION_REQUESTED, RK.ACTION_REQUESTED],
   [QUEUES.ACTION_DISPATCH, RK.ACTION_DISPATCH],
   [QUEUES.ACTION_RESULT, RK.ACTION_RESULT],
@@ -92,6 +94,21 @@ export async function assertMlQueue(
   await ch.bindQueue(queue, EXCHANGE, rk);
   await ch.prefetch(prefetch);
   return queue;
+}
+
+/**
+ * Assert + bind the notification queues and their DLQ routing. Called by notification-service
+ * at startup — deliberately NOT in the global connect() topology, so no other service asserts
+ * them (producers publish best-effort; messages drop until this service is deployed and binds).
+ */
+export async function assertNotificationQueues(ch: Channel): Promise<void> {
+  for (const [queue, rk] of [
+    [QUEUES.NOTIFICATION_PUBLISH, RK.NOTIFICATION_PUBLISH],
+    [QUEUES.NOTIFICATION_SEND, RK.NOTIFICATION_SEND],
+  ] as const) {
+    await ch.assertQueue(queue, { durable: true, arguments: DLQ_ARGS });
+    await ch.bindQueue(queue, EXCHANGE, rk);
+  }
 }
 
 export function publish<T>(ch: Channel, routingKey: string, payload: T): void {

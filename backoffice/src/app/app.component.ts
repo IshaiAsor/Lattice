@@ -5,6 +5,7 @@ import { filter } from 'rxjs/operators';
 import { SHARED_MATERIAL } from './shared-ui';
 import { AuthService } from './services/auth.service';
 import { ThemeService } from './services/theme.service';
+import { NotificationsService } from './services/notifications.service';
 import { ChatComponent } from './components/chat.component/chat.component';
 import { MatDialog } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
@@ -20,6 +21,7 @@ export class AppComponent implements OnInit {
   title = 'backoffice';
   authService = inject(AuthService);
   themeService = inject(ThemeService);
+  notifications = inject(NotificationsService);
   dialog = inject(MatDialog);
   private router = inject(Router);
   private activatedRoute = inject(ActivatedRoute);
@@ -32,6 +34,11 @@ export class AppComponent implements OnInit {
       this.updateHideSidebar();
     });
     this.updateHideSidebar();
+    // Prime the unread badge + wire live updates once a user is present.
+    if (this.authService.getCurrentUser()) {
+      this.notifications.refreshUnread();
+      this.notifications.connectLive();
+    }
   }
 
   private updateHideSidebar() {

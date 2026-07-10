@@ -13,32 +13,28 @@
 #include <WiFi.h>
 #include "config/settings.h"
 #include "models/ProvisioningData.h"
-// #include <jwt-cpp/jwt.h>
-#include <iostream>
-#include <chrono>
 #include "mbedtls/base64.h"
+#include "config/Log.h"
 
 class JwtService
 {
-private:
-    PreferencesManagerService prefService;
+  private:
+    PreferencesManagerService                                              prefService;
     HttpJsonClientService<RefreashTokenRequest, GetLongLivedTokenResponse> refreashTokenHttpClient;
 
-    const char *deviceType = DEVICE_TYPE;
-    JwtToken *jwtData;
-    uint32_t tokenExp = 0;
+    const char* deviceType = DEVICE_TYPE;
+    JwtToken*   jwtData;
+    uint32_t    tokenExp = 0;
 
-public:
+  public:
     JwtService() {}
     ~JwtService() {}
-
-#include <ArduinoJson.h>
 
     bool RefreshJwtTokenIfNeeded()
     {
         if (jwtData == nullptr)
         {
-            Serial.println("No JWT token found in storage.");
+            LOG_W("Jwt", "no JWT token in storage");
             return false;
         }
         else
@@ -52,25 +48,23 @@ public:
             {
                 if (tokenExp > (uint32_t)currentTime)
                 {
-                    Serial.print("Will expire in (sec): ");
-                    Serial.println(tokenExp - (uint32_t)currentTime);
-                    Serial.println("JWT token is expiring soon. Refreshing...");
+                    LOG_I("Jwt", "token expiring in %u s — refreshing", tokenExp - (uint32_t)currentTime);
                     return RefreshJwtToken();
                 }
                 else
                 {
-                    Serial.println("TOKEN EXPIRED");
+                    LOG_W("Jwt", "token expired");
                     u_int32_t refreshTokenExp = getExpFromToken(jwtData->refreshToken);
                     if (refreshTokenExp < (uint32_t)currentTime)
                     {
-                        Serial.println("REFRESH TOKEN EXPIRED !!!!");
+                        LOG_E("Jwt", "refresh token expired — clearing credentials");
                         prefService.ClearCredentials();
                         return false;
                     }
                     else
                     {
-                        Serial.print("Refresh tokn will expire in (sec): ");
-                        Serial.println(refreshTokenExp - (uint32_t)currentTime);
+                        LOG_I("Jwt", "refresh token valid for %u s — refreshing",
+                              (uint32_t)(refreshTokenExp - currentTime));
                         return RefreshJwtToken();
                     }
                 }
@@ -78,75 +72,59 @@ public:
         }
     }
 
-    JwtToken *GetCurrentJwtToken()
+    JwtToken* GetCurrentJwtToken()
     {
         if (!jwtData || jwtData->token == "")
         {
-            Serial.println("Getting JWT token from storage.");
+            LOG_D("Jwt", "loading JWT token from storage");
             jwtData = prefService.GetJwtToken();
 
-            // print jwt exp
             if (jwtData != nullptr && jwtData->token != "")
             {
                 time_t currentTime = time(nullptr);
-                tokenExp = getExpFromToken(jwtData->token);
-                Serial.print("jwtExp : ");
-                Serial.println(tokenExp);
-                Serial.print("currentTime: ");
-                Serial.println(currentTime);
-                Serial.print("Will expire in (sec): ");
+                tokenExp           = getExpFromToken(jwtData->token);
                 if (tokenExp > (uint32_t)currentTime)
-                {
-                    Serial.println(tokenExp - (uint32_t)currentTime);
-                }
+                    LOG_D("Jwt", "token exp=%u now=%ld — expires in %u s", tokenExp, (long)currentTime,
+                          tokenExp - (uint32_t)currentTime);
                 else
-                {
-                    Serial.println("EXPIRED");
-                }
+                    LOG_W("Jwt", "stored token already expired (exp=%u now=%ld)", tokenExp, (long)currentTime);
             }
         }
         if (RefreshJwtTokenIfNeeded())
         {
-            // Serial.println("JWT token is valid.");
             return jwtData;
         }
-        else
-        {
-            Serial.println("Failed to refresh JWT token.");
-            return nullptr;
-        }
-        Serial.println("Current JWT token:");
-        Serial.println(jwtData->token);
-        return jwtData;
+        LOG_E("Jwt", "failed to refresh JWT token");
+        return nullptr;
     }
 
     bool RefreshJwtToken()
     {
-        Serial.println("Refreshing JWT token...");
+        LOG_I("Jwt", "refreshing JWT token");
         RefreashTokenRequest request;
         request.refreshToken = jwtData->refreshToken;
 
-        GetLongLivedTokenResponse response = refreashTokenHttpClient.PostJson(jwtData->refreshTokenCallbackUrl, jwtData->refreshToken, &request, jwtData->validateCACert);
+        GetLongLivedTokenResponse response =
+            refreashTokenHttpClient.PostJson(jwtData->refreshTokenCallbackUrl, jwtData->refreshToken, &request);
 
         if (response.mqttToken == "")
         {
-            Serial.println("Failed to obtain permanent MQTT token from provisioning server.");
+            LOG_E("Jwt", "failed to obtain permanent MQTT token from provisioning server");
             return false;
         }
 
-        Serial.println("Permanent MQTT token received:");
-        Serial.println(response.mqttToken);
+        LOG_I("Jwt", "permanent MQTT token received (%u chars)", response.mqttToken.length());
 
         // Preserve existing service URLs if the refresh response omits them
         jwtData = new JwtToken{
             .token                   = response.mqttToken,
-            .refreshToken            = response.refreshToken            != "" ? response.refreshToken            : jwtData->refreshToken,
-            .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl != "" ? response.refreshTokenCallbackUrl : jwtData->refreshTokenCallbackUrl,
-            .deviceConfigUrl         = response.deviceConfigUrl         != "" ? response.deviceConfigUrl         : jwtData->deviceConfigUrl,
-            .validateCACert          = response.validateCACert,
-            .deviceId                = response.deviceId                != 0  ? response.deviceId                : jwtData->deviceId,
-            .wsStreamUrl             = response.wsStreamUrl             != "" ? response.wsStreamUrl             : jwtData->wsStreamUrl,
-            .cameraHttpUrl           = response.cameraHttpUrl           != "" ? response.cameraHttpUrl           : jwtData->cameraHttpUrl,
+            .refreshToken            = response.refreshToken != "" ? response.refreshToken : jwtData->refreshToken,
+            .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl != "" ? response.refreshTokenCallbackUrl
+                                                                              : jwtData->refreshTokenCallbackUrl,
+            .deviceConfigUrl = response.deviceConfigUrl != "" ? response.deviceConfigUrl : jwtData->deviceConfigUrl,
+            .deviceId        = response.deviceId != 0 ? response.deviceId : jwtData->deviceId,
+            .wsStreamUrl     = response.wsStreamUrl != "" ? response.wsStreamUrl : jwtData->wsStreamUrl,
+            .cameraHttpUrl   = response.cameraHttpUrl != "" ? response.cameraHttpUrl : jwtData->cameraHttpUrl,
         };
 
         tokenExp = getExpFromToken(response.mqttToken);
@@ -155,33 +133,31 @@ public:
         return true;
     }
 
-    JwtToken *Provision(ProvisioningData &pData, String provisioningToken)
+    JwtToken* Provision(ProvisioningData& pData, String provisioningToken)
     {
         ProvisionRequest request;
-        request.macAddress    = WiFi.macAddress();
-        request.deviceType    = deviceType;
-        request.version       = DEVICE_VERSION;
-        request.capabilities  = DeviceCapabilitiesService::getCapabilities();
+        request.macAddress   = WiFi.macAddress();
+        request.deviceType   = deviceType;
+        request.version      = DEVICE_VERSION;
+        request.capabilities = DeviceCapabilitiesService::getCapabilities();
 
         HttpJsonClientService<ProvisionRequest, GetLongLivedTokenResponse> provisionClient;
-        GetLongLivedTokenResponse response = provisionClient.PostJson(
-            pData.provisioningCallbackUrl, provisioningToken, &request, pData.validateCACert);
+        GetLongLivedTokenResponse                                          response =
+            provisionClient.PostJson(pData.provisioningCallbackUrl, provisioningToken, &request);
 
         if (response.mqttToken == "")
         {
-            Serial.println("Failed to obtain permanent JWT token from provisioning server.");
+            LOG_E("Jwt", "failed to obtain permanent JWT token from provisioning server");
             return nullptr;
         }
 
-        Serial.println("Permanent MQTT token received:");
-        Serial.println(response.mqttToken);
+        LOG_I("Jwt", "permanent MQTT token received (%u chars)", response.mqttToken.length());
 
         jwtData = new JwtToken{
             .token                   = response.mqttToken,
             .refreshToken            = response.refreshToken,
             .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl,
             .deviceConfigUrl         = response.deviceConfigUrl,
-            .validateCACert          = response.validateCACert,
             .deviceId                = response.deviceId,
             .wsStreamUrl             = response.wsStreamUrl,
             .cameraHttpUrl           = response.cameraHttpUrl,
@@ -189,24 +165,23 @@ public:
 
         tokenExp = getExpFromToken(response.mqttToken);
         prefService.SetJwtToken(*jwtData);
-        Serial.println("Permanent JWT token stored successfully.");
+        LOG_I("Jwt", "permanent JWT token stored");
         return jwtData;
     }
 
     String GetDeviceId()
     {
-        char deviceID[13];
+        char     deviceID[13];
         uint64_t mac = ESP.getEfuseMac();
         snprintf(deviceID, sizeof(deviceID), "%012llX", mac);
-        Serial.print("Device ID: ");
-        Serial.println(deviceID);
+        LOG_D("Jwt", "device ID: %s", deviceID);
         return String(deviceID);
     }
 
     uint32_t getExpFromToken(String token)
     {
         // 1. Extract the payload (the part between the two dots)
-        int firstDot = token.indexOf('.');
+        int firstDot  = token.indexOf('.');
         int secondDot = token.indexOf('.', firstDot + 1);
         if (firstDot == -1 || secondDot == -1)
             return 0;
@@ -219,20 +194,20 @@ public:
         while (payload.length() % 4 != 0)
             payload += '=';
 
-        size_t outLen;
+        size_t        outLen;
         unsigned char decoded[2048];
-        mbedtls_base64_decode(decoded, sizeof(decoded), &outLen, (const unsigned char *)payload.c_str(), payload.length());
+        mbedtls_base64_decode(decoded, sizeof(decoded), &outLen, (const unsigned char*)payload.c_str(),
+                              payload.length());
         decoded[outLen] = '\0';
 
-        JsonDocument doc;
+        JsonDocument         doc;
         DeserializationError error = deserializeJson(doc, decoded);
         if (error)
         {
-            Serial.print(F("deserializeJson() failed: "));
-            Serial.println(error.c_str());
+            LOG_W("Jwt", "token payload parse failed: %s", error.c_str());
             return 0;
         }
-        String expStr = doc["exp"].as<String>();
+        String   expStr = doc["exp"].as<String>();
         uint32_t expInt = strtoul(expStr.c_str(), NULL, 10);
         return expInt;
     }

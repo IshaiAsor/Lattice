@@ -2,7 +2,6 @@
 #include <Arduino.h>
 #include <WiFiClient.h>
 #include <WebSocketsClient.h>
-#include <MQTTPubSubClient.h>
 #include <PubSubClient.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
@@ -12,24 +11,24 @@
 #include "JwtService.h"
 #include "actions/DynamicDeviceActionsService.h"
 #include "OtaService.h"
+#include "config/Log.h"
 
 extern DynamicDeviceActionsService deviceActionsService;
 
 class MqttActionsHandlerService
 {
-public:
+  public:
     MqttActionsHandlerService();
     ~MqttActionsHandlerService();
 
-    static void callback(char *topic, byte *payload, unsigned int length)
+    static void callback(char* topic, byte* payload, unsigned int length)
     {
-        static OtaService *otaService = new OtaService(DEVICE_VERSION, DEVICE_TYPE, root_ca);
-        Serial.print("Message arrived on topic: ");
-        Serial.println(topic);
+        static OtaService* otaService = new OtaService(DEVICE_VERSION, DEVICE_TYPE, root_ca);
+        LOG_D("Mqtt", "message arrived on topic: %s", topic);
 
-        std::vector<char *> parts;
+        std::vector<char*> parts;
 
-        char *token = std::strtok(topic, "/");
+        char* token = std::strtok(topic, "/");
         while (token != nullptr)
         {
             parts.push_back(token);
@@ -49,43 +48,33 @@ public:
         if (strcmp(parts[0], "ota") == 0)
         {
             // Authenticate the firmware download with the device's current JWT.
-            JwtToken *jwt = jwtService.GetCurrentJwtToken();
+            JwtToken* jwt = jwtService.GetCurrentJwtToken();
             otaService->handleUpdateMessage(message.c_str(), jwt ? jwt->token.c_str() : "", ackPublisher);
             return;
         }
 
         if (parts.size() < 7)
         {
-            Serial.printf("[MQTT] Unexpected topic format (%d parts) — ignoring\n", (int)parts.size());
+            LOG_W("Mqtt", "unexpected topic format (%d parts) — ignoring", (int)parts.size());
             return;
         }
 
-        char *userId     = parts[1];
-        char *deviceId   = parts[3];
-        char *actionType = parts[5];
-        char *action     = parts[6];
+        char* userId     = parts[1];
+        char* deviceId   = parts[3];
+        char* actionType = parts[5];
+        char* action     = parts[6];
 
-        Serial.print("User ID: ");
-        Serial.println(userId);
-        Serial.print("Device ID: ");
-        Serial.println(deviceId);
-        Serial.print("Action Type: ");
-        Serial.println(actionType);
-        Serial.print("Action: ");
-        Serial.println(action);
+        LOG_D("Mqtt", "userId=%s deviceId=%s actionType=%s action=%s", userId, deviceId, actionType, action);
 
         if (strcmp(actionType, "status") == 0)
         {
-            Serial.print("Device : ");
-            Serial.print(deviceId);
-            Serial.print(" is : ");
-            Serial.println(message);
+            LOG_D("Mqtt", "device %s status: %s", deviceId, message.c_str());
         }
         else if (strcmp(actionType, "command") == 0)
         {
             if (strcmp(action, "reprovision") == 0 || strcmp(action, "soft-reset") == 0)
             {
-                Serial.println("[MQTT] Soft reset: clearing IoT credentials and restarting...");
+                LOG_I("Mqtt", "soft reset: clearing IoT credentials and restarting");
                 PreferencesManagerService p;
                 p.ClearCredentials();
                 ESP.restart();
@@ -93,7 +82,7 @@ public:
             }
             if (strcmp(action, "hard-reset") == 0)
             {
-                Serial.println("[MQTT] Hard reset: erasing all NVS data and restarting...");
+                LOG_I("Mqtt", "hard reset: erasing all NVS data and restarting");
                 PreferencesManagerService p;
                 p.ClearAllCredentials();
                 ESP.restart();
@@ -101,14 +90,13 @@ public:
             }
             if (strcmp(action, "restart") == 0)
             {
-                Serial.println("[MQTT] Restart: rebooting device...");
+                LOG_I("Mqtt", "restart: rebooting device");
                 ESP.restart();
                 return;
             }
 #ifdef HAS_CAMERA
-            // take_picture targets the device's telemetry-class CameraAction, not a
-            // BaseCommandAction — routed directly rather than through getAction() below,
-            // which only searches _cmdActions.
+            // Legacy take_picture alias — equivalent to `read` on the camera's read surface.
+            // Kept so not-yet-updated backend publishers keep working; new code sends `read`.
             if (strcmp(action, "take_picture") == 0)
             {
                 JsonDocument doc;
@@ -118,45 +106,70 @@ public:
                 return;
             }
 #endif
-            BaseCommandAction *deviceAction = getAction(action);
-            if (deviceAction != nullptr)
+            DeviceAction* deviceAction = deviceActionsService.getActionByName(action);
+
+            // Reserved `read` verb — never validated, never executes. On a read surface it
+            // triggers an on-demand reading (sensor sample / camera capture); on a command-only
+            // action it reports the current NVS-persisted state on the ack topic. Intercepted
+            // before execute() so it never reaches the parity-critical validateActionPayload.
             {
+                JsonDocument rdoc;
+                if (deviceAction != nullptr && deserializeJson(rdoc, message) == DeserializationError::Ok &&
+                    strcmp(rdoc["value"] | "", "read") == 0)
+                {
+                    String commandId = rdoc["commandId"] | "";
+                    if (deviceAction->hasReadSurface())
+                    {
+                        // On-demand read is gated on the `on_demand` behavior.
+                        if (deviceAction->onDemandEnabled())
+                        {
+                            LOG_D("Cmd", "read verb: on-demand read of '%s'", action);
+                            deviceAction->readNow(telemetryPublisher, commandId);
+                        }
+                        else
+                        {
+                            LOG_W("Cmd", "read verb rejected: '%s' has no on_demand behavior", action);
+                            if (ackPublisher)
+                                ackPublisher(action, commandId.c_str(), false, "on_demand_disabled");
+                        }
+                    }
+                    else
+                    {
+                        // Command action state report (always available, not a toggled behavior).
+                        LOG_D("Cmd", "read verb: reporting state for '%s'", action);
+                        if (ackPublisher)
+                            ackPublisher(action, commandId.c_str(), true, deviceAction->getState().c_str());
+                    }
+                    return;
+                }
+            }
+
+            if (deviceAction != nullptr && deviceAction->hasCommandSurface())
+            {
+                // Value commands are gated on the `command` behavior.
+                if (!deviceAction->commandEnabled())
+                {
+                    LOG_W("Cmd", "command rejected: '%s' has no command behavior", action);
+                    if (ackPublisher)
+                        ackPublisher(action, "", false, "command_disabled");
+                    return;
+                }
                 ActionResult result = deviceAction->execute(message);
-                Serial.print("Action execution result : ");
-                Serial.print(result.ok ? "OK" : "FAIL");
-                Serial.print(", Command ID: ");
-                Serial.print(result.commandId);
-                Serial.print(", Value: ");
-                Serial.println(result.value);
+                LOG_D("Mqtt", "action '%s' result: %s, commandId=%s, value=%s", action, result.ok ? "OK" : "FAIL",
+                      result.commandId.c_str(), result.value.c_str());
                 if (ackPublisher)
                     ackPublisher(action, result.commandId.c_str(), result.ok, result.value.c_str());
                 return;
             }
+            LOG_W("Mqtt", "no command action found for: %s", action);
         }
         else if (strcmp(actionType, "telemetry") == 0)
         {
-            Serial.println("Received telemetry:");
-            Serial.print("Action: ");
-            Serial.println(action);
-            Serial.print("Message: ");
-            Serial.println(message);
+            LOG_D("Mqtt", "received telemetry action=%s message=%s", action, message.c_str());
         }
         else
         {
-            Serial.println("Unknown action type");
-            Serial.println(actionType);
+            LOG_W("Mqtt", "unknown action type: %s", actionType);
         }
-    }
-
-    static BaseCommandAction *getAction(String actionName)
-    {
-        for (size_t i = 0; i < deviceActionsService.getDeviceActionsCount(); i++)
-        {
-            BaseCommandAction *a = deviceActionsService.getDeviceActions()[i];
-            if (a->actionName == actionName)
-                return a;
-        }
-        Serial.println("Action not found: " + actionName);
-        return nullptr;
     }
 };

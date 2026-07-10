@@ -61,6 +61,16 @@ export const deviceStateChangedSchema = z.object({
   version: z.string().optional(),
 });
 
+export const deviceHeartbeatSchema = z.object({
+  userId: z.string(),
+  deviceId: z.string(),
+  version: z.string(),
+  timestamp: z.string(),
+  uptimeMs: z.number().optional(),
+  freeHeap: z.number().optional(),
+  rssi: z.number().optional(),
+});
+
 export const actionRequestedSchema = z.object({
   userId: z.string(),
   actionId: z.number(),
@@ -137,6 +147,14 @@ export const notificationPublishSchema = z.object({
   version: z.string(),
 });
 
+export const notificationSendSchema = z.object({
+  userId: z.string(),
+  eventType: z.string(),
+  data: z.record(z.string(), z.unknown()),
+  dedupeKey: z.string().optional(),
+  channels: z.array(z.string()).optional(),
+});
+
 // Routing key → schema. Dynamic ML-stage routing keys (mlStageRK) intentionally have no
 // entry here — their payload is pipelineStageSchema but the key is per-model; publish()
 // skips validation for unknown keys.
@@ -147,6 +165,7 @@ export const EVENT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   [RK.PIPELINE_CANCEL]: pipelineCancelSchema,
   [RK.PIPELINE_RESULT]: pipelineResultSchema,
   [RK.DEVICE_STATE_CHANGED]: deviceStateChangedSchema,
+  [RK.DEVICE_HEARTBEAT]: deviceHeartbeatSchema,
   [RK.ACTION_REQUESTED]: actionRequestedSchema,
   [RK.ACTION_DISPATCH]: actionDispatchSchema,
   [RK.ACTION_RESULT]: actionResultSchema,
@@ -158,4 +177,5 @@ export const EVENT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   [RK.OTA_INCOMING]: otaIncomingSchema,
   [RK.OTA_DISPATCH]: otaDispatchSchema,
   [RK.NOTIFICATION_PUBLISH]: notificationPublishSchema,
+  [RK.NOTIFICATION_SEND]: notificationSendSchema,
 };

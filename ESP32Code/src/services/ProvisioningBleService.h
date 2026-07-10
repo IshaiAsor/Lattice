@@ -1,4 +1,4 @@
-// #pragma once
+#pragma once
 #include <Arduino.h>
 #include <cstring>
 #include <cstdlib>
@@ -12,7 +12,7 @@
 #include <BLE2902.h>
 #include <ArduinoJson.h>
 #include <nvs_flash.h>
-#include "Certs/cert.h"
+#include "certs/cert.h"
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <WiFiManager.h>
@@ -23,57 +23,51 @@
 #include "services/mqtt.h"
 #include <ESP32ProvisionToolkit.h>
 #include "services/BleServer.h"
-#include <WiFiManager.h>
 #include "services/BleNotificationService.h"
 #include "services/ProvisioningCallbacks.h"
 #include "services/DateTimeSyncService.h"
 #include "actions/commands/OnboardLedCommandAction.h"
+#include "config/Log.h"
 extern OnboardLedAction onboardLed;
 
 class ProvisioningBleService
 {
-private:
+  private:
     /* data */
-    BleNotificationService *bleNotificationService;
-    DateTimeSyncService *dateTimeSyncService;
-    WiFiManager *wm;
-    PreferencesManagerService *prefService;
-    JwtService *jwtService;
-    MqttService *mqttService;
+    BleNotificationService*    bleNotificationService;
+    DateTimeSyncService*       dateTimeSyncService;
+    WiFiManager*               wm;
+    PreferencesManagerService* prefService;
+    JwtService*                jwtService;
+    MqttService*               mqttService;
 
-public:
-    ProvisioningBleService(
-        BleNotificationService *bleNotificationService,
-        DateTimeSyncService *dateTimeSyncService,
-        WiFiManager *wm,
-        PreferencesManagerService *prefService,
-        JwtService *jwtService,
-        MqttService *mqttService)
+  public:
+    ProvisioningBleService(BleNotificationService* bleNotificationService, DateTimeSyncService* dateTimeSyncService,
+                           WiFiManager* wm, PreferencesManagerService* prefService, JwtService* jwtService,
+                           MqttService* mqttService)
     {
         this->bleNotificationService = bleNotificationService;
-        this->dateTimeSyncService = dateTimeSyncService;
-        this->wm = wm;
-        this->prefService = prefService;
-        this->jwtService = jwtService;
-        this->mqttService = mqttService;
+        this->dateTimeSyncService    = dateTimeSyncService;
+        this->wm                     = wm;
+        this->prefService            = prefService;
+        this->jwtService             = jwtService;
+        this->mqttService            = mqttService;
     }
     ~ProvisioningBleService() {}
 
-    void HandleProvisioning(char *payload)
+    void HandleProvisioning(char* payload)
     {
 
-        Serial.println("Provisioning data received from BLE; parsing in main task.");
+        LOG_I("Provision", "provisioning data received from BLE; parsing in main task");
         bleNotificationService->NotifyBleDevice(ResponseType::PROCESSING, "OK: PROCESSING");
 
-        Serial.println("Parsing provisioning payload...");
-        JsonDocument doc;
+        JsonDocument         doc;
         DeserializationError error = deserializeJson(doc, payload);
         free(payload);
 
         if (error)
         {
-            Serial.print(F("deserializeJson() failed in provProcess: "));
-            Serial.println(error.c_str());
+            LOG_E("Provision", "payload parse failed: %s", error.c_str());
             bleNotificationService->NotifyBleDevice(ResponseType::JSON_ERROR, "FAIL: JSON_ERROR");
             return;
         }
@@ -83,64 +77,63 @@ public:
 
         if (!pData.valid())
         {
-            Serial.println("Missing required provisioning parameters");
+            LOG_E("Provision", "missing required provisioning parameters");
             bleNotificationService->NotifyBleDevice(ResponseType::MISSING_PARAMS, "FAIL: MISSING_PARAMS");
             return;
         }
 
-        Serial.println("Testing WiFi connection...");
+        LOG_I("Provision", "testing WiFi connection");
         if (!WiFi.isConnected())
         {
-            Serial.println("Provisioning in progress. Please wait...");
-            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_PROVISIONING_IN_PROGRESS, "OK: Awaiting WiFi connection via portal...");
+            LOG_I("Provision", "no WiFi — opening config portal");
+            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_PROVISIONING_IN_PROGRESS,
+                                                    "OK: Awaiting WiFi connection via portal...");
 
             if (!wm->startConfigPortal(AP_HOTSPOT_NAME, AP_HOTSPOT_PASSWORD))
             {
-                Serial.println("Failed to connect or hit timeout");
+                LOG_E("Provision", "config portal failed or timed out");
                 bleNotificationService->NotifyBleDevice(ResponseType::WIFI_ERROR, "FAIL: Portal timed out or failed.");
                 return;
             }
 
             delay(1000);
 
-            Serial.println("Reconnected successfully. Credentials are now saved to flash.");
+            LOG_I("Provision", "WiFi connected via portal; credentials saved to flash");
             bleNotificationService->NotifyBleDevice(ResponseType::WIFI_CONNECTED_SUCCESSFULLY, "OK: WiFi Connected");
         }
         else
         {
-            Serial.println("WiFi connection successful!");
+            LOG_I("Provision", "WiFi already connected");
             bleNotificationService->NotifyBleDevice(ResponseType::WIFI_CONNECTED_SUCCESSFULLY, "OK: WiFi Connected");
         }
         dateTimeSyncService->syncTime();
         // Step 3: Request provisioning token from server
-        Serial.println("Requesting permanent MQTT token from provisioning server...");
+        LOG_I("Provision", "requesting permanent MQTT token from provisioning server");
 
         bleNotificationService->NotifyBleDevice(ResponseType::REQUESTING_PROVISIONING_TOKEN, "OK: Requesting token...");
 
-        char deviceID[13];
+        char     deviceID[13];
         uint64_t mac = ESP.getEfuseMac();
         snprintf(deviceID, sizeof(deviceID), "%012llX", mac);
-        Serial.print("Device ID: ");
-        Serial.println(deviceID);
+        LOG_D("Provision", "device ID: %s", deviceID);
 
         // Step 4: Test MQTT reachability using provisioningToken (userId as clientId)
         MqttCredentials mqttCreds;
-        mqttCreds.server         = pData.server;
-        mqttCreds.port           = pData.mqttPort;
-        mqttCreds.validateCACert = pData.validateCACert;
-        mqttCreds.clientId       = pData.userId;  // matches clientid claim in provisioningToken JWT
-        mqttCreds.userId         = pData.userId;
+        mqttCreds.server   = pData.server;
+        mqttCreds.port     = pData.mqttPort;
+        mqttCreds.clientId = pData.userId; // matches clientid claim in provisioningToken JWT
+        mqttCreds.userId   = pData.userId;
 
         JwtToken provToken;
         provToken.token = pData.provisioningToken;
 
-        Serial.println("Testing MQTT reachability with provisioning token...");
+        LOG_I("Provision", "testing MQTT reachability with provisioning token");
         bleNotificationService->NotifyBleDevice(ResponseType::TESTING_MQTT_CONNECTION, "OK: Testing MQTT...");
         delay(300); // let BLE TX flush before WiFi TCP
 
         if (!mqttService->testMqtt(&mqttCreds, &provToken))
         {
-            Serial.println("MQTT unreachable. Restarting to retry provisioning...");
+            LOG_E("Provision", "MQTT unreachable — restarting to retry provisioning");
             bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_FAILED, "FAIL: MQTT unreachable");
             onboardLed.execute("red");
             delay(2000);
@@ -148,18 +141,18 @@ public:
         }
 
         // Step 5: Single provision call — server upserts device type, blueprints, user_device
-        Serial.println("MQTT reachable! Sending provision request to server...");
-        bleNotificationService->NotifyBleDevice(ResponseType::EXCHANGING_TOKENS_WITH_SERVER, "OK: Registering device...");
+        LOG_I("Provision", "MQTT reachable — sending provision request to server");
+        bleNotificationService->NotifyBleDevice(ResponseType::EXCHANGING_TOKENS_WITH_SERVER,
+                                                "OK: Registering device...");
         delay(500); // let BLE TX flush before WiFi TCP — they share the radio
 
-        Serial.print("WiFi IP: ");
-        Serial.println(WiFi.localIP());
+        LOG_D("Provision", "WiFi IP: %s", WiFi.localIP().toString().c_str());
 
-        JwtToken *permanentJwtData = jwtService->Provision(pData, pData.provisioningToken);
+        JwtToken* permanentJwtData = jwtService->Provision(pData, pData.provisioningToken);
 
         if (permanentJwtData == nullptr)
         {
-            Serial.println("Provision call failed. Restarting to retry...");
+            LOG_E("Provision", "provision call failed — restarting to retry");
             bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_FAILED, "FAIL: Server error");
             onboardLed.execute("red");
             delay(2000);
@@ -169,12 +162,11 @@ public:
         mqttCreds.clientId = String(permanentJwtData->deviceId);
         prefService->SaveMqttServerCredentials(mqttCreds);
 
-        Serial.println("Provisioning successful and finalized!");
+        LOG_I("Provision", "provisioning successful — restarting");
         bleNotificationService->NotifyBleDevice(ResponseType::PROVISIONING_SUCCESSFUL, "OK: Provisioning Complete");
 
         onboardLed.execute("green");
 
-        Serial.println("Provisioning process complete.");
         delay(2000);
         ESP.restart();
     }

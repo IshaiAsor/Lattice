@@ -75,7 +75,7 @@ pio device monitor   # 115200 baud
 - `src/config/settings.h` — device type, topic templates, pin constants, timeouts
 - `src/actions/DeviceActions.h` — declares which actions and sensors are wired up (edit here to add a new device)
 - `src/actions/commands/OutletCommandAction.h` — outlet on/off logic
-- `src/actions/telemtries/TemperatureAction.h` — temperature sensor reporting
+- `src/actions/telemetries/TemperatureAction.h` — temperature sensor reporting
 - `src/services/mqtt.h` — MQTT connection and topic subscription
 - `src/services/ProvisioningBleService.h` — BLE provisioning flow
 

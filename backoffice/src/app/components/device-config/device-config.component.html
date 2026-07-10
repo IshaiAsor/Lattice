@@ -143,7 +143,20 @@
                     }
                   }
 
-                  @if (item.cap.mqtt_action_type === 'telemetry') {
+                  @if (item.cap.available_behaviors?.length) {
+                    <p class="field-section-label">Behaviors</p>
+                    <div class="behavior-toggles">
+                      @for (b of item.cap.available_behaviors; track b.behavior) {
+                        <mat-slide-toggle
+                          [checked]="isBehaviorEnabled(b.behavior)"
+                          (change)="toggleBehavior(b.behavior, $event.checked)">
+                          {{ behaviorLabel(b.behavior) }}
+                        </mat-slide-toggle>
+                      }
+                    </div>
+                  }
+
+                  @if (item.cap.mqtt_action_type === 'telemetry' && isBehaviorEnabled('interval')) {
                     <p class="field-section-label">Polling Interval</p>
                     <mat-form-field appearance="outline" class="pin-field">
                       <mat-label>Interval (ms)</mat-label>

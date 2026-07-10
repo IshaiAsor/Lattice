@@ -37,6 +37,9 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - parses numeric strings
 - falls back to string equality when either side is not numeric
 - returns false for unknown operators on numeric input
+- never satisfies a threshold for a fault reading
+- recognizes a fault envelope
+- rejects normal scalar/object readings
 
 ### Telemetry — `telemetry.topic-parser.test.ts` ✅
 
@@ -81,6 +84,8 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - OutletCommandAction accepts on/off/1/0 and rejects others
 - LightDimmerAction accepts on/off and 0..100, rejects out-of-range / non-numeric
 - OneDirectionalMotorAction behaves like the dimmer range
+- PwmOutputAction behaves like the dimmer range
+- I2cSocket8Action / I2cSocket16Action behave like the outlet (on/off/1/0)
 - unknown implementation types are accepted optimistically
   - mirrors firmware `BaseCommandAction::validateActionPayload` (parity rule)
 
@@ -90,10 +95,22 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - every schema is covered by a contract case
 - accepts the canonical payload
 - rejects the broken payload
-  - the two above run per routing key via `describe.each` — 17 RKs × (canonical accept + representative mutation reject)
+  - the two above run per routing key via `describe.each` — 18 RKs × (canonical accept + representative mutation reject)
 - throws on an off-contract payload
 - passes a canonical payload through to the channel
 - skips validation for unknown (dynamic ML-stage) routing keys
+
+### Platform — `platform.notifications.test.ts` ✅ (F15 notification catalog + templates)
+
+- in-app defaults on for every event (it is the inbox)
+- email defaults on only for emergency + transactional events
+- push and sms default off everywhere
+- in-app emergency is locked; nothing else is
+- transactional events are excluded from the user-configurable set
+- validates channel names
+- renders each known event with its data
+- falls back gracefully for an unknown event type
+- tolerates missing data fields without throwing
 
 ### Platform — `platform.fleet-config.test.js` ✅
 
@@ -179,6 +196,12 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
   - local-only: needs JWT_SECRET from .env.test; self-skips on staging
 - garbage and missing tokens are rejected
 
+### Notifications — `notifications.e2e.test.ts` ✅ (F15)
+
+- preferences round-trip: flip a configurable cell and it persists
+- register creates an unverified account and login is gated (F15.8)
+- notification.send is delivered to the in-app inbox
+
 ### Provisioning — `provisioning.e2e.test.ts` ✅
 
 - provision creates the device and it reports online
@@ -196,6 +219,21 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - camera frame → sensor_history row + socket frame event; current_state untouched
 - take_picture with commandId → on-demand frame resolves the pending capture
 - pending capture with no frame → timeout path publishes PICTURE_RESULT status timeout
+
+### Telemetry — `telemetry-fault.e2e.test.ts` ✅
+
+- a fault reading is recorded but leaves current_state on the last good value
+  - fault envelope `{"error":"read_failed",...}` → sensor_history row (is_error), current_state unchanged, no pipeline run
+
+### MQTT lifecycle — `heartbeat.e2e.test.ts` ✅
+
+- publishes a heartbeat with the expected diagnostics shape
+  - device heartbeat → RK.DEVICE_HEARTBEAT → digest writes the Valkey last-seen key
+
+### Commands — `command-read.e2e.test.ts` ✅
+
+- read reports current state, and still does after a restart
+  - reserved `read` verb answers from NVS-persisted state; survives a device restart
 
 ### Commands — `commands.socket.e2e.test.ts` ✅
 

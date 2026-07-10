@@ -1,0 +1,87 @@
+<div class="notif-shell">
+
+  <div class="notif-header">
+    <h1 class="notif-title">Notifications</h1>
+    @if (hasUnread()) {
+      <button mat-stroked-button (click)="markAllRead()">
+        <mat-icon>done_all</mat-icon> Mark all read
+      </button>
+    }
+  </div>
+
+  <mat-tab-group animationDuration="200ms" class="notif-tabs">
+
+    <!-- Inbox -->
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="tab-icon">inbox</mat-icon> Inbox
+        @if (unreadCount() > 0) { <span class="tab-badge">{{ unreadCount() }}</span> }
+      </ng-template>
+
+      @if (items().length === 0) {
+        <div class="empty-state">
+          <mat-icon>notifications_none</mat-icon>
+          <p>No notifications yet.</p>
+        </div>
+      } @else {
+        <div class="inbox-list">
+          @for (item of items(); track item.id) {
+            <div class="inbox-item" [class.unread]="item.read_at === null"
+                 (click)="markRead(item)" (keyup.enter)="markRead(item)" tabindex="0">
+              <div class="item-icon"><mat-icon>{{ iconFor(item.event_type) }}</mat-icon></div>
+              <div class="item-body">
+                <div class="item-top">
+                  <span class="item-title">{{ item.title }}</span>
+                  @if (item.read_at === null) { <span class="unread-dot"></span> }
+                </div>
+                <p class="item-text">{{ item.body }}</p>
+                <span class="item-time">{{ item.created_at | date:'MMM d, h:mm a' }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </mat-tab>
+
+    <!-- Preferences -->
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="tab-icon">tune</mat-icon> Preferences
+      </ng-template>
+
+      <div class="prefs">
+        <p class="prefs-hint">Choose how you're notified for each kind of event.</p>
+
+        <div class="prefs-table">
+          <div class="prefs-row prefs-head">
+            <span class="prefs-event-head">Event</span>
+            @for (ch of channels; track ch.key) {
+              <span class="prefs-ch-head" [matTooltip]="ch.label">
+                <mat-icon>{{ ch.icon }}</mat-icon>
+              </span>
+            }
+          </div>
+
+          @for (row of prefRows(); track row.eventType) {
+            <div class="prefs-row">
+              <span class="prefs-event">
+                <mat-icon>{{ row.icon }}</mat-icon> {{ row.label }}
+              </span>
+              @for (cell of row.cells; track cell.channel) {
+                <span class="prefs-cell">
+                  <mat-slide-toggle
+                    [checked]="cell.enabled"
+                    [disabled]="cell.locked || savingPrefs()"
+                    [matTooltip]="cell.locked ? 'Always on' : ''"
+                    (change)="togglePref(row, cell, $event.checked)">
+                  </mat-slide-toggle>
+                </span>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    </mat-tab>
+
+  </mat-tab-group>
+</div>

@@ -18,6 +18,9 @@ export const keys = {
   actionState: (userDeviceActionId: number) => `action_state:${userDeviceActionId}`,
   // Device liveness — set with a heartbeat-length TTL on online, deleted on offline.
   deviceOnline: (userDeviceId: number) => `device_online:${userDeviceId}`,
+  // Last heartbeat timestamp + diagnostics, refreshed on every heartbeat with a TTL a few
+  // intervals long. Presence ⇒ the device is alive even when it has no active telemetry.
+  deviceLastSeen: (userDeviceId: number) => `device_last_seen:${userDeviceId}`,
   // Latest camera frame for live relay / pipeline consumption (short TTL).
   cameraFrame: (userDeviceId: number) => `camera_frame:${userDeviceId}`,
   // Resolution cache: (deviceId string, actionName) → "{id}:{kind}".

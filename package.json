@@ -34,7 +34,8 @@
       "eslint --fix --no-warn-ignored",
       "prettier --write --ignore-unknown"
     ],
-    "*.{json,md,yaml,yml}": "prettier --write --ignore-unknown"
+    "*.{json,md,yaml,yml}": "prettier --write --ignore-unknown",
+    "ESP32Code/**/*.{h,cpp}": "clang-format -i --style=file"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.0",

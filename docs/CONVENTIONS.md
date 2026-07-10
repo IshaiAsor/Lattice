@@ -97,3 +97,19 @@ Rules:
 - ESLint (flat config at root) runs typescript-eslint type-checked rules on
   `services/`, `packages/`, `tests/` — correctness only (floating promises, unused vars);
   no stylistic rules.
+
+## Firmware (C++, `ESP32Code/`)
+
+The firmware has its own toolchain (PlatformIO/Arduino) — see `ESP32Code/CLAUDE.md` for the full
+guide. The conventions that rhyme with the TS side:
+
+- **Leveled logging, never raw `Serial.print*` for log output** — the firmware analog of "never
+  `console.log`". Use `LOG_E/W/I/D(tag, fmt, ...)` from `src/config/Log.h`; prod builds compile out
+  `LOG_D` (zero flash). Structured-ish `[LEVEL][Tag]` prefix, terse lowercase message, secrets by
+  length only — same spirit as `@lattice/logger`.
+- **Formatting** is `.clang-format` (own style: Allman/4-space, matching existing firmware), enforced
+  by the same lint-staged + CI machinery via the `clang-format-node` devDependency.
+- **Static analysis + tests**: `pio check` (cppcheck) and `pio test -e native` gate PRs in
+  `firmware-checks.yml`; pure logic that can be host-tested goes in Arduino-free headers.
+- **Parity rule** still governs capability/behavior changes — mirror them in the simulator
+  (`tools/device-sim`) and `PARITY.md`.

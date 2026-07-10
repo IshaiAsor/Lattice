@@ -30,6 +30,18 @@ export class MgmtDeviceListComponent implements OnInit {
   get devicesOffline()   { return this.devices?.filter(d => !d.online).length ?? 0; }
   get updatesAvailable() { return this.devices?.filter(d => d.update_available).length ?? 0; }
 
+  // WiFi RSSI (dBm) → strength bucket. Typical: >= -60 strong, -60..-75 fair, < -75 weak.
+  signalClass(rssi: number): string {
+    if (rssi >= -60) return 'sig-good';
+    if (rssi >= -75) return 'sig-fair';
+    return 'sig-weak';
+  }
+  signalLabel(rssi: number): string {
+    if (rssi >= -60) return 'Strong signal';
+    if (rssi >= -75) return 'Fair signal';
+    return 'Weak signal';
+  }
+
   ngOnInit(): void {
     this.loadDevices();
 

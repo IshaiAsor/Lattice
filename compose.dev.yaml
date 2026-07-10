@@ -146,6 +146,49 @@ services:
         condition: service_started
     restart: always
 
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    container_name: notification-service
+    ports:
+      - '3011:3011'
+    environment:
+      - PORT=3011
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+      # Local email goes to Mailpit (catcher w/ web UI at http://localhost:8025) so the
+      # verify-email / reset-password flows are testable without a real SMTP provider. Push
+      # (VAPID) stays unset → no-op. Override SMTP_HOST to use a real provider.
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-Lattice <no-reply@lattice.local>}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      cache:
+        condition: service_started
+    restart: always
+
+  # Local email catcher — the notification-service email adapter points here in dev. SMTP on
+  # 1025, web inbox at http://localhost:8025 (verify-email / reset-password links land here).
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    ports:
+      - '8025:8025'
+      - '1025:1025'
+    restart: always
+
   ml-router:
     build:
       context: .

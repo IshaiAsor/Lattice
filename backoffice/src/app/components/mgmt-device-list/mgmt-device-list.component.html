@@ -106,6 +106,15 @@
           <span class="info-label">ID</span>
           <span class="info-value">#{{ device.id }}</span>
         </div>
+        @if (device.online && device.rssi !== null) {
+          <div class="info-row">
+            <span class="info-label">Signal</span>
+            <span class="info-value signal-value" [matTooltip]="signalLabel(device.rssi)">
+              <mat-icon class="signal-icon" [ngClass]="signalClass(device.rssi)">wifi</mat-icon>
+              {{ device.rssi }} dBm
+            </span>
+          </div>
+        }
         @if (!device.online && device.lastOnlineDate) {
           <div class="info-row muted">
             <span class="info-label">Last seen</span>

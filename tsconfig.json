@@ -19,6 +19,7 @@
     { "path": "services/ml-executor" },
     { "path": "services/ml-router" },
     { "path": "services/mqtt-service" },
+    { "path": "services/notification-service" },
     { "path": "services/socket-server" }
   ]
 }

@@ -53,6 +53,7 @@ interface CapabilityManifestEntry {
   min_telemetry_interval_ms: number | null;
   google_traits: GoogleTraitManifestEntry[];
   configurable_pins: { key: string; label: string; mode: string }[];
+  configurations?: { behavior: string; min_interval_ms?: number }[];
 }
 
 interface DeviceManifest {
@@ -171,6 +172,18 @@ async function seedManifest(client: pg.PoolClient, m: DeviceManifest) {
          VALUES ($1, $2)
          ON CONFLICT (capability_id, google_trait_id) DO NOTHING`,
         [capabilityId, traitId],
+      );
+    }
+
+    // 5. Append new behavior rows only (command | interval | on_demand) — same immutability
+    //    rationale as pins/traits: user_action_configurations FK these, and a firmware change
+    //    ships as a new device version with its own fresh rows, so an existing row never changes.
+    for (const cfg of c.configurations ?? []) {
+      await client.query(
+        `INSERT INTO capability_configurations (capability_id, behavior, min_interval_ms)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (capability_id, behavior) DO NOTHING`,
+        [capabilityId, cfg.behavior, cfg.min_interval_ms ?? null],
       );
     }
   }

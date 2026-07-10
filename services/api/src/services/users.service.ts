@@ -64,6 +64,8 @@ class UsersService {
         full_name: profile.name,
         profile_picture_url: profile.picture || '',
         terms_accepted_at: new Date(),
+        // Google has already verified the address — no email confirmation needed.
+        email_verified: true,
       },
     });
   }
@@ -86,7 +88,14 @@ class UsersService {
     });
   }
 
-  async createRegularUser(username: string, email: string, password: string): Promise<User> {
+  // Credential accounts are created UNVERIFIED with a single-use verification token; login is
+  // gated until the address is confirmed (F15.8).
+  async createRegularUser(
+    username: string,
+    email: string,
+    password: string,
+    emailVerificationToken: string,
+  ): Promise<User> {
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     return db.user.create({
       data: {
@@ -96,6 +105,60 @@ class UsersService {
         password: hashedPassword,
         email,
         terms_accepted_at: new Date(),
+        email_verified: false,
+        email_verification_token: emailVerificationToken,
+      },
+    });
+  }
+
+  hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, SALT_ROUNDS);
+  }
+
+  // ── Email verification (F15.8) ──
+  findByVerificationToken(token: string): Promise<User | null> {
+    return db.user.findUnique({ where: { email_verification_token: token } });
+  }
+
+  async markEmailVerified(id: number): Promise<User> {
+    return db.user.update({
+      where: { id },
+      data: { email_verified: true, email_verification_token: null, updated_at: new Date() },
+    });
+  }
+
+  async setVerificationToken(id: number, token: string): Promise<void> {
+    await db.user.update({
+      where: { id },
+      data: { email_verification_token: token, updated_at: new Date() },
+    });
+  }
+
+  // ── Password reset (F15.9) ──
+  findByResetToken(token: string): Promise<User | null> {
+    return db.user.findUnique({ where: { password_reset_token: token } });
+  }
+
+  async setPasswordResetToken(id: number, token: string, expires: Date): Promise<void> {
+    await db.user.update({
+      where: { id },
+      data: {
+        password_reset_token: token,
+        password_reset_expires: expires,
+        updated_at: new Date(),
+      },
+    });
+  }
+
+  async resetPassword(id: number, newPassword: string): Promise<void> {
+    const hashedPassword = await this.hashPassword(newPassword);
+    await db.user.update({
+      where: { id },
+      data: {
+        password: hashedPassword,
+        password_reset_token: null,
+        password_reset_expires: null,
+        updated_at: new Date(),
       },
     });
   }

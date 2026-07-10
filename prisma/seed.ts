@@ -76,8 +76,8 @@ async function main() {
   if (ownerEmail) {
     console.log(`🌱 Seeding owner placeholder: ${ownerEmail}`);
     await pool.query(
-      `INSERT INTO users (email, user_role, user_type)
-       VALUES ($1, 'admin', 1)
+      `INSERT INTO users (email, user_role, user_type, email_verified)
+       VALUES ($1, 'admin', 1, true)
        ON CONFLICT (email) DO NOTHING`,
       [ownerEmail],
     );
@@ -94,9 +94,9 @@ async function main() {
   if (adminUser && adminPass) {
     console.log(`🌱 Seeding credential admin: ${adminUser}`);
     await pool.query(
-      `INSERT INTO users (user_name, email, password, user_role, user_type, terms_accepted_at)
-       VALUES ($1, $2, $3, 'admin', 0, now())
-       ON CONFLICT (user_name) DO UPDATE SET password = EXCLUDED.password, user_role = 'admin'`,
+      `INSERT INTO users (user_name, email, password, user_role, user_type, terms_accepted_at, email_verified)
+       VALUES ($1, $2, $3, 'admin', 0, now(), true)
+       ON CONFLICT (user_name) DO UPDATE SET password = EXCLUDED.password, user_role = 'admin', email_verified = true`,
       [adminUser, `${adminUser}@lattice.local`, await bcrypt.hash(adminPass, 10)],
     );
   } else {

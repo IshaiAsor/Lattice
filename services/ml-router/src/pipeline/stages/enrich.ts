@@ -190,7 +190,7 @@ async function imageFallbackFromHistory(
   sensor: PipelineSensorPlan,
 ): Promise<Record<string, unknown>> {
   const row = await db.sensorHistory.findFirst({
-    where: { user_device_action_id: sensor.user_device_action_id },
+    where: { user_device_action_id: sensor.user_device_action_id, is_error: false },
     orderBy: { recorded_at: 'desc' },
     select: { value: true, recorded_at: true },
   });
@@ -221,12 +221,18 @@ async function buildSensorDigest(
       'querying sensor history',
     );
     const rows = await db.sensorHistory.findMany({
-      where: { user_device_action_id: sensor.user_device_action_id, recorded_at: { gte: since } },
+      where: {
+        user_device_action_id: sensor.user_device_action_id,
+        recorded_at: { gte: since },
+        is_error: false,
+      },
       orderBy: { recorded_at: 'desc' },
       take: sensor.compression === 'last_n' ? (sensor.n ?? 10) : 1000,
       select: { value: true },
     });
-    const values = rows.map((r) => r.value);
+    // value is nullable in the schema (null on fault rows); is_error:false already excludes those,
+    // so this filter is just to satisfy the non-null string[] contract of compressReadings.
+    const values = rows.map((r) => r.value).filter((v): v is string => v !== null);
     const compressed = compressReadings(values, sensor.compression, sensor.n);
     log.trace(
       {

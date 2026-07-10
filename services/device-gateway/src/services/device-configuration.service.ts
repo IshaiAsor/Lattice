@@ -6,6 +6,14 @@ export interface PinConfigDto {
   pinMode: 'OUTPUT' | 'INPUT';
 }
 
+export interface BehaviorConfigDto {
+  behavior: string; // command | interval | on_demand
+  // Typed, nullable per behavior (only the relevant fields are set).
+  interval_ms: number | null; // interval: resolved cadence (user choice → catalog floor)
+  camera_resolution: string | null; // on_demand (camera)
+  camera_transport: string | null; // on_demand (camera)
+}
+
 export interface ActionConfigDto {
   mqtt_action_name: string;
   implementation_type: string;
@@ -16,6 +24,11 @@ export interface ActionConfigDto {
   // CameraAction only — null/unused for every other implementation_type.
   camera_resolution: string | null;
   camera_transport: string | null;
+  // Unified action model: the behaviors this action instance runs, resolved as
+  // user selection → catalog default. The device gates each surface on these (cyclic read iff
+  // `interval`, on-demand `read` iff `on_demand`, value commands iff `command`). Empty means
+  // fall back to legacy fields (telemetry_interval_ms/camera_*), so old firmware is unaffected.
+  behaviors: BehaviorConfigDto[];
 }
 
 export interface DeviceConfigurationDto {
@@ -39,9 +52,11 @@ class DeviceConfigurationService {
           include: {
             pins: true,
             traits: { include: { google_trait: { select: { valid_parameters: true } } } },
+            configurations: true,
           },
         },
         pins: true,
+        configurations: { include: { capability_configuration: true } },
       },
     });
 
@@ -52,6 +67,28 @@ class DeviceConfigurationService {
         pinNumber: p.pin_number,
         pinMode: (modeByPinId.get(p.capability_pin_id) ?? 'OUTPUT') as PinConfigDto['pinMode'],
       }));
+      // Resolve behaviors: the user's enabled selections win; otherwise the capability's
+      // catalog-declared behaviors are the default (so an action with no explicit selection
+      // still runs every behavior its capability supports — matching pre-6d behavior). Interval
+      // cadence resolves user choice → catalog floor → legacy telemetry_interval_ms.
+      const behaviors: BehaviorConfigDto[] =
+        ua.configurations.length > 0
+          ? ua.configurations.map((uc) => ({
+              behavior: uc.behavior,
+              interval_ms: uc.interval_ms ?? uc.capability_configuration.min_interval_ms ?? null,
+              camera_resolution: uc.camera_resolution ?? ua.camera_resolution,
+              camera_transport: uc.camera_transport ?? ua.camera_transport,
+            }))
+          : ua.capability.configurations.map((cc) => ({
+              behavior: cc.behavior,
+              interval_ms:
+                cc.behavior === 'interval'
+                  ? (ua.telemetry_interval_ms ?? cc.min_interval_ms ?? null)
+                  : null,
+              camera_resolution: cc.behavior === 'on_demand' ? ua.camera_resolution : null,
+              camera_transport: cc.behavior === 'on_demand' ? ua.camera_transport : null,
+            }));
+
       return {
         mqtt_action_name: ua.mqtt_action_name,
         implementation_type: ua.capability.implementation_type,
@@ -64,6 +101,7 @@ class DeviceConfigurationService {
         ),
         camera_resolution: ua.camera_resolution,
         camera_transport: ua.camera_transport,
+        behaviors,
       };
     });
 

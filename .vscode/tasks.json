@@ -152,6 +152,17 @@
       "dependsOn": ["kill-automation-worker-ports", "build-shared-libs"]
     },
     {
+      "label": "kill-notification-service-ports",
+      "type": "shell",
+      "command": "npx -y kill-port 9241 3011",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "prep-notification-service",
+      "dependsOn": ["kill-notification-service-ports", "build-shared-libs"]
+    },
+    {
       "label": "kill-google-home-ports",
       "type": "shell",
       "command": "npx -y kill-port 9237 3010",

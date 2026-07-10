@@ -13,6 +13,8 @@ export const SOCKET_EVENTS = {
   ACTION_STATE_FAILED: 'action_state_failed',
   DEVICE_STATUS_CHANGE: 'device_status_change',
   PIPELINE_RUN_UPDATE: 'pipeline_run_update',
+  // In-app notification pushed to a user's room by notification-service's in-app channel.
+  NOTIFICATION: 'notification',
 } as const;
 
 export const INFER_CHANNELS = {

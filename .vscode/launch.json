@@ -290,6 +290,36 @@
       "outFiles": ["${workspaceFolder:Automation Worker}/**/*.js"]
     },
     {
+      "name": "Debug Notification Service (dev + hot reload)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder:Project Root}",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "@dotenvx/dotenvx",
+        "run",
+        "--",
+        "npx",
+        "nodemon",
+        "--cwd",
+        "services/notification-service",
+        "--exec",
+        "node -r ts-node/register",
+        "--ext",
+        "ts,json",
+        "src/index.ts"
+      ],
+      "env": { "TS_NODE_PROJECT": "tsconfig.json", "PORT": "3011" },
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "autoAttachChildProcesses": true,
+      "restart": true,
+      "preLaunchTask": "prep-notification-service",
+      "skipFiles": ["<node_internals>/**"],
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder:Notification Service}/**/*.js"]
+    },
+    {
       "name": "Debug Google Home (dev + hot reload)",
       "type": "node",
       "request": "launch",

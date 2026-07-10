@@ -16,6 +16,7 @@ export class DeviceSocketService {
   readonly actionStatePending$: Observable<{ actionId: number, commandId: string, state: unknown }>;
   readonly actionStateFailed$: Observable<{ actionId: number, commandId: string, lastState?: unknown }>;
   readonly pipelineRunUpdate$: Observable<{ runId: number, pipelineId: number, status: string, error?: string }>;
+  readonly notification$: Observable<{ eventType: string, title: string, body: string, data?: unknown }>;
 
   constructor() {
     const socketUrl = environment.socketUrl ||
@@ -38,6 +39,7 @@ export class DeviceSocketService {
     this.actionStatePending$ = socketEvent('action_state_pending');
     this.actionStateFailed$ = socketEvent('action_state_failed');
     this.pipelineRunUpdate$ = socketEvent('pipeline_run_update');
+    this.notification$ = socketEvent('notification');
   }
 
   publishActionState(id: number, actionState: string) {

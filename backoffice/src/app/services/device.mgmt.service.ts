@@ -88,6 +88,21 @@ export class DeviceMgmtService {
   ): Observable<void> {
     return this.http.patch<void>(`${this.apiUrl}/api/devices/${deviceId}/actions/${userActionId}`, updates);
   }
+
+  // Replace the action's enabled behaviors (unified action model). The api validates each
+  // against the capability's catalog rows and rewrites user_action_configurations. Maps the
+  // camelCase view to the snake_case request body used by the rest of the API.
+  setActionBehaviors(userActionId: number, behaviors: BehaviorSelectionView[]): Observable<void> {
+    const body = {
+      behaviors: behaviors.map((b) => ({
+        behavior: b.behavior,
+        interval_ms: b.intervalMs ?? null,
+        camera_resolution: b.cameraResolution ?? null,
+        camera_transport: b.cameraTransport ?? null,
+      })),
+    };
+    return this.http.put<void>(`${this.apiUrl}/api/actions/${userActionId}/behaviors`, body);
+  }
 }
 
 export interface PinSlot {
@@ -96,6 +111,13 @@ export interface PinSlot {
   label: string;
   mode: string;
   description?: string;
+}
+
+export interface BehaviorSelectionView {
+  behavior: string; // command | interval | on_demand
+  intervalMs?: number | null;
+  cameraResolution?: string | null;
+  cameraTransport?: string | null;
 }
 
 export interface UserActionView {
@@ -108,6 +130,7 @@ export interface UserActionView {
   // CameraAction only — null for every other implementation_type.
   cameraResolution: string | null;
   cameraTransport: string | null;
+  enabledBehaviors: BehaviorSelectionView[];
 }
 
 export interface CapabilityView {
@@ -119,6 +142,7 @@ export interface CapabilityView {
   mqtt_action_name: string;
   min_telemetry_interval_ms: number | null;
   configurable_pins: PinSlot[];
+  available_behaviors: { behavior: string; min_interval_ms: number | null }[];
   instances: UserActionView[];
 }
 
@@ -131,6 +155,8 @@ export interface DeviceView {
   version: string;
   current_firmware_version: string | null;
   update_available: boolean;
+  // Latest WiFi RSSI (dBm) from the device heartbeat; null when offline.
+  rssi: number | null;
 }
 
 export interface ActionPreview {

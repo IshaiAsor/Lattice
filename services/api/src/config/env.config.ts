@@ -9,6 +9,13 @@ export const env = {
     .split(',')
     .map((s) => s.trim()),
 
+  // Public base URL of the backoffice, used to build verify-email / reset-password links in
+  // emails. Defaults to the first allowed origin. The UI uses hash routing (links add '#').
+  appBaseUrl: (
+    process.env['APP_BASE_URL'] ??
+    (process.env['ALLOWED_ORIGINS'] ?? 'http://localhost:4200').split(',')[0]
+  ).trim(),
+
   // Google sign-in (auth-code flow) — the UI exchanges a one-time code; we redeem it
   // server-side for the user's profile. 'postmessage' redirect (popup flow).
   googleSignIn: {

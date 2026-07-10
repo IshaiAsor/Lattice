@@ -5,29 +5,28 @@
 #include <Arduino.h>
 #include "BaseCommandAction.h"
 #include <Adafruit_NeoPixel.h>
+#include "config/Log.h"
 
 class OnboardLedAction : public BaseCommandAction
 {
-private:
-    int outletPinNumber;
+  private:
+    int               outletPinNumber;
     Adafruit_NeoPixel strip;
-    long lastOnTime = 0;
-    long lastOffTime = 0;
-    long blinkTime = 500;
-    bool isOn = false;
+    long              lastOnTime  = 0;
+    long              lastOffTime = 0;
+    long              blinkTime   = 500;
+    bool              isOn        = false;
 
-public:
+  public:
     OnboardLedAction(String name, int pinNumber)
         : BaseCommandAction(name, {ActionPinsSetup(pinNumber, OUTPUT)}, {"red", "green", "blue", "orange", "off"})
     {
         outletPinNumber = pinNumber;
-        strip = Adafruit_NeoPixel(1, outletPinNumber, NEO_GRB + NEO_KHZ800);
+        strip           = Adafruit_NeoPixel(1, outletPinNumber, NEO_GRB + NEO_KHZ800);
         strip.begin();
         strip.clear();
     }
-    void initPins()
-    {
-    }
+    void initPins() {}
 
     void loop() override
     {
@@ -85,7 +84,7 @@ public:
         }
         else
         {
-            Serial.println("Invalid parameter :" + action);
+            LOG_W("Cmd", "invalid onboard-led parameter: %s", action.c_str());
             return;
         }
     }

@@ -1,5 +1,4 @@
-#ifndef OTA_SERVICE_H
-#define OTA_SERVICE_H
+#pragma once
 
 #include <Arduino.h>
 #include <HTTPClient.h>
@@ -7,111 +6,127 @@
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <actions/AckPublisher.h>
+#include "config/Log.h"
 
-class OtaService {
-public:
+class OtaService
+{
+  public:
     OtaService(const char* currentVersion, const char* deviceType, const char* rootCa)
-        : _currentVersion(currentVersion), _deviceType(deviceType), _rootCa(rootCa) {}
+        : _currentVersion(currentVersion), _deviceType(deviceType), _rootCa(rootCa)
+    {
+    }
 
-    void handleUpdateMessage(const char* payload, const char* authToken = "", AckPublisherFn onStatus = nullptr) {
-        JsonDocument doc;
+    void handleUpdateMessage(const char* payload, const char* authToken = "", AckPublisherFn onStatus = nullptr)
+    {
+        JsonDocument         doc;
         DeserializationError error = deserializeJson(doc, payload);
 
-        if (error) {
-            Serial.print("OTA: Failed to parse update payload: ");
-            Serial.println(error.c_str());
-            if (onStatus) onStatus("ota", "", false, "invalid-payload");
+        if (error)
+        {
+            LOG_E("Ota", "failed to parse update payload: %s", error.c_str());
+            if (onStatus)
+                onStatus("ota", "", false, "invalid-payload");
             return;
         }
 
-        const char* newVersion = doc["version"];
+        const char* newVersion  = doc["version"];
         const char* downloadUrl = doc["url"];
 
-        if (!newVersion || !downloadUrl) {
-            Serial.println("OTA: Invalid payload format");
-            if (onStatus) onStatus("ota", "", false, "invalid-payload");
+        if (!newVersion || !downloadUrl)
+        {
+            LOG_E("Ota", "invalid payload format");
+            if (onStatus)
+                onStatus("ota", "", false, "invalid-payload");
             return;
         }
 
-        if (!isNewerVersion(newVersion, _currentVersion)) {
-            Serial.printf("OTA: Skipping — current=%s, received=%s\n", _currentVersion, newVersion);
-            if (onStatus) onStatus("ota", "", false, "rejected:not-newer");
+        if (!isNewerVersion(newVersion, _currentVersion))
+        {
+            LOG_I("Ota", "skipping — current=%s, received=%s", _currentVersion, newVersion);
+            if (onStatus)
+                onStatus("ota", "", false, "rejected:not-newer");
             return;
         }
 
-        if (!authToken || !*authToken) {
-            Serial.println("OTA: No device token available — refusing to download unauthenticated.");
-            if (onStatus) onStatus("ota", "", false, "rejected:no-token");
+        if (!authToken || !*authToken)
+        {
+            LOG_E("Ota", "no device token available — refusing to download unauthenticated");
+            if (onStatus)
+                onStatus("ota", "", false, "rejected:no-token");
             return;
         }
 
-        Serial.printf("OTA: Upgrading %s → %s\n", _currentVersion, newVersion);
-        Serial.print("OTA: Downloading from: ");
-        Serial.println(downloadUrl);
+        LOG_I("Ota", "upgrading %s → %s from %s", _currentVersion, newVersion, downloadUrl);
 
-        if (onStatus) onStatus("ota", "", true, (String("starting:") + newVersion).c_str());
+        if (onStatus)
+            onStatus("ota", "", true, (String("starting:") + newVersion).c_str());
 
         performUpdate(downloadUrl, authToken, onStatus);
     }
 
-private:
+  private:
     const char* _currentVersion;
     const char* _deviceType;
     const char* _rootCa;
 
     // Returns true only when newVer is strictly greater than curVer (semver "Vmajor.minor.patch").
     // Rejects downgrades and same-version re-flashes.
-    static bool isNewerVersion(const char* newVer, const char* curVer) {
+    static bool isNewerVersion(const char* newVer, const char* curVer)
+    {
         int nMaj = 0, nMin = 0, nPat = 0;
         int cMaj = 0, cMin = 0, cPat = 0;
         // Accept optional leading 'V' or 'v'
         const char* n = (*newVer == 'V' || *newVer == 'v') ? newVer + 1 : newVer;
-        const char* c = (*curVer  == 'V' || *curVer  == 'v') ? curVer  + 1 : curVer;
-        if (sscanf(n, "%d.%d.%d", &nMaj, &nMin, &nPat) != 3) return false;
-        if (sscanf(c, "%d.%d.%d", &cMaj, &cMin, &cPat) != 3) return false;
-        if (nMaj != cMaj) return nMaj > cMaj;
-        if (nMin != cMin) return nMin > cMin;
+        const char* c = (*curVer == 'V' || *curVer == 'v') ? curVer + 1 : curVer;
+        if (sscanf(n, "%d.%d.%d", &nMaj, &nMin, &nPat) != 3)
+            return false;
+        if (sscanf(c, "%d.%d.%d", &cMaj, &cMin, &cPat) != 3)
+            return false;
+        if (nMaj != cMaj)
+            return nMaj > cMaj;
+        if (nMin != cMin)
+            return nMin > cMin;
         return nPat > cPat;
     }
 
-    void performUpdate(const char* url, const char* authToken, AckPublisherFn onStatus) {
+    void performUpdate(const char* url, const char* authToken, AckPublisherFn onStatus)
+    {
         WiFiClientSecure client;
         client.setCACert(_rootCa);
 
         // Optional: set timeout for large downloads
         client.setTimeout(12000);
 
-        Serial.println("OTA: Starting update process...");
+        LOG_I("Ota", "starting update process");
 
         // Authenticate the download against the OTA manager with the device's JWT.
         // HTTPUpdate has no setAuthorization(), so inject the header via the request callback.
         String auth = (authToken && *authToken) ? (String("Bearer ") + authToken) : String();
 
         // This is a blocking call that will restart the ESP32 on success
-        t_httpUpdate_return ret = httpUpdate.update(client, url, "", [auth](HTTPClient *http) {
+        t_httpUpdate_return ret = httpUpdate.update(client, url, "", [auth](HTTPClient* http) {
             if (auth.length())
                 http->addHeader("Authorization", auth);
         });
 
-        switch (ret) {
-            case HTTP_UPDATE_FAILED: {
-                String detail = String("failed:") + httpUpdate.getLastError() + ":" + httpUpdate.getLastErrorString();
-                Serial.printf("OTA: Update failed! Error (%d): %s\n",
-                              httpUpdate.getLastError(),
-                              httpUpdate.getLastErrorString().c_str());
-                if (onStatus) onStatus("ota", "", false, detail.c_str());
-                break;
-            }
-            case HTTP_UPDATE_NO_UPDATES:
-                Serial.println("OTA: No updates available.");
-                break;
+        switch (ret)
+        {
+        case HTTP_UPDATE_FAILED: {
+            String detail = String("failed:") + httpUpdate.getLastError() + ":" + httpUpdate.getLastErrorString();
+            LOG_E("Ota", "update failed! error (%d): %s", httpUpdate.getLastError(),
+                  httpUpdate.getLastErrorString().c_str());
+            if (onStatus)
+                onStatus("ota", "", false, detail.c_str());
+            break;
+        }
+        case HTTP_UPDATE_NO_UPDATES:
+            LOG_I("Ota", "no updates available");
+            break;
 
-            case HTTP_UPDATE_OK:
-                // Device reboots here — no publish possible.
-                Serial.println("OTA: Update successful! Rebooting...");
-                break;
+        case HTTP_UPDATE_OK:
+            // Device reboots here — no publish possible.
+            LOG_I("Ota", "update successful! rebooting...");
+            break;
         }
     }
 };
-
-#endif

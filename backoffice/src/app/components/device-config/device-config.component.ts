@@ -46,6 +46,24 @@ export class DeviceConfigComponent implements OnInit {
   editPinValues: Record<number, number | null> = {};
   editResolution: string | null = null;
   editTransport: string | null = 'http';
+  // Enabled behaviors while editing (unified action model). Toggled per available behavior.
+  editBehaviors = new Set<string>();
+
+  private readonly behaviorLabels: Record<string, string> = {
+    command: 'Accept commands',
+    interval: 'Cyclic reading',
+    on_demand: 'On-demand reading',
+  };
+  behaviorLabel(b: string): string {
+    return this.behaviorLabels[b] ?? b;
+  }
+  isBehaviorEnabled(b: string): boolean {
+    return this.editBehaviors.has(b);
+  }
+  toggleBehavior(b: string, on: boolean): void {
+    if (on) this.editBehaviors.add(b);
+    else this.editBehaviors.delete(b);
+  }
 
   readonly cameraResolutionOptions = [
     { value: 'QQVGA', label: 'QQVGA (160x120)' },
@@ -184,6 +202,13 @@ export class DeviceConfigComponent implements OnInit {
     }
     this.editResolution = instance.cameraResolution ?? (this.isCameraCapability(cap) ? 'SVGA' : null);
     this.editTransport = instance.cameraTransport ?? (this.isCameraCapability(cap) ? 'http' : null);
+    // Enabled behaviors: the user's explicit selection, or (if none yet) every behavior the
+    // capability supports — matching the device's all-enabled default for an unconfigured action.
+    this.editBehaviors = new Set(
+      instance.enabledBehaviors.length > 0
+        ? instance.enabledBehaviors.map((b) => b.behavior)
+        : cap.available_behaviors.map((b) => b.behavior),
+    );
   }
 
   cancelEdit() {
@@ -193,6 +218,7 @@ export class DeviceConfigComponent implements OnInit {
     this.editPinValues = {};
     this.editResolution = null;
     this.editTransport = null;
+    this.editBehaviors = new Set();
   }
 
   saveEdit(cap: CapabilityView, instance: UserActionView) {
@@ -215,10 +241,27 @@ export class DeviceConfigComponent implements OnInit {
       },
     ).subscribe({
       next: () => {
-        this.snack.open(`${cap.label} updated — restarting device`, 'Close', { duration: 2500 });
-        this.cancelEdit();
-        this.loadCapabilities();
-        this.deviceMgmtService.restartDevice(deviceId).subscribe();
+        const finish = () => {
+          this.snack.open(`${cap.label} updated — restarting device`, 'Close', { duration: 2500 });
+          this.cancelEdit();
+          this.loadCapabilities();
+          this.deviceMgmtService.restartDevice(deviceId).subscribe();
+        };
+        // Persist the enabled behaviors (unified action model) if the capability declares any.
+        if ((cap.available_behaviors?.length ?? 0) > 0) {
+          const behaviors = [...this.editBehaviors].map((b) => ({
+            behavior: b,
+            intervalMs: b === 'interval' ? this.editIntervalMs : null,
+            cameraResolution: b === 'on_demand' && isCamera ? this.editResolution : null,
+            cameraTransport: b === 'on_demand' && isCamera ? this.editTransport : null,
+          }));
+          this.deviceMgmtService.setActionBehaviors(instance.id, behaviors).subscribe({
+            next: finish,
+            error: () => this.snack.open('Failed to save behaviors', 'Close', { duration: 3000 }),
+          });
+        } else {
+          finish();
+        }
       },
       error: () => this.snack.open('Failed to update action', 'Close', { duration: 3000 }),
     });
@@ -231,7 +274,8 @@ export class DeviceConfigComponent implements OnInit {
       const v = this.editPinValues[s.id];
       return v != null && v > 0;
     });
-    const intervalOk = cap.mqtt_action_type !== 'telemetry'
+    // Interval value is only required when the `interval` behavior is actually enabled.
+    const intervalOk = !(cap.mqtt_action_type === 'telemetry' && this.isBehaviorEnabled('interval'))
       || (this.editIntervalMs != null && this.editIntervalMs >= (cap.min_telemetry_interval_ms ?? 0));
     const cameraOk = !this.isCameraCapability(cap) || (!!this.editResolution && !!this.editTransport);
     return allPinsFilled && intervalOk && cameraOk;

@@ -2,160 +2,140 @@
 #include <Preferences.h>
 #include <Arduino.h>
 #include <nvs_flash.h>
+#include "config/Log.h"
 
 typedef struct
 {
-  String server;
-  uint32_t port;
-  String clientId;
-  String userId;
-  bool validateCACert;
+    String   server;
+    uint32_t port;
+    String   clientId;
+    String   userId;
 } MqttCredentials;
 
 typedef struct
 {
-  String token;
-  String refreshToken;
-  String refreshTokenCallbackUrl;
-  String deviceConfigUrl;
-  bool validateCACert;
-  uint32_t deviceId;
-  String wsStreamUrl;
-  String cameraHttpUrl;
+    String   token;
+    String   refreshToken;
+    String   refreshTokenCallbackUrl;
+    String   deviceConfigUrl;
+    uint32_t deviceId;
+    String   wsStreamUrl;
+    String   cameraHttpUrl;
 } JwtToken;
 
 class PreferencesManagerService
 {
-  Preferences preferences;
-  const char *PREF_NAMESPACE = "iot-creds";
+    Preferences preferences;
+    const char* PREF_NAMESPACE = "iot-creds";
 
-public:
-  void SaveMqttServerCredentials(MqttCredentials &mqttData)
-  {
-    preferences.begin(PREF_NAMESPACE, false);
-    preferences.putString("mqtt_server", mqttData.server);
-    preferences.putUInt("mqtt_port", mqttData.port);
-    preferences.putBool("validateCACert", mqttData.validateCACert);
-    preferences.putString("client_id", mqttData.clientId);
-    preferences.putString("user", mqttData.userId);
-    preferences.end();
-  }
-
-  MqttCredentials *LoadMqttServerCredentials()
-  {
-    preferences.begin(PREF_NAMESPACE, false);
-    if (!preferences.isKey("mqtt_server") || !preferences.isKey("mqtt_port") || !preferences.isKey("validateCACert") || !preferences.isKey("client_id") || !preferences.isKey("user"))
+  public:
+    void SaveMqttServerCredentials(MqttCredentials& mqttData)
     {
-      Serial.println("No MQTT credentials found in storage.");
-      preferences.clear();
-      preferences.end();
-      return nullptr;
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putString("mqtt_server", mqttData.server);
+        preferences.putUInt("mqtt_port", mqttData.port);
+        preferences.putString("client_id", mqttData.clientId);
+        preferences.putString("user", mqttData.userId);
+        preferences.end();
     }
-    MqttCredentials *mqttData = new MqttCredentials();
-    mqttData->server = preferences.getString("mqtt_server", "");
-    mqttData->port = preferences.getUInt("mqtt_port", 0);
-    mqttData->validateCACert = preferences.getBool("validateCACert", false);
-    mqttData->clientId = preferences.getString("client_id", "");
-    mqttData->userId = preferences.getString("user", "");
-    preferences.end();
 
-    Serial.println("MQTT credentials retrieved:");
-    Serial.print("Server: ");
-    Serial.println(mqttData->server);
-    Serial.print("Port: ");
-    Serial.println(mqttData->port);
-    Serial.print("validateCACert: ");
-    Serial.println(mqttData->validateCACert);
-    Serial.print("Client ID: ");
-    Serial.println(mqttData->clientId);
-    Serial.print("User ID: ");
-    Serial.println(mqttData->userId);
-    return mqttData;
-  }
-
-  void SetJwtToken(JwtToken &jwtData)
-  {
-    preferences.begin(PREF_NAMESPACE, false);
-    preferences.putString("token", jwtData.token);
-    preferences.putString("refresh_token", jwtData.refreshToken);
-    preferences.putString("ref_token_url", jwtData.refreshTokenCallbackUrl);
-    preferences.putString("config_url",      jwtData.deviceConfigUrl);
-    preferences.putBool("validateCACert",    jwtData.validateCACert);
-    preferences.putUInt("device_id",         jwtData.deviceId);
-    preferences.putString("ws_stream_url",   jwtData.wsStreamUrl);
-    preferences.putString("camera_url",      jwtData.cameraHttpUrl);
-    preferences.end();
-  }
-
-  JwtToken *GetJwtToken()
-  {
-    preferences.begin(PREF_NAMESPACE, false);
-    if (!preferences.isKey("token") || !preferences.isKey("refresh_token") || !preferences.isKey("ref_token_url") || !preferences.isKey("validateCACert") || !preferences.isKey("device_id"))
+    MqttCredentials* LoadMqttServerCredentials()
     {
-      Serial.println("No JWT token found in storage.");
-      preferences.clear();
-      preferences.end();
-      return nullptr;
+        preferences.begin(PREF_NAMESPACE, false);
+        if (!preferences.isKey("mqtt_server") || !preferences.isKey("mqtt_port") || !preferences.isKey("client_id") ||
+            !preferences.isKey("user"))
+        {
+            LOG_W("Prefs", "no MQTT credentials in storage");
+            preferences.clear();
+            preferences.end();
+            return nullptr;
+        }
+        MqttCredentials* mqttData = new MqttCredentials();
+        mqttData->server          = preferences.getString("mqtt_server", "");
+        mqttData->port            = preferences.getUInt("mqtt_port", 0);
+        mqttData->clientId        = preferences.getString("client_id", "");
+        mqttData->userId          = preferences.getString("user", "");
+        preferences.end();
+
+        LOG_D("Prefs", "MQTT credentials retrieved: server=%s port=%u clientId=%s userId=%s", mqttData->server.c_str(),
+              mqttData->port, mqttData->clientId.c_str(), mqttData->userId.c_str());
+        return mqttData;
     }
-    JwtToken *jwtData = new JwtToken{
-        .token                   = preferences.getString("token",          ""),
-        .refreshToken            = preferences.getString("refresh_token",  ""),
-        .refreshTokenCallbackUrl = preferences.getString("ref_token_url",  ""),
-        .deviceConfigUrl         = preferences.getString("config_url",     ""),
-        .validateCACert          = preferences.getBool("validateCACert",   false),
-        .deviceId                = preferences.getUInt("device_id",        0),
-        .wsStreamUrl             = preferences.getString("ws_stream_url",  ""),
-        .cameraHttpUrl           = preferences.getString("camera_url",     ""),
-    };
 
-    preferences.end();
-    Serial.println("JWT token retrieved:");
-    Serial.print("Token: ");
-    Serial.println(jwtData->token);
-    Serial.print("Device Config URL: ");
-    Serial.println(jwtData->deviceConfigUrl);
-    Serial.print("WS Stream URL: ");
-    Serial.println(jwtData->wsStreamUrl);
-    Serial.print("Camera HTTP URL: ");
-    Serial.println(jwtData->cameraHttpUrl);
-    Serial.print("validateCACert: ");
-    Serial.println(jwtData->validateCACert);
-    return jwtData;
-  }
-
-  void ClearCredentials()
-  {
-    preferences.begin(PREF_NAMESPACE, false);
-    preferences.clear();
-    preferences.end();
-  }
-
-  void ClearAllCredentials()
-  {
-    preferences.begin(PREF_NAMESPACE, false);
-    preferences.clear();
-    preferences.end();
-    nvs_flash_deinit();
-    nvs_flash_erase();
-    nvs_flash_init();
-  }
-
-  void SaveActionState(char *action, char *state)
-  {
-    preferences.begin(PREF_NAMESPACE, false);
-    preferences.putString(action, state);
-    preferences.end();
-  }
-
-  String LoadActionState(char *action)
-  {
-    preferences.begin(PREF_NAMESPACE, false);
-    String value = "";
-    if (preferences.isKey(action))
+    void SetJwtToken(JwtToken& jwtData)
     {
-      value = preferences.getString(action, "");
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putString("token", jwtData.token);
+        preferences.putString("refresh_token", jwtData.refreshToken);
+        preferences.putString("ref_token_url", jwtData.refreshTokenCallbackUrl);
+        preferences.putString("config_url", jwtData.deviceConfigUrl);
+        preferences.putUInt("device_id", jwtData.deviceId);
+        preferences.putString("ws_stream_url", jwtData.wsStreamUrl);
+        preferences.putString("camera_url", jwtData.cameraHttpUrl);
+        preferences.end();
     }
-    preferences.end();
-    return value;
-  }
+
+    JwtToken* GetJwtToken()
+    {
+        preferences.begin(PREF_NAMESPACE, false);
+        if (!preferences.isKey("token") || !preferences.isKey("refresh_token") || !preferences.isKey("ref_token_url") ||
+            !preferences.isKey("device_id"))
+        {
+            LOG_W("Prefs", "no JWT token in storage");
+            preferences.clear();
+            preferences.end();
+            return nullptr;
+        }
+        JwtToken* jwtData = new JwtToken{
+            .token                   = preferences.getString("token", ""),
+            .refreshToken            = preferences.getString("refresh_token", ""),
+            .refreshTokenCallbackUrl = preferences.getString("ref_token_url", ""),
+            .deviceConfigUrl         = preferences.getString("config_url", ""),
+            .deviceId                = preferences.getUInt("device_id", 0),
+            .wsStreamUrl             = preferences.getString("ws_stream_url", ""),
+            .cameraHttpUrl           = preferences.getString("camera_url", ""),
+        };
+
+        preferences.end();
+        // Never log the token itself — length only.
+        LOG_D("Prefs", "JWT retrieved: token(%u chars) configUrl=%s wsUrl=%s cameraUrl=%s", jwtData->token.length(),
+              jwtData->deviceConfigUrl.c_str(), jwtData->wsStreamUrl.c_str(), jwtData->cameraHttpUrl.c_str());
+        return jwtData;
+    }
+
+    void ClearCredentials()
+    {
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.clear();
+        preferences.end();
+    }
+
+    void ClearAllCredentials()
+    {
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.clear();
+        preferences.end();
+        nvs_flash_deinit();
+        nvs_flash_erase();
+        nvs_flash_init();
+    }
+
+    void SaveActionState(char* action, char* state)
+    {
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putString(action, state);
+        preferences.end();
+    }
+
+    String LoadActionState(char* action)
+    {
+        preferences.begin(PREF_NAMESPACE, false);
+        String value = "";
+        if (preferences.isKey(action))
+        {
+            value = preferences.getString(action, "");
+        }
+        preferences.end();
+        return value;
+    }
 };

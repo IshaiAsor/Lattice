@@ -3,15 +3,15 @@
 Single source of truth is `prisma/schema.prisma`. **Keep this file in sync with every schema
 change** (mermaid ERD + per-table examples). 25 tables, ordered by dependency tier 0 → 6.
 
-| Tier | Theme                                                       | Tables                                                                                                          |
-| ---- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 0    | External catalog                                            | `google_action_types`, `google_device_traits`                                                                   |
-| 1    | Device & ML catalog                                         | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `ml_models`             |
-| 2    | Identity                                                    | `users`, `mqtt_user`, `user_login_audit`                                                                        |
-| 3    | User devices & actions                                      | `user_devices`, `user_action_groups`, `user_device_actions`, `user_device_action_pins`                          |
-| 4    | Automation (rules; emergencies = rules with `is_emergency`) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`                                   |
-| 5    | Pipelines (ML execution)                                    | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages` |
-| 6    | Telemetry                                                   | `sensor_history`                                                                                                |
+| Tier | Theme                                                       | Tables                                                                                                                           |
+| ---- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | External catalog                                            | `google_action_types`, `google_device_traits`                                                                                    |
+| 1    | Device & ML catalog                                         | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models` |
+| 2    | Identity                                                    | `users`, `mqtt_user`, `user_login_audit`                                                                                         |
+| 3    | User devices & actions                                      | `user_devices`, `user_action_groups`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`             |
+| 4    | Automation (rules; emergencies = rules with `is_emergency`) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`                                                    |
+| 5    | Pipelines (ML execution)                                    | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                  |
+| 6    | Telemetry                                                   | `sensor_history`                                                                                                                 |
 
 ---
 
@@ -60,6 +60,12 @@ erDiagram
     string label
     string mode "INPUT/OUTPUT"
   }
+  CapabilityConfiguration {
+    int id PK
+    int capability_id FK
+    string behavior "command/interval/on_demand"
+    int min_interval_ms "interval floor; nullable"
+  }
   MlModel {
     int id PK
     string kind "vlm/llm"
@@ -76,6 +82,25 @@ erDiagram
     string email UK
     string user_role
     string google_id UK "nullable"
+    bool email_verified
+    string email_verification_token UK "nullable"
+  }
+  NotificationPreference {
+    int id PK
+    int user_id FK
+    string channel "in_app/email/push/sms"
+    string event_type
+    bool enabled
+  }
+  NotificationHistory {
+    int id PK
+    int user_id FK
+    string event_type
+    string title
+    string body
+    json data "nullable"
+    string_array channels
+    datetime read_at "nullable"
   }
   MqttUser {
     int id PK
@@ -98,6 +123,8 @@ erDiagram
     string mac_id UK
     string name
     bool online
+    int rssi "heartbeat WiFi dBm; nullable"
+    datetime last_heartbeat_at "nullable"
     int pending_device_type_id FK "nullable"
   }
   UserActionGroup {
@@ -125,6 +152,15 @@ erDiagram
     int user_device_action_id FK
     int capability_pin_id FK "→ device_capability_pins.id"
     int pin_number "assigned GPIO"
+  }
+  UserActionConfiguration {
+    int id PK
+    int user_device_action_id FK
+    int capability_configuration_id FK "→ capability_configurations.id"
+    string behavior "enabled behavior"
+    int interval_ms "chosen cadence; nullable"
+    string camera_resolution "on_demand camera; nullable"
+    string camera_transport "on_demand camera; nullable"
   }
 
   %% ── Tier 4: automation (rules) ──
@@ -226,7 +262,9 @@ erDiagram
   SensorHistory {
     int id PK
     int user_device_action_id FK
-    string value "scalar or base64 image"
+    string value "nullable; scalar or base64 image, NULL on fault"
+    boolean is_error "fault reading flag"
+    string error_code "fault envelope code, e.g. read_failed"
     datetime recorded_at
   }
 
@@ -236,6 +274,7 @@ erDiagram
   DeviceCapability      ||--o{ DeviceCapabilityTrait  : "has"
   GoogleDeviceTrait     ||--o{ DeviceCapabilityTrait  : "google trait"
   DeviceCapability      ||--o{ DeviceCapabilityPin    : "pin slots"
+  DeviceCapability      ||--o{ CapabilityConfiguration : "supported behaviors"
   DeviceCapability      ||--o{ UserDeviceAction       : "instantiated as"
 
   Device                ||--o{ UserDevice             : "current model"
@@ -245,11 +284,15 @@ erDiagram
   User                  ||--o{ UserRule               : "owns"
   User                  ||--o{ Pipeline               : "owns"
   User                  ||--o{ UserLoginAudit         : "logins"
+  User                  ||--o{ NotificationPreference : "notification prefs"
+  User                  ||--o{ NotificationHistory    : "notifications"
 
   UserDevice            ||--o{ UserDeviceAction       : "has"
   UserDevice            |o--o{ UserRuleCondition      : "status checked by"
   UserActionGroup       |o--o{ UserDeviceAction       : "groups"
   UserDeviceAction      ||--o{ UserDeviceActionPin    : "pin assignment"
+  UserDeviceAction      ||--o{ UserActionConfiguration : "enabled behaviors"
+  CapabilityConfiguration ||--o{ UserActionConfiguration : "selected from"
 
   UserRule              ||--o{ UserRuleCondition      : "when"
   UserRule              ||--o{ UserRuleAction         : "then"
@@ -322,6 +365,15 @@ erDiagram
 | --- | ------------- | --- | ---------- | ------ |
 | 1   | 11            | out | Output pin | OUTPUT |
 
+#### `capability_configurations` (`CapabilityConfiguration`) — behaviors a capability supports, firmware-generated into the catalog. Unique `(capability_id, behavior)`. `behavior ∈ {command, interval, on_demand}`. Per-behavior limits are typed columns (nullable, set only where meaningful — same pattern as `user_rule_conditions`): `min_interval_ms` is the hardware floor for `interval`; `command` validation comes from the capability's traits; `on_demand` needs no catalog limits.
+
+| id  | capability_id | behavior  | min_interval_ms |
+| --- | ------------- | --------- | --------------- |
+| 1   | 11 (outlet)   | command   | NULL            |
+| 2   | 12 (temp)     | interval  | 2000            |
+| 3   | 12 (temp)     | on_demand | NULL            |
+| 4   | 15 (camera)   | on_demand | NULL            |
+
 #### `ml_models` (`MlModel`) — system ML registry. Unique `(kind, name, version)`. `classes`/`config` JSON = per-model metadata.
 
 | id  | kind | name       | version | backend | model_file          | ollama_model   | classes                |
@@ -338,12 +390,27 @@ erDiagram
 
 ### Tier 2 — Identity
 
-#### `users` (`User`)
+#### `users` (`User`) — `email_verified` gates credential login (F15.8); Google accounts are created verified. `email_verification_token` holds the pending single-use verify token (NULL once used).
 
-| id  | email             | user_role | google_id |
-| --- | ----------------- | --------- | --------- |
-| 1   | owner@example.com | admin     | NULL      |
-| 2   | alice@example.com | user      | 11522…    |
+| id  | email             | user_role | google_id | email_verified | email_verification_token |
+| --- | ----------------- | --------- | --------- | -------------- | ------------------------ |
+| 1   | owner@example.com | admin     | NULL      | true           | NULL                     |
+| 2   | alice@example.com | user      | 11522…    | true           | NULL                     |
+| 3   | bob@example.com   | user      | NULL      | false          | 7c3f…                    |
+
+#### `notification_preferences` (`NotificationPreference`) — per-user opt-in matrix. Unique `(user_id, channel, event_type)`. A missing row = service default; `enabled=false` is an explicit opt-out.
+
+| id  | user_id | channel | event_type     | enabled |
+| --- | ------- | ------- | -------------- | ------- |
+| 1   | 2       | email   | device_offline | false   |
+| 2   | 2       | push    | emergency      | true    |
+
+#### `notification_history` (`NotificationHistory`) — delivered/attempted notifications backing the in-app inbox + unread badge. `read_at` NULL = unread; `channels` = the channels it fanned out to. Index `(user_id, created_at)`.
+
+| id  | user_id | event_type    | title              | channels       | read_at |
+| --- | ------- | ------------- | ------------------ | -------------- | ------- |
+| 1   | 2       | ota_available | Firmware update    | {in_app,email} | NULL    |
+| 2   | 2       | rule_fired    | Rule "Night" fired | {in_app}       | 2026-…  |
 
 #### `mqtt_user` (`MqttUser`) — broker app auth (standalone, no FK)
 
@@ -359,11 +426,11 @@ erDiagram
 
 ### Tier 3 — User devices & actions
 
-#### `user_devices` (`UserDevice`) — a physical device a user owns
+#### `user_devices` (`UserDevice`) — a physical device a user owns. `rssi`/`last_heartbeat_at` hold the latest MQTT-heartbeat diagnostics (WiFi dBm); live-only, surfaced by the devices page while online.
 
-| id  | device_type_id | user_id | mac_id            | name        | online | current_firmware_version | pending_device_type_id |
-| --- | -------------- | ------- | ----------------- | ----------- | ------ | ------------------------ | ---------------------- |
-| 7   | 1              | 2       | AA:BB:CC:00:11:22 | Garage Node | true   | v2.0.0                   | NULL                   |
+| id  | device_type_id | user_id | mac_id            | name        | online | rssi | current_firmware_version | pending_device_type_id |
+| --- | -------------- | ------- | ----------------- | ----------- | ------ | ---- | ------------------------ | ---------------------- |
+| 7   | 1              | 2       | AA:BB:CC:00:11:22 | Garage Node | true   | -58  | v2.0.0                   | NULL                   |
 
 #### `user_action_groups` (`UserActionGroup`) — dashboard grouping. Unique `(user_id, name)`. `sort_order` = card position.
 
@@ -385,6 +452,15 @@ erDiagram
 | id  | user_device_action_id | key | pin_number |
 | --- | --------------------- | --- | ---------- |
 | 1   | 101                   | out | 5          |
+
+#### `user_action_configurations` (`UserActionConfiguration`) — behaviors the user enabled on an action, with chosen values (typed columns, nullable per behavior). Unique `(user_device_action_id, behavior)`. `capability_configuration_id` FK to the catalog behavior it selects; validated against it on save (device-gateway). The device config endpoint resolves each behavior as user selection → catalog default → legacy column. `camera_resolution`/`camera_transport` fold here off `user_device_actions` (an `on_demand` camera row).
+
+| id  | user_device_action_id | capability_configuration_id | behavior  | interval_ms | camera_resolution | camera_transport |
+| --- | --------------------- | --------------------------- | --------- | ----------- | ----------------- | ---------------- |
+| 1   | 100 (temp)            | 2                           | interval  | 15000       | NULL              | NULL             |
+| 2   | 100 (temp)            | 3                           | on_demand | NULL        | NULL              | NULL             |
+| 3   | 101 (relay)           | 1                           | command   | NULL        | NULL              | NULL             |
+| 4   | 102 (camera)          | 4                           | on_demand | NULL        | SVGA              | http             |
 
 ### Tier 4 — Automation (rules; emergencies = `is_emergency` rules)
 
@@ -465,12 +541,13 @@ erDiagram
 
 ### Tier 6 — Telemetry
 
-#### `sensor_history` (`SensorHistory`) — time series. `value` TEXT (scalars + base64 frames). Index `(user_device_action_id, recorded_at)`.
+#### `sensor_history` (`SensorHistory`) — time series. `value` TEXT nullable (scalars + base64 frames; NULL on a fault reading). Fault rows carry `is_error=true` + `error_code`; readers filter `is_error=false`. Index `(user_device_action_id, recorded_at)`.
 
-| id   | user_device_action_id | value                | recorded_at          |
-| ---- | --------------------- | -------------------- | -------------------- |
-| 9001 | 100                   | "23.4"               | 2026-06-26T14:31:55Z |
-| 9002 | 102                   | "/9j/4AAQSk…" (jpeg) | 2026-06-26T14:32:00Z |
+| id   | user_device_action_id | value                | is_error | error_code    | recorded_at          |
+| ---- | --------------------- | -------------------- | -------- | ------------- | -------------------- |
+| 9001 | 100                   | "23.4"               | false    | NULL          | 2026-06-26T14:31:55Z |
+| 9002 | 102                   | "/9j/4AAQSk…" (jpeg) | false    | NULL          | 2026-06-26T14:32:00Z |
+| 9003 | 100                   | NULL                 | true     | "read_failed" | 2026-06-26T14:33:00Z |
 
 ---
 

@@ -333,6 +333,13 @@
 }
 .field-section-label:first-child { margin-top: 4px; }
 
+.behavior-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .pin-field {
   width: 100%;
   margin-bottom: 2px;
