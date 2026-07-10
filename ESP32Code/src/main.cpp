@@ -35,6 +35,7 @@
 #include "actions/commands/OnboardLedCommandAction.h"
 #include "actions/AckPublisher.h"
 #include "config/Log.h"
+
 const char* root_ca = certificate_root;
 
 unsigned long buttonPressTime = 0;
