@@ -29,6 +29,20 @@ userActionsRouter.put('/order', async (req, res, next) => {
   }
 });
 
+// Latest camera frame for on-load display (F6.7): 200 {frame, capturedAt} or 204 if none yet.
+userActionsRouter.get('/:id/last-frame', async (req, res, next) => {
+  try {
+    const frame = await userActionsService.getLastFrame(req.user!.id, Number(req.params.id));
+    if (frame === null) {
+      res.sendStatus(204);
+      return;
+    }
+    res.json(frame);
+  } catch (err) {
+    next(err);
+  }
+});
+
 userActionsRouter.patch('/:id', async (req, res, next) => {
   try {
     const { name, group_id, telemetry_interval_ms, default_trait_id } = req.body ?? {};

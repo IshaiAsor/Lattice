@@ -1,5 +1,6 @@
-import { Component, inject, input } from '@angular/core';
+import { Component, inject, input, OnInit } from '@angular/core';
 import { DeviceActionView } from 'src/app/services/device.mgmt.service';
+import { UserActionsService } from 'src/app/services/user.actions.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ReceivedBadgeComponent } from '../received-badge/received-badge.component';
@@ -81,10 +82,22 @@ export class CameraFullscreenDialog {
   templateUrl: './camera-display.component.html',
   styleUrl: './camera-display.component.css',
 })
-export class CameraDisplayComponent {
+export class CameraDisplayComponent implements OnInit {
   action = input.required<DeviceActionView>();
 
   private dialog = inject(MatDialog);
+  private userActionsService = inject(UserActionsService);
+
+  ngOnInit(): void {
+    // Backfill the last stored frame so the card isn't blank on load (F6.7). Skip if a live
+    // frame already populated state; guard again in the callback so a frame arriving over the
+    // socket while the request is in flight isn't clobbered by a staler stored frame.
+    const action = this.action();
+    if (action.state) return;
+    this.userActionsService.getLastFrame(action.id).subscribe((res) => {
+      if (res && !action.state) action.state = res.frame;
+    });
+  }
 
   openFullscreen() {
     this.dialog.open(CameraFullscreenDialog, {

@@ -115,4 +115,13 @@ export class UserActionsService {
   setDefaultTrait(actionId: number, traitId: number): Observable<void> {
     return this.http.patch<void>(`${this.apiUrl}/api/actions/${actionId}`, { default_trait_id: traitId });
   }
+
+  // Latest camera frame for on-load display (F6.7). Camera frames stream live over the socket,
+  // but current_state isn't persisted for images, so a freshly loaded card is blank until the
+  // next frame. Returns null (HTTP 204) when the camera has no stored frame yet.
+  getLastFrame(actionId: number): Observable<{ frame: string; capturedAt: string } | null> {
+    return this.http.get<{ frame: string; capturedAt: string } | null>(
+      `${this.apiUrl}/api/actions/${actionId}/last-frame`,
+    );
+  }
 }

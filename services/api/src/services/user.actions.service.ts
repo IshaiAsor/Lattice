@@ -5,6 +5,10 @@ import { db } from '../db';
 // device-config flow (device-gateway) with pins configured up front; the api manages
 // their lifecycle afterwards: list, rename, (re)group, reorder, delete — owner-scoped.
 
+// DeviceCapability.implementation_type value that produces image/camera-frame telemetry
+// (mirrors digest-service/resolve.ts and services/api/.../pipelines.validation.ts).
+const IMAGE_IMPL_TYPES = new Set(['CameraAction']);
+
 export interface GoogleTraitView {
   id: number;
   name: string;
@@ -40,6 +44,11 @@ export interface ActionView {
     cameraResolution: string | null;
     cameraTransport: string | null;
   }[];
+}
+
+export interface LastFrameView {
+  frame: string; // base64 JPEG
+  capturedAt: Date;
 }
 
 class UserActionsService {
@@ -263,6 +272,37 @@ class UserActionsService {
   async deleteAction(userId: number, actionId: number): Promise<void> {
     await this.ensureOwned(userId, actionId);
     await db.userDeviceAction.delete({ where: { id: actionId } });
+  }
+
+  // Latest camera frame for on-load display (F6.7). Frames are pushed live over the socket
+  // (action_state_update keyed by actionId), but current_state is deliberately NOT written for
+  // images — per-frame base64 would churn the DB — so a freshly loaded camera card stays blank
+  // until the next live frame arrives (noticeable for on-demand captures). This serves the most
+  // recent frame from sensor_history, the authoritative per-action image store, so the card
+  // paints immediately. Read-only: no per-frame DB writes are reintroduced. (The digest
+  // camera_frame:{deviceId} Valkey cache is intentionally not used here — it's keyed per device,
+  // so it's lossy for a device with multiple cameras, whereas sensor_history is per action.)
+  async getLastFrame(userId: number, actionId: number): Promise<LastFrameView | null> {
+    const action = await db.userDeviceAction.findUnique({
+      where: { id: actionId },
+      select: {
+        capability: { select: { implementation_type: true } },
+        user_device: { select: { user_id: true } },
+      },
+    });
+    if (!action) throw Object.assign(new Error('Action not found'), { statusCode: 404 });
+    if (action.user_device.user_id !== userId)
+      throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
+    if (!IMAGE_IMPL_TYPES.has(action.capability.implementation_type))
+      throw Object.assign(new Error('Action is not a camera action'), { statusCode: 400 });
+
+    const latest = await db.sensorHistory.findFirst({
+      where: { user_device_action_id: actionId, is_error: false, value: { not: null } },
+      orderBy: { recorded_at: 'desc' },
+      select: { value: true, recorded_at: true },
+    });
+    if (!latest?.value) return null;
+    return { frame: latest.value, capturedAt: latest.recorded_at };
   }
 
   private async ensureOwned(userId: number, actionId: number) {
