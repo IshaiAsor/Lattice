@@ -248,7 +248,7 @@ export class DeviceConfigComponent implements OnInit {
           this.deviceMgmtService.restartDevice(deviceId).subscribe();
         };
         // Persist the enabled behaviors (unified action model) if the capability declares any.
-        if ((cap.available_behaviors?.length ?? 0) > 0) {
+        if (cap.available_behaviors.length > 0) {
           const behaviors = [...this.editBehaviors].map((b) => ({
             behavior: b,
             intervalMs: b === 'interval' ? this.editIntervalMs : null,
