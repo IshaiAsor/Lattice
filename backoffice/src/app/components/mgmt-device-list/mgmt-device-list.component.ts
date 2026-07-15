@@ -155,6 +155,7 @@ export class MgmtDeviceListComponent implements OnInit {
   updateFirmware(device: DeviceView) {
     const dialogRef = this.dialog.open(DeviceUpdateDialogComponent, {
       width: '440px',
+      panelClass: ['glass-dialog', 'compact-dialog'],
       data: { device },
     });
     dialogRef.afterClosed().subscribe((updated) => {

@@ -12,6 +12,7 @@ export interface DeviceUpdateDialogData {
   selector: 'app-device-update-dialog',
   imports: [SHARED_MATERIAL],
   template: `
+    <div class="sheet-handle"></div>
     <h2 mat-dialog-title>Update Device</h2>
 
     <mat-dialog-content>
@@ -66,21 +67,35 @@ export interface DeviceUpdateDialogData {
     </mat-dialog-actions>
   `,
   styles: [`
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: var(--border-strong, #ccc);
+      border-radius: 2px;
+      margin: 12px auto 0;
+    }
     .loading { padding: 8px 0; }
-    .hint { color: #757575; font-size: 13px; margin: 8px 0; }
+    .hint { color: var(--text-muted); font-size: 13px; margin: 8px 0; }
     .version-line { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 12px 0 4px; }
-    .version-line .label { color: #9e9e9e; font-size: 11px; text-transform: uppercase; }
-    .version-line code { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
-    .version-line .arrow { font-size: 16px; width: 16px; height: 16px; color: #9e9e9e; }
-    .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #9e9e9e; margin: 16px 0 6px; }
+    .version-line .label { color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+    .version-line code { background: var(--surface-alt); color: var(--text); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .version-line .arrow { font-size: 16px; width: 16px; height: 16px; color: var(--text-muted); }
+    .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 16px 0 6px; }
     .action-list { display: flex; flex-direction: column; gap: 6px; }
-    .action-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 8px; border-radius: 6px; background: #f9fbe7; }
-    .action-row .status-icon { font-size: 16px; width: 16px; height: 16px; color: #43a047; }
-    .action-row.deprecated { background: #fff3e0; }
-    .action-row.deprecated .status-icon { color: #ef6c00; }
-    .action-name { font-weight: 500; }
-    .reason { color: #757575; font-size: 12px; margin-left: auto; }
-    .warn-note { font-size: 12px; color: #ef6c00; margin-top: 12px; }
+    .action-row {
+      display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 8px;
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--online) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--online) 24%, transparent);
+    }
+    .action-row .status-icon { font-size: 16px; width: 16px; height: 16px; color: var(--online); }
+    .action-row.deprecated {
+      background: color-mix(in srgb, var(--warning) 12%, transparent);
+      border-color: color-mix(in srgb, var(--warning) 28%, transparent);
+    }
+    .action-row.deprecated .status-icon { color: var(--warning); }
+    .action-name { font-weight: 500; color: var(--text); }
+    .reason { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+    .warn-note { font-size: 12px; color: var(--warning); margin-top: 12px; }
   `],
 })
 export class DeviceUpdateDialogComponent implements OnInit {
