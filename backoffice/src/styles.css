@@ -341,3 +341,32 @@ app-root {
   font-weight: 700;
 }
 .glass-dialog .mat-mdc-floating-label { color: var(--text-muted) !important; }
+
+/* ── Menu overlay panels ──────────────────────────────────────────────────
+   Same CDK-overlay story as selects above (rendered outside the opening
+   component), so the account/profile menus and every other mat-menu need
+   global glass theming or they fall back to Material's opaque default. */
+.mat-mdc-menu-panel {
+  background: var(--card-bg) !important;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--card-shadow) !important;
+}
+
+.mat-mdc-menu-item .mdc-list-item__primary-text,
+.mat-mdc-menu-item .mat-mdc-menu-item-text,
+.mat-mdc-menu-item > span {
+  color: var(--text) !important;
+}
+.mat-mdc-menu-item .mat-icon { color: var(--text-muted) !important; }
+
+.mat-mdc-menu-item:hover:not([disabled]),
+.mat-mdc-menu-item.cdk-program-focused:not([disabled]),
+.mat-mdc-menu-item.cdk-keyboard-focused:not([disabled]) {
+  background: var(--surface-alt) !important;
+}
+
+/* Divider between menu groups */
+.mat-mdc-menu-panel .mat-divider { border-top-color: var(--border) !important; }

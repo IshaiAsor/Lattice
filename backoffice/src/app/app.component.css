@@ -140,7 +140,11 @@
 }
 
 .menu-badge {
-  margin-left: auto;
+  /* Fixed gap keeps the count next to its label. margin-left:auto (the old
+     value) only right-aligns when the menu is wider than this row — and the
+     Notifications row is the widest, so auto gave no gap and the count sat
+     flush against the text. */
+  margin-left: 14px;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
