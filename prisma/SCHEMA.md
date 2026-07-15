@@ -101,6 +101,7 @@ erDiagram
     json data "nullable"
     string_array channels
     datetime read_at "nullable"
+    datetime deleted_at "nullable"
   }
   PushSubscription {
     int id PK
@@ -414,7 +415,7 @@ erDiagram
 | 1   | 2       | email   | device_offline | false   |
 | 2   | 2       | push    | emergency      | true    |
 
-#### `notification_history` (`NotificationHistory`) — delivered/attempted notifications backing the in-app inbox + unread badge. `read_at` NULL = unread; `channels` = the channels it fanned out to. Index `(user_id, created_at)`.
+#### `notification_history` (`NotificationHistory`) — delivered/attempted notifications backing the in-app inbox + unread badge. `read_at` NULL = unread; `deleted_at` non-NULL = soft-deleted (hidden from the inbox, kept on the DB); `channels` = the channels it fanned out to. Index `(user_id, created_at)`.
 
 | id  | user_id | event_type    | title              | channels       | read_at |
 | --- | ------- | ------------- | ------------------ | -------------- | ------- |

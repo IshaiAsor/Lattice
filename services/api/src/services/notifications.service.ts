@@ -80,14 +80,16 @@ class NotificationsService {
     before?: number,
   ): Promise<NotificationHistory[]> {
     return db.notificationHistory.findMany({
-      where: { user_id: userId, ...(before ? { id: { lt: before } } : {}) },
+      where: { user_id: userId, deleted_at: null, ...(before ? { id: { lt: before } } : {}) },
       orderBy: { id: 'desc' },
       take: Math.min(Math.max(limit, 1), 100),
     });
   }
 
   async unreadCount(userId: number): Promise<number> {
-    return db.notificationHistory.count({ where: { user_id: userId, read_at: null } });
+    return db.notificationHistory.count({
+      where: { user_id: userId, read_at: null, deleted_at: null },
+    });
   }
 
   async markRead(userId: number, id: number): Promise<void> {
@@ -104,6 +106,24 @@ class NotificationsService {
     await db.notificationHistory.updateMany({
       where: { user_id: userId, read_at: null },
       data: { read_at: new Date() },
+    });
+  }
+
+  // Soft delete: stamp deleted_at so the row is hidden from the inbox but kept on the DB.
+  async deleteOne(userId: number, id: number): Promise<void> {
+    const row = await db.notificationHistory.findUnique({
+      where: { id },
+      select: { user_id: true },
+    });
+    if (!row) throw Object.assign(new Error('Notification not found'), { statusCode: 404 });
+    if (row.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
+    await db.notificationHistory.update({ where: { id }, data: { deleted_at: new Date() } });
+  }
+
+  async deleteAll(userId: number): Promise<void> {
+    await db.notificationHistory.updateMany({
+      where: { user_id: userId, deleted_at: null },
+      data: { deleted_at: new Date() },
     });
   }
 

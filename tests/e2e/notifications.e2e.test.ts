@@ -117,6 +117,48 @@ describe('notifications (F15)', () => {
     expect(typeof unread.count).toBe('number');
   });
 
+  itStack('delete: single soft-delete then clear-all empties the inbox', async () => {
+    const token = await login();
+    const me: { id: number } = await apiGet('/api/users/me', token);
+
+    ch ??= await connect(process.env.RABBITMQ_URL);
+    const send = (marker: string) =>
+      publish(ch!, RK.NOTIFICATION_SEND, {
+        userId: String(me.id),
+        eventType: 'rule_fired',
+        data: { ruleName: marker },
+        dedupeKey: marker,
+      });
+    const findInInbox = (marker: string) =>
+      poll<NotificationRow | null>(
+        async () => {
+          const inbox: NotificationRow[] = await apiGet('/api/notifications?limit=50', token);
+          return inbox.find((n) => n.body.includes(marker)) ?? null;
+        },
+        (r) => r !== null,
+        { timeoutMs: 10000, intervalMs: 500 },
+      );
+
+    // (a) single delete removes just that row from the inbox.
+    const markerA = `E2E-DEL-${Date.now()}`;
+    send(markerA);
+    const rowA = await findInInbox(markerA);
+    expect(rowA).not.toBeNull();
+    await apiDelete(`/api/notifications/${rowA!.id}`, token);
+    const afterOne: NotificationRow[] = await apiGet('/api/notifications?limit=50', token);
+    expect(afterOne.some((n) => n.id === rowA!.id)).toBe(false);
+
+    // (b) clear-all empties the inbox and zeroes the unread count.
+    const markerB = `E2E-DEL-${Date.now()}-b`;
+    send(markerB);
+    await findInInbox(markerB);
+    await apiDelete('/api/notifications', token);
+    const afterAll: NotificationRow[] = await apiGet('/api/notifications?limit=50', token);
+    expect(afterAll.length).toBe(0);
+    const unread: { count: number } = await apiGet('/api/notifications/unread-count', token);
+    expect(unread.count).toBe(0);
+  });
+
   itStack('push subscription: register, upsert, validate, unsubscribe', async () => {
     const token = await login();
     const endpoint = `https://e2e-fake-push.example.com/${Date.now()}`;

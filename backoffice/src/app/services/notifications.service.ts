@@ -105,6 +105,19 @@ export class NotificationsService {
     this.http.post(`${this.base}/read-all`, {}).subscribe();
   }
 
+  deleteOne(item: NotificationItem): void {
+    this.items.update((list) => list.filter((it) => it.id !== item.id));
+    if (item.read_at === null) this.unreadCount.update((c) => Math.max(0, c - 1));
+    // Only real (server) rows have a positive id + an endpoint; drop provisional rows locally.
+    if (item.id > 0) this.http.delete(`${this.base}/${item.id}`).subscribe();
+  }
+
+  deleteAll(): void {
+    this.items.set([]);
+    this.unreadCount.set(0);
+    this.http.delete(`${this.base}`).subscribe();
+  }
+
   private applyRead(match: (it: NotificationItem) => boolean): void {
     const now = new Date().toISOString();
     let cleared = 0;

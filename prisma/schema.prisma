@@ -210,6 +210,7 @@ model NotificationHistory {
   data       Json?     // rendering context / deep-link payload
   channels   String[]  // channels this notification was delivered on
   read_at    DateTime? @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6) // soft-delete: hidden from inbox when set
   created_at DateTime  @default(now()) @db.Timestamptz(6)
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)

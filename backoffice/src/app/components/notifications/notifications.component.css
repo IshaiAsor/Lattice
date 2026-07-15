@@ -18,6 +18,12 @@
   margin: 0;
 }
 
+.notif-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .tab-icon {
   margin-right: 6px;
   vertical-align: middle;
@@ -76,6 +82,12 @@
 .item-body {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.item-delete {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  color: var(--text-muted);
 }
 
 .item-top {
@@ -172,6 +184,10 @@
   display: flex;
   justify-content: center;
   color: var(--text-muted);
+}
+
+.prefs-ch-head.prefs-ch-unavailable {
+  opacity: 0.4;
 }
 
 .prefs-event {

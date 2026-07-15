@@ -2,11 +2,18 @@
 
   <div class="notif-header">
     <h1 class="notif-title">Notifications</h1>
-    @if (hasUnread()) {
-      <button mat-stroked-button (click)="markAllRead()">
-        <mat-icon>done_all</mat-icon> Mark all read
-      </button>
-    }
+    <div class="notif-actions">
+      @if (hasUnread()) {
+        <button mat-stroked-button (click)="markAllRead()">
+          <mat-icon>done_all</mat-icon> Mark all read
+        </button>
+      }
+      @if (hasItems()) {
+        <button mat-stroked-button (click)="clearAll()">
+          <mat-icon>delete_sweep</mat-icon> Clear all
+        </button>
+      }
+    </div>
   </div>
 
   <mat-tab-group animationDuration="200ms" class="notif-tabs">
@@ -37,6 +44,10 @@
                 <p class="item-text">{{ item.body }}</p>
                 <span class="item-time">{{ item.created_at | date:'MMM d, h:mm a' }}</span>
               </div>
+              <button mat-icon-button class="item-delete" (click)="deleteItem(item, $event)"
+                      matTooltip="Delete" aria-label="Delete notification">
+                <mat-icon>close</mat-icon>
+              </button>
             </div>
           }
         </div>
@@ -70,7 +81,10 @@
           <div class="prefs-row prefs-head">
             <span class="prefs-event-head">Event</span>
             @for (ch of channels; track ch.key) {
-              <span class="prefs-ch-head" [matTooltip]="ch.label">
+              <span
+                class="prefs-ch-head"
+                [class.prefs-ch-unavailable]="isChannelUnavailable(ch.key)"
+                [matTooltip]="isChannelUnavailable(ch.key) ? ch.label + ' (not available yet)' : ch.label">
                 <mat-icon>{{ ch.icon }}</mat-icon>
               </span>
             }
@@ -84,9 +98,15 @@
               @for (cell of row.cells; track cell.channel) {
                 <span class="prefs-cell">
                   <mat-slide-toggle
-                    [checked]="cell.enabled"
-                    [disabled]="cell.locked || savingPrefs()"
-                    [matTooltip]="cell.locked ? 'Always on' : ''"
+                    [checked]="cell.enabled && !isChannelUnavailable(cell.channel)"
+                    [disabled]="cell.locked || isChannelUnavailable(cell.channel) || savingPrefs()"
+                    [matTooltip]="
+                      isChannelUnavailable(cell.channel)
+                        ? 'Not available yet'
+                        : cell.locked
+                          ? 'Always on'
+                          : ''
+                    "
                     (change)="togglePref(row, cell, $event.checked)">
                   </mat-slide-toggle>
                 </span>

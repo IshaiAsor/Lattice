@@ -1,5 +1,6 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatDialog } from '@angular/material/dialog';
 import { SHARED_MATERIAL } from '../../shared-ui';
 import {
   NotificationsService,
@@ -7,6 +8,7 @@ import {
   NotificationItem,
 } from '../../services/notifications.service';
 import { PushSubscriptionService } from '../../services/push-subscription.service';
+import { ConfirmDialogComponent } from '../admin-device-config/confirm-dialog.component';
 
 // Friendly labels + icons for the event types + channels the api exposes.
 const EVENT_META: Record<string, { label: string; icon: string }> = {
@@ -22,6 +24,8 @@ const CHANNEL_META: Record<string, { label: string; icon: string }> = {
   sms: { label: 'SMS', icon: 'sms' },
 };
 const CHANNEL_ORDER = ['in_app', 'email', 'push', 'sms'];
+// Channels with no configured provider yet — shown but not selectable.
+const UNAVAILABLE_CHANNELS = new Set(['sms']);
 
 interface PrefRow {
   eventType: string;
@@ -40,14 +44,20 @@ interface PrefRow {
 export class NotificationsComponent implements OnInit {
   private svc = inject(NotificationsService);
   private pushSvc = inject(PushSubscriptionService);
+  private dialog = inject(MatDialog);
 
   readonly items = this.svc.items;
   readonly unreadCount = this.svc.unreadCount;
   readonly channels = CHANNEL_ORDER.map((c) => ({ key: c, ...CHANNEL_META[c] }));
 
+  isChannelUnavailable(channel: string): boolean {
+    return UNAVAILABLE_CHANNELS.has(channel);
+  }
+
   readonly prefRows = signal<PrefRow[]>([]);
   readonly savingPrefs = signal(false);
   readonly hasUnread = computed(() => this.items().some((i) => i.read_at === null));
+  readonly hasItems = computed(() => this.items().length > 0);
 
   readonly pushSupported = signal(false);
   readonly pushEnabled = signal(false);
@@ -104,7 +114,7 @@ export class NotificationsComponent implements OnInit {
   }
 
   togglePref(row: PrefRow, cell: NotificationPreference, enabled: boolean): void {
-    if (cell.locked) return;
+    if (cell.locked || this.isChannelUnavailable(cell.channel)) return;
     this.savingPrefs.set(true);
     this.svc
       .setPreferences([{ channel: cell.channel, event_type: cell.event_type, enabled }])
@@ -123,6 +133,27 @@ export class NotificationsComponent implements OnInit {
 
   markAllRead(): void {
     this.svc.markAllRead();
+  }
+
+  deleteItem(item: NotificationItem, ev: Event): void {
+    ev.stopPropagation(); // don't also trigger markRead on the row
+    this.svc.deleteOne(item);
+  }
+
+  clearAll(): void {
+    this.dialog
+      .open(ConfirmDialogComponent, {
+        panelClass: ['glass-dialog', 'compact-dialog'],
+        data: {
+          title: 'Clear notifications',
+          message: 'Delete all notifications? This cannot be undone.',
+          confirmLabel: 'Clear all',
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (confirmed) this.svc.deleteAll();
+      });
   }
 
   iconFor(eventType: string): string {

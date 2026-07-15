@@ -65,6 +65,25 @@ notificationsRouter.post('/read-all', async (req, res, next) => {
   }
 });
 
+// Soft-delete every notification for the caller. Registered before '/:id' so it isn't shadowed.
+notificationsRouter.delete('/', async (req, res, next) => {
+  try {
+    await notificationsService.deleteAll(req.user!.id);
+    res.sendStatus(204);
+  } catch (err) {
+    next(err);
+  }
+});
+
+notificationsRouter.delete('/:id', async (req, res, next) => {
+  try {
+    await notificationsService.deleteOne(req.user!.id, Number(req.params.id));
+    res.sendStatus(204);
+  } catch (err) {
+    next(err);
+  }
+});
+
 notificationsRouter.post('/:id/read', async (req, res, next) => {
   try {
     await notificationsService.markRead(req.user!.id, Number(req.params.id));
