@@ -9,13 +9,6 @@
   },
   {
     "kind": "llm",
-    "name": "qwen",
-    "version": "v1",
-    "backend": "ollama",
-    "ollamaModel": "qwen2.5vl:7b"
-  },
-  {
-    "kind": "llm",
     "name": "groq",
     "version": "v1",
     "backend": "openai",
