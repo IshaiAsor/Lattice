@@ -276,6 +276,9 @@ services:
       - DEVICE_GATEWAY_URL=http://device-gateway:3004
       - MQTT_SERVER_NAME=emqx
       - MQTT_PORT=1883
+      # Timezone for the camera-frame timestamp burned by lib/jpeg.js. Set TZ in your .env (e.g.
+      # TZ=Asia/Jerusalem) to make frames read in local wall-clock time; defaults to UTC.
+      - TZ=${TZ:-UTC}
       - SIM_USER=${OWNER_USERNAME:-admin}
       - SIM_PASS=${OWNER_PASSWORD:-admin}
       - FLEET_CONFIG=fleet.dev.json
