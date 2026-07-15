@@ -272,7 +272,7 @@
 @media (max-width: 1024px) {
   .brand-name               { display: none; }
   .nav-section-label        { display: none; }
-  .sidebar-link span        { display: none; }
+  .sidebar-link > span:not(.nav-icon-wrap) { display: none; }
   .sidebar-link             { justify-content: center; padding: 9px; gap: 0; }
   .profile-info             { display: none; }
   .profile-menu-btn         { display: none; }
