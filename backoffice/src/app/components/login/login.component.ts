@@ -22,6 +22,7 @@ export class LoginComponent implements OnInit {
   password = '';
   error = '';
   termsAccepted = false;
+  rememberMe = true;
 
   // Set when login is blocked because the email isn't verified (F15.8) — the template then
   // offers to resend the verification email to this address.
@@ -50,7 +51,7 @@ export class LoginComponent implements OnInit {
       return;
     }
 
-    this.authService.loginWithGoogle(response.code, this.termsAccepted).subscribe({
+    this.authService.loginWithGoogle(response.code, this.termsAccepted, this.rememberMe).subscribe({
       next: () => this.loginSuccess(),
       error: (err) => {
         this.error = (err as { error?: { message?: string } })?.error?.message || 'Google login failed. Please try again.';
@@ -67,7 +68,7 @@ export class LoginComponent implements OnInit {
     this.error = '';
     this.unverifiedEmail = '';
     this.resendState = 'idle';
-    this.authService.loginWithUserPass(this.username, this.password).subscribe({
+    this.authService.loginWithUserPass(this.username, this.password, this.rememberMe).subscribe({
       next: () => this.loginSuccess(),
       error: (err) => {
         const body = (err as { error?: { error?: string; email?: string } })?.error;

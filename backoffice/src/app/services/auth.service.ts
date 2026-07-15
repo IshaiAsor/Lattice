@@ -29,7 +29,7 @@ export class AuthService {
   private router = inject(Router);
 
   constructor() {
-    const token = localStorage.getItem(this.tokenKey);
+    const token = this.activeStorage().getItem(this.tokenKey);
     if (token) {
       try {
         const decodedUser: User = jwtDecode(token);
@@ -50,18 +50,18 @@ export class AuthService {
     return this.http.get<User>(`${this.apiUrl}/api/users/me`);
   }
 
-  loginWithUserPass(username: string, password: string) {
+  loginWithUserPass(username: string, password: string, remember = true) {
     return this.http.post<AuthResponse>(`${this.apiUrl}/api/auth/login`, { username, password }).pipe(
       tap((response) => {
-        this.storeTokens(response);
+        this.storeTokens(response, remember);
       }),
     );
   }
 
-  loginWithGoogle(code: string, termsAccepted = false) {
+  loginWithGoogle(code: string, termsAccepted = false, remember = true) {
     return this.http.post<AuthResponse>(`${this.apiUrl}/api/auth/google`, { code, termsAccepted }).pipe(
       tap((response) => {
-        this.storeTokens(response);
+        this.storeTokens(response, remember);
       }),
     );
   }
@@ -96,7 +96,7 @@ export class AuthService {
   }
 
   refreshAccessToken(): Observable<AuthResponse> {
-    const refreshToken = localStorage.getItem(this.refreshTokenKey);
+    const refreshToken = this.activeStorage().getItem(this.refreshTokenKey);
     return this.http.post<AuthResponse>(`${this.apiUrl}/api/auth/refresh-token`, { refreshToken }).pipe(
       tap((response) => {
         this.storeTokens(response);
@@ -105,14 +105,17 @@ export class AuthService {
   }
 
   logout() {
+    // Clear both backends — the token may live in either depending on the "Remember me" choice.
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.refreshTokenKey);
+    sessionStorage.removeItem(this.tokenKey);
+    sessionStorage.removeItem(this.refreshTokenKey);
     this.currentUser.set(null);
     this.router.navigate(['/login']);
   }
 
   getToken() {
-    return localStorage.getItem(this.tokenKey);
+    return this.activeStorage().getItem(this.tokenKey);
   }
 
   isLoggedIn(): boolean {
@@ -123,9 +126,30 @@ export class AuthService {
     return !this.isTokenExpired(token);
   }
 
-  private storeTokens(response: AuthResponse): void {
-    localStorage.setItem(this.tokenKey, response.token);
-    localStorage.setItem(this.refreshTokenKey, response.refreshToken);
+  // Picks where tokens live. When `remember` is given (login paths), the caller chooses:
+  // localStorage persists across browser restarts, sessionStorage is cleared when the browser
+  // closes. When omitted (e.g. token refresh), reuse whichever backend already holds the token.
+  private storageFor(remember?: boolean): Storage {
+    if (remember === undefined) {
+      return this.activeStorage();
+    }
+    return remember ? localStorage : sessionStorage;
+  }
+
+  // The backend currently holding the session: sessionStorage if a token lives there, else
+  // localStorage (also the default when no session exists).
+  private activeStorage(): Storage {
+    return sessionStorage.getItem(this.tokenKey) ? sessionStorage : localStorage;
+  }
+
+  private storeTokens(response: AuthResponse, remember?: boolean): void {
+    const storage = this.storageFor(remember);
+    // Drop any token in the other backend so a stale session can't be resurrected.
+    const other = storage === localStorage ? sessionStorage : localStorage;
+    other.removeItem(this.tokenKey);
+    other.removeItem(this.refreshTokenKey);
+    storage.setItem(this.tokenKey, response.token);
+    storage.setItem(this.refreshTokenKey, response.refreshToken);
     const decodedUser: User = jwtDecode(response.token);
     this.currentUser.set(decodedUser);
   }
