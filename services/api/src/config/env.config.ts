@@ -37,4 +37,8 @@ export const env = {
   },
 
   rabbitmqUrl: process.env['RABBITMQ_URL'] ?? 'amqp://localhost',
+
+  // Web-push (VAPID) public key, served to the browser so it can subscribe. Only the public
+  // key — notification-service holds the private key and does the actual sending.
+  vapidPublicKey: process.env['VAPID_PUBLIC_KEY'],
 };

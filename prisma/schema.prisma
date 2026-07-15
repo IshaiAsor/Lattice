@@ -176,6 +176,7 @@ model User {
   pipelines             Pipeline[]
   notification_prefs    NotificationPreference[]
   notification_history  NotificationHistory[]
+  push_subscriptions    PushSubscription[]
 
   @@map("users")
 }
@@ -215,6 +216,24 @@ model NotificationHistory {
 
   @@index([user_id, created_at])
   @@map("notification_history")
+}
+
+// One row per subscribed browser/device (web-push). endpoint is the push service URL
+// (FCM/Mozilla/etc — no fixed max length), unique so re-subscribing the same browser
+// upserts rather than duplicates; p256dh/auth are the subscription's encryption keys.
+model PushSubscription {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  endpoint   String   @unique @db.Text
+  p256dh     String   @db.VarChar(255)
+  auth       String   @db.VarChar(255)
+  user_agent String?  @db.VarChar(255)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("push_subscriptions")
 }
 
 model MqttUser {

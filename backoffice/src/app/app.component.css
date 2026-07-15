@@ -109,6 +109,11 @@
   color: var(--nav-text);
 }
 
+/* The badge pokes outside the icon's box via negative offsets — .sidebar-link's overflow:hidden
+   (needed for text truncation on the other links) would otherwise clip it, especially once the
+   sidebar auto-collapses to icon-only on tablet widths where there's barely any padding to spare. */
+.sidebar-link--badge { overflow: visible; }
+
 /* Unread badge on the notifications nav icon (stays visible when the sidebar is collapsed). */
 .nav-icon-wrap {
   position: relative;
@@ -348,6 +353,27 @@
 }
 
 /* Profile avatar tab item */
+.tab-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tab-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+
 .tab-avatar-img {
   width: 24px; height: 24px;
   border-radius: 50%;

@@ -135,6 +135,10 @@
   margin: 0 0 16px;
 }
 
+.push-banner {
+  margin-bottom: 16px;
+}
+
 .prefs-table {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);

@@ -52,6 +52,20 @@
       <div class="prefs">
         <p class="prefs-hint">Choose how you're notified for each kind of event.</p>
 
+        @if (pushSupported()) {
+          <div class="push-banner">
+            @if (!pushEnabled()) {
+              <button mat-stroked-button [disabled]="pushBusy()" (click)="enablePush()">
+                <mat-icon>notifications_active</mat-icon> Enable push on this device
+              </button>
+            } @else {
+              <button mat-stroked-button [disabled]="pushBusy()" (click)="disablePush()">
+                <mat-icon>notifications_off</mat-icon> Disable push on this device
+              </button>
+            }
+          </div>
+        }
+
         <div class="prefs-table">
           <div class="prefs-row prefs-head">
             <span class="prefs-event-head">Event</span>

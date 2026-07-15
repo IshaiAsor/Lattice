@@ -1,13 +1,13 @@
 # Lattice v2.2 — Database Schema Review
 
 Single source of truth is `prisma/schema.prisma`. **Keep this file in sync with every schema
-change** (mermaid ERD + per-table examples). 25 tables, ordered by dependency tier 0 → 6.
+change** (mermaid ERD + per-table examples). 26 tables, ordered by dependency tier 0 → 6.
 
 | Tier | Theme                                                       | Tables                                                                                                                           |
 | ---- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | External catalog                                            | `google_action_types`, `google_device_traits`                                                                                    |
 | 1    | Device & ML catalog                                         | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models` |
-| 2    | Identity                                                    | `users`, `mqtt_user`, `user_login_audit`                                                                                         |
+| 2    | Identity                                                    | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                   |
 | 3    | User devices & actions                                      | `user_devices`, `user_action_groups`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`             |
 | 4    | Automation (rules; emergencies = rules with `is_emergency`) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`                                                    |
 | 5    | Pipelines (ML execution)                                    | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                  |
@@ -101,6 +101,14 @@ erDiagram
     json data "nullable"
     string_array channels
     datetime read_at "nullable"
+  }
+  PushSubscription {
+    int id PK
+    int user_id FK
+    string endpoint UK "browser push service URL"
+    string p256dh "encryption key"
+    string auth "encryption key"
+    string user_agent "nullable"
   }
   MqttUser {
     int id PK
@@ -286,6 +294,7 @@ erDiagram
   User                  ||--o{ UserLoginAudit         : "logins"
   User                  ||--o{ NotificationPreference : "notification prefs"
   User                  ||--o{ NotificationHistory    : "notifications"
+  User                  ||--o{ PushSubscription       : "push subscriptions"
 
   UserDevice            ||--o{ UserDeviceAction       : "has"
   UserDevice            |o--o{ UserRuleCondition      : "status checked by"
@@ -411,6 +420,12 @@ erDiagram
 | --- | ------- | ------------- | ------------------ | -------------- | ------- |
 | 1   | 2       | ota_available | Firmware update    | {in_app,email} | NULL    |
 | 2   | 2       | rule_fired    | Rule "Night" fired | {in_app}       | 2026-…  |
+
+#### `push_subscriptions` (`PushSubscription`) — one row per subscribed browser/device (web-push). `endpoint` is the push service URL (unique — re-subscribing the same browser upserts, not duplicates); `p256dh`/`auth` are the subscription's encryption keys.
+
+| id  | user_id | endpoint                           | p256dh | auth  | user_agent    |
+| --- | ------- | ---------------------------------- | ------ | ----- | ------------- |
+| 1   | 2       | https://fcm.googleapis.com/fcm/... | BNc4R… | k8J2… | Mozilla/5.0 … |
 
 #### `mqtt_user` (`MqttUser`) — broker app auth (standalone, no FK)
 

@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { requireAppToken } from '../middlewares/auth.middleware';
 import { notificationsService, type PreferenceInput } from '../services/notifications.service';
+import {
+  pushSubscriptionService,
+  type PushSubscribeInput,
+} from '../services/push-subscription.service';
 
 export const notificationsRouter = Router();
 
@@ -64,6 +68,36 @@ notificationsRouter.post('/read-all', async (req, res, next) => {
 notificationsRouter.post('/:id/read', async (req, res, next) => {
   try {
     await notificationsService.markRead(req.user!.id, Number(req.params.id));
+    res.sendStatus(204);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Web-push (VAPID) subscription capture — the browser fetches the public key, subscribes via
+// the Push API, then registers the resulting subscription here.
+notificationsRouter.get('/push/public-key', async (req, res, next) => {
+  try {
+    res.json({ publicKey: pushSubscriptionService.getPublicKey() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+notificationsRouter.post('/push/subscribe', async (req, res, next) => {
+  try {
+    const body = req.body as PushSubscribeInput;
+    await pushSubscriptionService.subscribe(req.user!.id, body, req.headers['user-agent']);
+    res.sendStatus(204);
+  } catch (err) {
+    next(err);
+  }
+});
+
+notificationsRouter.delete('/push/subscribe', async (req, res, next) => {
+  try {
+    const endpoint = (req.body?.endpoint ?? req.query['endpoint']) as string;
+    await pushSubscriptionService.unsubscribe(req.user!.id, endpoint);
     res.sendStatus(204);
   } catch (err) {
     next(err);

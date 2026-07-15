@@ -14,13 +14,20 @@ export interface RenderedNotification {
   data?: Record<string, unknown>;
 }
 
+// A single browser/device push subscription, shaped to match webpush.PushSubscription
+// (endpoint + encryption keys) so push.channel.ts can pass it straight through.
+export interface PushSubscriptionInfo {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
 // The recipient's channel-specific delivery details, resolved from the DB in F15.2/F15.3.
 // All optional — an adapter skips (logs) when its required detail is absent.
 export interface Recipient {
   userId: number;
   email?: string;
-  // web-push subscriptions (browser PushSubscription JSON), one per registered device.
-  pushSubscriptions?: unknown[];
+  // web-push subscriptions, one per registered device.
+  pushSubscriptions?: PushSubscriptionInfo[];
   phone?: string;
 }
 

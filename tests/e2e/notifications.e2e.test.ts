@@ -116,4 +116,47 @@ describe('notifications (F15)', () => {
     const unread: { count: number } = await apiGet('/api/notifications/unread-count', token);
     expect(typeof unread.count).toBe('number');
   });
+
+  itStack('push subscription: register, upsert, validate, unsubscribe', async () => {
+    const token = await login();
+    const endpoint = `https://e2e-fake-push.example.com/${Date.now()}`;
+
+    const bad = await fetch(`${API_URL}/api/notifications/push/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ endpoint }), // missing keys
+    });
+    expect(bad.status).toBe(400);
+
+    await apiPost('/api/notifications/push/subscribe', token, {
+      endpoint,
+      keys: { p256dh: 'fake-p256dh', auth: 'fake-auth' },
+    });
+
+    // Re-subscribing the same endpoint upserts rather than erroring.
+    await apiPost('/api/notifications/push/subscribe', token, {
+      endpoint,
+      keys: { p256dh: 'fake-p256dh-2', auth: 'fake-auth-2' },
+    });
+
+    await apiDelete(
+      `/api/notifications/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`,
+      token,
+    );
+    // Idempotent — unsubscribing an already-gone endpoint doesn't error.
+    await apiDelete(
+      `/api/notifications/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`,
+      token,
+    );
+  });
+
+  itStack('push public key endpoint returns a shape the browser can consume', async () => {
+    const token = await login();
+    const res: { publicKey: string | null } = await apiGet(
+      '/api/notifications/push/public-key',
+      token,
+    );
+    expect('publicKey' in res).toBe(true);
+    expect(res.publicKey === null || typeof res.publicKey === 'string').toBe(true);
+  });
 });

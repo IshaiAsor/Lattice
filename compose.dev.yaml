@@ -31,6 +31,9 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
+      # Public VAPID key only, served to the browser for push subscription — same value as
+      # notification-service's VAPID_PUBLIC_KEY below (api never needs the private key).
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:

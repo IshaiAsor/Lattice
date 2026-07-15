@@ -43,7 +43,7 @@
           @if (!sidebarCollapsed()) { <span>Device Config</span> }
         </a>
 
-        <a class="sidebar-link" routerLink="/notifications" routerLinkActive="active"
+        <a class="sidebar-link sidebar-link--badge" routerLink="/notifications" routerLinkActive="active"
            [matTooltip]="sidebarCollapsed() ? 'Notifications' : ''" matTooltipPosition="right">
           <span class="nav-icon-wrap">
             <mat-icon>notifications</mat-icon>
@@ -144,11 +144,16 @@
     </a>
     @let user = authService.getCurrentUser();
     <button type="button" class="tab-item tab-profile" [matMenuTriggerFor]="profileMenu">
-      @if (user?.profileImage) {
-        <img [src]="user!.profileImage" class="tab-avatar-img" alt="Profile" />
-      } @else {
-        <div class="tab-avatar-initials">{{ (user?.username ?? '?')[0] | uppercase }}</div>
-      }
+      <span class="tab-avatar-wrap">
+        @if (user?.profileImage) {
+          <img [src]="user!.profileImage" class="tab-avatar-img" alt="Profile" />
+        } @else {
+          <div class="tab-avatar-initials">{{ (user?.username ?? '?')[0] | uppercase }}</div>
+        }
+        @if (notifications.unreadCount() > 0) {
+          <span class="tab-badge">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span>
+        }
+      </span>
       <span>Account</span>
     </button>
   </nav>

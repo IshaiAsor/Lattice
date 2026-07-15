@@ -6,6 +6,7 @@ import {
   NotificationPreference,
   NotificationItem,
 } from '../../services/notifications.service';
+import { PushSubscriptionService } from '../../services/push-subscription.service';
 
 // Friendly labels + icons for the event types + channels the api exposes.
 const EVENT_META: Record<string, { label: string; icon: string }> = {
@@ -38,6 +39,7 @@ interface PrefRow {
 })
 export class NotificationsComponent implements OnInit {
   private svc = inject(NotificationsService);
+  private pushSvc = inject(PushSubscriptionService);
 
   readonly items = this.svc.items;
   readonly unreadCount = this.svc.unreadCount;
@@ -47,11 +49,37 @@ export class NotificationsComponent implements OnInit {
   readonly savingPrefs = signal(false);
   readonly hasUnread = computed(() => this.items().some((i) => i.read_at === null));
 
+  readonly pushSupported = signal(false);
+  readonly pushEnabled = signal(false);
+  readonly pushBusy = signal(false);
+
   ngOnInit(): void {
     this.svc.connectLive();
     this.svc.loadInbox();
     this.svc.refreshUnread();
     this.loadPreferences();
+
+    this.pushSupported.set(this.pushSvc.isSupported());
+    if (this.pushSupported()) {
+      this.pushSvc.getSubscriptionState().then((s) => this.pushEnabled.set(s === 'subscribed'));
+    }
+  }
+
+  enablePush(): void {
+    this.pushBusy.set(true);
+    this.pushSvc
+      .enable()
+      .then(() => this.pushEnabled.set(true))
+      .catch((err) => console.error('enable push failed', err))
+      .finally(() => this.pushBusy.set(false));
+  }
+
+  disablePush(): void {
+    this.pushBusy.set(true);
+    this.pushSvc
+      .disable()
+      .then(() => this.pushEnabled.set(false))
+      .finally(() => this.pushBusy.set(false));
   }
 
   private loadPreferences(): void {

@@ -201,6 +201,8 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - preferences round-trip: flip a configurable cell and it persists
 - register creates an unverified account and login is gated (F15.8)
 - notification.send is delivered to the in-app inbox
+- push subscription: register, upsert, validate, unsubscribe
+- push public key endpoint returns a shape the browser can consume
 
 ### Provisioning — `provisioning.e2e.test.ts` ✅
 
