@@ -9,6 +9,9 @@ export const JwtPurpose = {
   device_usage_refresh: 'device_usage_refresh',
   google_cloud_to_cloud_login: 'google_cloud_to_cloud_login',
   google_cloud_to_cloud_login_refresh: 'google_cloud_to_cloud_login_refresh',
+  // Short-lived token carrying a Google-verified profile between the code exchange and the
+  // point where a brand-new user accepts the Terms of Service (login-page consent dialog).
+  google_signup_consent: 'google_signup_consent',
 } as const;
 
 export type JwtPurpose = (typeof JwtPurpose)[keyof typeof JwtPurpose];

@@ -34,15 +34,27 @@ authRouter.post('/login', authRateLimiter, async (req, res, next) => {
   }
 });
 
-// Google auth-code sign-in (popup flow). Creates the account on first sign-in.
+// Google auth-code sign-in (popup flow). A returning user gets tokens; a brand-new identity gets
+// { pendingConsent, signupToken } so the UI can collect Terms acceptance and finish via /google/complete.
 authRouter.post('/google', authRateLimiter, async (req, res, next) => {
   try {
-    const { code, termsAccepted } = req.body ?? {};
-    const result = await loginService.loginWithGoogle(code, clientIp(req), termsAccepted === true);
-    if (!result) {
-      res.status(401).json({ error: 'Invalid credentials' });
+    const { code } = req.body ?? {};
+    const result = await loginService.loginWithGoogle(code, clientIp(req));
+    if ('pendingConsent' in result) {
+      res.json({ pendingConsent: true, signupToken: result.signupToken });
       return;
     }
+    res.json({ token: result.token, refreshToken: result.refreshToken });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Finish a new Google user's signup after they accept the Terms of Service in the consent dialog.
+authRouter.post('/google/complete', authRateLimiter, async (req, res, next) => {
+  try {
+    const { signupToken } = req.body ?? {};
+    const result = await loginService.completeGoogleSignup(signupToken, clientIp(req));
     res.json({ token: result.token, refreshToken: result.refreshToken });
   } catch (err) {
     next(err);

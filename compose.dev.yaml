@@ -34,6 +34,10 @@ services:
       # Public VAPID key only, served to the browser for push subscription — same value as
       # notification-service's VAPID_PUBLIC_KEY below (api never needs the private key).
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      # Google sign-in: the api exchanges the OAuth auth-code itself (auth.routes /google →
+      # google.service.getUserFromCode), so it needs the same client id/secret as google-home.
+      - GOOGLE_SIGN_IN_CLIENT_ID=${GOOGLE_SIGN_IN_CLIENT_ID}
+      - GOOGLE_SIGN_IN_CLIENT_SECRET=${GOOGLE_SIGN_IN_CLIENT_SECRET}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:

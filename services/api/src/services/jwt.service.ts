@@ -8,4 +8,6 @@ export { JwtPurpose };
 export const jwtService = new JwtService(env.jwtSecret, {
   [JwtPurpose.app_usage]: env.jwt.appUsageExpiresIn,
   [JwtPurpose.app_usage_refresh]: env.jwt.appUsageRefreshExpiresIn,
+  // 5 minutes: just long enough for a new Google user to read and accept the terms dialog.
+  [JwtPurpose.google_signup_consent]: 5 * 60,
 });

@@ -258,22 +258,6 @@
 .forgot { font-size: 13px; color: #4f46e5; font-weight: 500; text-decoration: none; }
 :host-context(.dark-theme) .forgot { color: #38bdf8; }
 
-/* ── ToS ──────────────────────────────────────────────────────────── */
-.terms-group { margin-bottom: 20px; }
-
-.terms-label {
-  display: flex; align-items: flex-start; gap: 8px;
-  font-size: 13px; color: #6366a0; cursor: pointer; line-height: 1.4;
-}
-
-.terms-label input[type='checkbox'] { accent-color: #4f46e5; width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
-.terms-label a { color: #4f46e5; font-weight: 600; text-decoration: none; }
-.terms-label a:hover { text-decoration: underline; }
-
-:host-context(.dark-theme) .terms-label { color: #6b82a0; }
-:host-context(.dark-theme) .terms-label input[type='checkbox'] { accent-color: #38bdf8; }
-:host-context(.dark-theme) .terms-label a { color: #38bdf8; }
-
 /* ── Sign in ──────────────────────────────────────────────────────── */
 .btn-sign {
   width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -309,12 +293,7 @@
 .btn-google:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .google-g {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; border-radius: 50%;
-  font-size: 13px; font-weight: 700; font-style: normal;
-  background: conic-gradient(#4285F4 90deg, #EA4335 90deg 180deg, #FBBC05 180deg 270deg, #34A853 270deg);
-  color: transparent; -webkit-background-clip: text; background-clip: text;
-  background-color: #fff;
+  width: 18px; height: 18px; flex-shrink: 0;
 }
 
 :host-context(.dark-theme) .btn-google {

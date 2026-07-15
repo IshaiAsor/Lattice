@@ -20,6 +20,13 @@ interface AuthResponse {
   refreshToken: string;
 }
 
+// Returned by /api/auth/google when the Google identity is brand new: the UI collects Terms
+// acceptance in a consent dialog, then finishes signup via completeGoogleSignup(signupToken).
+export interface GoogleConsentRequired {
+  pendingConsent: true;
+  signupToken: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private tokenKey = 'access_token';
@@ -58,12 +65,24 @@ export class AuthService {
     );
   }
 
-  loginWithGoogle(code: string, termsAccepted = false, remember = true) {
-    return this.http.post<AuthResponse>(`${this.apiUrl}/api/auth/google`, { code, termsAccepted }).pipe(
-      tap((response) => {
-        this.storeTokens(response, remember);
-      }),
-    );
+  loginWithGoogle(code: string, remember = true) {
+    return this.http
+      .post<AuthResponse | GoogleConsentRequired>(`${this.apiUrl}/api/auth/google`, { code })
+      .pipe(
+        tap((response) => {
+          // New Google users come back as { pendingConsent } with no tokens — the caller opens the
+          // terms dialog and finishes via completeGoogleSignup. Only store on a real session.
+          if (!('pendingConsent' in response)) {
+            this.storeTokens(response, remember);
+          }
+        }),
+      );
+  }
+
+  completeGoogleSignup(signupToken: string, remember = true) {
+    return this.http
+      .post<AuthResponse>(`${this.apiUrl}/api/auth/google/complete`, { signupToken })
+      .pipe(tap((response) => this.storeTokens(response, remember)));
   }
 
   // Registration no longer logs the user in — it returns { pendingVerification } and an email

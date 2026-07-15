@@ -1,6 +1,8 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '../../services/auth.service';
+import { TermsConsentDialogComponent } from '../terms-consent-dialog/terms-consent-dialog.component';
 import { environment } from 'src/environments/environment';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 
@@ -21,7 +23,6 @@ export class LoginComponent implements OnInit {
   username = '';
   password = '';
   error = '';
-  termsAccepted = false;
   rememberMe = true;
 
   // Set when login is blocked because the email isn't verified (F15.8) — the template then
@@ -31,6 +32,7 @@ export class LoginComponent implements OnInit {
 
   private authService = inject(AuthService);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
 
   ngOnInit() {
     window.onload = () => {
@@ -51,13 +53,43 @@ export class LoginComponent implements OnInit {
       return;
     }
 
-    this.authService.loginWithGoogle(response.code, this.termsAccepted, this.rememberMe).subscribe({
-      next: () => this.loginSuccess(),
+    this.authService.loginWithGoogle(response.code, this.rememberMe).subscribe({
+      next: (result) => {
+        // Brand-new Google user: capture Terms consent before the account is created.
+        if ('pendingConsent' in result) {
+          this.promptTermsConsent(result.signupToken);
+          return;
+        }
+        this.loginSuccess();
+      },
       error: (err) => {
         this.error = (err as { error?: { message?: string } })?.error?.message || 'Google login failed. Please try again.';
         console.error('Google login error:', err);
       },
     });
+  }
+
+  private promptTermsConsent(signupToken: string) {
+    this.dialog
+      .open(TermsConsentDialogComponent, {
+        width: '380px',
+        // Match the app's dialogs: glass surface + compact-dialog anchors it as a content-sized
+        // bottom sheet on phones instead of a full-height centered box.
+        panelClass: ['glass-dialog', 'compact-dialog'],
+      })
+      .afterClosed()
+      .subscribe((accepted) => {
+        if (!accepted) return;
+        this.authService.completeGoogleSignup(signupToken, this.rememberMe).subscribe({
+          next: () => this.loginSuccess(),
+          error: (err) => {
+            this.error =
+              (err as { error?: { error?: string } })?.error?.error ||
+              'Google sign-up failed. Please try again.';
+            console.error('Google sign-up error:', err);
+          },
+        });
+      });
   }
 
   loginWithGoogle() {
