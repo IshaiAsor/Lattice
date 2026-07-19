@@ -33,8 +33,8 @@ model GoogleDeviceTrait {
   valid_parameters Json?
   created_at       DateTime @default(now()) @db.Timestamp(6)
 
-  capability_traits    DeviceCapabilityTrait[]
-  action_defaults      UserDeviceAction[]
+  capability_traits DeviceCapabilityTrait[]
+  action_defaults   UserDeviceAction[]
 
   @@map("google_device_traits")
 }
@@ -54,8 +54,8 @@ model Device {
   updated_at   DateTime @default(now()) @db.Timestamp(6)
 
   capabilities         DeviceCapability[]
-  user_devices         UserDevice[]  @relation("CurrentDevice")
-  pending_user_devices UserDevice[]  @relation("PendingDevice")
+  user_devices         UserDevice[]       @relation("CurrentDevice")
+  pending_user_devices UserDevice[]       @relation("PendingDevice")
 
   @@unique([type, version])
   @@map("devices")
@@ -73,8 +73,8 @@ model DeviceCapability {
   google_type_id            Int?
   created_at                DateTime @default(now()) @db.Timestamp(6)
 
-  device              Device                     @relation(fields: [device_id], references: [id], onDelete: Cascade)
-  google_type         GoogleActionType?          @relation(fields: [google_type_id], references: [id], onDelete: SetNull)
+  device              Device                    @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  google_type         GoogleActionType?         @relation(fields: [google_type_id], references: [id], onDelete: SetNull)
   traits              DeviceCapabilityTrait[]
   pins                DeviceCapabilityPin[]
   configurations      CapabilityConfiguration[]
@@ -106,10 +106,10 @@ model CapabilityConfiguration {
 }
 
 model DeviceCapabilityTrait {
-  id              Int               @id @default(autoincrement())
+  id              Int     @id @default(autoincrement())
   capability_id   Int
   google_trait_id Int
-  is_default      Boolean           @default(false)
+  is_default      Boolean @default(false)
 
   capability   DeviceCapability  @relation(fields: [capability_id], references: [id], onDelete: Cascade)
   google_trait GoogleDeviceTrait @relation(fields: [google_trait_id], references: [id], onDelete: Cascade)
@@ -171,18 +171,22 @@ model SealedTemplateTarget {
 
 // One activated capability in the template, resolved per version by capability_key.
 model SealedTemplateEntry {
-  id                 Int     @id @default(autoincrement())
-  template_id        Int
-  capability_key     String  @db.VarChar(64)
-  action_label       String  @db.VarChar(255)
+  id                  Int     @id @default(autoincrement())
+  template_id         Int
+  capability_key      String  @db.VarChar(64)
+  // Per-instance MQTT routing verb (mirrors UserDeviceAction.mqtt_action_name): base capability
+  // name for the first instance, <base>_2/_3/… for repeats. A capability may appear more than once
+  // per template (e.g. 8 i2c_socket_8 channels), so this — not capability_key — is the unique key.
+  mqtt_action_name    String  @db.VarChar(64)
+  action_label        String  @db.VarChar(255)
   default_trait_value String? @db.VarChar(255) // GoogleDeviceTrait.value, resolved per version
-  sort_order         Int     @default(0)
+  sort_order          Int     @default(0)
 
-  template   SealedTemplate               @relation(fields: [template_id], references: [id], onDelete: Cascade)
-  pins       SealedTemplateEntryPin[]
-  behaviors  SealedTemplateEntryBehavior[]
+  template  SealedTemplate                @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  pins      SealedTemplateEntryPin[]
+  behaviors SealedTemplateEntryBehavior[]
 
-  @@unique([template_id, capability_key])
+  @@unique([template_id, mqtt_action_name])
   @@map("sealed_template_entries")
 }
 
@@ -235,34 +239,34 @@ model MlModel {
 // ═══ Tier 2 — Identity ═════════════════════════════════════════════════════════
 
 model User {
-  id                  Int               @id @default(autoincrement())
-  user_type           Int               @default(0)
-  user_role           String            @default("user") @db.VarChar(50)
-  user_name           String?           @unique @db.VarChar(255)
-  password            String?           @db.VarChar(255)
-  google_id           String?           @unique @db.VarChar(255)
-  email               String            @unique @db.VarChar(255)
-  full_name           String?           @db.VarChar(255)
-  profile_picture_url String?
+  id                       Int       @id @default(autoincrement())
+  user_type                Int       @default(0)
+  user_role                String    @default("user") @db.VarChar(50)
+  user_name                String?   @unique @db.VarChar(255)
+  password                 String?   @db.VarChar(255)
+  google_id                String?   @unique @db.VarChar(255)
+  email                    String    @unique @db.VarChar(255)
+  full_name                String?   @db.VarChar(255)
+  profile_picture_url      String?
   // Credential accounts start unverified and must confirm via an email link (F15.8) before
   // they can log in; Google accounts are created with email_verified = true (Google verified).
-  email_verified             Boolean   @default(false)
-  email_verification_token   String?   @unique @db.VarChar(255)
+  email_verified           Boolean   @default(false)
+  email_verification_token String?   @unique @db.VarChar(255)
   // Password-reset flow (F15.9): single-use token + expiry, cleared on use.
-  password_reset_token       String?   @unique @db.VarChar(255)
-  password_reset_expires     DateTime? @db.Timestamptz(6)
-  terms_accepted_at   DateTime?         @db.Timestamptz(6)
-  created_at          DateTime?         @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime?         @default(now()) @db.Timestamptz(6)
+  password_reset_token     String?   @unique @db.VarChar(255)
+  password_reset_expires   DateTime? @db.Timestamptz(6)
+  terms_accepted_at        DateTime? @db.Timestamptz(6)
+  created_at               DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime? @default(now()) @db.Timestamptz(6)
 
-  user_devices          UserDevice[]
-  user_login_audit      UserLoginAudit[]
-  user_rules            UserRule[]
-  action_groups         UserActionGroup[]
-  pipelines             Pipeline[]
-  notification_prefs    NotificationPreference[]
-  notification_history  NotificationHistory[]
-  push_subscriptions    PushSubscription[]
+  user_devices         UserDevice[]
+  user_login_audit     UserLoginAudit[]
+  user_rules           UserRule[]
+  action_groups        UserActionGroup[]
+  pipelines            Pipeline[]
+  notification_prefs   NotificationPreference[]
+  notification_history NotificationHistory[]
+  push_subscriptions   PushSubscription[]
 
   @@map("users")
 }
@@ -273,8 +277,8 @@ model User {
 model NotificationPreference {
   id         Int      @id @default(autoincrement())
   user_id    Int
-  channel    String   @db.VarChar(32)  // in_app | email | push | sms
-  event_type String   @db.VarChar(64)  // emergency | rule_fired | device_offline | ota_available | ...
+  channel    String   @db.VarChar(32) // in_app | email | push | sms
+  event_type String   @db.VarChar(64) // emergency | rule_fired | device_offline | ota_available | ...
   enabled    Boolean  @default(true)
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -293,8 +297,8 @@ model NotificationHistory {
   event_type String    @db.VarChar(64)
   title      String    @db.VarChar(255)
   body       String
-  data       Json?     // rendering context / deep-link payload
-  channels   String[]  // channels this notification was delivered on
+  data       Json? // rendering context / deep-link payload
+  channels   String[] // channels this notification was delivered on
   read_at    DateTime? @db.Timestamptz(6)
   deleted_at DateTime? @db.Timestamptz(6) // soft-delete: hidden from inbox when set
   created_at DateTime  @default(now()) @db.Timestamptz(6)
@@ -460,16 +464,16 @@ model UserDeviceActionPin {
 // ═══ Tier 4 — Automation (rules; emergencies are rules with is_emergency) ═══════
 
 model UserRule {
-  id                 Int                 @id @default(autoincrement())
+  id                 Int       @id @default(autoincrement())
   user_id            Int
-  name               String              @db.VarChar(255)
-  enabled            Boolean             @default(true)
-  is_emergency       Boolean             @default(false)
-  condition_operator String              @default("AND") @db.VarChar(3)
-  cooldown_seconds   Int                 @default(60)
-  last_triggered     DateTime?           @db.Timestamp(6)
-  created_at         DateTime            @default(now()) @db.Timestamp(6)
-  updated_at         DateTime            @default(now()) @db.Timestamp(6)
+  name               String    @db.VarChar(255)
+  enabled            Boolean   @default(true)
+  is_emergency       Boolean   @default(false)
+  condition_operator String    @default("AND") @db.VarChar(3)
+  cooldown_seconds   Int       @default(60)
+  last_triggered     DateTime? @db.Timestamp(6)
+  created_at         DateTime  @default(now()) @db.Timestamp(6)
+  updated_at         DateTime  @default(now()) @db.Timestamp(6)
 
   user       User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   conditions UserRuleCondition[]
@@ -480,9 +484,9 @@ model UserRule {
 }
 
 model UserRuleCondition {
-  id                    Int    @id @default(autoincrement())
-  rule_id               Int
-  condition_type        String @db.VarChar(20) // threshold | device_status | schedule | vlm
+  id             Int    @id @default(autoincrement())
+  rule_id        Int
+  condition_type String @db.VarChar(20) // threshold | device_status | schedule | vlm
 
   // threshold: reading from a sensor action vs a value
   user_device_action_id Int?
@@ -490,12 +494,12 @@ model UserRuleCondition {
   threshold_value       String? @db.VarChar(100)
 
   // device_status: a device is online/offline
-  user_device_id        Int?
-  status_value          String? @db.VarChar(20)
+  user_device_id Int?
+  status_value   String? @db.VarChar(20)
 
   // schedule: time-of-day + days-of-week (0=Sun … 6=Sat)
-  schedule_time         String? @db.VarChar(5)
-  schedule_days         Int[]   @default([])
+  schedule_time String? @db.VarChar(5)
+  schedule_days Int[]   @default([])
 
   rule               UserRule          @relation(fields: [rule_id], references: [id], onDelete: Cascade)
   user_device_action UserDeviceAction? @relation(fields: [user_device_action_id], references: [id], onDelete: SetNull)

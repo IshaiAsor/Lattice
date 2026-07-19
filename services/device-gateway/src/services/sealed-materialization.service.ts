@@ -72,7 +72,9 @@ export async function materializeForUserDevice(userDeviceId: number): Promise<bo
         );
         continue;
       }
-      const mqttName = cap.mqtt_action_name;
+      // Per-instance name (base or <base>_N) — NOT cap.mqtt_action_name, which is shared across
+      // instances of the same capability and would collapse them onto one action.
+      const mqttName = entry.mqtt_action_name;
       materializedMqttNames.push(mqttName);
 
       const defaultTraitId = entry.default_trait_value
@@ -217,7 +219,7 @@ export async function stageSealedUpgrade(
           user_device_id: userDeviceId,
           capability_id: cap.id,
           action_name: entry.action_label,
-          mqtt_action_name: cap.mqtt_action_name,
+          mqtt_action_name: entry.mqtt_action_name,
           default_trait_id: defaultTraitId,
           status: 'staged_active',
           sort_order: entry.sort_order,

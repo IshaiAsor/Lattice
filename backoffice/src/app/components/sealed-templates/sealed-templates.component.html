@@ -1,123 +1,246 @@
 <div class="sealed-layout">
   <!-- Left: template list -->
-  <aside class="template-list">
+  <aside class="template-list glass">
     <div class="list-head">
-      <h2>Sealed Templates</h2>
-      <button mat-flat-button color="primary" (click)="create()">
-        <mat-icon>add</mat-icon> New
-      </button>
+      <div>
+        <h2 class="pane-title">Sealed Templates</h2>
+        <p class="pane-sub">{{ templates().length }} template{{ templates().length === 1 ? '' : 's' }}</p>
+      </div>
+      @if (!creating()) {
+        <button mat-flat-button color="primary" class="new-btn" (click)="startCreate()">
+          <mat-icon>add</mat-icon> New
+        </button>
+      }
     </div>
+
+    @if (creating()) {
+      <div class="new-template">
+        <mat-form-field appearance="outline" class="new-name-field" subscriptSizing="dynamic">
+          <mat-label>New template name</mat-label>
+          <input
+            matInput
+            [(ngModel)]="newName"
+            (keyup.enter)="confirmCreate()"
+            (keyup.escape)="cancelCreate()"
+            autocomplete="off"
+          />
+        </mat-form-field>
+        <div class="new-actions">
+          <button mat-stroked-button (click)="cancelCreate()">Cancel</button>
+          <button mat-flat-button color="primary" (click)="confirmCreate()" [disabled]="!newName.trim()">
+            Create
+          </button>
+        </div>
+      </div>
+    }
+
     @if (identities().length === 0) {
-      <p class="hint">No sealed device types in the catalog. Seed a firmware built with the
-        <code>SEALED</code> flag first.</p>
+      <p class="hint">
+        No sealed device types in the catalog. Seed a firmware built with the <code>SEALED</code> flag first.
+      </p>
     }
-    @for (t of templates(); track t.id) {
-      <button class="template-row" [class.active]="selected()?.id === t.id" (click)="open(t.id)">
-        <span class="tname">{{ t.name }}</span>
-        <span class="badge" [class.released]="t.status === 'released'">{{ t.status }}</span>
-        <span class="meta">{{ t._count.entries }} actions · {{ t.targets.length }} targets</span>
-      </button>
-    }
+
+    <div class="rows">
+      @for (t of templates(); track t.id) {
+        <button class="template-row" [class.active]="selected()?.id === t.id" (click)="open(t.id)">
+          <span class="row-icon"><mat-icon>dashboard_customize</mat-icon></span>
+          <span class="tname">{{ t.name }}</span>
+          <span class="badge" [class.released]="t.status === 'released'">{{ t.status }}</span>
+          <span class="meta">
+            <span class="chip"><mat-icon>bolt</mat-icon>{{ t._count.entries }}</span>
+            <span class="chip"><mat-icon>adjust</mat-icon>{{ t.targets.length }}</span>
+          </span>
+        </button>
+      }
+      @if (templates().length === 0 && !creating()) {
+        <p class="hint">No templates yet — hit <strong>New</strong> to compose one.</p>
+      }
+    </div>
   </aside>
 
   <!-- Right: editor -->
   <section class="editor">
     @if (selected(); as t) {
-      <div class="editor-head">
-        <mat-form-field appearance="outline" class="name-field">
+      <div class="editor-head glass">
+        <mat-form-field appearance="outline" class="name-field" subscriptSizing="dynamic">
           <mat-label>Template name</mat-label>
           <input matInput [(ngModel)]="name" />
         </mat-form-field>
         <span class="badge" [class.released]="t.status === 'released'">{{ t.status }}</span>
         <span class="spacer"></span>
-        <button mat-stroked-button (click)="save()" [disabled]="loading()">Save</button>
-        <button mat-flat-button color="primary" (click)="release()" [disabled]="loading()">Release</button>
-        <button mat-icon-button color="warn" (click)="remove()" title="Delete"><mat-icon>delete</mat-icon></button>
+        <button mat-stroked-button (click)="save()" [disabled]="loading()">
+          <mat-icon>save</mat-icon> Save
+        </button>
+        <button mat-flat-button color="primary" (click)="release()" [disabled]="loading()">
+          <mat-icon>rocket_launch</mat-icon> Release
+        </button>
+        <button mat-icon-button class="danger" (click)="remove()" title="Delete template">
+          <mat-icon>delete</mat-icon>
+        </button>
       </div>
 
-      @if (message()) { <p class="message">{{ message() }}</p> }
+      @if (message()) {
+        <p class="message">{{ message() }}</p>
+      }
 
       <!-- Targets -->
-      <h3>Targets <small>device type + firmware version range this template covers</small></h3>
-      <div class="targets">
-        @for (tg of targets; track $index) {
-          <div class="target-row">
-            <mat-form-field appearance="outline">
-              <mat-label>Type</mat-label>
-              <mat-select [(ngModel)]="tg.device_type">
-                @for (ty of sealedTypes; track ty) { <mat-option [value]="ty">{{ ty }}</mat-option> }
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Min version</mat-label>
-              <input matInput [(ngModel)]="tg.version_min" placeholder="v2.0.0" />
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Max version</mat-label>
-              <input matInput [(ngModel)]="tg.version_max" placeholder="v2.9.9" />
-            </mat-form-field>
-            <button mat-icon-button (click)="removeTarget($index)"><mat-icon>close</mat-icon></button>
+      <div class="section glass">
+        <div class="section-head">
+          <span class="sec-icon"><mat-icon>adjust</mat-icon></span>
+          <div>
+            <h3>Targets</h3>
+            <p>Device types + firmware version ranges this template covers.</p>
           </div>
-        }
-        <button mat-stroked-button (click)="addTarget()"><mat-icon>add</mat-icon> Add target</button>
-      </div>
-
-      <!-- Entries (composed from a reference device's catalog) -->
-      <h3>Actions <small>pick capabilities + fix pins from a reference sealed version</small></h3>
-      <mat-form-field appearance="outline" class="ref-field">
-        <mat-label>Reference version (capability palette)</mat-label>
-        <mat-select [(ngModel)]="referenceDeviceId" (selectionChange)="onReferenceChange()">
-          @for (i of identities(); track i.id) {
-            <mat-option [value]="i.id">{{ i.type }} · {{ i.version }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      @for (e of entries; track e.capability_key) {
-        <div class="entry" [class.included]="e.include">
-          <label class="entry-head">
-            <input type="checkbox" [(ngModel)]="e.include" />
-            <strong>{{ e.label }}</strong> <code>{{ e.capability_key }}</code>
-          </label>
-          @if (e.include) {
-            <div class="entry-body">
-              <mat-form-field appearance="outline">
-                <mat-label>Action label</mat-label>
-                <input matInput [(ngModel)]="e.action_label" />
+        </div>
+        <div class="targets">
+          @for (tg of targets; track $index) {
+            <div class="target-row">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Type</mat-label>
+                <mat-select [(ngModel)]="tg.device_type">
+                  @for (ty of sealedTypes; track ty) {
+                    <mat-option [value]="ty">{{ ty }}</mat-option>
+                  }
+                </mat-select>
               </mat-form-field>
-              @if (e.traitOptions.length) {
-                <mat-form-field appearance="outline">
-                  <mat-label>Default trait</mat-label>
-                  <mat-select [(ngModel)]="e.default_trait_value">
-                    <mat-option [value]="null">—</mat-option>
-                    @for (tr of e.traitOptions; track tr) { <mat-option [value]="tr">{{ tr }}</mat-option> }
-                  </mat-select>
-                </mat-form-field>
-              }
-              <div class="pins">
-                @for (p of e.pins; track p.pin_slot_key) {
-                  <mat-form-field appearance="outline" class="pin-field">
-                    <mat-label>{{ p.label }} ({{ p.mode }})</mat-label>
-                    <input matInput type="number" [(ngModel)]="p.pin_number" placeholder="GPIO" />
-                  </mat-form-field>
-                }
-              </div>
-              <div class="behaviors">
-                @for (b of e.behaviors; track b.behavior) {
-                  <label class="beh">
-                    <input type="checkbox" [(ngModel)]="b.enabled" /> {{ b.behavior }}
-                    @if (b.behavior === 'interval' && b.enabled) {
-                      <input class="ms" type="number" [(ngModel)]="b.interval_ms" placeholder="ms" />
-                    }
-                  </label>
-                }
-              </div>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Min version</mat-label>
+                <input matInput [(ngModel)]="tg.version_min" placeholder="v2.0.0" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Max version</mat-label>
+                <input matInput [(ngModel)]="tg.version_max" placeholder="v2.9.9" />
+              </mat-form-field>
+              <button mat-icon-button class="row-remove" (click)="removeTarget($index)" title="Remove target">
+                <mat-icon>close</mat-icon>
+              </button>
             </div>
           }
+          @if (targets.length === 0) {
+            <p class="sub-hint">No targets yet — add the sealed device type this template applies to.</p>
+          }
+          <button mat-stroked-button class="add-btn" (click)="addTarget()">
+            <mat-icon>add</mat-icon> Add target
+          </button>
         </div>
-      }
+      </div>
+
+      <!-- Actions -->
+      <div class="section glass">
+        <div class="section-head">
+          <span class="sec-icon"><mat-icon>bolt</mat-icon></span>
+          <div>
+            <h3>Actions</h3>
+            <p>Add one card per action this board ships — a capability can be added multiple times (e.g. one per socket).</p>
+          </div>
+        </div>
+
+        <mat-form-field appearance="outline" class="ref-field" subscriptSizing="dynamic">
+          <mat-label>Reference version — capability palette</mat-label>
+          <mat-select [(ngModel)]="referenceDeviceId" (selectionChange)="onReferenceChange()">
+            @for (i of identities(); track i.id) {
+              <mat-option [value]="i.id">{{ i.type }} · {{ i.version }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        @if (referenceDeviceId == null) {
+          <div class="pick-hint">
+            <mat-icon>touch_app</mat-icon>
+            <div>
+              <strong>Choose a reference version above</strong>
+              <span>Its capabilities become "Add" buttons — click one for each action instance the board has.</span>
+            </div>
+          </div>
+        } @else {
+          <!-- Palette: add-buttons per capability -->
+          <div class="palette">
+            <span class="palette-label">Add action</span>
+            <div class="palette-chips">
+              @for (c of palette; track c.capability_key) {
+                <button class="add-chip" (click)="addInstance(c)" [title]="c.capability_key">
+                  <mat-icon>add</mat-icon>
+                  <span>{{ c.label }}</span>
+                  @if (instanceCount(c.capability_key) > 0) {
+                    <span class="count">{{ instanceCount(c.capability_key) }}</span>
+                  }
+                </button>
+              }
+            </div>
+          </div>
+
+          <!-- Composed instances -->
+          @if (instances.length === 0) {
+            <p class="sub-hint">No actions yet — click a capability above to add its first instance.</p>
+          }
+          <div class="instances">
+            @for (e of instances; track $index) {
+              <div class="instance">
+                <div class="instance-head">
+                  <span class="inst-icon"><mat-icon>bolt</mat-icon></span>
+                  <mat-form-field appearance="outline" class="label-field" subscriptSizing="dynamic">
+                    <mat-label>Action label</mat-label>
+                    <input matInput [(ngModel)]="e.action_label" />
+                  </mat-form-field>
+                  <code class="cap-key">{{ e.capability_key }}</code>
+                  <span class="spacer"></span>
+                  <button mat-icon-button class="row-remove" (click)="removeInstance($index)" title="Remove action">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+
+                <div class="instance-body">
+                  @if (e.traitOptions.length) {
+                    <div class="field-group">
+                      <span class="group-label">Default trait</span>
+                      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                        <mat-label>Trait</mat-label>
+                        <mat-select [(ngModel)]="e.default_trait_value">
+                          <mat-option [value]="null">—</mat-option>
+                          @for (tr of e.traitOptions; track tr) {
+                            <mat-option [value]="tr">{{ tr }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                    </div>
+                  }
+                  @if (e.pins.length) {
+                    <div class="field-group">
+                      <span class="group-label">Pins</span>
+                      <div class="pins">
+                        @for (p of e.pins; track p.pin_slot_key) {
+                          <mat-form-field appearance="outline" class="pin-field" subscriptSizing="dynamic">
+                            <mat-label>{{ p.label }} ({{ p.mode }})</mat-label>
+                            <input matInput type="number" [(ngModel)]="p.pin_number" placeholder="value" />
+                          </mat-form-field>
+                        }
+                      </div>
+                    </div>
+                  }
+                  <div class="field-group">
+                    <span class="group-label">Behaviors</span>
+                    <div class="behaviors">
+                      @for (b of e.behaviors; track b.behavior) {
+                        <label class="beh" [class.on]="b.enabled">
+                          <input type="checkbox" [(ngModel)]="b.enabled" /> {{ b.behavior }}
+                          @if (b.behavior === 'interval' && b.enabled) {
+                            <input class="ms" type="number" [(ngModel)]="b.interval_ms" placeholder="ms" />
+                          }
+                        </label>
+                      }
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
     } @else {
-      <div class="empty">Select or create a template to start composing.</div>
+      <div class="empty glass">
+        <mat-icon>dashboard_customize</mat-icon>
+        <p>Select a template on the left, or create one to start composing.</p>
+      </div>
     }
   </section>
 </div>

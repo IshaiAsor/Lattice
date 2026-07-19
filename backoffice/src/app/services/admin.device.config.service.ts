@@ -54,6 +54,9 @@ export interface SealedTemplateEntryBehavior {
 }
 export interface SealedTemplateEntry {
   capability_key: string;
+  // On write: the capability's base mqtt_action_name (server suffixes _2/_3… per repeated
+  // instance). On read: the resolved unique name. A capability may appear more than once.
+  mqtt_action_name?: string;
   action_label: string;
   default_trait_value?: string | null;
   sort_order?: number;

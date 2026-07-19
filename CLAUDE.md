@@ -39,6 +39,10 @@ Bring-up order matters: infra → `migrate` container → services. App-level se
   parse/validate input, call a service, shape the response. Logic lives in `services/` modules.
 - **Generic IoT naming only.** No domain-specific terminology (farming, crops, or any other
   vertical) in code, seeds, docs, or test data. Devices, sensors, and actions are generic.
+  **Exception:** a _sealed_ device type is a factory-soldered board for one specific
+  application, so its `DEVICE_TYPE_STR` / catalog identity may carry application/vertical
+  wording (e.g. `HYDRO_FARM_WATER_TANK_MANAGER`). The capabilities it draws from, and all
+  other platform code, stay generic — the vertical name lives only in the sealed type's name.
 - **Schema changes update the ERD.** Any edit to `prisma/schema.prisma` updates
   `prisma/SCHEMA.md` (mermaid ERD + examples) in the same change. New models need a real
   migration — never rely on `db push` drift.

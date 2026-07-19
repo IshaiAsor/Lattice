@@ -83,6 +83,7 @@ erDiagram
     int id PK
     int template_id FK
     string capability_key "resolved per version"
+    string mqtt_action_name "per-instance routing verb; unique per template"
     string action_label
     string default_trait_value "nullable"
     int sort_order
@@ -437,11 +438,12 @@ erDiagram
 | --- | ----------- | ----------- | ----------- | ----------- |
 | 1   | 1           | outlet-4ch  | v2.0.0      | v2.9.9      |
 
-#### `sealed_template_entries` (`SealedTemplateEntry`) — one activated capability, resolved per version by `capability_key`. Unique `(template_id, capability_key)`. `default_trait_value` is a `GoogleDeviceTrait.value` (resolved per version), nullable.
+#### `sealed_template_entries` (`SealedTemplateEntry`) — one activated capability **instance**, resolved per version by `capability_key`. A capability may appear more than once per template (e.g. 8 `i2c_socket_8` channels), so `mqtt_action_name` (base capability name, then `<base>_2`/`_3`/… for repeats — mirrors `user_device_actions`) is the unique key: unique `(template_id, mqtt_action_name)`. `default_trait_value` is a `GoogleDeviceTrait.value` (resolved per version), nullable.
 
-| id  | template_id | capability_key | action_label | default_trait_value           | sort_order |
-| --- | ----------- | -------------- | ------------ | ----------------------------- | ---------- |
-| 1   | 1           | relay1         | Outlet 1     | `action.devices.traits.OnOff` | 0          |
+| id  | template_id | capability_key | mqtt_action_name | action_label | default_trait_value           | sort_order |
+| --- | ----------- | -------------- | ---------------- | ------------ | ----------------------------- | ---------- |
+| 1   | 1           | i2c_socket_8   | socket           | Socket 1     | `action.devices.traits.OnOff` | 0          |
+| 2   | 1           | i2c_socket_8   | socket_2         | Socket 2     | `action.devices.traits.OnOff` | 1          |
 
 #### `sealed_template_entry_pins` (`SealedTemplateEntryPin`) — fixed GPIO the admin assigned to a capability's pin slot (`DeviceCapabilityPin.key`). Unique `(entry_id, pin_slot_key)`.
 

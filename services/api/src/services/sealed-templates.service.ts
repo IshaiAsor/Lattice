@@ -36,11 +36,28 @@ export interface EntryBehaviorInput {
 }
 export interface EntryInput {
   capability_key: string;
+  // Base MQTT action name of the capability (from the catalog palette). The server suffixes it
+  // (_2, _3…) per repeated instance so each entry gets a unique mqtt_action_name. Optional on the
+  // wire — falls back to capability_key if omitted.
+  mqtt_action_name?: string;
   action_label: string;
   default_trait_value?: string | null;
   sort_order?: number;
   pins?: EntryPinInput[];
   behaviors?: EntryBehaviorInput[];
+}
+
+// Assign each entry a unique mqtt_action_name: the capability's base name for the first instance,
+// <base>_2/_3/… for repeats — the same scheme deviceMgmtService.activateCapability uses for
+// regular devices, so the firmware served-config + MQTT dispatch handle N instances unchanged.
+function assignMqttNames(entries: EntryInput[]): (EntryInput & { mqtt_action_name: string })[] {
+  const seen = new Map<string, number>();
+  return entries.map((e) => {
+    const base = e.mqtt_action_name?.trim() || e.capability_key;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return { ...e, mqtt_action_name: n === 0 ? base : `${base}_${n + 1}` };
+  });
 }
 
 const templateInclude = {
@@ -113,13 +130,16 @@ class SealedTemplatesService {
         });
       }
       if (body.entries) {
-        // Replace the whole entry set (cascades pins/behaviors).
+        // Replace the whole entry set (cascades pins/behaviors). Names are assigned here so each
+        // instance of a repeated capability gets a unique mqtt_action_name.
+        const named = assignMqttNames(body.entries);
         await tx.sealedTemplateEntry.deleteMany({ where: { template_id: id } });
-        for (const [i, e] of body.entries.entries()) {
+        for (const [i, e] of named.entries()) {
           await tx.sealedTemplateEntry.create({
             data: {
               template_id: id,
               capability_key: e.capability_key,
+              mqtt_action_name: e.mqtt_action_name,
               action_label: e.action_label,
               default_trait_value: e.default_trait_value ?? null,
               sort_order: e.sort_order ?? i,
@@ -200,13 +220,9 @@ class SealedTemplatesService {
     if (template.targets.length === 0) throw badRequest('template has no targets');
     if (template.entries.length === 0) throw badRequest('template has no entries');
 
-    // Pin numbers must not collide across the actions materialized onto one device.
-    const pinNumbers = template.entries.flatMap((e) => e.pins.map((p) => p.pin_number));
-    if (new Set(pinNumbers).size !== pinNumbers.length) {
-      throw badRequest(
-        'duplicate pin_number across template entries — pins would collide on the device',
-      );
-    }
+    // No cross-entry pin-collision check: multi-instance actions legitimately share bus pins
+    // (e.g. 8 i2c_socket_8 channels share SDA/SCL/address), and regular device-config trusts the
+    // admin's pin assignments too — so pin sanity is the composer's responsibility, not a gate.
 
     // Reject overlapping released targets for the same device type (a device must resolve to one).
     const otherTargets = await db.sealedTemplateTarget.findMany({
@@ -280,13 +296,11 @@ function assertValidTarget(t: TargetInput): void {
   }
 }
 function assertValidEntries(entries: EntryInput[]): void {
-  const keys = new Set<string>();
+  // A capability may repeat (multi-instance) — uniqueness is on the generated mqtt_action_name,
+  // not capability_key — so we only validate each entry is individually well-formed.
   for (const e of entries) {
     if (!e.capability_key?.trim()) throw badRequest('entry.capability_key is required');
     if (!e.action_label?.trim()) throw badRequest('entry.action_label is required');
-    if (keys.has(e.capability_key))
-      throw badRequest(`duplicate capability_key "${e.capability_key}"`);
-    keys.add(e.capability_key);
     for (const p of e.pins ?? []) {
       if (!p.pin_slot_key?.trim() || !Number.isInteger(p.pin_number)) {
         throw badRequest('each pin needs pin_slot_key and an integer pin_number');

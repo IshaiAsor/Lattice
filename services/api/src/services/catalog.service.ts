@@ -10,6 +10,22 @@ type DeviceWithCapabilities = Device & {
     }>)[];
 };
 
+// Wire shape the admin UIs (sealed-template composer, device-config) consume: pins flattened to
+// `configurable_pins`, google trait rows flattened to their string values, google type to its name.
+export interface CatalogCapabilityDto {
+  id: number;
+  device_id: number;
+  capability_key: string;
+  label: string;
+  implementation_type: string;
+  mqtt_action_type: string;
+  mqtt_action_name: string;
+  configurable_pins: { key: string; label: string; mode: string }[];
+  min_telemetry_interval_ms: number | null;
+  google_action_type: string | null;
+  google_traits: string[];
+}
+
 class CatalogService {
   // ─── Device catalog ───────────────────────────────────────────────────
   listDevices(): Promise<Device[]> {
@@ -35,16 +51,25 @@ class CatalogService {
     await db.device.delete({ where: { id } }); // cascades capabilities/pins/traits
   }
 
-  listCapabilities(deviceId: number): Promise<
-    Prisma.DeviceCapabilityGetPayload<{
-      include: { pins: true; traits: true; google_type: true };
-    }>[]
-  > {
-    return db.deviceCapability.findMany({
+  async listCapabilities(deviceId: number): Promise<CatalogCapabilityDto[]> {
+    const caps = await db.deviceCapability.findMany({
       where: { device_id: deviceId },
       orderBy: { id: 'asc' },
-      include: { pins: true, traits: true, google_type: true },
+      include: { pins: true, traits: { include: { google_trait: true } }, google_type: true },
     });
+    return caps.map((c) => ({
+      id: c.id,
+      device_id: c.device_id,
+      capability_key: c.capability_key,
+      label: c.label,
+      implementation_type: c.implementation_type,
+      mqtt_action_type: c.mqtt_action_type,
+      mqtt_action_name: c.mqtt_action_name,
+      configurable_pins: c.pins.map((p) => ({ key: p.key, label: p.label, mode: p.mode })),
+      min_telemetry_interval_ms: c.min_telemetry_interval_ms ?? null,
+      google_action_type: c.google_type?.name ?? null,
+      google_traits: c.traits.map((t) => t.google_trait.value),
+    }));
   }
 
   async listActions(deviceId: number) {
