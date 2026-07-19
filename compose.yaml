@@ -125,6 +125,14 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: always
+    healthcheck:
+      # Gate dependents on the broker actually accepting AMQP, not just the container starting —
+      # services that fatal-exit on a missing broker (e.g. socket-server) crash-loop otherwise.
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # OTA Manager Service
   ota-manager:

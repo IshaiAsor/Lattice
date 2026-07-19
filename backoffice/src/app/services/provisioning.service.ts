@@ -109,8 +109,11 @@ export class ProvisioningService {
         switchMap((result) =>
           from(
             navigator.bluetooth.requestDevice({
+              // Filter by the provisioning service every Lattice device advertises, not a name
+              // prefix — sealed device types advertise their DEVICE_TYPE (e.g. MULTI_SOCKET_8_CH,
+              // HYDRO_FARM_*) as the BLE name, so an 'ESP32' prefix would hide them from the picker.
               filters: [
-                { namePrefix: 'ESP32' }
+                { services: [SERVICE_UUID] }
               ],
               optionalServices: [SERVICE_UUID],
             }),

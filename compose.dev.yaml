@@ -108,8 +108,10 @@ services:
       - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
-      - rabbitmq
-      - cache
+      rabbitmq:
+        condition: service_healthy
+      cache:
+        condition: service_started
     restart: always
 
   digest-service:
