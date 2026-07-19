@@ -210,6 +210,11 @@ const CASES: ContractCase[] = [
     broken: { deviceType: 'ESP32S3_MINI', version: 'v2.0.9', url: 'http://x', timestamp: 42 }, // timestamp must be string
   },
   {
+    rk: RK.SEALED_TEMPLATE_APPLIED,
+    canonical: { templateId: 7, timestamp: new Date().toISOString() },
+    broken: { templateId: '7', timestamp: 'now' }, // templateId must be a number
+  },
+  {
     rk: RK.NOTIFICATION_PUBLISH,
     canonical: { type: 'ota_available', deviceType: 'ESP32S3_MINI', version: 'v2.0.9' },
     broken: { type: 'firmware_ready', deviceType: 'ESP32S3_MINI', version: 'v2.0.9' }, // literal mismatch

@@ -2,6 +2,7 @@ import { db } from '../db';
 import { jwtService, JwtPurpose } from './jwt.service';
 import { env } from '../config/env.config';
 import { createLogger } from '@lattice/logger';
+import { materializeForUserDevice } from './sealed-materialization.service';
 
 const log = createLogger('device-gateway');
 
@@ -58,6 +59,20 @@ class ProvisioningService {
       update: { user_id: userId, device_type_id: device.id },
       create: { user_id: userId, device_type_id: device.id, mac_id: macAddress, name: deviceType },
     });
+
+    // 3. Sealed devices are factory-soldered: their config is admin-composed, not user-chosen —
+    // auto-materialize the resolved template's actions/pins/behaviors so the device pulls a full
+    // config with no user setup. Regular devices materialize nothing here (user configures later).
+    if (device.is_sealed) {
+      try {
+        await materializeForUserDevice(userDevice.id);
+      } catch (err) {
+        log.warn(
+          { err, userDeviceId: userDevice.id },
+          'sealed materialization failed — device will retry on config pull',
+        );
+      }
+    }
 
     // 4. Return permanent JWT + URLs.
     const tokenData = this.generatePermanentToken(userId, userDevice.id, version);

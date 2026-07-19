@@ -38,11 +38,18 @@ export class AuthService {
   constructor() {
     const token = this.activeStorage().getItem(this.tokenKey);
     if (token) {
+      // Don't trust a stored-but-expired token: jwtDecode ignores `exp`, so priming currentUser
+      // from an expired session would make getCurrentUser() truthy on the login page and fire
+      // authenticated requests (→ 403). Clear the stale tokens and stay logged out.
+      if (this.isTokenExpired(token)) {
+        this.clearTokens();
+        return;
+      }
       try {
         const decodedUser: User = jwtDecode(token);
         this.currentUser.set(decodedUser);
       } catch {
-        this.logout();
+        this.clearTokens();
       }
     }
   }
@@ -124,13 +131,19 @@ export class AuthService {
   }
 
   logout() {
+    this.clearTokens();
+    this.router.navigate(['/login']);
+  }
+
+  // Drop the session from storage + memory without navigating. Safe to call during construction
+  // (logout() adds the redirect to /login on top of this).
+  private clearTokens() {
     // Clear both backends — the token may live in either depending on the "Remember me" choice.
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.refreshTokenKey);
     sessionStorage.removeItem(this.tokenKey);
     sessionStorage.removeItem(this.refreshTokenKey);
     this.currentUser.set(null);
-    this.router.navigate(['/login']);
   }
 
   getToken() {

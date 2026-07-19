@@ -5,6 +5,7 @@ import { getChannel } from '../queue';
 import { env } from '../config/env.config';
 import { createLogger } from '@lattice/logger';
 import { isCompatible, migratePins, type PinSlot } from './action-compatibility';
+import { stageSealedUpgrade } from './sealed-materialization.service';
 
 const log = createLogger('device-gateway:migration');
 
@@ -99,6 +100,22 @@ class ActionMigrationService {
       'applying device action migration',
     );
 
+    // Sealed devices don't name-match user actions across versions — their config is the admin
+    // template for the target version. Stage that template as staged_active, then share the
+    // pending-version + OTA-dispatch tail (promotion happens on OTA confirm, same as regular).
+    if (latestDevice.is_sealed) {
+      await stageSealedUpgrade(userDeviceId, latestDevice);
+      await db.userDevice.update({
+        where: { id: userDeviceId },
+        data: {
+          pending_device_type_id: latestDevice.id,
+          pending_firmware_version: latestDevice.version,
+        },
+      });
+      this.dispatchOta(latestDevice.type, latestDevice.version);
+      return;
+    }
+
     const [capabilities, activeActions] = await Promise.all([
       db.deviceCapability.findMany({
         where: { device_id: latestDevice.id },
@@ -177,19 +194,20 @@ class ActionMigrationService {
       'device action migration staged',
     );
 
-    // Best-effort OTA dispatch — failure is logged but not fatal.
+    this.dispatchOta(latestDevice.type, latestDevice.version);
+  }
+
+  // Best-effort OTA dispatch — failure is logged but not fatal (picked up on next reconnect).
+  private dispatchOta(deviceType: string, version: string): void {
     try {
       const payload: OtaDispatchPayload = {
-        deviceType: latestDevice.type,
-        version: latestDevice.version,
-        url: `${env.otaManagerUrl}/download/${latestDevice.type}/${latestDevice.version}`,
+        deviceType,
+        version,
+        url: `${env.otaManagerUrl}/download/${deviceType}/${version}`,
         timestamp: new Date().toISOString(),
       };
       publish(getChannel(), RK.OTA_DISPATCH, payload);
-      log.info(
-        { deviceType: latestDevice.type, version: latestDevice.version },
-        'OTA dispatch sent',
-      );
+      log.info({ deviceType, version }, 'OTA dispatch sent');
     } catch (err) {
       log.warn(
         { err },

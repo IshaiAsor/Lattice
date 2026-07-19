@@ -5,8 +5,17 @@
 #ifndef DEVICE_VERSION_STR
 #error "DEVICE_VERSION_STR must be defined in build_flags (e.g. -D DEVICE_VERSION_STR=\"V1.0.0\")"
 #endif
-const char DEVICE_TYPE[]         = DEVICE_TYPE_STR;
-const char DEVICE_VERSION[]      = DEVICE_VERSION_STR;
+const char DEVICE_TYPE[]    = DEVICE_TYPE_STR;
+const char DEVICE_VERSION[] = DEVICE_VERSION_STR;
+// SEALED = factory-soldered device. The build flag (-D SEALED) marks the type is_sealed in the
+// catalog (via the manifest), so its pins/actions come from an admin-composed template and the
+// user configures nothing. Runtime config consumption is unchanged — the device still pulls its
+// served config by (type, version); this constant only records intent.
+#ifdef SEALED
+[[maybe_unused]] const bool DEVICE_IS_SEALED = true;
+#else
+[[maybe_unused]] const bool DEVICE_IS_SEALED = false;
+#endif
 const char COMMAND_TOPIC[]       = "users/%{userid}/devices/%{deviceid}/%{version}/command/#";
 const char STATUS_TOPIC[]        = "users/%{userid}/devices/%{deviceid}/%{version}/status";
 const char TELEMETRY_TOPIC[]     = "users/%{userid}/devices/%{deviceid}/%{version}/telemetry/#";

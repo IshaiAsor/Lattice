@@ -147,6 +147,14 @@ export interface OtaDispatchPayload {
   timestamp: string;
 }
 
+// A sealed device template was released/changed by an admin (api service). device-gateway
+// consumes this and re-materializes every already-provisioned device the template matches,
+// then pushes a config reload — the "apply migration" for sealed devices.
+export interface SealedTemplateAppliedPayload {
+  templateId: number;
+  timestamp: string;
+}
+
 // Incoming OTA release trigger — published by ota-manager/CI, consumed by
 // digest-service which validates + audit-logs, then forwards to OtaDispatchPayload.
 // Shape mirrors OtaDispatchPayload for now but kept separate as it may diverge

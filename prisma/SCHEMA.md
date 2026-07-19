@@ -36,6 +36,7 @@ erDiagram
     string type
     string version
     string default_name UK
+    bool is_sealed "factory-soldered; admin-composed template"
   }
   DeviceCapability {
     int id PK
@@ -65,6 +66,40 @@ erDiagram
     int capability_id FK
     string behavior "command/interval/on_demand"
     int min_interval_ms "interval floor; nullable"
+  }
+  SealedTemplate {
+    int id PK
+    string name UK
+    string status "draft/released"
+  }
+  SealedTemplateTarget {
+    int id PK
+    int template_id FK
+    string device_type
+    string version_min
+    string version_max
+  }
+  SealedTemplateEntry {
+    int id PK
+    int template_id FK
+    string capability_key "resolved per version"
+    string action_label
+    string default_trait_value "nullable"
+    int sort_order
+  }
+  SealedTemplateEntryPin {
+    int id PK
+    int entry_id FK
+    string pin_slot_key
+    int pin_number "fixed GPIO"
+  }
+  SealedTemplateEntryBehavior {
+    int id PK
+    int entry_id FK
+    string behavior "command/interval/on_demand"
+    int interval_ms "nullable"
+    string camera_resolution "nullable"
+    string camera_transport "nullable"
   }
   MlModel {
     int id PK
@@ -286,6 +321,11 @@ erDiagram
   DeviceCapability      ||--o{ CapabilityConfiguration : "supported behaviors"
   DeviceCapability      ||--o{ UserDeviceAction       : "instantiated as"
 
+  SealedTemplate        ||--o{ SealedTemplateTarget   : "covers (type, version range)"
+  SealedTemplate        ||--o{ SealedTemplateEntry    : "activates capabilities"
+  SealedTemplateEntry   ||--o{ SealedTemplateEntryPin : "fixed pins"
+  SealedTemplateEntry   ||--o{ SealedTemplateEntryBehavior : "enabled behaviors"
+
   Device                ||--o{ UserDevice             : "current model"
   Device                |o--o{ UserDevice             : "pending model"
   User                  ||--o{ UserDevice             : "owns"
@@ -347,12 +387,13 @@ erDiagram
 
 ### Tier 1 — Device & ML catalog
 
-#### `devices` — device models (type + firmware version). Unique `(type, version)`.
+#### `devices` — device models (type + firmware version). Unique `(type, version)`. `is_sealed=true` (seeded from the firmware `SEALED` marker) marks factory-soldered types whose config is admin-composed via a sealed template rather than user-configured.
 
-| id  | type     | version | default_name          |
-| --- | -------- | ------- | --------------------- |
-| 1   | env-node | v2.0.0  | Environment Node      |
-| 2   | env-node | v2.1.0  | Environment Node v2.1 |
+| id  | type       | version | default_name          | is_sealed |
+| --- | ---------- | ------- | --------------------- | --------- |
+| 1   | env-node   | v2.0.0  | Environment Node      | false     |
+| 2   | env-node   | v2.1.0  | Environment Node v2.1 | false     |
+| 3   | outlet-4ch | v2.0.0  | 4-Channel Outlet      | true      |
 
 #### `device_capabilities` (`DeviceCapability`) — single per-version capability catalog. Unique `(device_id, capability_key)`.
 
@@ -383,6 +424,36 @@ erDiagram
 | 2   | 12 (temp)     | interval  | 2000            |
 | 3   | 12 (temp)     | on_demand | NULL            |
 | 4   | 15 (camera)   | on_demand | NULL            |
+
+#### `sealed_templates` (`SealedTemplate`) — admin authoring layer for sealed devices. Unique `name`. `status ∈ {draft, released}`; only `released` templates materialize. Composing/releasing/editing a template re-applies its actions to every already-provisioned matching device (via the "apply migration" staging flow). The catalog itself stays append-only — only these tables + user instances mutate.
+
+| id  | name              | status   |
+| --- | ----------------- | -------- |
+| 1   | 4-Ch Outlet (2.x) | released |
+
+#### `sealed_template_targets` (`SealedTemplateTarget`) — which `(device_type, firmware version range)` a template covers. A device matches when `type == device_type AND version_min <= version <= version_max` (inclusive, `vX.Y.Z` compare). One template may have several targets.
+
+| id  | template_id | device_type | version_min | version_max |
+| --- | ----------- | ----------- | ----------- | ----------- |
+| 1   | 1           | outlet-4ch  | v2.0.0      | v2.9.9      |
+
+#### `sealed_template_entries` (`SealedTemplateEntry`) — one activated capability, resolved per version by `capability_key`. Unique `(template_id, capability_key)`. `default_trait_value` is a `GoogleDeviceTrait.value` (resolved per version), nullable.
+
+| id  | template_id | capability_key | action_label | default_trait_value           | sort_order |
+| --- | ----------- | -------------- | ------------ | ----------------------------- | ---------- |
+| 1   | 1           | relay1         | Outlet 1     | `action.devices.traits.OnOff` | 0          |
+
+#### `sealed_template_entry_pins` (`SealedTemplateEntryPin`) — fixed GPIO the admin assigned to a capability's pin slot (`DeviceCapabilityPin.key`). Unique `(entry_id, pin_slot_key)`.
+
+| id  | entry_id | pin_slot_key | pin_number |
+| --- | -------- | ------------ | ---------- |
+| 1   | 1        | out          | 4          |
+
+#### `sealed_template_entry_behaviors` (`SealedTemplateEntryBehavior`) — enabled behavior + chosen values (mirrors `user_action_configurations`). Unique `(entry_id, behavior)`.
+
+| id  | entry_id | behavior | interval_ms | camera_resolution | camera_transport |
+| --- | -------- | -------- | ----------- | ----------------- | ---------------- |
+| 1   | 1        | command  | NULL        | NULL              | NULL             |
 
 #### `ml_models` (`MlModel`) — system ML registry. Unique `(kind, name, version)`. `classes`/`config` JSON = per-model metadata.
 

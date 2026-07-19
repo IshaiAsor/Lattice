@@ -454,3 +454,18 @@
 
   .section-label { margin: 16px 0 8px; }
 }
+
+/* Read-only banner for sealed devices (config is admin-managed via a sealed template). */
+.sealed-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mat-sys-primary, #3f51b5) 10%, transparent);
+  font-size: 0.9rem;
+}
+.sealed-notice mat-icon {
+  color: var(--mat-sys-primary, #3f51b5);
+}

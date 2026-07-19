@@ -73,6 +73,11 @@
             <mat-icon>build</mat-icon>
             @if (!sidebarCollapsed()) { <span>Templates</span> }
           </a>
+          <a class="sidebar-link" routerLink="/admin/sealed-templates" routerLinkActive="active"
+             [matTooltip]="sidebarCollapsed() ? 'Sealed Templates' : ''" matTooltipPosition="right">
+            <mat-icon>lock</mat-icon>
+            @if (!sidebarCollapsed()) { <span>Sealed Templates</span> }
+          </a>
         }
 
       </nav>

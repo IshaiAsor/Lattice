@@ -141,6 +141,11 @@ export const otaDispatchSchema = z.object({
 // Shape mirrors otaDispatchSchema for now but kept separate as it may diverge (CI metadata).
 export const otaIncomingSchema = otaDispatchSchema;
 
+export const sealedTemplateAppliedSchema = z.object({
+  templateId: z.number(),
+  timestamp: z.string(),
+});
+
 export const notificationPublishSchema = z.object({
   type: z.literal('ota_available'),
   deviceType: z.string(),
@@ -176,6 +181,7 @@ export const EVENT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   [RK.PIPELINE_STAGE_DONE]: pipelineStageDoneSchema,
   [RK.OTA_INCOMING]: otaIncomingSchema,
   [RK.OTA_DISPATCH]: otaDispatchSchema,
+  [RK.SEALED_TEMPLATE_APPLIED]: sealedTemplateAppliedSchema,
   [RK.NOTIFICATION_PUBLISH]: notificationPublishSchema,
   [RK.NOTIFICATION_SEND]: notificationSendSchema,
 };

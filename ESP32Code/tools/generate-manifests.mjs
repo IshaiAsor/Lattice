@@ -76,7 +76,7 @@ function parseProdEnvs(iniText) {
     const section = raw.match(/^\[env:([^\]]+)\]/);
     if (section) {
       if (cur) envs.push(cur);
-      cur = { env: section[1].trim(), deviceType: null, version: null, hasCamera: false };
+      cur = { env: section[1].trim(), deviceType: null, version: null, hasCamera: false, sealed: false };
       continue;
     }
     if (!cur) continue;
@@ -86,6 +86,9 @@ function parseProdEnvs(iniText) {
     const ver = raw.match(/DEVICE_VERSION_STR\s*=\s*\\?"?([A-Za-z0-9_.\-]+)/);
     if (ver) cur.version = ver[1].trim();
     if (/-D\s*HAS_CAMERA\b/.test(raw)) cur.hasCamera = true;
+    // SEALED = factory-soldered: catalog marks the type is_sealed; config comes from an admin
+    // template, not the user. A top-level manifest flag (capabilities are emitted the same way).
+    if (/-D\s*SEALED\b/.test(raw)) cur.sealed = true;
   }
   if (cur) envs.push(cur);
   return envs.filter((e) => e.env.endsWith('-prod') && e.deviceType && e.version);
@@ -121,8 +124,9 @@ function main() {
     const key = `${e.deviceType}@${e.version}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    console.error(`[manifest-gen] ${key}${e.hasCamera ? ' (camera)' : ''}`);
+    console.error(`[manifest-gen] ${key}${e.hasCamera ? ' (camera)' : ''}${e.sealed ? ' (sealed)' : ''}`);
     const manifest = generateOne(e);
+    if (e.sealed) manifest.sealed = true;
     writeFileSync(join(outDir, `${e.deviceType}.json`), JSON.stringify(manifest, null, 2) + '\n');
     manifests.push(manifest);
   }

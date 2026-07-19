@@ -7,6 +7,7 @@ import { LegalComponent } from './components/legal/legal.component';
 import { MgmtDeviceListComponent } from './components/mgmt-device-list/mgmt-device-list.component';
 import { UserDashboard } from './components/user-dashboard/user-dashboard';
 import { AdminDeviceConfigComponent } from './components/admin-device-config/admin-device-config.component';
+import { SealedTemplatesComponent } from './components/sealed-templates/sealed-templates.component';
 import { DeviceConfigComponent } from './components/device-config/device-config.component';
 import { AutomationsComponent } from './components/automations/automations.component';
 import { NotificationsComponent } from './components/notifications/notifications.component';
@@ -49,6 +50,11 @@ export const routes: Routes = [
   {
     path: 'admin/templates',
     component: AdminDeviceConfigComponent,
+    canActivate: [authGuard, adminGuard],
+  },
+  {
+    path: 'admin/sealed-templates',
+    component: SealedTemplatesComponent,
     canActivate: [authGuard, adminGuard],
   },
   { path: 'login', component: LoginComponent, data: { hideSidebar: true } },

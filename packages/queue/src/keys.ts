@@ -30,6 +30,10 @@ export const RK = {
   PIPELINE_STAGE_DONE: 'pipeline.stage.done.v1',
   OTA_INCOMING: 'ota.incoming',
   OTA_DISPATCH: 'ota.dispatch',
+  // A sealed device template was released/changed by an admin. device-gateway re-materializes
+  // every already-provisioned device the template matches (rebuild actions/pins/behaviors) and
+  // pushes a config reload — the "apply migration" for sealed devices.
+  SEALED_TEMPLATE_APPLIED: 'sealed.template.applied',
   // Best-effort event published by digest when an OTA release passes validation.
   // notification-service (F15) binds q.notification.publish to this key.
   NOTIFICATION_PUBLISH: 'notification.publish',
@@ -66,6 +70,7 @@ export const QUEUES = {
   PIPELINE_STAGE_DONE: 'q.pipeline.stage.done',
   OTA_INCOMING: 'q.ota.incoming',
   OTA_DISPATCH: 'q.ota.dispatch',
+  SEALED_TEMPLATE_APPLIED: 'q.sealed.template.applied',
   NOTIFICATION_PUBLISH: 'q.notification.publish',
   NOTIFICATION_SEND: 'q.notification.send',
   DLQ: 'q.dlq',

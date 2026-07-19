@@ -11,6 +11,7 @@ import { deviceUpdateRouter } from './routes/device-update.routes';
 import { cameraRouter } from './routes/camera.routes';
 import { initCameraStream } from './ws/camera-stream';
 import { exceptionMiddleware } from './middlewares/exception.middleware';
+import { startSealedTemplateConsumer } from './services/sealed-materialization.service';
 
 // OTel must be initialised before any other imports that could create spans.
 const { metricsHandler } = initOTel('device-gateway');
@@ -21,6 +22,9 @@ async function main() {
   // Camera frames are published to RabbitMQ — establish the channel before serving.
   await initQueue();
   log.info('RabbitMQ connected');
+
+  // Re-apply sealed device templates to live devices when an admin releases/changes one.
+  await startSealedTemplateConsumer();
 
   const app = express();
   app.use(createHttpLogger(log));

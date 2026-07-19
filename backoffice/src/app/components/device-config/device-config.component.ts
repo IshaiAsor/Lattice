@@ -115,6 +115,12 @@ export class DeviceConfigComponent implements OnInit {
       });
   }
 
+  // Sealed devices are factory-soldered: pins/actions are composed by an admin (sealed template),
+  // so the user configures nothing here — the page shows the fixed config read-only.
+  get isSealed(): boolean {
+    return !!this.selectedDevice?.is_sealed;
+  }
+
   selectDevice(device: DeviceView) {
     this.selectedDevice = device;
     this.cancelAdd();

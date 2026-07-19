@@ -153,6 +153,8 @@ export interface DeviceView {
   lastOnlineDate: Date;
   type: string;
   version: string;
+  // Sealed = factory-soldered: pins/actions are admin-composed, so device-config is read-only.
+  is_sealed: boolean;
   current_firmware_version: string | null;
   update_available: boolean;
   // Latest WiFi RSSI (dBm) from the device heartbeat; null when offline.

@@ -84,6 +84,14 @@
         </div>
       </div>
 
+      @if (isSealed) {
+        <div class="sealed-notice">
+          <mat-icon>lock</mat-icon>
+          <span>This is a sealed device — its pins and actions are fixed by an admin template and
+            can't be changed here.</span>
+        </div>
+      }
+
       @if (loadingCapabilities) {
         <mat-progress-bar mode="indeterminate"></mat-progress-bar>
       }
@@ -217,7 +225,7 @@
                 }
               }
 
-              <div class="card-actions">
+              <div class="card-actions" [hidden]="isSealed">
                 @if (editingInstanceId === item.instance.id) {
                   <button mat-button (click)="cancelEdit()">Cancel</button>
                   <button mat-flat-button color="primary"
@@ -238,7 +246,8 @@
           }
         </div>
 
-        <!-- Available Capabilities -->
+        <!-- Available Capabilities (hidden for sealed devices — config is admin-managed) -->
+        @if (!isSealed) {
         <p class="section-label">Available Capabilities</p>
         <div class="bp-grid">
           @for (cap of capabilities; track cap.id) {
@@ -328,6 +337,7 @@
             </div>
           }
         </div>
+        }
       }
     }
   </main>

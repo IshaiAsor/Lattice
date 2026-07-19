@@ -34,8 +34,10 @@ export class AppComponent implements OnInit {
       this.updateHideSidebar();
     });
     this.updateHideSidebar();
-    // Prime the unread badge + wire live updates once a user is present.
-    if (this.authService.getCurrentUser()) {
+    // Prime the unread badge + wire live updates once a valid session is present. Use
+    // isLoggedIn() (checks token expiry), not getCurrentUser(), so a stale "remember me" token
+    // on the login page doesn't fire an authenticated request → 403.
+    if (this.authService.isLoggedIn()) {
       this.notifications.refreshUnread();
       this.notifications.connectLive();
     }

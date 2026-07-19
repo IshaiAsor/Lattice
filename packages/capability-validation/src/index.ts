@@ -98,3 +98,6 @@ export function deriveValidParameters(traitConstraints: unknown[]): ValidParamet
   }
   return patterns[0];
 }
+
+// Firmware version comparison for sealed-device templates (vX.Y.Z range matching).
+export * from './version';

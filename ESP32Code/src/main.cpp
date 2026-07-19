@@ -48,6 +48,10 @@ bool provisioningMode = false;
 QueueHandle_t provisioningQueue = NULL;
 QueueHandle_t bleResponseQueue  = NULL;
 
+// Stored so the BLE stack can be torn down before the provisioning TLS phase on low-heap
+// boards (see teardownBleForTls, gated by FREE_BLE_BEFORE_TLS).
+TaskHandle_t bleResponseTaskHandle = NULL;
+
 WiFiManager wm;
 #ifdef ENV_TEST
 WiFiClient espClient;
@@ -136,13 +140,13 @@ void setup()
     }
 
     // Create BLE response handler task with larger stack (3072 bytes)
-    xTaskCreatePinnedToCore(bleResponseTask,   // Task function
-                            "BLEResponseTask", // Task name
-                            3072,              // Stack size
-                            NULL,              // Parameters
-                            1,                 // Priority
-                            NULL,              // Task handle
-                            0                  // Core affinity (PRO_CPU)
+    xTaskCreatePinnedToCore(bleResponseTask,        // Task function
+                            "BLEResponseTask",      // Task name
+                            3072,                   // Stack size
+                            NULL,                   // Parameters
+                            1,                      // Priority
+                            &bleResponseTaskHandle, // Task handle (kept for teardownBleForTls)
+                            0                       // Core affinity (PRO_CPU)
     );
 
     WiFi.mode(WIFI_STA); // Initialize WiFi driver to properly read from NVS
@@ -387,3 +391,29 @@ void setupBleProvisioning()
     BLEDevice::startAdvertising();
     LOG_I("Ble", "BLE server started — waiting for a client to connect");
 }
+
+#ifdef FREE_BLE_BEFORE_TLS
+// Classic ESP32 (no PSRAM) can't hold the Bluedroid stack AND mbedTLS's ~40 KB of SSL
+// record buffers at once — the provisioning TLS handshake dies with
+// MBEDTLS_ERR_SSL_ALLOC_FAILED (-0x7F00). Provisioning restarts the device on both success
+// and failure, so once WiFi creds + the provisioning token are in hand BLE has no job left:
+// release the whole stack to reclaim the heap the handshakes need. Called by
+// ProvisioningBleService right before the MQTT probe / provision call. Idempotent.
+void teardownBleForTls()
+{
+    static bool torn = false;
+    if (torn)
+        return;
+    torn = true;
+
+    LOG_I("Ble", "releasing BLE stack before TLS (free heap %u)", ESP.getFreeHeap());
+    if (bleResponseTaskHandle != NULL)
+    {
+        vTaskDelete(bleResponseTaskHandle); // no more notifies will touch the characteristic
+        bleResponseTaskHandle = NULL;
+    }
+    pCharacteristic = NULL;  // freed by deinit below — must not be dereferenced after this
+    BLEDevice::deinit(true); // release Bluedroid + BT controller memory back to the heap
+    LOG_I("Ble", "BLE released (free heap %u)", ESP.getFreeHeap());
+}
+#endif

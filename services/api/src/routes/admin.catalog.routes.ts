@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAppToken, requireAdmin } from '../middlewares/auth.middleware';
 import { catalogService } from '../services/catalog.service';
+import { sealedTemplatesService } from '../services/sealed-templates.service';
 
 export const adminCatalogRouter = Router();
 
@@ -57,3 +58,65 @@ adminCatalogRouter.patch(
     }
   },
 );
+
+// ─── Sealed device templates (admin authoring over the shared catalog) ──────
+// Palette: sealed catalog identities the admin composes from (capabilities come from the
+// existing GET /devices/:id/capabilities|actions endpoints above).
+adminCatalogRouter.get('/sealed/identities', async (_req, res, next) => {
+  try {
+    res.json(await sealedTemplatesService.listSealedIdentities());
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminCatalogRouter.get('/sealed/templates', async (_req, res, next) => {
+  try {
+    res.json(await sealedTemplatesService.listTemplates());
+  } catch (err) {
+    next(err);
+  }
+});
+adminCatalogRouter.post('/sealed/templates', async (req, res, next) => {
+  try {
+    res.status(201).json(await sealedTemplatesService.createTemplate(req.body?.name));
+  } catch (err) {
+    next(err);
+  }
+});
+adminCatalogRouter.get('/sealed/templates/:id', async (req, res, next) => {
+  try {
+    res.json(await sealedTemplatesService.getTemplate(Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+adminCatalogRouter.patch('/sealed/templates/:id', async (req, res, next) => {
+  try {
+    const { name, targets, entries } = req.body ?? {};
+    res.json(
+      await sealedTemplatesService.updateTemplate(Number(req.params.id), {
+        name,
+        targets,
+        entries,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+adminCatalogRouter.delete('/sealed/templates/:id', async (req, res, next) => {
+  try {
+    await sealedTemplatesService.deleteTemplate(Number(req.params.id));
+    res.sendStatus(204);
+  } catch (err) {
+    next(err);
+  }
+});
+adminCatalogRouter.post('/sealed/templates/:id/release', async (req, res, next) => {
+  try {
+    res.json(await sealedTemplatesService.releaseTemplate(Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});

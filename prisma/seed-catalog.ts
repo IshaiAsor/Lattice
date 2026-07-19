@@ -59,6 +59,9 @@ interface CapabilityManifestEntry {
 interface DeviceManifest {
   deviceType: string;
   version: string;
+  // Factory-soldered device (SEALED firmware build): its pins/actions are fixed and composed by
+  // an admin into a sealed template rather than user-configured. Same catalog pipeline otherwise.
+  sealed?: boolean;
   capabilities: CapabilityManifestEntry[];
 }
 
@@ -114,11 +117,11 @@ async function upsertGoogleDeviceTrait(
 async function seedManifest(client: pg.PoolClient, m: DeviceManifest) {
   // 1. Upsert the device type (catalog identity).
   const deviceRes = await client.query<{ id: number }>(
-    `INSERT INTO devices (type, version, default_name)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (type, version) DO UPDATE SET updated_at = now()
+    `INSERT INTO devices (type, version, default_name, is_sealed)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (type, version) DO UPDATE SET updated_at = now(), is_sealed = EXCLUDED.is_sealed
      RETURNING id`,
-    [m.deviceType, m.version, `${m.deviceType} ${m.version}`],
+    [m.deviceType, m.version, `${m.deviceType} ${m.version}`, m.sealed ?? false],
   );
   const deviceId = deviceRes.rows[0].id;
 

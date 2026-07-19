@@ -29,6 +29,10 @@
 #include "actions/commands/OnboardLedCommandAction.h"
 #include "config/Log.h"
 extern OnboardLedAction onboardLed;
+#ifdef FREE_BLE_BEFORE_TLS
+// Defined in main.cpp — releases the BLE stack so mbedTLS can allocate on low-heap boards.
+extern void teardownBleForTls();
+#endif
 
 class ProvisioningBleService
 {
@@ -130,6 +134,15 @@ class ProvisioningBleService
         LOG_I("Provision", "testing MQTT reachability with provisioning token");
         bleNotificationService->NotifyBleDevice(ResponseType::TESTING_MQTT_CONNECTION, "OK: Testing MQTT...");
         delay(300); // let BLE TX flush before WiFi TCP
+
+#ifdef FREE_BLE_BEFORE_TLS
+        // Low-heap board: this is the last BLE notify the phone will receive. Give it a moment
+        // to flush, then release the BLE stack so the TLS handshakes below can allocate. The
+        // device restarts at the end of provisioning regardless, so BLE is not needed again;
+        // the phone sees a disconnect and the device comes back online on success.
+        delay(500);
+        teardownBleForTls();
+#endif
 
         if (!mqttService->testMqtt(&mqttCreds, &provToken))
         {

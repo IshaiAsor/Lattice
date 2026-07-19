@@ -47,7 +47,7 @@ export class NotificationsService {
   // Subscribe to live in-app deliveries. Idempotent + no-op until a user is present; safe to
   // call from the shell (on load, if authenticated) and from the notifications page.
   connectLive(): void {
-    if (this.liveWired || !this.auth.getToken()) return;
+    if (this.liveWired || !this.auth.isLoggedIn()) return;
     this.liveWired = true;
     const socket = this.injector.get(DeviceSocketService);
     socket.notification$.subscribe((n) => {
@@ -72,7 +72,7 @@ export class NotificationsService {
 
   // Called by the shell once a user is authenticated, so the badge is correct on load.
   refreshUnread(): void {
-    if (!this.auth.getToken()) return;
+    if (!this.auth.isLoggedIn()) return;
     this.http
       .get<{ count: number }>(`${this.base}/unread-count`)
       .subscribe((r) => this.unreadCount.set(r.count));

@@ -16,6 +16,8 @@ export interface DeviceView {
   lastOnlineDate: Date | null;
   type: string;
   version: string;
+  // Sealed = factory-soldered: config is admin-composed, so the device-config page is read-only.
+  is_sealed: boolean;
   current_firmware_version: string | null;
   update_available: boolean;
   // Latest WiFi RSSI (dBm) from the device heartbeat — only while online (null otherwise, so
@@ -96,6 +98,7 @@ class DeviceMgmtService {
         lastOnlineDate: d.last_online_date,
         type: d.device.type,
         version: d.device.version,
+        is_sealed: d.device.is_sealed,
         current_firmware_version: d.current_firmware_version,
         update_available: d.device.version !== latestVersion,
         rssi: d.online ? d.rssi : null,

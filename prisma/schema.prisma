@@ -46,6 +46,10 @@ model Device {
   type         String   @db.VarChar(255)
   version      String   @db.VarChar(255)
   default_name String   @unique @db.VarChar(255)
+  // Sealed = factory-soldered device: pins/actions are fixed and composed by an admin into a
+  // SealedTemplate (not user-configurable). Seeded from the firmware manifest's `sealed` marker
+  // (SEALED build flag); regular types stay false. Same catalog pipeline either way.
+  is_sealed    Boolean  @default(false)
   created_at   DateTime @default(now()) @db.Timestamp(6)
   updated_at   DateTime @default(now()) @db.Timestamp(6)
 
@@ -126,6 +130,88 @@ model DeviceCapabilityPin {
 
   @@unique([capability_id, key])
   @@map("device_capability_pins")
+}
+
+// ─── Sealed device templates (admin authoring layer over the shared catalog) ────────
+// A sealed device's config is composed ONCE by an admin instead of per-user: which catalog
+// capabilities to activate, the fixed GPIO per pin slot, and which behaviors. Entries reference
+// catalog capabilities BY KEY (capability_key / pin_slot_key), not by row id, so one template
+// resolves across a firmware version RANGE (see targets). On provision a sealed device
+// auto-materializes its resolved template into user_device_actions (device-gateway) — the user
+// configures nothing. The catalog itself stays append-only; only these tables + user instances
+// are mutable.
+
+model SealedTemplate {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique @db.VarChar(255)
+  status     String   @default("draft") @db.VarChar(20) // draft | released (only released materializes)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+
+  targets SealedTemplateTarget[]
+  entries SealedTemplateEntry[]
+
+  @@map("sealed_templates")
+}
+
+// Which (device type, firmware version range) a template covers. A device matches when
+// type == device_type AND version_min <= version <= version_max (inclusive, vX.Y.Z compare).
+model SealedTemplateTarget {
+  id          Int    @id @default(autoincrement())
+  template_id Int
+  device_type String @db.VarChar(255)
+  version_min String @db.VarChar(64)
+  version_max String @db.VarChar(64)
+
+  template SealedTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@index([device_type])
+  @@map("sealed_template_targets")
+}
+
+// One activated capability in the template, resolved per version by capability_key.
+model SealedTemplateEntry {
+  id                 Int     @id @default(autoincrement())
+  template_id        Int
+  capability_key     String  @db.VarChar(64)
+  action_label       String  @db.VarChar(255)
+  default_trait_value String? @db.VarChar(255) // GoogleDeviceTrait.value, resolved per version
+  sort_order         Int     @default(0)
+
+  template   SealedTemplate               @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  pins       SealedTemplateEntryPin[]
+  behaviors  SealedTemplateEntryBehavior[]
+
+  @@unique([template_id, capability_key])
+  @@map("sealed_template_entries")
+}
+
+// Fixed GPIO the admin assigned to a capability's pin slot (by DeviceCapabilityPin.key).
+model SealedTemplateEntryPin {
+  id           Int    @id @default(autoincrement())
+  entry_id     Int
+  pin_slot_key String @db.VarChar(50)
+  pin_number   Int
+
+  entry SealedTemplateEntry @relation(fields: [entry_id], references: [id], onDelete: Cascade)
+
+  @@unique([entry_id, pin_slot_key])
+  @@map("sealed_template_entry_pins")
+}
+
+// Enabled behavior + chosen values (mirrors user_action_configurations).
+model SealedTemplateEntryBehavior {
+  id                Int     @id @default(autoincrement())
+  entry_id          Int
+  behavior          String  @db.VarChar(20)
+  interval_ms       Int?
+  camera_resolution String? @db.VarChar(20)
+  camera_transport  String? @db.VarChar(10)
+
+  entry SealedTemplateEntry @relation(fields: [entry_id], references: [id], onDelete: Cascade)
+
+  @@unique([entry_id, behavior])
+  @@map("sealed_template_entry_behaviors")
 }
 
 model MlModel {
