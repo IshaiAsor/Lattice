@@ -144,6 +144,10 @@ class SimDevice extends EventEmitter {
     this.appToken = null;
     this.userId = null;
     this.catalogCaps = null;
+    // Sealed = factory-soldered: config is composed by an admin (sealed template) and
+    // auto-materialized by device-gateway on provision. The sim never self-activates capabilities
+    // for these — it just pulls the served config, exactly like sealed firmware. Set from catalog.
+    this.isSealed = false;
     this.version = null;
     this.deviceId = null;
     this.mqttToken = null;
@@ -187,15 +191,22 @@ class SimDevice extends EventEmitter {
     );
     await this.provision();
     this._log(`✔ provisioned — deviceId ${this.deviceId}`);
-    // `capabilities` (a list of catalog capability_keys) activates just those, even if
-    // activateAll is off — an explicit list is an explicit request to activate them.
-    const wantsSelected =
-      Array.isArray(this.opts.capabilities) && this.opts.capabilities.length > 0;
-    if (this.opts.activateAll || wantsSelected) {
-      const { activated, skipped } = await this.activateAll();
-      this._log(
-        `✔ activated ${activated} capabilit${activated === 1 ? 'y' : 'ies'} via api (skipped ${skipped} already configured)`,
-      );
+    // Sealed devices are admin-configured: device-gateway auto-materializes the released template
+    // on provision, so the sim never self-activates — it just pulls the served config (matching
+    // sealed firmware, and keeping the device-config page's read-only contract honest).
+    if (this.isSealed) {
+      this._log('🔒 sealed device — config is admin-composed; skipping capability self-activation');
+    } else {
+      // `capabilities` (a list of catalog capability_keys) activates just those, even if
+      // activateAll is off — an explicit list is an explicit request to activate them.
+      const wantsSelected =
+        Array.isArray(this.opts.capabilities) && this.opts.capabilities.length > 0;
+      if (this.opts.activateAll || wantsSelected) {
+        const { activated, skipped } = await this.activateAll();
+        this._log(
+          `✔ activated ${activated} capabilit${activated === 1 ? 'y' : 'ies'} via api (skipped ${skipped} already configured)`,
+        );
+      }
     }
     this._loadStateFile();
     const { tel, cmd, cam } = await this.pullConfig();
@@ -204,7 +215,9 @@ class SimDevice extends EventEmitter {
     );
     if (this.actions.length === 0) {
       this._log(
-        `  (nothing activated yet — activate capabilities in the device-config UI; re-pulls every ${this.opts.configRefreshMs}ms)`,
+        this.isSealed
+          ? `  (no released sealed template covers ${this.opts.deviceType} ${this.version} yet — compose + release one in Admin › Sealed Templates; re-pulls every ${this.opts.configRefreshMs}ms)`
+          : `  (nothing activated yet — activate capabilities in the device-config UI; re-pulls every ${this.opts.configRefreshMs}ms)`,
       );
     }
     await this.connect();
@@ -240,6 +253,7 @@ class SimDevice extends EventEmitter {
         `no catalog device for type ${this.opts.deviceType} — seed the catalog first`,
       );
     this.version = dev.version;
+    this.isSealed = !!dev.is_sealed;
     this.catalogCaps = await this._http(
       'GET',
       `${this.opts.apiUrl}/api/admin/catalog/devices/${dev.id}/capabilities`,

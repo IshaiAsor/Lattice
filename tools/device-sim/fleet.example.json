@@ -7,6 +7,7 @@
   "//devices[2]": "2 Gen4 boards with faster telemetry (2s) than the library default (5s)",
   "//devices[3]": "a single pinned mac — handy when a test/bookmark needs a stable device identity across restarts, instead of the auto-generated SIM-<TYPE>-<NN>",
   "//devices[4]": "1 Gen4 board, full catalog, all defaults — the minimal form of a device entry",
+  "//sealed": "For a SEALED (factory-soldered) device type, just give its `type` — the sim detects is_sealed from the catalog and skips self-activation; its actions/pins come from the admin's released Sealed Template (auto-materialized on provision). `capabilities`/`activateAll` are ignored for sealed types. e.g. { \"type\": \"HYDRO_FARM_WATER_TANK_MANAGER\", \"count\": 1 }",
   "defaults": {
     "activateAll": true
   },

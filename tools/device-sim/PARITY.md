@@ -8,12 +8,13 @@ Legend: ✓ mirrored · ◐ partial / functional-equivalent · ✗ not simulated
 
 ## Provisioning & identity
 
-| Firmware behavior                                     | Source                                                                                        | Sim                                                                   |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| BLE provisioning (WiFi creds + token over BLE)        | `main.cpp` setupBleProvisioning                                                               | ✗ — HTTP provision stands in (no BLE/WiFi)                            |
-| Single provision call → deviceId, mqttToken, URLs     | `JwtService::Provision` → `provisioning.routes`                                               | ✓                                                                     |
-| Permanent `device_usage` JWT + refresh-token rotation | `JwtService::RefreshJwtTokenIfNeeded` (450s pre-exp), `provisioning.service.refreshMqttToken` | ✓ — decodes JWT exp, refreshes ~450s before via `POST /refresh-token` |
-| Physical button factory reset (BUTTON_PIN)            | `main.cpp` handleReset/performFactoryReset                                                    | ✗ — N/A (no hardware); use `hard-reset` cmd                           |
+| Firmware behavior                                     | Source                                                                                        | Sim                                                                                             |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| BLE provisioning (WiFi creds + token over BLE)        | `main.cpp` setupBleProvisioning                                                               | ✗ — HTTP provision stands in (no BLE/WiFi)                                                      |
+| Single provision call → deviceId, mqttToken, URLs     | `JwtService::Provision` → `provisioning.routes`                                               | ✓                                                                                               |
+| Sealed device: admin-composed config, no self-config  | `SEALED` build flag → `devices.is_sealed`; gateway auto-materializes the released template    | ✓ — sim reads `is_sealed` from catalog, skips self-activation, pulls the served template config |
+| Permanent `device_usage` JWT + refresh-token rotation | `JwtService::RefreshJwtTokenIfNeeded` (450s pre-exp), `provisioning.service.refreshMqttToken` | ✓ — decodes JWT exp, refreshes ~450s before via `POST /refresh-token`                           |
+| Physical button factory reset (BUTTON_PIN)            | `main.cpp` handleReset/performFactoryReset                                                    | ✗ — N/A (no hardware); use `hard-reset` cmd                                                     |
 
 ## Config pull
 
