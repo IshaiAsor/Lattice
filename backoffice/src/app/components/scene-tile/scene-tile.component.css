@@ -1,0 +1,123 @@
+:host {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+}
+
+.scene-tile {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+  box-sizing: border-box;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s,
+    transform 0.1s;
+}
+
+.scene-tile:hover {
+  background: var(--surface);
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* Tap feedback — the run is fire-and-forget, so this is the only local confirmation. */
+.scene-tile:active {
+  transform: scale(0.98);
+}
+
+.scene-tile.running {
+  border-color: var(--primary);
+}
+
+.scene-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 6px 8px 12px;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.scene-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.scene-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.card-menu-btn {
+  width: 28px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  flex-shrink: 0;
+}
+
+.card-menu-btn mat-icon {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+.scene-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 20px;
+}
+
+.play-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--surface-alt);
+  transition: background 0.15s;
+}
+
+.scene-tile:hover .play-badge {
+  background: var(--primary);
+}
+
+.play-badge mat-icon {
+  font-size: 36px;
+  width: 36px;
+  height: 36px;
+  color: var(--primary);
+  transition: color 0.15s;
+}
+
+.scene-tile:hover .play-badge mat-icon {
+  color: #fff;
+}
+
+.scene-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}

@@ -99,6 +99,24 @@ export function isTelemetryAction(action: DeviceActionView): boolean {
   return action.googleTraits.some(t => SENSOR_TRAIT_VALUES.has(t.value));
 }
 
+// Which input widget an editor should render to set a target value for an action.
+// Shared by the rule editor ("then do") and the scene editor (member target state).
+export type ActionControlType = 'onoff' | 'dial' | 'sensor' | 'text';
+
+export const TRAIT_ONOFF = 'action.devices.traits.OnOff';
+export const TRAIT_BRIGHTNESS = 'action.devices.traits.Brightness';
+export const TRAIT_FANSPEED = 'action.devices.traits.FanSpeed';
+export const TYPE_SENSOR = 'action.devices.types.SENSOR';
+
+export function actionControlType(action: DeviceActionView | undefined | null): ActionControlType {
+  if (!action) return 'text';
+  const traits = action.googleTraits.map(t => t.value);
+  if (action.googleType?.value === TYPE_SENSOR) return 'sensor';
+  if (traits.some(t => t === TRAIT_BRIGHTNESS || t === TRAIT_FANSPEED)) return 'dial';
+  if (traits.some(t => t === TRAIT_ONOFF)) return 'onoff';
+  return 'text';
+}
+
 // Maps a Google trait value to a mat-icon name for use in the trait-switcher chips.
 export function traitIconName(traitValue: string): string {
   switch (traitValue) {

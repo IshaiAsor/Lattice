@@ -11,6 +11,9 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
 import { GroupTileComponent } from '../group-tile/group-tile.component';
+import { SceneTileComponent } from '../scene-tile/scene-tile.component';
+import { SceneEditorDialogComponent } from '../scene-editor-dialog/scene-editor-dialog.component';
+import { ScenesService, SceneView } from 'src/app/services/scenes.service';
 import { CameraDisplayComponent } from '../camera-display/camera-display.component';
 import { ReceivedBadgeComponent } from '../received-badge/received-badge.component';
 import { GroupBottomSheetComponent } from '../group-bottom-sheet/group-bottom-sheet.component';
@@ -30,7 +33,7 @@ function toSvgPt(angleDeg: number) {
 
 @Component({
   selector: 'app-user-dashboard',
-  imports: [SHARED_MATERIAL, GroupTileComponent, CameraDisplayComponent, ReceivedBadgeComponent],
+  imports: [SHARED_MATERIAL, GroupTileComponent, SceneTileComponent, CameraDisplayComponent, ReceivedBadgeComponent],
   templateUrl: './user-dashboard.html',
   styleUrl: './user-dashboard.css',
 })
@@ -43,9 +46,14 @@ export class UserDashboard implements OnInit {
   bottomSheet = inject(MatBottomSheet);
   private deviceMgmtService = inject(DeviceMgmtService);
   private rulesService = inject(UserRulesService);
+  private scenesService = inject(ScenesService);
   private http = inject(HttpClient);
 
   items: DashboardItem[] = [];
+  scenes: SceneView[] = [];
+  // Scene ids with an execute in flight — drives the tile spinner. Cleared on 202, since
+  // execution is fire-and-forget (per-device acks arrive later as normal state updates).
+  runningSceneIds = new Set<number>();
   isDragging = false;
   draggingIndex = -1;
   groupDropTargetIndex: number | null = null;
@@ -72,6 +80,7 @@ export class UserDashboard implements OnInit {
 
   ngOnInit(): void {
     this.loadActions();
+    this.loadScenes();
     this.loadStats();
 
     this.socketService
@@ -177,6 +186,65 @@ export class UserDashboard implements OnInit {
   private reloadActions() {
     this.userActionsService.getUserActions().subscribe(actions => {
       this.items = this.buildItems(actions);
+    });
+  }
+
+  // ── Scenes (F10.5) ───────────────────────────────────────────────
+
+  private loadScenes() {
+    this.scenesService
+      .getScenes()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(scenes => { this.scenes = scenes; });
+  }
+
+  // Fire-and-forget: the 202 only means "queued". Each device's real state lands via the
+  // normal socket action_state_update, so the tiles below update themselves.
+  runScene(scene: SceneView) {
+    if (this.runningSceneIds.has(scene.id)) return;
+    this.runningSceneIds.add(scene.id);
+    this.scenesService.execute(scene.id).subscribe({
+      next: res => {
+        this.runningSceneIds.delete(scene.id);
+        this.snackBar.open(`${scene.name} — ${res.queued} command(s) sent`, 'Close', { duration: 2500 });
+      },
+      error: () => {
+        this.runningSceneIds.delete(scene.id);
+        this.snackBar.open(`Failed to run ${scene.name}`, 'Close', { duration: 3000 });
+      },
+    });
+  }
+
+  createScene() {
+    this.openSceneEditor(null);
+  }
+
+  editScene(scene: SceneView) {
+    this.openSceneEditor(scene);
+  }
+
+  private openSceneEditor(scene: SceneView | null) {
+    const actions = this.items
+      .flatMap(i => (i.kind === 'action' ? [i.action!] : i.group!.actions))
+      .filter(a => !isTelemetryAction(a) && !isCameraAction(a));
+
+    const ref = this.dialog.open(SceneEditorDialogComponent, {
+      data: { scene, actions },
+      panelClass: 'glass-dialog',
+      width: '520px',
+    });
+    ref.afterClosed().subscribe((saved: boolean) => {
+      if (saved) this.loadScenes();
+    });
+  }
+
+  deleteScene(scene: SceneView) {
+    this.scenesService.deleteScene(scene.id).subscribe({
+      next: () => {
+        this.scenes = this.scenes.filter(s => s.id !== scene.id);
+        this.snackBar.open(`Deleted ${scene.name}`, 'Close', { duration: 2500 });
+      },
+      error: () => this.snackBar.open('Failed to delete scene', 'Close', { duration: 3000 }),
     });
   }
 

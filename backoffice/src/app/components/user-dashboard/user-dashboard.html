@@ -36,6 +36,32 @@
   </div>
 </div>
 
+<!-- Scenes (F10.5). Kept out of the device card-grid on purpose: that grid's drag-drop
+     persists action order and uses cards as grouping drop targets, neither of which apply
+     to a scene. -->
+<div class="scenes-section">
+  <div class="scenes-header">
+    <mat-icon class="scenes-header-icon">auto_awesome</mat-icon>
+    <span class="scenes-title">Scenes</span>
+    <span class="header-spacer"></span>
+    <button mat-button class="new-scene-btn" (click)="createScene()">
+      <mat-icon>add</mat-icon> New scene
+    </button>
+  </div>
+  @if (scenes.length) {
+  <div class="scenes-row">
+    @for (scene of scenes; track scene.id) {
+    <div class="scene-card-wrapper">
+      <app-scene-tile [scene]="scene" [running]="runningSceneIds.has(scene.id)"
+        (execute)="runScene(scene)" (edit)="editScene(scene)" (remove)="deleteScene(scene)"></app-scene-tile>
+    </div>
+    }
+  </div>
+  } @else {
+  <p class="scenes-empty">Group several devices into one tap — e.g. a "Good Night" scene.</p>
+  }
+</div>
+
 <div class="card-grid" cdkDropList cdkDropListOrientation="mixed" cdkDropListSortingDisabled
      (cdkDropListDropped)="drop($event)">
     @for (item of items; track itemTrackId(item); let i = $index) {

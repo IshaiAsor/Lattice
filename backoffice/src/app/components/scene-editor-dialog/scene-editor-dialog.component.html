@@ -1,0 +1,89 @@
+<h2 mat-dialog-title>{{ data.scene ? 'Edit Scene' : 'New Scene' }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Scene name</mat-label>
+      <input matInput formControlName="name" placeholder="Good Night" maxlength="255">
+    </mat-form-field>
+
+    <div class="section-label">Set these actions</div>
+
+    <div formArrayName="members">
+      @for (member of membersArray.controls; track $index; let i = $index) {
+      <div [formGroupName]="i" class="member-row">
+        <div class="member-row-header">
+          <span class="member-index">{{ i + 1 }}</span>
+          <span class="header-spacer"></span>
+          <button mat-icon-button type="button" (click)="removeMember(i)" class="remove-btn"
+            matTooltip="Remove" [disabled]="membersArray.length === 1">
+            <mat-icon>remove_circle_outline</mat-icon>
+          </button>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Action</mat-label>
+          <mat-select formControlName="user_device_action_id" (selectionChange)="onMemberActionChange(i)">
+            @for (a of availableActions(i); track a.id) {
+            <mat-option [value]="a.id">{{ actionLabel(a) }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <div class="member-fields">
+          @switch (getActionControlType(member.get('user_device_action_id')?.value)) {
+          @case ('onoff') {
+          <mat-form-field appearance="outline">
+            <mat-label>Set to</mat-label>
+            <mat-select formControlName="target_state">
+              <mat-option value="on">On</mat-option>
+              <mat-option value="off">Off</mat-option>
+            </mat-select>
+          </mat-form-field>
+          }
+          @case ('dial') {
+          <mat-form-field appearance="outline">
+            <mat-label>Set value (0–100)</mat-label>
+            <input matInput type="number" min="0" max="100" formControlName="target_state">
+            <span matSuffix>%</span>
+          </mat-form-field>
+          }
+          @default {
+          <mat-form-field appearance="outline">
+            <mat-label>Set state to</mat-label>
+            <input matInput formControlName="target_state">
+          </mat-form-field>
+          }
+          }
+
+          <mat-form-field appearance="outline" class="delay-field">
+            <mat-label>Delay</mat-label>
+            <input matInput type="number" formControlName="delay_seconds" min="0">
+            <span matSuffix>s</span>
+          </mat-form-field>
+        </div>
+      </div>
+      }
+    </div>
+
+    <button mat-stroked-button type="button" (click)="addMember()" class="add-member-btn"
+      [disabled]="membersArray.length >= data.actions.length">
+      <mat-icon>add</mat-icon> Add action
+    </button>
+
+    @if (error) {
+    <p class="error-note">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ error }}</span>
+    </p>
+    }
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="dialogRef.close(false)" [disabled]="saving">Cancel</button>
+  <button mat-raised-button color="primary" [disabled]="form.invalid || membersArray.length === 0 || saving"
+    (click)="save()">
+    {{ data.scene ? 'Save Changes' : 'Create Scene' }}
+  </button>
+</mat-dialog-actions>

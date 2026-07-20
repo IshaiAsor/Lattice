@@ -263,6 +263,7 @@ model User {
   user_login_audit     UserLoginAudit[]
   user_rules           UserRule[]
   action_groups        UserActionGroup[]
+  scenes               Scene[]
   pipelines            Pipeline[]
   notification_prefs   NotificationPreference[]
   notification_history NotificationHistory[]
@@ -417,6 +418,7 @@ model UserDeviceAction {
   configurations    UserActionConfiguration[]
   rule_actions      UserRuleAction[]
   rule_conditions   UserRuleCondition[]
+  scene_members     SceneMember[]
   sensor_history    SensorHistory[]
   pipeline_sensors  PipelineSensor[]
   pipeline_triggers PipelineTrigger[]         @relation("PipelineTrig")
@@ -531,6 +533,43 @@ model UserRuleEvent {
 
   @@index([rule_id, fired_at])
   @@map("user_rule_events")
+}
+
+// Scenes (F10.5) — a user-named set of device actions executed on demand ("Good Night").
+// Structurally a UserRule without conditions: firing is manual (POST /api/scenes/:id/execute)
+// rather than condition-driven. Distinct from UserActionGroup, which is an organizational
+// folder (exclusive group_id on the action, no target value); a SceneMember is a join row
+// carrying the DESIRED value, so one action can belong to many scenes.
+model Scene {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  name       String   @db.VarChar(255)
+  sort_order Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+
+  user    User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  members SceneMember[]
+
+  @@unique([user_id, name])
+  @@index([user_id, sort_order])
+  @@map("scenes")
+}
+
+model SceneMember {
+  id                    Int    @id @default(autoincrement())
+  scene_id              Int
+  user_device_action_id Int
+  target_state          String @db.VarChar(255)
+  sort_order            Int    @default(0)
+  // Staggered execution: members with delay_seconds > 0 are published after the delay.
+  delay_seconds         Int    @default(0)
+
+  scene              Scene            @relation(fields: [scene_id], references: [id], onDelete: Cascade)
+  user_device_action UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
+
+  @@unique([scene_id, user_device_action_id])
+  @@map("scene_members")
 }
 
 // ═══ Tier 5 — Pipelines (ML execution) ═════════════════════════════════════════

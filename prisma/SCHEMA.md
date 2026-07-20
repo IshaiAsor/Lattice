@@ -1,17 +1,17 @@
 # Lattice v2.2 — Database Schema Review
 
 Single source of truth is `prisma/schema.prisma`. **Keep this file in sync with every schema
-change** (mermaid ERD + per-table examples). 26 tables, ordered by dependency tier 0 → 6.
+change** (mermaid ERD + per-table examples). 28 tables, ordered by dependency tier 0 → 6.
 
-| Tier | Theme                                                       | Tables                                                                                                                           |
-| ---- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | External catalog                                            | `google_action_types`, `google_device_traits`                                                                                    |
-| 1    | Device & ML catalog                                         | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models` |
-| 2    | Identity                                                    | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                   |
-| 3    | User devices & actions                                      | `user_devices`, `user_action_groups`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`             |
-| 4    | Automation (rules; emergencies = rules with `is_emergency`) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`                                                    |
-| 5    | Pipelines (ML execution)                                    | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                  |
-| 6    | Telemetry                                                   | `sensor_history`                                                                                                                 |
+| Tier | Theme                                                                                | Tables                                                                                                                           |
+| ---- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | External catalog                                                                     | `google_action_types`, `google_device_traits`                                                                                    |
+| 1    | Device & ML catalog                                                                  | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models` |
+| 2    | Identity                                                                             | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                   |
+| 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`             |
+| 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                         |
+| 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                  |
+| 6    | Telemetry                                                                            | `sensor_history`                                                                                                                 |
 
 ---
 
@@ -243,6 +243,20 @@ erDiagram
     string triggered_value
     datetime fired_at
   }
+  Scene {
+    int id PK
+    int user_id FK
+    string name "unique per user"
+    int sort_order
+  }
+  SceneMember {
+    int id PK
+    int scene_id FK
+    int user_device_action_id FK
+    string target_state
+    int sort_order
+    int delay_seconds "stagger"
+  }
 
   %% ── Tier 5: pipelines ──
   Pipeline {
@@ -350,6 +364,9 @@ erDiagram
   UserRule              ||--o{ UserRuleEvent          : "fired"
   UserDeviceAction      |o--o{ UserRuleCondition      : "reads"
   UserDeviceAction      ||--o{ UserRuleAction         : "commands"
+  User                  ||--o{ Scene                  : "owns"
+  Scene                 ||--o{ SceneMember            : "runs"
+  UserDeviceAction      ||--o{ SceneMember            : "commands"
 
   MlModel               |o--o{ PipelineStage          : "runs"
   Pipeline              ||--o{ PipelineSensor         : "inputs"
@@ -581,6 +598,28 @@ erDiagram
 | id  | rule_id | triggered_value | fired_at             |
 | --- | ------- | --------------- | -------------------- |
 | 1   | 51      | "46.2"          | 2026-06-26T14:40:00Z |
+
+#### `scenes` (`Scene`) — manual one-tap fan-out ("Good Night"). Unique `(user_id, name)`, index `(user_id, sort_order)`.
+
+A scene is a `user_rules` row without conditions: it fires on `POST /api/scenes/:id/execute`,
+not on a trigger. Distinct from `user_action_groups`, which is an organizational folder
+(exclusive `group_id` on the action, no target value) — a scene stores the **desired value**
+per action, and `scene_members` being a join table means one action can sit in many scenes.
+
+| id  | user_id | name       | sort_order |
+| --- | ------- | ---------- | ---------- |
+| 10  | 2       | Good Night | 0          |
+| 11  | 2       | Away       | 1          |
+
+#### `scene_members` (`SceneMember`) — the action list. Unique `(scene_id, user_device_action_id)`.
+
+`delay_seconds > 0` staggers a member (published after the delay); `0` fires immediately.
+
+| id  | scene_id | user_device_action_id | target_state | sort_order | delay_seconds |
+| --- | -------- | --------------------- | ------------ | ---------- | ------------- |
+| 30  | 10       | 101                   | OFF          | 0          | 0             |
+| 31  | 10       | 104                   | ON           | 1          | 0             |
+| 32  | 11       | 101                   | OFF          | 0          | 30            |
 
 ### Tier 5 — Pipelines (ML execution: trigger → sensors → stages → decision)
 

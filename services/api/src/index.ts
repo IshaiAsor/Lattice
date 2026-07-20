@@ -12,6 +12,7 @@ import { deviceMgmtRouter } from './routes/device.mgmt.routes';
 import { userActionsRouter } from './routes/user.actions.routes';
 import { actionGroupsRouter } from './routes/action.groups.routes';
 import { rulesRouter } from './routes/rules.routes';
+import { scenesRouter } from './routes/scenes.routes';
 import { pipelinesRouter } from './routes/pipelines.routes';
 import { notificationsRouter } from './routes/notifications.routes';
 import { getChannel } from './queue';
@@ -54,6 +55,7 @@ function main() {
   app.use('/api/actions', userActionsRouter);
   app.use('/api/action-groups', actionGroupsRouter);
   app.use('/api/rules', rulesRouter);
+  app.use('/api/scenes', scenesRouter);
   app.use('/api/pipelines', pipelinesRouter);
   app.use('/api/notifications', notificationsRouter);
 

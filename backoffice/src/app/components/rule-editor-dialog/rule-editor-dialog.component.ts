@@ -6,6 +6,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { DeviceActionView, DeviceView } from 'src/app/services/device.mgmt.service';
 import { CreateRuleDto, UserRuleView } from 'src/app/services/user.rules.service';
+import { actionControlType, ActionControlType } from 'src/app/utils/device-type.utils';
 
 interface ConditionPrefill {
   days?: number[];
@@ -45,15 +46,8 @@ export interface RuleEditorData {
   devices: DeviceView[];
 }
 
-export type ActionControlType = 'onoff' | 'dial' | 'sensor' | 'text';
-
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const TRAIT_ONOFF = 'action.devices.traits.OnOff';
-const TRAIT_BRIGHTNESS = 'action.devices.traits.Brightness';
-const TRAIT_FANSPEED = 'action.devices.traits.FanSpeed';
-const TYPE_SENSOR = 'action.devices.types.SENSOR';
 
 @Component({
   selector: 'app-rule-editor-dialog',
@@ -129,13 +123,7 @@ export class RuleEditorDialogComponent implements OnInit {
   }
 
   getActionControlType(id: number | null | undefined): ActionControlType {
-    const action = this.getAction(id);
-    if (!action) return 'text';
-    const traits = action.googleTraits.map(t => t.value);
-    if (action.googleType?.value === TYPE_SENSOR) return 'sensor';
-    if (traits.some(t => t === TRAIT_BRIGHTNESS || t === TRAIT_FANSPEED)) return 'dial';
-    if (traits.some(t => t === TRAIT_ONOFF)) return 'onoff';
-    return 'text';
+    return actionControlType(this.getAction(id));
   }
 
   getConditionOperators(condIndex: number): { value: string; label: string }[] {
