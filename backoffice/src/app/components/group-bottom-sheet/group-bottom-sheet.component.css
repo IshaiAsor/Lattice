@@ -47,16 +47,32 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 0;
+  /* Height is ALWAYS reserved, never animated. CDK caches every item's
+     geometry in _draggingStarted(); collapsing/expanding this zone during a
+     drag reflows the card list and invalidates that cache, which silently
+     breaks sorting. Reveal it with opacity only — never height/display.
+     Do not add `pointer-events: none`: CDK's _canReceive() uses
+     elementFromPoint, so the zone must stay hit-testable to accept a drop. */
+  height: 40px;
   overflow: hidden;
-  background: rgba(46, 204, 113, 0.10);
+  background: transparent;
   color: var(--online);
   font-size: 12px;
   font-weight: 600;
-  transition: height 0.2s;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s, box-shadow 0.2s;
 }
 
-.drag-up-zone.active { height: 40px; }
+/* .visible = a drag is in progress; .active = pointer is armed over the zone. */
+.drag-up-zone.visible {
+  opacity: 1;
+  background: rgba(46, 204, 113, 0.10);
+}
+
+.drag-up-zone.active {
+  background: rgba(46, 204, 113, 0.22);
+  box-shadow: inset 0 0 0 2px var(--online);
+}
 .drag-up-zone mat-icon { font-size: 18px; width: 18px; height: 18px; }
 
 /* ── Drag rail (same as dashboard) ──────────────────────────────── */

@@ -8,16 +8,22 @@
     </button>
 </div>
 
-<div class="drag-up-zone" [class.active]="dragUpActive">
+<div class="drag-up-zone" [class.visible]="dragging" [class.active]="dragUpActive"
+     cdkDropList id="group-remove-zone" [cdkDropListConnectedTo]="['group-cards']"
+     (cdkDropListEntered)="dragUpActive = true"
+     (cdkDropListExited)="dragUpActive = false"
+     (cdkDropListDropped)="onRemoveZoneDrop($event)">
     <mat-icon>keyboard_arrow_up</mat-icon>
     <span>Release to remove from group</span>
 </div>
 
-<div class="sheet-cards">
+<div class="sheet-cards" cdkDropList id="group-cards" cdkDropListOrientation="mixed"
+     [cdkDropListConnectedTo]="['group-remove-zone']"
+     (cdkDropListDropped)="drop($event)">
     @for (action of actions; track action.id) {
-    <div class="device-card-wrapper" cdkDrag
-         (cdkDragMoved)="onCardDragMoved($event)"
-         (cdkDragEnded)="onCardDragEnded($event, action)">
+    <div class="device-card-wrapper" cdkDrag [cdkDragData]="action"
+         (cdkDragStarted)="onDragStarted()"
+         (cdkDragEnded)="onDragEnded()">
 
         <div class="drag-rail" cdkDragHandle>
             <div class="drag-rail-dots">

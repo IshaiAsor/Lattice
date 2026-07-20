@@ -11,7 +11,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
-import { CdkDragEnd, CdkDragMove } from '@angular/cdk/drag-drop';
+import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { ReceivedBadgeComponent } from '../received-badge/received-badge.component';
 
 // Dial geometry constants (duplicated from user-dashboard for standalone use)
@@ -41,8 +41,11 @@ export class GroupBottomSheetComponent implements OnInit {
   dialog = inject(MatDialog);
 
   actions: DeviceActionView[] = [];
+  dragging = false;
   dragUpActive = false;
   private draggingActionId: number | null = null;
+  // Set when intra-group order changed, so the dashboard reloads on dismiss.
+  private orderChanged = false;
 
   // Prior action.state for in-flight commands, so action_state_failed can revert the UI.
   private pendingPrevState = new Map<number, unknown>();
@@ -119,15 +122,45 @@ export class GroupBottomSheetComponent implements OnInit {
       });
   }
 
-  onCardDragMoved(event: CdkDragMove) {
-    this.dragUpActive = event.distance.y < -80;
+  // ── Drag: reorder within the group, or drop on the top zone to remove ──
+  // The remove zone is its own connected drop list rather than a distance
+  // threshold, so dragging a card upward to reorder no longer removes it.
+
+  onDragStarted() { this.dragging = true; }
+
+  onDragEnded() {
+    this.dragging = false;
+    this.dragUpActive = false;
   }
 
-  onCardDragEnded(event: CdkDragEnd, action: DeviceActionView) {
-    const draggedUp = event.distance.y < -80;
-    event.source.reset();
+  drop(event: CdkDragDrop<DeviceActionView[]>) {
+    if (event.previousContainer !== event.container) return; // remove zone handles its own drop
+    if (event.previousIndex === event.currentIndex) return;
+    moveItemInArray(this.actions, event.previousIndex, event.currentIndex);
+    this.orderChanged = true;
+    this.saveOrder();
+  }
+
+  onRemoveZoneDrop(event: CdkDragDrop<DeviceActionView[]>) {
     this.dragUpActive = false;
-    if (draggedUp) this.removeFromGroup(action);
+    this.removeFromGroup(event.item.data as DeviceActionView);
+  }
+
+  // reorderActions rewrites sort_order as the absolute array index, so sending
+  // only this group's ids would move the whole group to the front of the
+  // dashboard. Send the full list instead, permuting just the group's slots.
+  private saveOrder() {
+    const newOrder = this.actions.map(a => a.id);
+    const inGroup = new Set(newOrder);
+
+    this.userActionsService.getUserActions().subscribe(all => {
+      let next = 0;
+      const orderedIds = [...all]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map(a => (inGroup.has(a.id) ? newOrder[next++] : a.id));
+
+      this.userActionsService.reorderActions(orderedIds).subscribe();
+    });
   }
 
   changeActionState(action: DeviceActionView, actionState: unknown) {
@@ -176,7 +209,7 @@ export class GroupBottomSheetComponent implements OnInit {
   }
 
   close() {
-    this.sheetRef.dismiss(false);
+    this.sheetRef.dismiss(this.orderChanged);
   }
 
   // ── Arc dial ────────────────────────────────────────────────────
