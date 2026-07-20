@@ -254,7 +254,7 @@ export async function stageSealedUpgrade(
 }
 
 // Re-apply a template to every already-provisioned device it matches, then push a config reload
-// (reprovision command) so live devices pick up the new actions — the "apply migration" for
+// (restart command) so live devices pick up the new actions — the "apply migration" for
 // sealed devices. Invoked by the SEALED_TEMPLATE_APPLIED consumer.
 export async function reMaterializeMatchingDevices(templateId: number): Promise<number> {
   const template = await db.sealedTemplate.findUnique({
@@ -295,14 +295,16 @@ export async function startSealedTemplateConsumer(): Promise<void> {
   log.info('subscribed to sealed template releases');
 }
 
-// A device reloads its served config by rebooting on `reprovision` (see firmware/device-sim).
-// Best-effort — an offline device re-pulls config on its next reconnect anyway.
+// A device reloads its served config by rebooting on `restart` — it re-fetches /device/configuration
+// on every boot. Must NOT be `reprovision`: the firmware aliases that to `soft-reset` and wipes the
+// device's IoT credentials, dropping real hardware into BLE provisioning mode (the sim hides this by
+// silently re-provisioning itself). Best-effort — an offline device re-pulls config on next reconnect.
 function dispatchConfigReload(deviceId: number, userId: number, firmwareVersion: string): void {
   try {
     const payload: ActionDispatchPayload = {
       userId: String(userId),
       deviceId: String(deviceId),
-      actionName: 'reprovision',
+      actionName: 'restart',
       command: '',
       firmwareVersion,
     };
