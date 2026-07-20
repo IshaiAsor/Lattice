@@ -2,6 +2,19 @@
 
   <!-- Mobile device chip selector (hidden on desktop/tablet) -->
   <div class="mobile-chip-bar">
+    <!-- Fleet summary + add: the rail carries these on desktop, which is hidden here -->
+    <div class="mobile-fleet-head">
+      <div class="mobile-stats">
+        <span class="mobile-stat"><strong>{{ devicesOnline }}</strong> online</span>
+        <span class="mobile-stat"><strong>{{ devicesOffline }}</strong> offline</span>
+        @if (updatesAvailable > 0) {
+          <span class="mobile-stat warn"><strong>{{ updatesAvailable }}</strong> updates</span>
+        }
+      </div>
+      <button mat-icon-button matTooltip="Add Device" (click)="addDevice()">
+        <mat-icon>add</mat-icon>
+      </button>
+    </div>
     <div class="mobile-chip-scroll">
       @for (device of devices; track device.id) {
         <button type="button" class="device-chip" [class.active]="selectedDevice?.id === device.id"
@@ -26,11 +39,32 @@
   <aside class="device-rail">
     <div class="rail-header">
       <span class="rail-title">My Devices</span>
-      @if (isAdmin) {
-        <button mat-icon-button matTooltip="Manage Templates" (click)="goToTemplates()">
-          <mat-icon>build</mat-icon>
+      <span class="rail-header-actions">
+        @if (isAdmin) {
+          <button mat-icon-button matTooltip="Manage Templates" (click)="goToTemplates()">
+            <mat-icon>build</mat-icon>
+          </button>
+        }
+        <button mat-icon-button matTooltip="Add Device" (click)="addDevice()">
+          <mat-icon>add</mat-icon>
         </button>
-      }
+      </span>
+    </div>
+
+    <!-- Fleet summary (from the former standalone devices page) -->
+    <div class="rail-stats">
+      <div class="rail-stat">
+        <span class="rail-stat-value">{{ devicesOnline }}</span>
+        <span class="rail-stat-label">Online</span>
+      </div>
+      <div class="rail-stat">
+        <span class="rail-stat-value">{{ devicesOffline }}</span>
+        <span class="rail-stat-label">Offline</span>
+      </div>
+      <div class="rail-stat" [class.warn]="updatesAvailable > 0">
+        <span class="rail-stat-value">{{ updatesAvailable }}</span>
+        <span class="rail-stat-label">Updates</span>
+      </div>
     </div>
 
     @if (loadingDevices) {
@@ -43,11 +77,14 @@
           (click)="selectDevice(device)">
           <div class="rail-item-info">
             <span class="rail-item-name">{{ device.deviceName }}</span>
-            <span class="rail-item-meta">{{ device.type }} · v{{ device.version }}</span>
+            <span class="rail-item-meta">{{ device.type }} · {{ device.version }}</span>
             @if (!device.online && device.lastOnlineDate) {
               <span class="rail-item-meta">Last seen {{ device.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
             }
           </div>
+          @if (device.update_available) {
+            <mat-icon class="rail-item-update" matTooltip="New firmware version available">system_update</mat-icon>
+          }
           <span class="status-dot" [class.online]="device.online" [class.offline]="!device.online"
             [matTooltip]="device.online ? 'Online' : 'Offline'"></span>
         </button>
@@ -76,11 +113,67 @@
           <h2 class="config-device-name">{{ selectedDevice.deviceName }}</h2>
           <div class="config-device-meta">
             <span class="status-dot" [class.online]="selectedDevice.online" [class.offline]="!selectedDevice.online"></span>
-            <span>{{ selectedDevice.type }} · v{{ selectedDevice.version }}</span>
+            <span>{{ selectedDevice.type }} · {{ selectedDevice.version }}</span>
+            @if (selectedDevice.online && selectedDevice.rssi !== null) {
+              <span class="config-signal" [matTooltip]="signalLabel(selectedDevice.rssi)">
+                <mat-icon class="signal-icon" [ngClass]="signalClass(selectedDevice.rssi)">wifi</mat-icon>
+                {{ selectedDevice.rssi }} dBm
+              </span>
+            }
             @if (!selectedDevice.online && selectedDevice.lastOnlineDate) {
               <span class="config-last-seen">· Last seen {{ selectedDevice.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
             }
           </div>
+        </div>
+
+        <!-- Device lifecycle: the per-device menu of the former standalone devices page -->
+        <div class="config-header-actions">
+          @if (selectedDevice.update_available) {
+            <button mat-flat-button color="primary" class="update-btn"
+              [disabled]="!selectedDevice.online" (click)="updateFirmware(selectedDevice)">
+              <mat-icon>system_update</mat-icon>
+              Update firmware
+            </button>
+          }
+          <button mat-icon-button [matMenuTriggerFor]="deviceMenu" matTooltip="Manage device">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #deviceMenu="matMenu">
+            @if (selectedDevice!.update_available) {
+              <button mat-menu-item class="menu-update" [disabled]="!selectedDevice!.online"
+                (click)="updateFirmware(selectedDevice!)">
+                <mat-icon>system_update</mat-icon>
+                <span>Update Firmware</span>
+              </button>
+            }
+            <button mat-menu-item (click)="renameDevice(selectedDevice!)">
+              <mat-icon>edit</mat-icon>
+              <span>Rename</span>
+            </button>
+            <button mat-menu-item [disabled]="!selectedDevice!.online" (click)="restartDevice(selectedDevice!)">
+              <mat-icon>power_settings_new</mat-icon>
+              <span>Restart</span>
+            </button>
+            <button mat-menu-item [disabled]="!selectedDevice!.online" (click)="reprovisionDevice(selectedDevice!)">
+              <mat-icon>sync</mat-icon>
+              <span>Reprovision</span>
+            </button>
+            <mat-divider></mat-divider>
+            <button mat-menu-item [disabled]="!selectedDevice!.online" (click)="softResetDevice(selectedDevice!)">
+              <mat-icon>restart_alt</mat-icon>
+              <span>Soft Reset</span>
+            </button>
+            <button mat-menu-item class="menu-danger" [disabled]="!selectedDevice!.online"
+              (click)="hardResetDevice(selectedDevice!)">
+              <mat-icon>device_reset</mat-icon>
+              <span>Hard Reset</span>
+            </button>
+            <mat-divider></mat-divider>
+            <button mat-menu-item class="menu-danger" (click)="deleteDevice(selectedDevice!)">
+              <mat-icon>delete_outline</mat-icon>
+              <span>Delete Device</span>
+            </button>
+          </mat-menu>
         </div>
       </div>
 

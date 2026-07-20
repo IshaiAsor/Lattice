@@ -4,7 +4,6 @@ import { adminGuard } from './guards/admin.guard';
 import { LoginComponent } from './components/login/login.component';
 import { RegisterComponent } from './components/register/register.component';
 import { LegalComponent } from './components/legal/legal.component';
-import { MgmtDeviceListComponent } from './components/mgmt-device-list/mgmt-device-list.component';
 import { UserDashboard } from './components/user-dashboard/user-dashboard';
 import { AdminDeviceConfigComponent } from './components/admin-device-config/admin-device-config.component';
 import { SealedTemplatesComponent } from './components/sealed-templates/sealed-templates.component';
@@ -18,8 +17,19 @@ import { ResetPasswordComponent } from './components/reset-password/reset-passwo
 export const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   {
+    // Devices and device config are one page now; keep the old paths working.
     path: 'mgmt/devices',
-    component: MgmtDeviceListComponent,
+    redirectTo: '/devices',
+    pathMatch: 'full',
+  },
+  {
+    path: 'device-config',
+    redirectTo: '/devices',
+    pathMatch: 'full',
+  },
+  {
+    path: 'devices',
+    component: DeviceConfigComponent,
     canActivate: [authGuard],
   },
   {
@@ -35,11 +45,6 @@ export const routes: Routes = [
   {
     path: 'automations',
     component: AutomationsComponent,
-    canActivate: [authGuard],
-  },
-  {
-    path: 'device-config',
-    component: DeviceConfigComponent,
     canActivate: [authGuard],
   },
   {

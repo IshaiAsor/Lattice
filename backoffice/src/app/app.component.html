@@ -25,7 +25,7 @@
           @if (!sidebarCollapsed()) { <span>Dashboard</span> }
         </a>
 
-        <a class="sidebar-link" routerLink="/mgmt/devices" routerLinkActive="active"
+        <a class="sidebar-link" routerLink="/devices" routerLinkActive="active"
            [matTooltip]="sidebarCollapsed() ? 'Devices' : ''" matTooltipPosition="right">
           <mat-icon>device_hub</mat-icon>
           @if (!sidebarCollapsed()) { <span>Devices</span> }
@@ -35,12 +35,6 @@
            [matTooltip]="sidebarCollapsed() ? 'Automate' : ''" matTooltipPosition="right">
           <mat-icon>bolt</mat-icon>
           @if (!sidebarCollapsed()) { <span>Automate</span> }
-        </a>
-
-        <a class="sidebar-link" routerLink="/device-config" routerLinkActive="active"
-           [matTooltip]="sidebarCollapsed() ? 'Device Config' : ''" matTooltipPosition="right">
-          <mat-icon>settings_suggest</mat-icon>
-          @if (!sidebarCollapsed()) { <span>Device Config</span> }
         </a>
 
         <a class="sidebar-link sidebar-link--badge" routerLink="/notifications" routerLinkActive="active"
@@ -135,7 +129,7 @@
       <div class="tab-icon-wrap"><mat-icon>dashboard</mat-icon></div>
       <span>Home</span>
     </a>
-    <a class="tab-item" routerLink="/mgmt/devices" routerLinkActive="active">
+    <a class="tab-item" routerLink="/devices" routerLinkActive="active">
       <div class="tab-icon-wrap"><mat-icon>device_hub</mat-icon></div>
       <span>Devices</span>
     </a>

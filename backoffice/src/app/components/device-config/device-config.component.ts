@@ -1,5 +1,6 @@
 import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { DeviceMgmtService, DeviceView, CapabilityView, UserActionView, PinSlot } from 'src/app/services/device.mgmt.service';
@@ -7,6 +8,10 @@ import { UserActionsService } from 'src/app/services/user.actions.service';
 import { AuthService } from 'src/app/services/auth.service';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { MgmtDeviceRegisterComponent } from '../mgmt-device-register/mgmt-device-register.component';
+import { MgmtDeviceEdit } from '../mgmt-device-edit/mgmt-device-edit';
+import { DeviceUpdateDialogComponent } from '../device-update-dialog/device-update-dialog.component';
+import { ConfirmDialogComponent } from '../admin-device-config/confirm-dialog.component';
 
 export interface ActiveInstance {
   cap: CapabilityView;
@@ -24,6 +29,7 @@ export class DeviceConfigComponent implements OnInit {
   private userActionsService = inject(UserActionsService);
   private snack = inject(MatSnackBar);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
   private socketService = inject(DeviceSocketService);
   private destroyRef = inject(DestroyRef);
   authService = inject(AuthService);
@@ -93,12 +99,14 @@ export class DeviceConfigComponent implements OnInit {
     );
   }
 
+  // ── Fleet summary (shown above the device rail) ─────────────────────────
+  get devicesTotal()     { return this.devices.length; }
+  get devicesOnline()    { return this.devices.filter(d => d.online).length; }
+  get devicesOffline()   { return this.devices.filter(d => !d.online).length; }
+  get updatesAvailable() { return this.devices.filter(d => d.update_available).length; }
+
   ngOnInit() {
-    this.loadingDevices = true;
-    this.deviceMgmtService.getDevices().subscribe({
-      next: (devices) => { this.devices = devices; this.loadingDevices = false; },
-      error: () => { this.snack.open('Failed to load devices', 'Close', { duration: 3000 }); this.loadingDevices = false; },
-    });
+    this.loadDevices();
 
     this.socketService.onDeviceOnlineStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -113,6 +121,24 @@ export class DeviceConfigComponent implements OnInit {
           }
         }
       });
+  }
+
+  // Reloads the fleet, re-pointing selectedDevice at the refreshed row so the detail header
+  // reflects server-side changes (rename, firmware version) without dropping the selection.
+  private loadDevices(onLoaded?: () => void) {
+    this.loadingDevices = true;
+    this.deviceMgmtService.getDevices().subscribe({
+      next: (devices) => {
+        this.devices = devices;
+        if (this.selectedDevice) {
+          this.selectedDevice = devices.find(d => d.id === this.selectedDevice!.id) ?? null;
+          if (!this.selectedDevice) this.capabilities = [];
+        }
+        this.loadingDevices = false;
+        onLoaded?.();
+      },
+      error: () => { this.snack.open('Failed to load devices', 'Close', { duration: 3000 }); this.loadingDevices = false; },
+    });
   }
 
   // Sealed devices are factory-soldered: pins/actions are composed by an admin (sealed template),
@@ -314,6 +340,126 @@ export class DeviceConfigComponent implements OnInit {
 
   typeChip(cap: CapabilityView): string {
     return cap.mqtt_action_type === 'telemetry' ? 'sensor' : 'command';
+  }
+
+  // ── Device lifecycle ────────────────────────────────────────────────────
+  // These act on the selected device and were previously the per-row menu of the
+  // separate devices list; they live here now that the two pages are one.
+
+  // WiFi RSSI (dBm) → strength bucket. Typical: >= -60 strong, -60..-75 fair, < -75 weak.
+  signalClass(rssi: number): string {
+    if (rssi >= -60) return 'sig-good';
+    if (rssi >= -75) return 'sig-fair';
+    return 'sig-weak';
+  }
+  signalLabel(rssi: number): string {
+    if (rssi >= -60) return 'Strong signal';
+    if (rssi >= -75) return 'Fair signal';
+    return 'Weak signal';
+  }
+
+  addDevice() {
+    this.dialog.open(MgmtDeviceRegisterComponent, {})
+      .afterClosed().subscribe(() => this.loadDevices());
+  }
+
+  renameDevice(device: DeviceView) {
+    this.dialog.open(MgmtDeviceEdit, {
+      width: '250px',
+      data: { deviceName: device.deviceName },
+    }).afterClosed().subscribe((name) => {
+      if (!name) return;
+      this.deviceMgmtService.updateDevice(device.id, { name }).subscribe({
+        next: () => {
+          this.loadDevices();
+          this.snack.open('Device renamed', 'Close', { duration: 2000 });
+        },
+        error: () => this.snack.open('Failed to rename device', 'Close', { duration: 3000 }),
+      });
+    });
+  }
+
+  deleteDevice(device: DeviceView) {
+    this.dialog.open(ConfirmDialogComponent, {
+      panelClass: ['glass-dialog', 'compact-dialog'],
+      data: {
+        title: 'Delete Device',
+        message: `Delete "${device.deviceName}"? This will remove all associated actions and cannot be undone.`,
+        confirmLabel: 'Delete',
+      },
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.deviceMgmtService.deleteDevice(device.id).subscribe({
+        next: () => {
+          // Drop the selection: loadDevices() cannot re-point at a row that no longer exists.
+          this.selectedDevice = null;
+          this.capabilities = [];
+          this.loadDevices();
+          this.snack.open('Device deleted', 'Close', { duration: 2000 });
+        },
+        error: () => this.snack.open('Failed to delete device', 'Close', { duration: 3000 }),
+      });
+    });
+  }
+
+  restartDevice(device: DeviceView) {
+    this.deviceMgmtService.restartDevice(device.id).subscribe({
+      next: () => this.snack.open('Restart command sent', 'Close', { duration: 2000 }),
+      error: () => this.snack.open('Failed to send restart command', 'Close', { duration: 3000 }),
+    });
+  }
+
+  reprovisionDevice(device: DeviceView) {
+    this.deviceMgmtService.reprovisionDevice(device.id).subscribe({
+      next: () => this.snack.open('Reprovision command sent', 'Close', { duration: 2000 }),
+      error: () => this.snack.open('Failed to send reprovision command', 'Close', { duration: 3000 }),
+    });
+  }
+
+  softResetDevice(device: DeviceView) {
+    this.dialog.open(ConfirmDialogComponent, {
+      panelClass: ['glass-dialog', 'compact-dialog'],
+      data: {
+        title: 'Soft Reset',
+        message: `Send a soft reset command to "${device.deviceName}"? The device will reboot and reconnect.`,
+        confirmLabel: 'Reset',
+      },
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.deviceMgmtService.softResetDevice(device.id).subscribe({
+        next: () => this.snack.open('Soft reset command sent', 'Close', { duration: 2000 }),
+        error: () => this.snack.open('Failed to send soft reset command', 'Close', { duration: 3000 }),
+      });
+    });
+  }
+
+  hardResetDevice(device: DeviceView) {
+    this.dialog.open(ConfirmDialogComponent, {
+      panelClass: ['glass-dialog', 'compact-dialog'],
+      data: {
+        title: 'Hard Reset',
+        message: `Hard reset "${device.deviceName}"? This will erase the device configuration and it will need to be re-provisioned.`,
+        confirmLabel: 'Hard Reset',
+      },
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.deviceMgmtService.hardResetDevice(device.id).subscribe({
+        next: () => this.snack.open('Hard reset command sent', 'Close', { duration: 2000 }),
+        error: () => this.snack.open('Failed to send hard reset command', 'Close', { duration: 3000 }),
+      });
+    });
+  }
+
+  updateFirmware(device: DeviceView) {
+    this.dialog.open(DeviceUpdateDialogComponent, {
+      width: '440px',
+      panelClass: ['glass-dialog', 'compact-dialog'],
+      data: { device },
+    }).afterClosed().subscribe((updated) => {
+      // Reload on success so the header version + rail update badge reflect the new firmware,
+      // then re-read capabilities (a firmware change can deprecate actions).
+      if (updated) this.loadDevices(() => this.loadCapabilities());
+    });
   }
 
   goToTemplates() {

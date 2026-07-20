@@ -36,6 +36,63 @@
   color: var(--text-muted);
 }
 
+.rail-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── Fleet summary strip (rail) ────────────────────────────────────────── */
+.rail-stats {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.rail-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border-radius: 10px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+}
+
+.rail-stat.warn {
+  background: rgba(245, 166, 35, 0.08);
+  border-color: rgba(245, 166, 35, 0.35);
+}
+
+.rail-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.rail-stat.warn .rail-stat-value { color: var(--warning); }
+
+.rail-stat-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rail-item-update {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--warning);
+  flex-shrink: 0;
+}
+
 .rail-list {
   flex: 1;
   overflow-y: auto;
@@ -77,6 +134,34 @@
 .mobile-chip-bar {
   display: none;
 }
+
+/* Fleet summary + add device, mobile only (the rail that carries them is hidden). */
+.mobile-fleet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 0 16px;
+}
+
+.mobile-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mobile-stat {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.mobile-stat strong {
+  font-weight: 700;
+  color: var(--text);
+}
+.mobile-stat.warn strong { color: var(--warning); }
 
 .mobile-chip-scroll {
   display: flex;
@@ -178,12 +263,52 @@
   letter-spacing: -0.02em;
 }
 
+.config-header-info { flex: 1; min-width: 0; }
+
 .config-device-meta {
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: 12px;
   color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.config-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.signal-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+.signal-icon.sig-good { color: var(--online); }
+.signal-icon.sig-fair { color: var(--warning); }
+.signal-icon.sig-weak { color: var(--error); }
+
+/* ── Device lifecycle actions (header) ─────────────────────────────────── */
+.config-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.update-btn mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  margin-right: 4px;
+}
+
+/* Destructive entries in the device menu. */
+::ng-deep .menu-danger:not([disabled]) .mat-mdc-menu-item-text,
+::ng-deep .menu-danger:not([disabled]) mat-icon {
+  color: var(--error);
 }
 
 /* ── Section labels ───────────────────────────────────────────────────── */
@@ -442,6 +567,9 @@
   }
 
   .config-device-name { font-size: 14px; }
+
+  /* Too wide next to the device name here — the same action lives in the device menu. */
+  .update-btn { display: none; }
 
   .bp-grid {
     grid-template-columns: 1fr 1fr;
