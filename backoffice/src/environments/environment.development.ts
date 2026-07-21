@@ -3,5 +3,6 @@ export const environment = {
   apiUrl: 'http://localhost:3100', // `api` service
   deviceGatewayUrl: 'http://localhost:3004',
   socketUrl: 'http://localhost:3007',
-  googleClientId: '670668044114-iing0d4h94kd2gno8fb2m1mbilkeflu9.apps.googleusercontent.com',
+  googleHomeUrl: 'http://localhost:3010',
+  // googleClientId comes from GET /api/auth/config — see environment.ts.
 };

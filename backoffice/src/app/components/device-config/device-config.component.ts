@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { DeviceMgmtService, DeviceView, CapabilityView, UserActionView, PinSlot } from 'src/app/services/device.mgmt.service';
 import { UserActionsService } from 'src/app/services/user.actions.service';
+import { AreasService, AreaView } from 'src/app/services/areas.service';
 import { AuthService } from 'src/app/services/auth.service';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -12,6 +13,7 @@ import { MgmtDeviceRegisterComponent } from '../mgmt-device-register/mgmt-device
 import { MgmtDeviceEdit } from '../mgmt-device-edit/mgmt-device-edit';
 import { DeviceUpdateDialogComponent } from '../device-update-dialog/device-update-dialog.component';
 import { ConfirmDialogComponent } from '../admin-device-config/confirm-dialog.component';
+import { AreaAssignDialogComponent } from '../area-assign-dialog/area-assign-dialog.component';
 
 export interface ActiveInstance {
   cap: CapabilityView;
@@ -27,6 +29,7 @@ export interface ActiveInstance {
 export class DeviceConfigComponent implements OnInit {
   private deviceMgmtService = inject(DeviceMgmtService);
   private userActionsService = inject(UserActionsService);
+  private areasService = inject(AreasService);
   private snack = inject(MatSnackBar);
   private router = inject(Router);
   private dialog = inject(MatDialog);
@@ -37,6 +40,7 @@ export class DeviceConfigComponent implements OnInit {
   devices: DeviceView[] = [];
   selectedDevice: DeviceView | null = null;
   capabilities: CapabilityView[] = [];
+  areas: AreaView[] = [];
   loadingDevices = false;
   loadingCapabilities = false;
 
@@ -107,6 +111,7 @@ export class DeviceConfigComponent implements OnInit {
 
   ngOnInit() {
     this.loadDevices();
+    this.loadAreas();
 
     this.socketService.onDeviceOnlineStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -138,6 +143,32 @@ export class DeviceConfigComponent implements OnInit {
         onLoaded?.();
       },
       error: () => { this.snack.open('Failed to load devices', 'Close', { duration: 3000 }); this.loadingDevices = false; },
+    });
+  }
+
+  private loadAreas() {
+    this.areasService.list().subscribe({
+      next: (areas) => { this.areas = areas; },
+      error: () => { /* areas are non-critical to the page; a failure just hides the label */ },
+    });
+  }
+
+  // Display name of the device's current area, or null when unassigned / not yet loaded.
+  areaName(device: DeviceView | null): string | null {
+    if (!device?.area_id) return null;
+    return this.areas.find(a => a.id === device.area_id)?.name ?? null;
+  }
+
+  // Assign the device to an area (create/select/clear). Reloads devices + areas so the header
+  // label and the areas' device counts reflect the change.
+  assignArea(device: DeviceView) {
+    this.dialog.open(AreaAssignDialogComponent, {
+      width: '360px',
+      data: { deviceId: device.id, deviceName: device.deviceName, currentAreaId: device.area_id },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return; // cancelled or no change
+      this.loadDevices();
+      this.loadAreas();
     });
   }
 

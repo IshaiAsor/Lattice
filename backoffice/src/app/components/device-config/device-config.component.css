@@ -289,6 +289,31 @@
 .signal-icon.sig-fair { color: var(--warning); }
 .signal-icon.sig-weak { color: var(--error); }
 
+/* ── Area chip (F10.0) ─────────────────────────────────────────────────── */
+.config-area-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 3px 10px 3px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.config-area-chip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.config-area-chip mat-icon {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+}
+
 /* ── Device lifecycle actions (header) ─────────────────────────────────── */
 .config-header-actions {
   display: flex;

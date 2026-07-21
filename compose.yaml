@@ -169,12 +169,14 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_EXPIRES_IN=${JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_EXPIRES_IN:-3600}
       - JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_REFRESH=${JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_REFRESH:-0}
-      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@valkey:6379
+      # Host is the compose service name (`cache`); in k8s the same service is named `valkey`.
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
       - GOOGLE_AUTH_CLIENT_ID=${GOOGLE_AUTH_CLIENT_ID}
       - GOOGLE_AUTH_CLIENT_SECRET=${GOOGLE_AUTH_CLIENT_SECRET}
-      - GOOGLE_SIGN_IN_CLIENT_ID=${GOOGLE_SIGN_IN_CLIENT_ID}
-      - GOOGLE_SIGN_IN_CLIENT_SECRET=${GOOGLE_SIGN_IN_CLIENT_SECRET}
       - GOOGLE_SERVICE_ACCOUNT_KEY=${GOOGLE_SERVICE_ACCOUNT_KEY}
+      # Account linking hands the user to the backoffice login page. Deployed environments serve
+      # both on one host (empty = same origin); locally the UI is a separate dev server.
+      - BACKOFFICE_URL=${BACKOFFICE_URL:-http://localhost:4200}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:

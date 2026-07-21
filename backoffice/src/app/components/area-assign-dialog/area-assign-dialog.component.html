@@ -1,0 +1,37 @@
+<h2 mat-dialog-title>Assign area</h2>
+
+<mat-dialog-content>
+  <p class="area-subtitle">Group <strong>{{ data.deviceName }}</strong> with other devices in an area.</p>
+
+  @if (loading) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  } @else {
+    <mat-form-field appearance="outline" class="area-select">
+      <mat-label>Area</mat-label>
+      <mat-select [(ngModel)]="selectedAreaId">
+        <mat-option [value]="null">No area</mat-option>
+        @for (area of areas; track area.id) {
+          <mat-option [value]="area.id">{{ area.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <div class="area-create">
+      <mat-form-field appearance="outline" class="area-create-field">
+        <mat-label>New area</mat-label>
+        <input matInput [(ngModel)]="newAreaName" (keyup.enter)="createArea()" maxlength="255"
+          placeholder="e.g. Greenhouse A" />
+      </mat-form-field>
+      <button mat-stroked-button type="button" (click)="createArea()"
+        [disabled]="!newAreaName.trim() || creating">
+        <mat-icon>add</mat-icon>
+        Add
+      </button>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancel</button>
+  <button mat-flat-button color="primary" (click)="save()" [disabled]="loading || saving">Save</button>
+</mat-dialog-actions>

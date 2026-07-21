@@ -263,6 +263,7 @@ model User {
   user_login_audit     UserLoginAudit[]
   user_rules           UserRule[]
   action_groups        UserActionGroup[]
+  areas                Area[]
   scenes               Scene[]
   pipelines            Pipeline[]
   notification_prefs   NotificationPreference[]
@@ -365,15 +366,18 @@ model UserDevice {
   current_firmware_version String?   @db.VarChar(64)
   pending_device_type_id   Int?
   pending_firmware_version String?   @db.VarChar(64)
+  area_id                  Int?
   created_at               DateTime  @default(now()) @db.Timestamp(6)
   updated_at               DateTime  @default(now()) @db.Timestamp(6)
 
   device              Device              @relation("CurrentDevice", fields: [device_type_id], references: [id], onDelete: Cascade)
   pending_device      Device?             @relation("PendingDevice", fields: [pending_device_type_id], references: [id], onDelete: SetNull)
   user                User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area                Area?               @relation(fields: [area_id], references: [id], onDelete: SetNull)
   user_device_actions UserDeviceAction[]
   rule_conditions     UserRuleCondition[]
 
+  @@index([area_id])
   @@map("user_devices")
 }
 
@@ -391,6 +395,30 @@ model UserActionGroup {
   @@unique([user_id, name])
   @@index([user_id, sort_order])
   @@map("user_action_groups")
+}
+
+// "These devices belong together." A user-createable grouping primitive (F10.0), independent of
+// blueprints — a hand-built setup gets the same sectioned dashboard and area-scoped notifications
+// as a derived one. A blueprint derive creates one and fills it. Devices and the automations that
+// act on them (scenes/rules/pipelines) carry a nullable area_id; deleting an area never deletes a
+// device or an automation (SetNull), it only un-groups them.
+model Area {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  name       String   @db.VarChar(255)
+  sort_order Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+
+  user      User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  devices   UserDevice[]
+  scenes    Scene[]
+  rules     UserRule[]
+  pipelines Pipeline[]
+
+  @@unique([user_id, name])
+  @@index([user_id, sort_order])
+  @@map("areas")
 }
 
 model UserDeviceAction {
@@ -474,14 +502,17 @@ model UserRule {
   condition_operator String    @default("AND") @db.VarChar(3)
   cooldown_seconds   Int       @default(60)
   last_triggered     DateTime? @db.Timestamp(6)
+  area_id            Int?
   created_at         DateTime  @default(now()) @db.Timestamp(6)
   updated_at         DateTime  @default(now()) @db.Timestamp(6)
 
   user       User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area       Area?               @relation(fields: [area_id], references: [id], onDelete: SetNull)
   conditions UserRuleCondition[]
   actions    UserRuleAction[]
   events     UserRuleEvent[]
 
+  @@index([area_id])
   @@map("user_rules")
 }
 
@@ -545,14 +576,17 @@ model Scene {
   user_id    Int
   name       String   @db.VarChar(255)
   sort_order Int      @default(0)
+  area_id    Int?
   created_at DateTime @default(now()) @db.Timestamp(6)
   updated_at DateTime @default(now()) @db.Timestamp(6)
 
   user    User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area    Area?         @relation(fields: [area_id], references: [id], onDelete: SetNull)
   members SceneMember[]
 
   @@unique([user_id, name])
   @@index([user_id, sort_order])
+  @@index([area_id])
   @@map("scenes")
 }
 
@@ -579,15 +613,18 @@ model Pipeline {
   user_id    Int
   name       String   @db.VarChar(255)
   enabled    Boolean  @default(true)
+  area_id    Int?
   created_at DateTime @default(now()) @db.Timestamp(6)
   updated_at DateTime @default(now()) @db.Timestamp(6)
 
   user     User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area     Area?             @relation(fields: [area_id], references: [id], onDelete: SetNull)
   sensors  PipelineSensor[]
   stages   PipelineStage[]
   triggers PipelineTrigger[]
   runs     PipelineRun[]
 
+  @@index([area_id])
   @@map("pipelines")
 }
 

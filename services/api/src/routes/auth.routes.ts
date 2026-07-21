@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { googleService } from '../services/google.service';
 import { loginService } from '../services/login.service';
 import { registerService } from '../services/register.service';
 import { authFlowsService } from '../services/auth-flows.service';
@@ -32,6 +33,12 @@ authRouter.post('/login', authRateLimiter, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// Public, unauthenticated client config. The backoffice is one image promoted across
+// environments, so it can't bake in the per-environment Google client id — it reads it here.
+authRouter.get('/config', (_req, res) => {
+  res.json({ googleClientId: googleService.publicClientId() });
 });
 
 // Google auth-code sign-in (popup flow). A returning user gets tokens; a brand-new identity gets

@@ -159,6 +159,8 @@ export interface DeviceView {
   update_available: boolean;
   // Latest WiFi RSSI (dBm) from the device heartbeat; null when offline.
   rssi: number | null;
+  // Area (F10.0) this device belongs to, or null when unassigned.
+  area_id: number | null;
 }
 
 export interface ActionPreview {
@@ -191,6 +193,10 @@ export interface DeviceActionView {
   sortOrder: number;
   groupId: number | null;
   groupName: string | null;
+  // Area (F10.0) of this action's device — drives dashboard sectioning/filtering. Shared by all
+  // actions of the same device, since the device is the unit that belongs to an area.
+  areaId: number | null;
+  areaName: string | null;
   implementation_type: string;
   // Firmware-authored accepted-value constraint ({type:'enum'|'range'|'pattern', ...}), or
   // undefined when not fetched via UserActionsService (e.g. device-config's own action list).

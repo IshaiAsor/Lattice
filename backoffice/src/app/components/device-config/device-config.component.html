@@ -124,6 +124,12 @@
               <span class="config-last-seen">· Last seen {{ selectedDevice.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
             }
           </div>
+          <!-- Area (F10.0): which grouping this device belongs to; click to assign/create/clear. -->
+          <button type="button" class="config-area-chip" (click)="assignArea(selectedDevice)"
+            [matTooltip]="areaName(selectedDevice) ? 'Change area' : 'Assign this device to an area'">
+            <mat-icon>{{ areaName(selectedDevice) ? 'label' : 'label_off' }}</mat-icon>
+            <span>{{ areaName(selectedDevice) ?? 'Add to area' }}</span>
+          </button>
         </div>
 
         <!-- Device lifecycle: the per-device menu of the former standalone devices page -->

@@ -1,9 +1,9 @@
 import { Component, inject, OnInit } from '@angular/core';
-import { Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '../../services/auth.service';
+import { GoogleLinkService } from '../../services/google-link.service';
 import { TermsConsentDialogComponent } from '../terms-consent-dialog/terms-consent-dialog.component';
-import { environment } from 'src/environments/environment';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 
 interface GoogleOAuthResponse {
@@ -19,7 +19,8 @@ interface GoogleOAuthResponse {
   styleUrls: ['./login.component.css'],
 })
 export class LoginComponent implements OnInit {
-  declare googleClient: { requestCode: () => void };
+  // Undefined until the config fetch + GSI script both land (see initGoogleClient).
+  googleClient?: { requestCode: () => void };
   username = '';
   password = '';
   error = '';
@@ -30,20 +31,85 @@ export class LoginComponent implements OnInit {
   unverifiedEmail = '';
   resendState: 'idle' | 'sent' = 'idle';
 
+  // Google Home account linking: google-home redirects here with ?google_link=<requestId> instead
+  // of rendering its own login form. When set, a successful sign-in finishes the OAuth handshake
+  // rather than landing on the dashboard.
+  googleLinkRequest = '';
+  linking = false;
+
   private authService = inject(AuthService);
+  private googleLinkService = inject(GoogleLinkService);
+  private route = inject(ActivatedRoute);
   private router = inject(Router);
   private dialog = inject(MatDialog);
 
   ngOnInit() {
-    window.onload = () => {
-      // @ts-expect-error google is loaded via script tag
-      this.googleClient = google.accounts.oauth2.initCodeClient({
-        client_id: environment.googleClientId,
-        scope: 'openid email profile',
-        ux_mode: 'popup',
-        callback: (response: GoogleOAuthResponse) => this.handleAuthCode(response),
-      });
-    };
+    // Subscribe rather than read the snapshot: useAnotherAccount() re-navigates to this same
+    // route, which reuses the component and would leave a snapshot-read value stale.
+    this.route.queryParamMap.subscribe((params) => {
+      this.googleLinkRequest = params.get('google_link') ?? '';
+    });
+
+    // The client id is per-environment (staging and prod have their own OAuth client) and the
+    // bundle is environment-agnostic, so it comes from the API rather than environment.ts.
+    this.authService.getAuthConfig().subscribe({
+      next: (config) => this.initGoogleClient(config.googleClientId),
+      error: (err) => console.error('Failed to load Google auth config', err),
+    });
+  }
+
+  // Signed-in user to offer the link to, if any — the linking flow shows a "continue as" step
+  // instead of the credential form so an existing session doesn't force a re-login.
+  get linkedUsername(): string | null {
+    if (!this.googleLinkRequest || !this.authService.isLoggedIn()) return null;
+    const user = this.authService.getCurrentUser();
+    return user?.username || user?.email || 'your account';
+  }
+
+  // Hand the (now authenticated) session back to google-home, which mints the OAuth code and
+  // gives us the Google redirect to bounce to.
+  completeGoogleLink() {
+    this.error = '';
+    this.linking = true;
+    this.googleLinkService.authorize(this.googleLinkRequest).subscribe({
+      next: ({ redirectUrl }) => (window.location.href = redirectUrl),
+      error: (err) => {
+        this.linking = false;
+        this.error =
+          (err as { status?: number })?.status === 410
+            ? 'This linking request expired. Start again from the Google Home app.'
+            : 'Could not link your account to Google Home. Please try again.';
+        console.error('Google Home link error:', err);
+      },
+    });
+  }
+
+  // Sign out but stay in the linking flow, so the user can link a different account.
+  useAnotherAccount() {
+    this.authService.logout();
+    this.router.navigate(['/login'], { queryParams: { google_link: this.googleLinkRequest } });
+  }
+
+  private initGoogleClient(clientId: string, attempt = 0) {
+    // index.html loads the GSI script async, so it may not have landed yet. Poll briefly instead
+    // of hooking window.onload — that can have fired already, and it clobbers other handlers.
+    // @ts-expect-error google is loaded via script tag
+    if (typeof google === 'undefined') {
+      if (attempt >= 50) {
+        console.error('Google identity script failed to load');
+        return;
+      }
+      setTimeout(() => this.initGoogleClient(clientId, attempt + 1), 100);
+      return;
+    }
+
+    // @ts-expect-error google is loaded via script tag
+    this.googleClient = google.accounts.oauth2.initCodeClient({
+      client_id: clientId,
+      scope: 'openid email profile',
+      ux_mode: 'popup',
+      callback: (response: GoogleOAuthResponse) => this.handleAuthCode(response),
+    });
   }
 
   handleAuthCode(response: GoogleOAuthResponse) {
@@ -93,6 +159,10 @@ export class LoginComponent implements OnInit {
   }
 
   loginWithGoogle() {
+    if (!this.googleClient) {
+      this.error = 'Google sign-in is not available right now. Please try again in a moment.';
+      return;
+    }
     this.googleClient.requestCode();
   }
 
@@ -125,6 +195,10 @@ export class LoginComponent implements OnInit {
   }
 
   loginSuccess() {
+    if (this.googleLinkRequest) {
+      this.completeGoogleLink();
+      return;
+    }
     this.router.navigate(['/dashboard']);
   }
 }

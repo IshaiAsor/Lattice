@@ -121,3 +121,20 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* The tile's natural content height is ~188px (header + 20px padding + 72px badge + gap + count).
+   The dashboard gives it less room on smaller screens, and the body would otherwise overflow the
+   card border — pushing the "N actions" label out over whatever follows. Scale the badge and
+   padding down so the content fits the box at each breakpoint. */
+@media (max-width: 1024px) {
+  .scene-body { padding: 14px; gap: 10px; }
+  .play-badge { width: 56px; height: 56px; }
+  .play-badge mat-icon { font-size: 28px; width: 28px; height: 28px; }
+}
+
+@media (max-width: 599px) {
+  .scene-body { padding: 10px; gap: 6px; }
+  .play-badge { width: 44px; height: 44px; }
+  .play-badge mat-icon { font-size: 24px; width: 24px; height: 24px; }
+  .scene-count { font-size: 11px; }
+}
