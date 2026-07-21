@@ -4,6 +4,10 @@
 export const env = {
   port: parseInt(process.env['PORT'] ?? '3011', 10),
   logLevel: process.env['LOG_LEVEL'] ?? 'info',
+  // The deployment this instance belongs to (development | staging | production). NODE_ENV is
+  // baked to "production" in every image, so only this can separate staging from prod; outbound
+  // channels tag non-production notifications with it (see delivery/environment.ts).
+  environment: process.env['LATTICE_ENV'] ?? 'development',
   otelEndpoint: process.env['OTEL_EXPORTER_OTLP_ENDPOINT'],
   rabbitmqUrl: process.env['RABBITMQ_URL'] ?? 'amqp://localhost',
   // NOTE: deep links (verify-email / reset-password) are built by the *api* from its own

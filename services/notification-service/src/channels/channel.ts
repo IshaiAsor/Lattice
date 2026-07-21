@@ -10,6 +10,9 @@ export interface RenderedNotification {
   eventType: string;
   title: string;
   body: string;
+  // The deployment this notification was sent from (development | staging | production).
+  // Channels that leave the environment (email, push) tag non-production deliveries with it.
+  environment: string;
   // Optional structured payload (deep-link target, template vars, etc.).
   data?: Record<string, unknown>;
 }

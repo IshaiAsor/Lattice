@@ -3,6 +3,7 @@ import { createLogger } from '@lattice/logger';
 import { env } from '../config/env.config';
 import { db } from '../db/client';
 import type { Channel, RenderedNotification, Recipient } from './channel';
+import { tagTitle } from '../delivery/environment';
 
 const log = createLogger('notification-service:push');
 
@@ -32,9 +33,11 @@ export class PushChannel implements Channel {
       return;
     }
     const payload = JSON.stringify({
-      title: notification.title,
+      // A push lands on a phone with no other clue where it came from, so the title carries the
+      // environment tag (production is untagged) and `data` carries it structurally.
+      title: tagTitle(notification.title, notification.environment),
       body: notification.body,
-      data: notification.data,
+      data: { ...notification.data, environment: notification.environment },
     });
     await Promise.all(
       recipient.pushSubscriptions.map((sub) =>

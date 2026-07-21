@@ -164,6 +164,9 @@ services:
       - '3011:3011'
     environment:
       - PORT=3011
+      # Tags outbound (email/push) notifications with the environment they were sent from, so a
+      # local or staging alert is never mistaken for a prod one. Only "production" is untagged.
+      - LATTICE_ENV=${LATTICE_ENV:-development}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
       - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379

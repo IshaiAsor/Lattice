@@ -17,10 +17,13 @@ export class InAppChannel implements Channel {
   readonly enabled = true;
 
   async send(notification: RenderedNotification, recipient: Recipient): Promise<void> {
+    // In-app stays untagged: the notification is rendered inside the very environment that sent
+    // it, so the title needs no prefix — the field is passed through for clients that want it.
     emitter.to(`user_${recipient.userId}`).emit(SOCKET_EVENTS.NOTIFICATION, {
       eventType: notification.eventType,
       title: notification.title,
       body: notification.body,
+      environment: notification.environment,
       data: notification.data,
     });
     log.debug({ userId: recipient.userId, eventType: notification.eventType }, 'in-app emitted');

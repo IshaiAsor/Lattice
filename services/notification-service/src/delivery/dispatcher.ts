@@ -1,5 +1,6 @@
 import type { NotificationSendPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
+import { env } from '../config/env.config';
 import { db, Prisma } from '../db/client';
 import { channelByName } from '../channels/registry';
 import { resolveEnabledChannels } from './preferences';
@@ -45,7 +46,10 @@ export async function dispatch(payload: NotificationSendPayload): Promise<void> 
     const channel = channelByName.get(name);
     if (!channel) continue;
     try {
-      await channel.send({ userId, eventType, ...rendered, data }, recipient);
+      await channel.send(
+        { userId, eventType, environment: env.environment, ...rendered, data },
+        recipient,
+      );
       delivered.push(name);
     } catch (err) {
       log.warn({ err, userId, eventType, channel: name }, 'channel delivery failed');
@@ -67,5 +71,8 @@ export async function dispatch(payload: NotificationSendPayload): Promise<void> 
     });
   }
 
-  log.info({ userId, eventType, delivered }, 'notification dispatched');
+  log.info(
+    { userId, eventType, delivered, environment: env.environment },
+    'notification dispatched',
+  );
 }

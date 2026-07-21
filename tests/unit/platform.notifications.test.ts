@@ -7,6 +7,12 @@ import {
   isNotificationChannel,
 } from '@lattice/queue';
 import { render } from '../../services/notification-service/src/delivery/templates';
+import {
+  isProductionEnvironment,
+  normalizeEnvironment,
+  tagBody,
+  tagTitle,
+} from '../../services/notification-service/src/delivery/environment';
 
 // Firmware-of-Node: the notification catalog + templates are pure logic shared by api (prefs
 // validation/defaults) and notification-service (fan-out). These lock the matrix the two sides
@@ -80,5 +86,29 @@ describe('notification templates', () => {
   it('tolerates missing data fields without throwing', () => {
     expect(() => render('ota_available', {})).not.toThrow();
     expect(render('device_offline', {}).body).toContain('A device');
+  });
+});
+
+describe('environment tagging', () => {
+  it('leaves production notifications untagged', () => {
+    expect(tagTitle('Device offline', 'production')).toBe('Device offline');
+    expect(tagTitle('Device offline', 'PROD')).toBe('Device offline');
+    expect(tagBody('A device went offline.', 'production')).toBe('A device went offline.');
+  });
+
+  it('prefixes the title and footers the body outside production', () => {
+    expect(tagTitle('Device offline', 'staging')).toBe('[STAGING] Device offline');
+    expect(tagTitle('Device offline', 'development')).toBe('[DEVELOPMENT] Device offline');
+    expect(tagBody('A device went offline.', 'staging')).toContain(
+      'Sent from the staging environment.',
+    );
+  });
+
+  // Fail loud, not silent: a missing LATTICE_ENV must never impersonate production, since an
+  // untagged subject is exactly what tells a reader "this one is real".
+  it('treats a missing or blank environment as unknown, not production', () => {
+    expect(isProductionEnvironment(undefined)).toBe(false);
+    expect(normalizeEnvironment('  ')).toBe('unknown');
+    expect(tagTitle('Device offline', undefined)).toBe('[UNKNOWN] Device offline');
   });
 });

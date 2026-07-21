@@ -2,6 +2,7 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import { createLogger } from '@lattice/logger';
 import { env } from '../config/env.config';
 import type { Channel, RenderedNotification, Recipient } from './channel';
+import { tagBody, tagTitle } from '../delivery/environment';
 
 const log = createLogger('notification-service:email');
 
@@ -38,9 +39,11 @@ export class EmailChannel implements Channel {
     await this.transport.sendMail({
       from: env.smtp.from,
       to: recipient.email,
-      subject: notification.title,
+      // Non-production mail is tagged in both subject and body — staging and prod commonly
+      // deliver to the same mailbox, and an untagged subject must mean prod.
+      subject: tagTitle(notification.title, notification.environment),
       // F15.3 replaces this with per-event HTML templates.
-      text: notification.body,
+      text: tagBody(notification.body, notification.environment),
     });
     log.debug({ userId: recipient.userId, eventType: notification.eventType }, 'email sent');
   }
