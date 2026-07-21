@@ -2,6 +2,7 @@ import { db } from '../db';
 import { publish, RK } from '@lattice/queue';
 import type { ActionDispatchPayload } from '@lattice/queue';
 import { getChannel } from '../queue';
+import { ensureNotSealed } from './sealed-templates.service';
 
 // User-facing device management (F2.5).
 //
@@ -200,6 +201,7 @@ class DeviceMgmtService {
     },
   ): Promise<{ id: number }> {
     const device = await this.getOwnedDevice(userId, deviceId);
+    ensureNotSealed(device.is_sealed);
     const cap = await db.deviceCapability.findUnique({ where: { id: body.capability_id } });
     if (!cap || cap.device_id !== device.device_type_id) {
       throw Object.assign(new Error('Capability not valid for this device'), { statusCode: 400 });
@@ -245,7 +247,8 @@ class DeviceMgmtService {
       camera_transport?: string | null;
     },
   ): Promise<void> {
-    await this.getOwnedDevice(userId, deviceId);
+    const device = await this.getOwnedDevice(userId, deviceId);
+    ensureNotSealed(device.is_sealed);
     const action = await db.userDeviceAction.findUnique({
       where: { id: actionId },
       select: { user_device_id: true },
@@ -309,14 +312,23 @@ class DeviceMgmtService {
   private async getOwnedDevice(
     userId: number,
     deviceId: number,
-  ): Promise<{ id: number; device_type_id: number }> {
+  ): Promise<{ id: number; device_type_id: number; is_sealed: boolean }> {
     const device = await db.userDevice.findUnique({
       where: { id: deviceId },
-      select: { id: true, user_id: true, device_type_id: true },
+      select: {
+        id: true,
+        user_id: true,
+        device_type_id: true,
+        device: { select: { is_sealed: true } },
+      },
     });
     if (!device) throw Object.assign(new Error('Device not found'), { statusCode: 404 });
     if (device.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
-    return { id: device.id, device_type_id: device.device_type_id };
+    return {
+      id: device.id,
+      device_type_id: device.device_type_id,
+      is_sealed: device.device.is_sealed,
+    };
   }
 }
 

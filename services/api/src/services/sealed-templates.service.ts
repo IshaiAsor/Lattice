@@ -19,6 +19,21 @@ function notFound(message = 'Sealed template not found'): Error {
   return Object.assign(new Error(message), { statusCode: 404 });
 }
 
+/**
+ * The owner of a sealed device may still *use* it (rename, group, send state), but its pins and
+ * action set come from the admin's template — a user edit would be silently reverted the next
+ * time the template is applied. Config-changing paths call this so the rule is enforced by the
+ * api, not only hidden in the UI.
+ */
+export function ensureNotSealed(isSealed: boolean): void {
+  if (isSealed) {
+    throw Object.assign(
+      new Error('This device is sealed — its pins and actions are fixed by an admin template'),
+      { statusCode: 403 },
+    );
+  }
+}
+
 export interface TargetInput {
   device_type: string;
   version_min: string;

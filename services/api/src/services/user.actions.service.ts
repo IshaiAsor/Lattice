@@ -1,5 +1,6 @@
 import { deriveValidParameters } from '@lattice/capability-validation';
 import { db } from '../db';
+import { ensureNotSealed } from './sealed-templates.service';
 
 // User action management (F2.6). Action *instances* are created by the provisioning /
 // device-config flow (device-gateway) with pins configured up front; the api manages
@@ -193,6 +194,9 @@ class UserActionsService {
     }[],
   ): Promise<void> {
     const action = await this.ensureOwned(userId, actionId);
+    // Behaviors are part of the sealed template's entry config — a user edit would be reverted
+    // on the next template apply. Renaming/grouping (updateAction) stays allowed.
+    ensureNotSealed(action.isSealed);
 
     const catalog = await db.capabilityConfiguration.findMany({
       where: { capability_id: action.capability_id },
@@ -276,7 +280,8 @@ class UserActionsService {
   }
 
   async deleteAction(userId: number, actionId: number): Promise<void> {
-    await this.ensureOwned(userId, actionId);
+    const action = await this.ensureOwned(userId, actionId);
+    ensureNotSealed(action.isSealed);
     await db.userDeviceAction.delete({ where: { id: actionId } });
   }
 
@@ -314,12 +319,15 @@ class UserActionsService {
   private async ensureOwned(userId: number, actionId: number) {
     const action = await db.userDeviceAction.findUnique({
       where: { id: actionId },
-      select: { capability_id: true, user_device: { select: { user_id: true } } },
+      select: {
+        capability_id: true,
+        user_device: { select: { user_id: true, device: { select: { is_sealed: true } } } },
+      },
     });
     if (!action) throw Object.assign(new Error('Action not found'), { statusCode: 404 });
     if (action.user_device.user_id !== userId)
       throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
-    return action;
+    return { ...action, isSealed: action.user_device.device.is_sealed };
   }
 }
 
