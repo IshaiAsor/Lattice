@@ -111,6 +111,9 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - renders each known event with its data
 - falls back gracefully for an unknown event type
 - tolerates missing data fields without throwing
+- leaves production notifications untagged
+- prefixes the title and footers the body outside production
+- treats a missing or blank environment as unknown, not production
 
 ### Platform — `platform.fleet-config.test.js` ✅
 
