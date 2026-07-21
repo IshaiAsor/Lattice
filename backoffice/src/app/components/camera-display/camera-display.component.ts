@@ -1,4 +1,14 @@
-import { Component, inject, input, OnInit } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  HostListener,
+  inject,
+  input,
+  OnDestroy,
+  OnInit,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { DeviceActionView } from 'src/app/services/device.mgmt.service';
 import { UserActionsService } from 'src/app/services/user.actions.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
@@ -10,10 +20,22 @@ import { ReceivedBadgeComponent } from '../received-badge/received-badge.compone
   standalone: true,
   imports: [SHARED_MATERIAL, ReceivedBadgeComponent],
   template: `
-    <div class="cam-fs-wrap">
-      <button mat-icon-button class="cam-fs-close" (click)="dialogRef.close()">
-        <mat-icon>close</mat-icon>
-      </button>
+    <div class="cam-fs-wrap" #wrap>
+      <div class="cam-fs-actions">
+        @if (fullscreenSupported) {
+          <button
+            mat-icon-button
+            class="cam-fs-btn"
+            (click)="toggleFullscreen()"
+            [matTooltip]="isFullscreen() ? 'Exit full screen' : 'Full screen'"
+          >
+            <mat-icon>{{ isFullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+          </button>
+        }
+        <button mat-icon-button class="cam-fs-btn" (click)="dialogRef.close()" matTooltip="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
       @if (data.action.state) {
         <div class="cam-fs-frame">
           <img [src]="'data:image/jpeg;base64,' + data.action.state" alt="Camera" class="cam-fs-img" />
@@ -51,12 +73,16 @@ import { ReceivedBadgeComponent } from '../received-badge/received-badge.compone
       min-width: 0;
       min-height: 0;
     }
-    .cam-fs-close {
+    .cam-fs-actions {
       position: absolute;
       top: 8px;
       right: 8px;
-      color: #fff;
       z-index: 10;
+      display: flex;
+      gap: 4px;
+    }
+    .cam-fs-btn {
+      color: #fff;
       background: rgba(0,0,0,0.4);
     }
     .cam-fs-img {
@@ -97,16 +123,58 @@ import { ReceivedBadgeComponent } from '../received-badge/received-badge.compone
          as it fits, not the sensor's native pixel size adrift in black. */
       .cam-fs-frame { width: 100%; }
       .cam-fs-img { width: 100%; height: auto; }
-      .cam-fs-close {
+      .cam-fs-actions {
         top: max(8px, env(safe-area-inset-top));
         right: max(8px, env(safe-area-inset-right));
       }
     }
+
+    /* Real fullscreen (Fullscreen API): the wrap itself becomes the fullscreen element,
+       so it has to stop hugging the image and take over the whole screen. */
+    .cam-fs-wrap:fullscreen {
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      max-height: none;
+    }
+    .cam-fs-wrap:fullscreen .cam-fs-frame,
+    .cam-fs-wrap:fullscreen .cam-fs-img {
+      width: 100%;
+      height: 100%;
+    }
   `],
 })
-export class CameraFullscreenDialog {
+export class CameraFullscreenDialog implements OnDestroy {
   dialogRef = inject(MatDialogRef<CameraFullscreenDialog>);
   data: { action: DeviceActionView } = inject(MAT_DIALOG_DATA);
+
+  private wrap = viewChild.required<ElementRef<HTMLDivElement>>('wrap');
+
+  // iOS Safari only grants fullscreen to <video>, so hide the control there rather than
+  // offering a button that silently does nothing.
+  readonly fullscreenSupported = document.fullscreenEnabled;
+  readonly isFullscreen = signal(false);
+
+  @HostListener('document:fullscreenchange')
+  protected onFullscreenChange(): void {
+    const active = document.fullscreenElement === this.wrap().nativeElement;
+    this.isFullscreen.set(active);
+    // While fullscreen, Escape belongs to the browser (it exits fullscreen); letting the
+    // dialog also close on it would tear the whole viewer down on the first press.
+    this.dialogRef.disableClose = active;
+  }
+
+  ngOnDestroy(): void {
+    if (document.fullscreenElement) void document.exitFullscreen();
+  }
+
+  protected async toggleFullscreen(): Promise<void> {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    await this.wrap().nativeElement.requestFullscreen();
+  }
 }
 
 @Component({
