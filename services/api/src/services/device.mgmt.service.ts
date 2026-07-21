@@ -23,6 +23,8 @@ export interface DeviceView {
   // Latest WiFi RSSI (dBm) from the device heartbeat — only while online (null otherwise, so
   // the UI never shows a stale signal for an offline device).
   rssi: number | null;
+  // The Area this device belongs to (F10.0), or null when unassigned.
+  area_id: number | null;
 }
 
 export interface PinSlotView {
@@ -102,6 +104,7 @@ class DeviceMgmtService {
         current_firmware_version: d.current_firmware_version,
         update_available: d.device.version !== latestVersion,
         rssi: d.online ? d.rssi : null,
+        area_id: d.area_id,
       };
     });
   }

@@ -1,0 +1,48 @@
+<h2 mat-dialog-title>Manage areas</h2>
+
+<mat-dialog-content>
+  <p class="am-subtitle">Drag to reorder how sections appear on your dashboard. Renaming or
+    deleting an area never touches its devices.</p>
+
+  @if (loading) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  } @else if (!areas.length) {
+    <p class="am-empty">No areas yet. Assign a device to an area from the device page to create one.</p>
+  } @else {
+    <div class="am-list" cdkDropList (cdkDropListDropped)="drop($event)">
+      @for (area of areas; track area.id) {
+        <div class="am-row" cdkDrag>
+          <span class="am-handle" cdkDragHandle matTooltip="Drag to reorder">
+            <mat-icon>drag_indicator</mat-icon>
+          </span>
+
+          @if (editingId === area.id) {
+            <input #renameInput class="am-edit" [(ngModel)]="editName" maxlength="255"
+              (keyup.enter)="saveRename(area)" (keyup.escape)="cancelRename()" />
+            <button mat-icon-button class="am-ok" (click)="saveRename(area)" matTooltip="Save">
+              <mat-icon>check</mat-icon>
+            </button>
+            <button mat-icon-button (click)="cancelRename()" matTooltip="Cancel">
+              <mat-icon>close</mat-icon>
+            </button>
+          } @else {
+            <span class="am-name">{{ area.name }}</span>
+            <span class="am-count">{{ area.device_count }} device{{ area.device_count === 1 ? '' : 's' }}</span>
+            <button mat-icon-button class="am-action" (click)="startRename(area)" matTooltip="Rename">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button mat-icon-button class="am-action am-danger" (click)="remove(area)" matTooltip="Delete">
+              <mat-icon>delete_outline</mat-icon>
+            </button>
+          }
+
+          <div *cdkDragPlaceholder class="am-placeholder"></div>
+        </div>
+      }
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-flat-button color="primary" (click)="close()">Done</button>
+</mat-dialog-actions>

@@ -9,3 +9,10 @@ export function apiUrl(): string {
     (environment.production ? `${window.location.protocol}//api.${window.location.hostname}` : 'http://localhost:3100')
   );
 }
+
+// Base URL for the `google-home` service (Google Home account linking). Deployed environments
+// serve it under /api/google on this same host, so the empty value means "same origin"; locally
+// it is a separate container port.
+export function googleHomeUrl(): string {
+  return environment.googleHomeUrl || (environment.production ? '' : 'http://localhost:3010');
+}

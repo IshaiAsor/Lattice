@@ -3,6 +3,8 @@ import { DeviceActionView, DeviceMgmtService } from 'src/app/services/device.mgm
 import { hasTrait, COLOR_OPTIONS, iconForAction, activeTraitValue, traitIconName, controllableTraits, isTelemetryAction, isCameraAction } from 'src/app/utils/device-type.utils';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { ActionGroupView, DashboardItem, UserActionsService } from 'src/app/services/user.actions.service';
+import { AreasService, AreaView } from 'src/app/services/areas.service';
+import { AreaManageDialogComponent } from '../area-manage-dialog/area-manage-dialog.component';
 import { UserRulesService } from 'src/app/services/user.rules.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -31,6 +33,17 @@ function toSvgPt(angleDeg: number) {
   return { x: CX + R * Math.cos(rad), y: CY - R * Math.sin(rad) };
 }
 
+// One dashboard section = the cards for a single Area (or the "Unassigned" bucket). Built as a
+// view over the flat `items` list: each entry keeps its global index into `items` so the existing
+// pointer-based drag hit-testing (which reads data-item-index) keeps working unchanged (F10.0).
+interface AreaSection {
+  key: string; // 'area-<id>' | 'unassigned'
+  areaId: number | null;
+  areaName: string | null;
+  entries: { item: DashboardItem; index: number }[];
+  onlineCount: number;
+}
+
 @Component({
   selector: 'app-user-dashboard',
   imports: [SHARED_MATERIAL, GroupTileComponent, SceneTileComponent, CameraDisplayComponent, ReceivedBadgeComponent],
@@ -45,11 +58,21 @@ export class UserDashboard implements OnInit {
   snackBar = inject(MatSnackBar);
   bottomSheet = inject(MatBottomSheet);
   private deviceMgmtService = inject(DeviceMgmtService);
+  private areasService = inject(AreasService);
   private rulesService = inject(UserRulesService);
   private scenesService = inject(ScenesService);
   private http = inject(HttpClient);
 
   items: DashboardItem[] = [];
+  // Area sectioning/filtering (F10.0). sections is derived from items; activeAreaFilter narrows
+  // which sections render. areaDropTargetKey highlights the band the pointer is over while
+  // dragging (drag-to-reassign).
+  sections: AreaSection[] = [];
+  activeAreaFilter = 'all'; // 'all' | 'area-<id>' | 'unassigned'
+  areaDropTargetKey: string | null = null;
+  // The user's areas (incl. any with no devices yet) — drives the Manage-areas affordance and,
+  // via sort_order, the order the sections render in.
+  allAreas: AreaView[] = [];
   scenes: SceneView[] = [];
   // Scene ids with an execute in flight — drives the tile spinner. Cleared on 202, since
   // execution is fire-and-forget (per-device acks arrive later as normal state updates).
@@ -80,6 +103,7 @@ export class UserDashboard implements OnInit {
 
   ngOnInit(): void {
     this.loadActions();
+    this.loadAreas();
     this.loadScenes();
     this.loadStats();
 
@@ -180,13 +204,41 @@ export class UserDashboard implements OnInit {
     this.userActionsService
       .getUserActions()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((actions) => { this.items = this.buildItems(actions); });
+      .subscribe((actions) => { this.setItems(this.buildItems(actions)); });
   }
 
   private reloadActions() {
     this.userActionsService.getUserActions().subscribe(actions => {
-      this.items = this.buildItems(actions);
+      this.setItems(this.buildItems(actions));
     });
+  }
+
+  // Single entry point for replacing the flat item list; keeps the derived area sections in sync.
+  private setItems(items: DashboardItem[]) {
+    this.items = items;
+    this.rebuildSections();
+  }
+
+  private loadAreas() {
+    this.areasService.list().subscribe({
+      next: areas => {
+        this.allAreas = areas;
+        this.rebuildSections(); // sort_order may have changed the section order
+      },
+      error: () => { /* non-critical: sections fall back to alphabetical order */ },
+    });
+  }
+
+  // Reorder / rename / delete areas. Areas are created by assigning a device on the device page;
+  // this dialog is where their order and names live.
+  openManageAreas() {
+    this.dialog.open(AreaManageDialogComponent, { width: '440px', panelClass: 'glass-dialog' })
+      .afterClosed()
+      .subscribe((changed: boolean) => {
+        if (!changed) return;
+        this.loadAreas();
+        this.reloadActions(); // a rename/delete changes the names/areas the cards carry
+      });
   }
 
   // ── Scenes (F10.5) ───────────────────────────────────────────────
@@ -278,6 +330,85 @@ export class UserDashboard implements OnInit {
     return result.sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
+  // ── Area sections (F10.0) ────────────────────────────────────────
+  // The area a dashboard item belongs to. An action carries its device's areaId directly; a group
+  // spans possibly several devices, so it only counts as an area member when ALL its actions share
+  // the same area — otherwise it falls into "Unassigned" (a mixed-area group has no single home).
+  private itemAreaId(item: DashboardItem): number | null {
+    if (item.kind === 'action') return item.action!.areaId ?? null;
+    const ids = new Set(item.group!.actions.map(a => a.areaId ?? null));
+    return ids.size === 1 ? [...ids][0] : null;
+  }
+
+  private itemAreaName(item: DashboardItem): string | null {
+    if (item.kind === 'action') return item.action!.areaName ?? null;
+    const areaId = this.itemAreaId(item);
+    if (areaId === null) return null;
+    return item.group!.actions.find(a => a.areaId === areaId)?.areaName ?? null;
+  }
+
+  private itemOnline(item: DashboardItem): boolean {
+    return item.kind === 'action' ? !!item.action!.online : item.group!.actions.some(a => a.online);
+  }
+
+  // Buckets the flat item list into per-area sections (named areas first, alphabetical, then the
+  // Unassigned bucket last), preserving each item's global index for the drag hit-testing.
+  private rebuildSections() {
+    const byKey = new Map<string, AreaSection>();
+    this.items.forEach((item, index) => {
+      const areaId = this.itemAreaId(item);
+      const key = areaId === null ? 'unassigned' : `area-${areaId}`;
+      let section = byKey.get(key);
+      if (!section) {
+        section = { key, areaId, areaName: this.itemAreaName(item), entries: [], onlineCount: 0 };
+        byKey.set(key, section);
+      }
+      if (!section.areaName) section.areaName = this.itemAreaName(item);
+      section.entries.push({ item, index });
+      if (this.itemOnline(item)) section.onlineCount++;
+    });
+
+    // Named sections follow the user's own order (areas.sort_order, set in Manage areas); areas
+    // not in the loaded list yet fall to the end, tie-broken by name so the order stays stable.
+    const orderOf = new Map(this.allAreas.map(a => [a.id, a.sort_order]));
+    const named = [...byKey.values()]
+      .filter(s => s.areaId !== null)
+      .sort((a, b) => {
+        const oa = orderOf.get(a.areaId!) ?? Number.MAX_SAFE_INTEGER;
+        const ob = orderOf.get(b.areaId!) ?? Number.MAX_SAFE_INTEGER;
+        return oa !== ob ? oa - ob : (a.areaName ?? '').localeCompare(b.areaName ?? '');
+      });
+    const unassigned = byKey.get('unassigned');
+    this.sections = unassigned ? [...named, unassigned] : named;
+
+    // Drop a filter that no longer matches any section (e.g. its last device was reassigned).
+    if (this.activeAreaFilter !== 'all' && !byKey.has(this.activeAreaFilter)) {
+      this.activeAreaFilter = 'all';
+    }
+  }
+
+  // Sections actually shown, after the filter chips (B). 'all' shows everything.
+  get visibleSections(): AreaSection[] {
+    if (this.activeAreaFilter === 'all') return this.sections;
+    return this.sections.filter(s => s.key === this.activeAreaFilter);
+  }
+
+  // Filter chips: All + one per section (with card counts). Only rendered when the user actually
+  // has areas in play — a flat single-bucket dashboard shows no chips at all.
+  get areaChips(): { key: string; label: string; count: number }[] {
+    if (this.sections.length <= 1) return [];
+    const chips = this.sections.map(s => ({
+      key: s.key,
+      label: s.areaName ?? 'Unassigned',
+      count: s.entries.length,
+    }));
+    return [{ key: 'all', label: 'All', count: this.items.length }, ...chips];
+  }
+
+  setAreaFilter(key: string) {
+    this.activeAreaFilter = key;
+  }
+
   private findAction(actionId: number): DeviceActionView | undefined {
     for (const item of this.items) {
       if (item.kind === 'action' && item.action!.id === actionId) return item.action;
@@ -302,6 +433,7 @@ export class UserDashboard implements OnInit {
     this.isDragging = false;
     this.draggingIndex = -1;
     this.groupDropTargetIndex = null;
+    this.areaDropTargetKey = null;
   }
 
   // ── Group hover detection (works because CDK sorting is disabled) ──
@@ -311,6 +443,25 @@ export class UserDashboard implements OnInit {
   onDragMoved(event: CdkDragMove) {
     this.lastPointerPos = { x: event.pointerPosition.x, y: event.pointerPosition.y };
     this.groupDropTargetIndex = this.cardIndexAtPoint(this.lastPointerPos.x, this.lastPointerPos.y);
+    // Highlight an area band only when the pointer is over one AND not over a card (a card drop
+    // means "group", which wins) — mirrors the drop() precedence so the highlight can't mislead.
+    this.areaDropTargetKey =
+      this.groupDropTargetIndex === null
+        ? this.areaBandAtPoint(this.lastPointerPos.x, this.lastPointerPos.y)
+        : null;
+  }
+
+  // The area band under (px, py), or null. Bands carry data-area-key; used for drag-to-reassign.
+  private areaBandAtPoint(px: number, py: number): string | null {
+    const bands = document.querySelectorAll<HTMLElement>('.area-band[data-area-key]');
+    for (const b of Array.from(bands)) {
+      const r = b.getBoundingClientRect();
+      if (r.width === 0) continue;
+      if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) {
+        return b.getAttribute('data-area-key');
+      }
+    }
+    return null;
   }
 
   // Returns the index of the card whose bounding rect contains (px, py), excluding the dragged card.
@@ -362,18 +513,52 @@ export class UserDashboard implements OnInit {
 
   drop(event: CdkDragDrop<DashboardItem[]>) {
     // Re-check pointer position at drop time (lastPointerPos = final cdkDragMoved position).
-    // This is more reliable than groupDropTargetIndex which resets on any pointer movement.
+    // This is more reliable than the *DropTarget fields which reset on any pointer movement.
     const targetIdx = this.cardIndexAtPoint(this.lastPointerPos.x, this.lastPointerPos.y);
+    const bandKey = targetIdx === null ? this.areaBandAtPoint(this.lastPointerPos.x, this.lastPointerPos.y) : null;
+    const dragged = this.items[event.previousIndex];
     this.groupDropTargetIndex = null;
+    this.areaDropTargetKey = null;
 
-    if (targetIdx !== null && this.items[event.previousIndex].kind === 'action') {
-      this.handleGroupDrop(this.items[event.previousIndex], this.items[targetIdx]);
+    if (targetIdx !== null && dragged.kind === 'action') {
+      // Precedence 1 — dropped onto another card → group them (existing behavior).
+      this.handleGroupDrop(dragged, this.items[targetIdx]);
+    } else if (bandKey !== null) {
+      // Precedence 2 — dropped onto an area band → move the device(s) into that area (C).
+      this.reassignItemToArea(dragged, bandKey);
     } else {
-      // cdkDropListSortingDisabled → currentIndex === previousIndex, so compute manually
+      // Precedence 3 — plain reorder. cdkDropListSortingDisabled → currentIndex === previousIndex.
       const to = this.reorderIndex(this.lastPointerPos.x, this.lastPointerPos.y, event.previousIndex);
       moveItemInArray(this.items, event.previousIndex, to);
+      this.rebuildSections();
       this.saveOrder();
     }
+  }
+
+  // Drag-to-assign (C): reassign the dragged item's device(s) to the target area (or clear it for
+  // the Unassigned band). A group carries several devices — all of them move. No-op when the item
+  // is already in that area.
+  private reassignItemToArea(item: DashboardItem, bandKey: string) {
+    const targetAreaId = bandKey === 'unassigned' ? null : Number(bandKey.replace('area-', ''));
+    if (this.itemAreaId(item) === targetAreaId) return;
+
+    const deviceIds = [
+      ...new Set(
+        item.kind === 'action'
+          ? [item.action!.deviceId]
+          : item.group!.actions.map(a => a.deviceId),
+      ),
+    ];
+    const label = item.kind === 'action' ? item.action!.name : item.group!.name;
+    const areaName = this.sections.find(s => s.key === bandKey)?.areaName ?? 'Unassigned';
+
+    this.areasService.assignDevices(targetAreaId, deviceIds).subscribe({
+      next: () => {
+        this.reloadActions();
+        this.snackBar.open(`Moved ${label} to ${areaName}`, 'Close', { duration: 2500 });
+      },
+      error: () => this.snackBar.open('Failed to move to area', 'Close', { duration: 3000 }),
+    });
   }
 
   private handleGroupDrop(draggedItem: DashboardItem, targetItem: DashboardItem) {
@@ -394,7 +579,7 @@ export class UserDashboard implements OnInit {
 
     this.userActionsService.assignActionsToGroup(groupName, actionIds).subscribe(() => {
       this.userActionsService.getUserActions().subscribe(actions => {
-        this.items = this.buildItems(actions);
+        this.setItems(this.buildItems(actions));
         this.saveOrder();
       });
     });

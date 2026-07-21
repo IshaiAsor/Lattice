@@ -1,14 +1,14 @@
 # Lattice v2.2 — Database Schema Review
 
 Single source of truth is `prisma/schema.prisma`. **Keep this file in sync with every schema
-change** (mermaid ERD + per-table examples). 28 tables, ordered by dependency tier 0 → 6.
+change** (mermaid ERD + per-table examples). 29 tables, ordered by dependency tier 0 → 6.
 
 | Tier | Theme                                                                                | Tables                                                                                                                           |
 | ---- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | External catalog                                                                     | `google_action_types`, `google_device_traits`                                                                                    |
 | 1    | Device & ML catalog                                                                  | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models` |
 | 2    | Identity                                                                             | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                   |
-| 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`             |
+| 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`    |
 | 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                         |
 | 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                  |
 | 6    | Telemetry                                                                            | `sensor_history`                                                                                                                 |
@@ -171,12 +171,19 @@ erDiagram
     int rssi "heartbeat WiFi dBm; nullable"
     datetime last_heartbeat_at "nullable"
     int pending_device_type_id FK "nullable"
+    int area_id FK "nullable"
   }
   UserActionGroup {
     int id PK
     int user_id FK
     string name
     int sort_order "dashboard card position"
+  }
+  Area {
+    int id PK
+    int user_id FK
+    string name
+    int sort_order "dashboard section position"
   }
   UserDeviceAction {
     int id PK
@@ -217,6 +224,7 @@ erDiagram
     bool is_emergency "fast-path safety rule"
     string condition_operator "AND/OR"
     int cooldown_seconds
+    int area_id FK "nullable"
   }
   UserRuleCondition {
     int id PK
@@ -248,6 +256,7 @@ erDiagram
     int user_id FK
     string name "unique per user"
     int sort_order
+    int area_id FK "nullable"
   }
   SceneMember {
     int id PK
@@ -264,6 +273,7 @@ erDiagram
     int user_id FK
     string name
     bool enabled
+    int area_id FK "nullable"
   }
   PipelineSensor {
     int id PK
@@ -345,6 +355,7 @@ erDiagram
   Device                |o--o{ UserDevice             : "pending model"
   User                  ||--o{ UserDevice             : "owns"
   User                  ||--o{ UserActionGroup        : "owns"
+  User                  ||--o{ Area                   : "owns"
   User                  ||--o{ UserRule               : "owns"
   User                  ||--o{ Pipeline               : "owns"
   User                  ||--o{ UserLoginAudit         : "logins"
@@ -355,6 +366,10 @@ erDiagram
   UserDevice            ||--o{ UserDeviceAction       : "has"
   UserDevice            |o--o{ UserRuleCondition      : "status checked by"
   UserActionGroup       |o--o{ UserDeviceAction       : "groups"
+  Area                  |o--o{ UserDevice             : "sections"
+  Area                  |o--o{ UserRule               : "scopes"
+  Area                  |o--o{ Scene                  : "scopes"
+  Area                  |o--o{ Pipeline               : "scopes"
   UserDeviceAction      ||--o{ UserDeviceActionPin    : "pin assignment"
   UserDeviceAction      ||--o{ UserActionConfiguration : "enabled behaviors"
   CapabilityConfiguration ||--o{ UserActionConfiguration : "selected from"
@@ -543,6 +558,12 @@ erDiagram
 | id  | user_id | name   | sort_order |
 | --- | ------- | ------ | ---------- |
 | 1   | 2       | Garage | 0          |
+
+#### `areas` (`Area`) — user-createable "these devices belong together" grouping (F10.0). Unique `(user_id, name)`, index `(user_id, sort_order)`. Independent of blueprints (a derive creates one and fills it). `user_devices`/`user_rules`/`scenes`/`pipelines` carry a nullable `area_id` (SET NULL on delete — removing an area only un-groups, never deletes). Powers dashboard sectioning + area-scoped notifications.
+
+| id  | user_id | name         | sort_order |
+| --- | ------- | ------------ | ---------- |
+| 1   | 2       | Greenhouse A | 0          |
 
 #### `user_device_actions` (`UserDeviceAction`) — an activated capability instance. Index `(user_device_id, mqtt_action_name)`. `sort_order` = position within group. `default_trait_id` (nullable FK → `google_device_traits`) = the user's chosen display trait; overrides the capability-level `is_default` when set. Resolution order: `default_trait_id` → catalog `is_default` trait → first trait. `camera_resolution`/`camera_transport` are only meaningful for a `CameraAction` instance (nullable, unused by every other implementation_type).
 

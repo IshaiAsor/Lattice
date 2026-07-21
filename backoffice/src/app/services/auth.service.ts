@@ -72,6 +72,13 @@ export class AuthService {
     );
   }
 
+  // Per-environment client config. The Google client id can't be baked into the bundle — one
+  // backoffice image is promoted staging → prod — so the API serves it from the same env the
+  // paired client secret comes from, which keeps the two from drifting apart.
+  getAuthConfig() {
+    return this.http.get<{ googleClientId: string }>(`${this.apiUrl}/api/auth/config`);
+  }
+
   loginWithGoogle(code: string, remember = true) {
     return this.http
       .post<AuthResponse | GoogleConsentRequired>(`${this.apiUrl}/api/auth/google`, { code })

@@ -47,6 +47,7 @@ function handleRefresh(
 // credential/verification failure — not an expired-session signal. Attempting a refresh here
 // clobbers the actual error (e.g. "Invalid credentials") with an unrelated refresh-token failure.
 const PUBLIC_AUTH_PATHS = [
+  '/api/auth/config',
   '/api/auth/login',
   '/api/auth/google',
   '/api/auth/register',

@@ -44,8 +44,47 @@
     </div>
 
     <div class="login-card">
-      <div class="card-title">Welcome back</div>
-      <div class="card-sub">Sign in to your Lattice account</div>
+      @if (googleLinkRequest) {
+        <div class="link-banner">
+          <div class="link-icon"><mat-icon>link</mat-icon></div>
+          <div class="link-text">
+            <strong>Google Home</strong>
+            wants to connect to your Lattice account
+          </div>
+        </div>
+      }
+
+      <div class="card-title">{{ googleLinkRequest ? 'Link your account' : 'Welcome back' }}</div>
+      <div class="card-sub">
+        @if (linkedUsername) {
+          Confirm the account you want to link
+        } @else if (googleLinkRequest) {
+          Sign in to finish linking Google Home
+        } @else {
+          Sign in to your Lattice account
+        }
+      </div>
+
+      @if (linkedUsername) {
+        <!-- Already signed in and linking: confirm the account instead of forcing a re-login. -->
+        @if (error) {
+          <div class="error-alert">{{ error }}</div>
+        }
+        <div class="continue-as">
+          <div class="continue-avatar"><mat-icon>person</mat-icon></div>
+          <div class="continue-text">
+            <strong>{{ linkedUsername }}</strong>
+            Signed in on this device
+          </div>
+        </div>
+        <button type="button" class="btn-sign" [disabled]="linking" (click)="completeGoogleLink()">
+          <mat-icon>link</mat-icon>
+          {{ linking ? 'Linking…' : 'Continue' }}
+        </button>
+        <button type="button" class="btn-switch" [disabled]="linking" (click)="useAnotherAccount()">
+          Use a different account
+        </button>
+      } @else {
 
       <form (ngSubmit)="onSubmit()">
         @if (error) {
@@ -121,6 +160,7 @@
       </button>
 
       <div class="card-foot">Don't have an account? <a routerLink="/register">Create one</a></div>
+      }
     </div>
   </div>
 </div>

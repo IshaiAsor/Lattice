@@ -17,17 +17,14 @@
     "@lattice/queue": "*",
     "actions-on-google": "^3.0.0",
     "googleapis": "^146.0.0",
-    "google-auth-library": "^9.0.0",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "cors": "^2.8.6",
-    "ioredis": "^5.3.2",
-    "bcryptjs": "^2.4.3"
+    "ioredis": "^5.3.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17",
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"

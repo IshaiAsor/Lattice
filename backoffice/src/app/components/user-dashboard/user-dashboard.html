@@ -62,9 +62,48 @@
   }
 </div>
 
+<!-- Areas toolbar (F10.0): filter chips (shown once there's more than one bucket) + the entry
+     point for reordering/renaming/deleting areas. -->
+@if (allAreas.length) {
+<div class="area-toolbar">
+    @if (areaChips.length) {
+    <div class="area-filter" role="tablist" aria-label="Filter by area">
+        @for (chip of areaChips; track chip.key) {
+        <button type="button" class="area-fchip" [class.active]="activeAreaFilter === chip.key"
+            role="tab" [attr.aria-selected]="activeAreaFilter === chip.key" (click)="setAreaFilter(chip.key)">
+            {{ chip.label }} <span class="area-fchip-n">{{ chip.count }}</span>
+        </button>
+        }
+    </div>
+    }
+    <button mat-button class="area-manage-btn" (click)="openManageAreas()"
+        matTooltip="Reorder, rename or delete areas">
+        <mat-icon>tune</mat-icon>
+        Manage areas
+    </button>
+</div>
+}
+
 <div class="card-grid" cdkDropList cdkDropListOrientation="mixed" cdkDropListSortingDisabled
      (cdkDropListDropped)="drop($event)">
-    @for (item of items; track itemTrackId(item); let i = $index) {
+    @for (section of visibleSections; track section.key) {
+    <!-- Area band (F10.0, option A): section header + a drop target for drag-to-reassign (C). -->
+    @if (areaChips.length) {
+    <div class="area-band" [attr.data-area-key]="section.key"
+        [class.area-drop-hover]="areaDropTargetKey === section.key"
+        [class.unassigned]="section.areaId === null">
+        <span class="area-caret">▾</span>
+        <h4 class="area-name">{{ section.areaName ?? 'Unassigned' }}</h4>
+        <span class="area-count"><span class="area-band-dot"></span>{{ section.onlineCount }} online</span>
+        <span class="area-rule"></span>
+        @if (areaDropTargetKey === section.key) {
+        <span class="area-drop-tag"><mat-icon>drive_file_move</mat-icon> Move here</span>
+        }
+    </div>
+    }
+    @for (entry of section.entries; track itemTrackId(entry.item)) {
+    @let item = entry.item;
+    @let i = entry.index;
     <div class="device-card-wrapper" cdkDrag [cdkDragData]="item"
         [class.deprecated-card]="item.action?.status === 'deprecated'"
          [attr.data-item-index]="i"
@@ -287,5 +326,6 @@
 
         <div *cdkDragPlaceholder class="drag-placeholder"></div>
     </div>
+    }
     }
 </div>

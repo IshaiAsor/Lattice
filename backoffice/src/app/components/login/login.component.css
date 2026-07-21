@@ -210,6 +210,74 @@
 .card-sub { font-size: 14px; color: #6366a0; margin-bottom: 28px; }
 :host-context(.dark-theme) .card-sub { color: #6b82a0; }
 
+/* ── Google Home account linking ──────────────────────────────────── */
+.link-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 12px; margin-bottom: 20px;
+  background: rgba(79, 70, 229, 0.09); border: 1px solid rgba(79, 70, 229, 0.20);
+}
+
+:host-context(.dark-theme) .link-banner {
+  background: rgba(56, 189, 248, 0.09); border-color: rgba(56, 189, 248, 0.22);
+}
+
+.link-icon {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(79, 70, 229, 0.14);
+}
+.link-icon mat-icon {
+  font-size: 18px !important; width: 18px !important; height: 18px !important; color: #4f46e5;
+}
+
+:host-context(.dark-theme) .link-icon { background: rgba(56, 189, 248, 0.14); }
+:host-context(.dark-theme) .link-icon mat-icon { color: #38bdf8; }
+
+.link-text { font-size: 12.5px; color: #6366a0; line-height: 1.45; }
+.link-text strong { display: block; font-size: 13.5px; font-weight: 700; color: #1e1b4b; }
+
+:host-context(.dark-theme) .link-text { color: #6b82a0; }
+:host-context(.dark-theme) .link-text strong { color: #e2e8f3; }
+
+/* "Continue as <user>" — shown when a session already exists during linking */
+.continue-as {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px; border-radius: 12px; margin-bottom: 20px;
+  background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(99, 102, 241, 0.18);
+}
+
+:host-context(.dark-theme) .continue-as {
+  background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.10);
+}
+
+.continue-avatar {
+  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #4f46e5;
+}
+.continue-avatar mat-icon {
+  font-size: 20px !important; width: 20px !important; height: 20px !important; color: #fff;
+}
+
+:host-context(.dark-theme) .continue-avatar { background: #38bdf8; }
+:host-context(.dark-theme) .continue-avatar mat-icon { color: #021018; }
+
+.continue-text { font-size: 12.5px; color: #6366a0; line-height: 1.45; }
+.continue-text strong {
+  display: block; font-size: 14px; font-weight: 700; color: #1e1b4b;
+  overflow-wrap: anywhere;
+}
+
+:host-context(.dark-theme) .continue-text { color: #6b82a0; }
+:host-context(.dark-theme) .continue-text strong { color: #e2e8f3; }
+
+.btn-switch {
+  width: 100%; background: none; border: none; padding: 4px;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: #4f46e5; cursor: pointer;
+}
+.btn-switch:disabled { opacity: 0.45; cursor: not-allowed; }
+:host-context(.dark-theme) .btn-switch { color: #38bdf8; }
+
 /* ── Fields ───────────────────────────────────────────────────────── */
 .field { margin-bottom: 16px; }
 

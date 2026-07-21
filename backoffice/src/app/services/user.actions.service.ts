@@ -38,6 +38,8 @@ interface ApiUserAction {
   status: string;
   groupId: number | null;
   groupName: string | null;
+  areaId: number | null;
+  areaName: string | null;
   telemetryIntervalMs: number | null;
 }
 
@@ -74,6 +76,8 @@ export class UserActionsService {
       sortOrder: r.sortOrder,
       groupId: r.groupId,
       groupName: r.groupName,
+      areaId: r.areaId,
+      areaName: r.areaName,
       implementation_type: r.implementation_type,
       validParameters: r.validParameters,
       status: r.status === 'active' ? 'active' : 'deprecated',

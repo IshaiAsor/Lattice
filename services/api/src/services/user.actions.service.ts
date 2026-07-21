@@ -34,6 +34,10 @@ export interface ActionView {
   status: string;
   groupId: number | null;
   groupName: string | null;
+  // Area (F10.0) of this action's device — powers dashboard sectioning/filtering. The device is
+  // the unit that belongs to an area, so every action of a device shares its areaId.
+  areaId: number | null;
+  areaName: string | null;
   telemetryIntervalMs: number | null;
   // Unified action model (6d): the behaviors this capability supports, and which the user has
   // enabled (with chosen values). The device-config UI renders a toggle per available behavior.
@@ -57,7 +61,7 @@ class UserActionsService {
       where: { user_device: { user_id: userId } },
       orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
       include: {
-        user_device: true,
+        user_device: { include: { area: { select: { id: true, name: true } } } },
         group: true,
         capability: {
           include: {
@@ -110,6 +114,8 @@ class UserActionsService {
         status: a.status,
         groupId: a.group_id,
         groupName: a.group?.name ?? null,
+        areaId: a.user_device.area?.id ?? null,
+        areaName: a.user_device.area?.name ?? null,
         telemetryIntervalMs: a.telemetry_interval_ms,
         availableBehaviors: a.capability.configurations.map((c) => ({
           behavior: c.behavior,

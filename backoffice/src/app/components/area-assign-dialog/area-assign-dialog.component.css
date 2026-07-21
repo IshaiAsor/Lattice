@@ -1,0 +1,24 @@
+.area-subtitle {
+  margin: 0 0 1rem;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+  font-size: 0.9rem;
+}
+
+.area-select {
+  width: 100%;
+}
+
+.area-create {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.area-create-field {
+  flex: 1;
+}
+
+.area-create button {
+  margin-top: 0.35rem;
+  white-space: nowrap;
+}

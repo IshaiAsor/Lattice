@@ -20,6 +20,13 @@ class GoogleService {
     );
   }
 
+  // The OAuth client id the browser must initialize its code client with. Public by design (it
+  // travels in every OAuth request); only the paired secret stays server-side. Served to the UI
+  // so a single backoffice image can run against staging and prod, each with its own client.
+  publicClientId(): string {
+    return env.googleSignIn.clientId;
+  }
+
   async getUserFromCode(code: string): Promise<GoogleProfile> {
     const { tokens } = await this.client.getToken(code);
     this.client.setCredentials(tokens);

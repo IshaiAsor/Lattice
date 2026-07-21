@@ -4,9 +4,9 @@ import rateLimit from 'express-rate-limit';
 import { JwtPurpose, JwtService } from '@lattice/jwt';
 import { createLogger } from '@lattice/logger';
 import config from '../config/env.config';
-import { authService } from '../services/auth.service';
+import { verifyToken } from '../middlewares/auth.middleware';
+import { oauthService } from '../services/oauth.service';
 import { valkeyService } from '../services/valkey.service';
-import { renderAuthPage } from '../views/auth.view';
 
 const log = createLogger('google-home:auth-routes');
 const router = express.Router();
@@ -22,7 +22,10 @@ const authRateLimiter = rateLimit({
   max: 20,
 }) as unknown as express.RequestHandler;
 
-router.get('/auth', (req: Request, res: Response) => {
+// Account linking entry point (Google Home app → here). This service owns no login UI: it parks
+// the OAuth params and hands the user to the backoffice login page, which finishes the flow by
+// calling /auth/authorize with a normal app session token.
+router.get('/auth', async (req: Request, res: Response) => {
   const { redirect_uri, state, client_id, response_type } = req.query as Record<string, string>;
 
   if (!client_id || !redirect_uri || !state || response_type !== 'code') {
@@ -35,49 +38,43 @@ router.get('/auth', (req: Request, res: Response) => {
     return res.status(400).send('Invalid redirect_uri');
   }
 
-  res.send(
-    renderAuthPage('/api/google/auth/login', { redirect_uri, state, client_id, response_type }),
-  );
-});
-
-router.post('/auth/login', authRateLimiter, async (req: Request, res: Response) => {
-  const { username, password, googleCode, redirect_uri, state, client_id, response_type } =
-    req.body;
-
-  if (!redirect_uri || !redirect_uri.startsWith('https://oauth-redirect.googleusercontent.com/')) {
-    return res.status(400).send('Invalid redirect_uri');
-  }
-
   try {
-    let user: { id: number } | null = null;
-
-    if (googleCode) {
-      user = await authService.loginWithGoogle(googleCode);
-    } else if (username && password) {
-      user = await authService.validateUser(username, password);
-    }
-
-    if (user) {
-      const authCode = crypto.randomBytes(16).toString('hex');
-      await valkeyService.set(
-        `oauth_code:${authCode}`,
-        { userId: user.id, redirectUri: redirect_uri },
-        600,
-      );
-      return res.redirect(`${redirect_uri}?code=${authCode}&state=${state}`);
-    }
+    const requestId = await oauthService.createLinkRequest({
+      redirectUri: redirect_uri,
+      state,
+      clientId: client_id,
+    });
+    // Hash routing: the backoffice reads google_link off the route's query params.
+    return res.redirect(`${config.backofficeUrl}/#/login?google_link=${requestId}`);
   } catch (err) {
-    log.error({ err }, 'login error');
+    log.error({ err }, 'failed to create link request');
+    return res.status(500).send('Unable to start account linking');
   }
-
-  res.send(
-    renderAuthPage(
-      '/api/google/auth/login',
-      { redirect_uri, state, client_id, response_type },
-      'Invalid credentials',
-    ),
-  );
 });
+
+// Called by the backoffice once the user is signed in. The app_usage JWT is the proof of
+// identity — credentials never reach this service.
+router.post(
+  '/auth/authorize',
+  authRateLimiter,
+  verifyToken(JwtPurpose.app_usage),
+  async (req: Request, res: Response) => {
+    const { requestId } = req.body as { requestId?: string };
+    const userId = Number(req.user?.id);
+
+    if (!requestId) return res.status(400).json({ error: 'invalid_request' });
+    if (!Number.isFinite(userId)) return res.status(403).json({ error: 'invalid_token' });
+
+    try {
+      const redirectUrl = await oauthService.authorize(requestId, userId);
+      if (!redirectUrl) return res.status(410).json({ error: 'link_request_expired' });
+      return res.json({ redirectUrl });
+    } catch (err) {
+      log.error({ err }, 'authorize error');
+      return res.status(500).json({ error: 'server_error' });
+    }
+  },
+);
 
 router.post('/token', async (req: Request, res: Response) => {
   const { grant_type, code, refresh_token, redirect_uri } = req.body;
