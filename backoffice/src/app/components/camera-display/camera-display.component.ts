@@ -15,9 +15,11 @@ import { ReceivedBadgeComponent } from '../received-badge/received-badge.compone
         <mat-icon>close</mat-icon>
       </button>
       @if (data.action.state) {
-        <img [src]="'data:image/jpeg;base64,' + data.action.state" alt="Camera" class="cam-fs-img" />
-        <div class="cam-fs-received-badge">
-          <app-received-badge [receivedAt]="data.action.receivedAt" variant="overlay"></app-received-badge>
+        <div class="cam-fs-frame">
+          <img [src]="'data:image/jpeg;base64,' + data.action.state" alt="Camera" class="cam-fs-img" />
+          <div class="cam-fs-received-badge">
+            <app-received-badge [receivedAt]="data.action.receivedAt" variant="overlay"></app-received-badge>
+          </div>
         </div>
       } @else {
         <div class="cam-fs-placeholder">
@@ -39,6 +41,16 @@ import { ReceivedBadgeComponent } from '../received-badge/received-badge.compone
       align-items: center;
       justify-content: center;
     }
+    /* The frame hugs the rendered image so the badge sits on the picture, not in
+       the (viewport-sized) letterbox around it on mobile. */
+    .cam-fs-frame {
+      position: relative;
+      display: flex;
+      max-width: 100%;
+      max-height: 100%;
+      min-width: 0;
+      min-height: 0;
+    }
     .cam-fs-close {
       position: absolute;
       top: 8px;
@@ -53,10 +65,12 @@ import { ReceivedBadgeComponent } from '../received-badge/received-badge.compone
       object-fit: contain;
       display: block;
     }
+    /* Top-left: clear of the close button and of any timestamp the camera burns
+       into the bottom of the frame. */
     .cam-fs-received-badge {
       position: absolute;
-      bottom: 8px;
-      right: 8px;
+      top: 8px;
+      left: 8px;
       z-index: 10;
     }
     .cam-fs-placeholder {
@@ -68,6 +82,26 @@ import { ReceivedBadgeComponent } from '../received-badge/received-badge.compone
       font-size: 14px;
     }
     .cam-fs-placeholder .material-symbols-outlined { font-size: 56px; }
+
+    /* Mobile: the global <600px rule makes every dialog surface 100vw/100dvh, so the
+       wrap must fill it and centre the frame instead of hugging the top-left corner.
+       Close button clears the notch/status bar. */
+    @media (max-width: 599px) {
+      .cam-fs-wrap {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+      }
+      /* Fill the width — tapping "expand" on a phone should show the frame as large
+         as it fits, not the sensor's native pixel size adrift in black. */
+      .cam-fs-frame { width: 100%; }
+      .cam-fs-img { width: 100%; height: auto; }
+      .cam-fs-close {
+        top: max(8px, env(safe-area-inset-top));
+        right: max(8px, env(safe-area-inset-right));
+      }
+    }
   `],
 })
 export class CameraFullscreenDialog {

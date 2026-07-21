@@ -199,6 +199,42 @@ app-root {
   overflow: hidden;
 }
 
+/* The frame is the content — the glass card treatment (blur + border) would show
+   the dashboard through the letterbox around the image. */
+.camera-dialog-panel .mat-mdc-dialog-surface,
+.camera-dialog-panel .mdc-dialog__surface {
+  background: #000 !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Mobile: a photo viewer wants the whole viewport. The generic <600px rule below
+   already stretches the surface, but the PANE stays auto-sized and centred, which
+   left the frame pinned to the top-left corner — pin the pane too. */
+@media (max-width: 599px) {
+  .camera-dialog-panel {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    transform: none !important;
+  }
+  .camera-dialog-panel .mat-mdc-dialog-container {
+    max-width: 100vw !important;
+    max-height: 100dvh !important;
+  }
+  .camera-dialog-panel .mat-mdc-dialog-surface,
+  .camera-dialog-panel .mdc-dialog__surface {
+    width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    border-radius: 0 !important;
+  }
+}
+
 /* ── Mobile full-screen dialogs (<600px) ─────────────────────────────── */
 @media (max-width: 599px) {
   .mat-mdc-dialog-container { max-width: 100vw !important; }

@@ -387,6 +387,16 @@
   right: 6px;
 }
 
+/* Camera frames commonly burn their own timestamp into a bar along the bottom edge,
+   so the "received at" chip sits top-left instead of colliding with it. */
+.sensor-received-badge.on-frame {
+  top: 6px;
+  bottom: auto;
+  right: auto;
+  left: 6px;
+  z-index: 2;
+}
+
 @keyframes card-pending-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

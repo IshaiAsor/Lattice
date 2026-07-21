@@ -281,7 +281,7 @@
                 </div>
                 }
                 @if (isTelemetryAction(item.action!) || isCameraAction(item.action!)) {
-                <div class="sensor-received-badge">
+                <div class="sensor-received-badge" [class.on-frame]="isCameraAction(item.action!)">
                     <app-received-badge [receivedAt]="item.action!.receivedAt"
                         [variant]="isCameraAction(item.action!) ? 'overlay' : 'inline'"></app-received-badge>
                 </div>
