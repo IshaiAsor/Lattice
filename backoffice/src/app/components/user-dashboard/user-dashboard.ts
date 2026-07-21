@@ -1,6 +1,6 @@
-import { Component, DestroyRef, HostListener, inject, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { DeviceActionView, DeviceMgmtService } from 'src/app/services/device.mgmt.service';
-import { hasTrait, COLOR_OPTIONS, iconForAction, activeTraitValue, traitIconName, controllableTraits, isTelemetryAction, isCameraAction } from 'src/app/utils/device-type.utils';
+import { isTelemetryAction, isCameraAction } from 'src/app/utils/device-type.utils';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { ActionGroupView, DashboardItem, UserActionsService } from 'src/app/services/user.actions.service';
 import { AreasService, AreaView } from 'src/app/services/areas.service';
@@ -16,22 +16,11 @@ import { GroupTileComponent } from '../group-tile/group-tile.component';
 import { SceneTileComponent } from '../scene-tile/scene-tile.component';
 import { SceneEditorDialogComponent } from '../scene-editor-dialog/scene-editor-dialog.component';
 import { ScenesService, SceneView } from 'src/app/services/scenes.service';
-import { CameraDisplayComponent } from '../camera-display/camera-display.component';
-import { ReceivedBadgeComponent } from '../received-badge/received-badge.component';
+import { ActionCardComponent } from '../action-card/action-card.component';
 import { GroupBottomSheetComponent } from '../group-bottom-sheet/group-bottom-sheet.component';
 import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop';
 import { HttpClient } from '@angular/common/http';
 import { apiUrl } from 'src/app/services/api.config';
-
-// Dial geometry constants
-const CX = 60, CY = 52, R = 36;
-const START_ANGLE = 225;
-const TOTAL_SWEEP = 270;
-
-function toSvgPt(angleDeg: number) {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: CX + R * Math.cos(rad), y: CY - R * Math.sin(rad) };
-}
 
 // One dashboard section = the cards for a single Area (or the "Unassigned" bucket). Built as a
 // view over the flat `items` list: each entry keeps its global index into `items` so the existing
@@ -46,7 +35,7 @@ interface AreaSection {
 
 @Component({
   selector: 'app-user-dashboard',
-  imports: [SHARED_MATERIAL, GroupTileComponent, SceneTileComponent, CameraDisplayComponent, ReceivedBadgeComponent],
+  imports: [SHARED_MATERIAL, GroupTileComponent, SceneTileComponent, ActionCardComponent],
   templateUrl: './user-dashboard.html',
   styleUrl: './user-dashboard.css',
 })
@@ -89,7 +78,6 @@ export class UserDashboard implements OnInit {
   firmwareUpdates = 0;
 
   private lastPointerPos = { x: 0, y: 0 };
-  private draggingActionId: number | null = null;
   private deviceOnlineState = new Map<number, boolean>();
 
   // Prior action.state for in-flight commands, so action_state_failed can revert the UI.
@@ -97,9 +85,6 @@ export class UserDashboard implements OnInit {
   // Latest commandId dispatched per action. Only that commandId's ack clears pending=true,
   // preventing a stale concurrent ack from clobbering a more recent command's state.
   private latestCommandId = new Map<number, string>();
-
-  @HostListener('document:pointerup')
-  onDocumentPointerUp() { this.draggingActionId = null; }
 
   ngOnInit(): void {
     this.loadActions();
@@ -651,27 +636,7 @@ export class UserDashboard implements OnInit {
     });
   }
 
-  // ── Device type icon + trait helpers ─────────────────────────────
-
-  iconForAction = iconForAction;
-  hasTrait = hasTrait;
-  activeTraitValue = activeTraitValue;
-  traitIconName = traitIconName;
-  controllableTraits = controllableTraits;
-  isTelemetryAction = isTelemetryAction;
-  isCameraAction = isCameraAction;
-  colorOptions = COLOR_OPTIONS;
-
-  setDefaultTrait(action: DeviceActionView, traitId: number) {
-    action.defaultTraitId = traitId;
-    this.userActionsService.setDefaultTrait(action.id, traitId).subscribe();
-  }
-
   // ── Action card actions ──────────────────────────────────────────
-
-  changeActionState(action: DeviceActionView, actionState: unknown) {
-    this.socketService.publishActionState(action.id, String(actionState));
-  }
 
   renameAction(action: DeviceActionView) {
     const ref = this.dialog.open(RenameActionDialogComponent, {
@@ -686,61 +651,5 @@ export class UserDashboard implements OnInit {
         this.snackBar.open('Action renamed', 'Close', { duration: 2000 });
       });
     });
-  }
-
-  // ── Arc dial ────────────────────────────────────────────────────
-
-  dialTrackPath(): string {
-    const s = toSvgPt(START_ANGLE);
-    const e = toSvgPt(START_ANGLE - TOTAL_SWEEP);
-    return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 1 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
-  }
-
-  dialActivePath(value: unknown): string {
-    const v = Math.max(0, Math.min(100, Number(value) || 0));
-    if (v <= 0) return '';
-    if (v >= 100) return this.dialTrackPath();
-    const s = toSvgPt(START_ANGLE);
-    const e = toSvgPt(START_ANGLE - (v / 100) * TOTAL_SWEEP);
-    const largeArc = (v / 100) * TOTAL_SWEEP > 180 ? 1 : 0;
-    return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${R} ${R} 0 ${largeArc} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
-  }
-
-  dialThumbPt(value: unknown) {
-    const v = Math.max(0, Math.min(100, Number(value) || 0));
-    return toSvgPt(START_ANGLE - (v / 100) * TOTAL_SWEEP);
-  }
-
-  onDialPointerDown(event: PointerEvent, action: DeviceActionView) {
-    event.preventDefault();
-    (event.currentTarget as Element).setPointerCapture(event.pointerId);
-    this.draggingActionId = action.id;
-    this.applyDialEvent(event, action);
-  }
-
-  onDialPointerMove(event: PointerEvent, action: DeviceActionView) {
-    if (this.draggingActionId !== action.id) return;
-    this.applyDialEvent(event, action);
-  }
-
-  private applyDialEvent(event: PointerEvent, action: DeviceActionView) {
-    const svg = event.currentTarget as SVGSVGElement;
-    const pt = svg.createSVGPoint();
-    pt.x = event.clientX;
-    pt.y = event.clientY;
-    const sp = pt.matrixTransform(svg.getScreenCTM()!.inverse());
-
-    const dx = sp.x - CX;
-    const dy = -(sp.y - CY);
-    let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-    if (angle < 0) angle += 360;
-
-    let sweep = START_ANGLE - angle;
-    if (sweep < 0) sweep += 360;
-    if (sweep > TOTAL_SWEEP) sweep = sweep > TOTAL_SWEEP + (360 - TOTAL_SWEEP) / 2 ? 0 : TOTAL_SWEEP;
-
-    const v = Math.round((sweep / TOTAL_SWEEP) * 100);
-    action.state = v;
-    this.changeActionState(action, String(v));
   }
 }

@@ -1,0 +1,361 @@
+/* The card fills whatever slot its owner lays out (dashboard grid cell, group sheet card). */
+:host {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* ── Card shell ──────────────────────────────────────────────────── */
+.device-card {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-left: none;
+  box-sizing: border-box;
+}
+
+.card-disabled { opacity: 0.6; filter: grayscale(30%); }
+
+/* ── Card header ─────────────────────────────────────────────────── */
+.card-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 6px 8px 12px;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.device-icon {
+  font-size: 18px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.header-spacer { flex: 1; }
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: var(--online);
+  box-shadow: 0 0 5px var(--online-glow);
+}
+
+.status-dot.offline { background: var(--offline); }
+
+.card-menu-btn {
+  width: 28px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  flex-shrink: 0;
+}
+
+.card-menu-btn mat-icon {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+.deprecated-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Card body ───────────────────────────────────────────────────── */
+.card-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow: hidden;
+}
+
+.card-content.pending {
+  animation: card-pending-pulse 1s ease-in-out infinite;
+}
+
+@keyframes card-pending-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.sensor-received-badge {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+}
+
+/* Camera frames commonly burn their own timestamp into a bar along the bottom edge,
+   so the "received at" chip sits top-left instead of colliding with it. */
+.sensor-received-badge.on-frame {
+  top: 6px;
+  bottom: auto;
+  right: auto;
+  left: 6px;
+  z-index: 2;
+}
+
+/* ── Offline overlay ─────────────────────────────────────────────── */
+.offline-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--offline-overlay-bg);
+  color: var(--text-muted);
+  z-index: 1;
+}
+
+.offline-overlay mat-icon {
+  font-size: 28px;
+  width: 28px;
+  height: 28px;
+  color: var(--offline-overlay-icon);
+}
+
+.offline-overlay span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--offline-overlay-text);
+}
+
+.offline-overlay span.offline-last-seen {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+/* ── Power button ────────────────────────────────────────────────── */
+.control-onoff {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.power-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.power-btn mat-icon {
+  font-size: 24px;
+  width: 24px;
+  height: 24px;
+}
+
+.power-btn:hover {
+  border-color: var(--primary);
+  background: var(--nav-active-bg);
+  color: var(--primary);
+}
+
+.power-btn.on {
+  background: var(--nav-active-bg);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-glow);
+}
+
+.power-btn.on:hover { box-shadow: 0 0 0 6px var(--primary-glow); }
+
+.power-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Arc speed dial ──────────────────────────────────────────────── */
+.speed-dial {
+  width: 100%;
+  /* The viewBox (136x96) makes this scale by width, so on a wide card it grows taller than the
+     compact body. Cap it at what's left after the trait switcher (~39px) — measured budget is
+     139px of body on desktop, so 88 leaves margin. */
+  max-height: 88px;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  display: block;
+}
+
+/* Tablet: 129px of body — the dial has to stay under (129 - 39 switcher - 6 gap). */
+@media (max-width: 1024px) {
+  .speed-dial { max-height: 78px; }
+}
+
+/* Phone: taller cards, smaller dial cap so dial + switcher fit with room to spare. */
+@media (max-width: 599px) {
+  .speed-dial { max-height: 92px; }
+  .sensor-value { font-size: 1.75rem; }
+}
+
+.dial-track {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+
+.dial-active {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+
+.dial-thumb {
+  fill: var(--card-bg);
+  stroke: var(--primary);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 1px 3px var(--primary-glow));
+}
+
+.dial-value {
+  font-size: 18px;
+  font-weight: 600;
+  fill: var(--text);
+}
+
+.dial-pct-unit { fill: var(--text-muted); }
+
+.dial-unit {
+  font-size: 10px;
+  fill: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* ── Sensor display ──────────────────────────────────────────────── */
+.sensor-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.sensor-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.sensor-unit {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.sensor-icon { font-size: 18px; height: 18px; width: 18px; vertical-align: middle; margin-right: 2px; }
+
+/* ── Color controls ──────────────────────────────────────────────── */
+.color-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 0 4px;
+  flex-wrap: wrap;
+}
+
+.color-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.color-chip:hover { transform: scale(1.15); }
+.color-chip.active { border-color: var(--text); transform: scale(1.1); }
+
+.color-chip.color-red    { background: #e53935; }
+.color-chip.color-green  { background: #43a047; }
+.color-chip.color-blue   { background: #1e88e5; }
+.color-chip.color-orange { background: #fb8c00; }
+.color-chip.color-off    { background: var(--offline); }
+
+/* ── Trait switcher strip ────────────────────────────────────────── */
+.trait-switcher {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.trait-chip {
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+
+.trait-chip mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+}
+
+.trait-chip.active {
+  color: var(--color-primary, #4f8ef7);
+  background: color-mix(in srgb, var(--color-primary, #4f8ef7) 12%, transparent);
+  border-radius: 8px;
+}
+

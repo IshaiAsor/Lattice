@@ -1,10 +1,5 @@
-.material-symbols-outlined {
-  font-variation-settings:
-    'FILL' 0,
-    'wght' 400,
-    'GRAD' 0,
-    'opsz' 24;
-}
+/* Card internals live in app-action-card (variant="sheet") — this file only styles the
+   sheet chrome: header, the drag-up remove zone, and the card slots the cards drop into. */
 
 .sheet-header {
   display: flex;
@@ -77,7 +72,7 @@
 
 /* ── Drag rail (same as dashboard) ──────────────────────────────── */
 .drag-rail {
-  width: 16px;
+  width: 14px;
   background: var(--surface-alt);
   display: flex;
   flex-direction: column;
@@ -85,8 +80,10 @@
   justify-content: center;
   cursor: grab;
   flex-shrink: 0;
+  transition: background 0.15s;
 }
 
+.drag-rail:hover { background: var(--border-strong); }
 .drag-rail:active { cursor: grabbing; }
 
 .drag-rail-dots {
@@ -102,240 +99,56 @@
   background: var(--text-dim);
 }
 
-/* ── CDK placeholder inside sheet ───────────────────────────────── */
-.drag-placeholder-sheet {
-  width: 240px;
-  height: 300px;
-  border: 2px dashed var(--border-strong);
-  border-radius: 12px;
-  margin: 10px;
-  background: transparent;
-  box-sizing: border-box;
-}
+.drag-rail:hover .drag-rail-dots span { background: var(--text-muted); }
 
 .sheet-cards {
   display: flex;
   flex-wrap: wrap;
-  padding: 8px;
+  padding: 12px 6px;
   gap: 0;
   max-height: 60vh;
   overflow-y: auto;
 }
 
-/* ── Card wrapper (no drag rail inside bottom sheet) ─── */
+/* ── Card slot ──────────────────────────────────────────────────── */
+/* Same geometry as the dashboard grid (see user-dashboard.css): a card in a group is a
+   dashboard card that happens to be inside a sheet, so the two must not drift again. */
 .device-card-wrapper {
+  position: relative;
   display: flex;
   flex-direction: row;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   overflow: hidden;
-  margin: 10px;
-  width: 240px;
-  height: 300px;
+  margin: 9px;
+  width: 216px;
+  height: 188px;
   box-shadow: var(--card-shadow);
+  transition: box-shadow 0.15s;
 }
 
-.device-card {
-  flex: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--card-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-left: none;
+.device-card-wrapper:has(.card-enabled):hover {
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* ── CDK placeholder inside sheet ───────────────────────────────── */
+.drag-placeholder-sheet {
+  width: 216px;
+  height: 188px;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-card);
+  margin: 9px;
+  background: transparent;
   box-sizing: border-box;
-  border-radius: 0 12px 12px 0;
 }
 
-.card-header {
-  display: flex;
-  align-items: center;
-  padding: 10px 6px 8px 12px;
-  gap: 6px;
-  border-bottom: 1px solid var(--border);
+@media (max-width: 1024px) {
+  .device-card-wrapper { width: 186px; height: 178px; margin: 8px; }
+  .drag-placeholder-sheet { width: 186px; height: 178px; margin: 8px; }
 }
 
-.device-icon {
-  font-size: 18px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.card-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-.header-spacer { flex: 1; }
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-dot.online {
-  background: var(--online);
-  box-shadow: 0 0 4px var(--online-glow);
-}
-
-.status-dot.offline { background: var(--offline); }
-
-.card-menu-btn {
-  width: 28px !important;
-  height: 28px !important;
-  line-height: 28px !important;
-  flex-shrink: 0;
-}
-
-.card-menu-btn mat-icon { font-size: 16px; color: var(--text-muted); }
-
-.card-content.pending {
-  animation: card-pending-pulse 1s ease-in-out infinite;
-}
-
-@keyframes card-pending-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.card-content {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr;
-  align-content: center;
-  justify-items: center;
-  gap: 8px;
-  padding: 12px;
-}
-
-.offline-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: var(--offline-overlay-bg);
-  backdrop-filter: blur(2px);
-  color: var(--text-muted);
-  z-index: 1;
-}
-
-.offline-overlay mat-icon { font-size: 28px; width: 28px; height: 28px; color: var(--offline-overlay-icon); }
-.offline-overlay span { font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--offline-overlay-text); }
-
-.card-content .speed-dial { width: 100%; }
-
-.control-onoff { display: flex; justify-content: center; padding: 4px 0; }
-
-.power-btn {
-  width: 52px; height: 52px; border-radius: 50%;
-  border: 2px solid var(--border-strong); background: var(--surface-alt); color: var(--text-muted);
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s; outline: none;
-}
-
-.power-btn mat-icon { font-size: 24px; width: 24px; height: 24px; }
-.power-btn:hover { border-color: var(--primary); background: var(--nav-active-bg); color: var(--primary); }
-.power-btn.on { background: var(--nav-active-bg); border-color: var(--primary); color: var(--primary); box-shadow: 0 0 0 4px var(--primary-glow); }
-.power-btn.on:hover { box-shadow: 0 0 0 6px var(--primary-glow); }
-.power-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.speed-dial { width: 100%; cursor: pointer; user-select: none; touch-action: none; display: block; }
-.dial-track { fill: none; stroke: var(--border-strong); stroke-width: 8; stroke-linecap: round; }
-.dial-active { fill: none; stroke: var(--primary); stroke-width: 8; stroke-linecap: round; }
-.dial-thumb { fill: var(--card-bg); stroke: var(--primary); stroke-width: 2.5; filter: drop-shadow(0 1px 3px var(--primary-glow)); }
-.dial-value { font-size: 18px; font-weight: 300; fill: var(--text); }
-.dial-unit { font-size: 10px; fill: var(--text-muted); letter-spacing: 0.04em; }
-
-.sensor-display { display: flex; align-items: center; gap: 4px; justify-content: center; }
-.sensor-value { font-size: 2rem; font-weight: 300; color: var(--primary); line-height: 1; }
-.sensor-unit { font-size: 1rem; color: var(--text-muted); }
-
-.card-disabled { opacity: 0.75; filter: grayscale(50%); }
-
-/* ── Camera display ─────────────────────────────────────────────── */
-.camera-display {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.sensor-received-badge {
-  position: absolute;
-  bottom: 6px;
-  right: 6px;
-}
-
-.camera-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  border-radius: 4px;
-  display: block;
-}
-
-.camera-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-dim);
-}
-
-.camera-placeholder .material-symbols-outlined { font-size: 48px; }
-
-.camera-placeholder span:last-child {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-
-/* ── Trait switcher strip ────────────────────────────────────────── */
-.trait-switcher {
-  display: flex;
-  justify-content: center;
-  gap: 2px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
-  margin-top: auto;
-}
-
-.trait-chip {
-  width: 32px !important;
-  height: 32px !important;
-  line-height: 32px !important;
-  color: var(--text-muted);
-  transition: color 0.15s, background 0.15s;
-}
-
-.trait-chip mat-icon {
-  font-size: 18px;
-  width: 18px;
-  height: 18px;
-  line-height: 18px;
-}
-
-.trait-chip.active {
-  color: var(--color-primary, #4f8ef7);
-  background: color-mix(in srgb, var(--color-primary, #4f8ef7) 12%, transparent);
-  border-radius: 8px;
+/* Phone: 2 columns, taller cards — the dial + trait switcher need the extra height. */
+@media (max-width: 599px) {
+  .sheet-cards { padding: 12px 6px; }
+  .device-card-wrapper { width: calc(50% - 12px); height: 200px; margin: 6px; }
+  .drag-placeholder-sheet { width: calc(50% - 12px); height: 200px; margin: 6px; }
 }

@@ -7,32 +7,32 @@
 
 <div class="stats-row">
   <div class="stat-card">
-    <div class="stat-icon-row">
-      <div class="stat-icon stat-icon-primary"><mat-icon>device_hub</mat-icon></div>
+    <div class="stat-icon stat-icon-primary"><mat-icon>device_hub</mat-icon></div>
+    <div class="stat-text">
+      <div class="stat-value">{{ devicesOnline }}<span class="stat-denom"> / {{ devicesTotal }}</span></div>
+      <div class="stat-label">Devices Online</div>
     </div>
-    <div class="stat-value">{{ devicesOnline }}<span class="stat-denom"> / {{ devicesTotal }}</span></div>
-    <div class="stat-label">Devices Online</div>
   </div>
   <div class="stat-card">
-    <div class="stat-icon-row">
-      <div class="stat-icon stat-icon-purple"><mat-icon>bolt</mat-icon></div>
+    <div class="stat-icon stat-icon-purple"><mat-icon>bolt</mat-icon></div>
+    <div class="stat-text">
+      <div class="stat-value">{{ activeRules }}</div>
+      <div class="stat-label">Automations</div>
     </div>
-    <div class="stat-value">{{ activeRules }}</div>
-    <div class="stat-label">Active Automations</div>
   </div>
   <div class="stat-card" [class.stat-card-alert]="emergencyAlerts > 0">
-    <div class="stat-icon-row">
-      <div class="stat-icon stat-icon-red"><mat-icon>warning</mat-icon></div>
+    <div class="stat-icon stat-icon-red"><mat-icon>warning</mat-icon></div>
+    <div class="stat-text">
+      <div class="stat-value" [class.stat-value-alert]="emergencyAlerts > 0">{{ emergencyAlerts }}</div>
+      <div class="stat-label">Alerts</div>
     </div>
-    <div class="stat-value" [class.stat-value-alert]="emergencyAlerts > 0">{{ emergencyAlerts }}</div>
-    <div class="stat-label">Emergency Alerts</div>
   </div>
   <div class="stat-card" [class.stat-card-warn]="firmwareUpdates > 0">
-    <div class="stat-icon-row">
-      <div class="stat-icon stat-icon-orange"><mat-icon>system_update</mat-icon></div>
+    <div class="stat-icon stat-icon-orange"><mat-icon>system_update</mat-icon></div>
+    <div class="stat-text">
+      <div class="stat-value" [class.stat-value-warn]="firmwareUpdates > 0">{{ firmwareUpdates }}</div>
+      <div class="stat-label">Updates</div>
     </div>
-    <div class="stat-value" [class.stat-value-warn]="firmwareUpdates > 0">{{ firmwareUpdates }}</div>
-    <div class="stat-label">Firmware Updates</div>
   </div>
 </div>
 
@@ -122,192 +122,7 @@
         </div>
 
         @if (item.kind === 'action') {
-        <div class="device-card" [ngClass]="(item.action!.online && item.action?.status === 'active') ? 'card-enabled' : 'card-disabled'">
-            <div class="card-header">
-                <span class="material-symbols-outlined device-icon">
-                    {{ iconForAction(item.action!) }}
-                </span>
-                 @if (item.action?.status === 'deprecated') {
-            <span class="deprecated-badge" matTooltip="This action is incompatible with the current firmware version">deprecated</span>
-        }
-                <span class="card-name">{{ item.action!.name }}</span>
-                <span class="header-spacer"></span>
-                <span class="status-dot" [class.online]="item.action!.online" [class.offline]="!item.action!.online"
-                    [matTooltip]="item.action!.online ? 'Online' : 'Offline'"></span>
-                <button mat-icon-button [matMenuTriggerFor]="actionMenu" class="card-menu-btn">
-                    <mat-icon>more_vert</mat-icon>
-                </button>
-                <mat-menu #actionMenu="matMenu">
-                    <button mat-menu-item (click)="renameAction(item.action!)">
-                        <mat-icon>edit</mat-icon>
-                        <span>Rename</span>
-                    </button>
-                </mat-menu>
-            </div>
-
-            <div class="card-content" [class.pending]="item.action!.pending">
-                @if (!item.action!.online) {
-                <div class="offline-overlay">
-                    <mat-icon>wifi_off</mat-icon>
-                    <span>Offline</span>
-                    @if (item.action!.lastOnlineDate) {
-                    <span class="offline-last-seen">Last seen {{ item.action!.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
-                    }
-                </div>
-                }
-
-                <!-- Active control: only one trait shown at a time -->
-                @switch (activeTraitValue(item.action!)) {
-                  @case ('action.devices.traits.OnOff') {
-                  <div class="control-onoff">
-                      <button class="power-btn" [class.on]="item.action!.state === 'on'"
-                          (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
-                          [matTooltip]="item.action!.state === 'on' ? 'Turn off' : 'Turn on'">
-                          <mat-icon>power_settings_new</mat-icon>
-                      </button>
-                  </div>
-                  }
-                  @case ('action.devices.traits.LockUnlock') {
-                  <div class="control-onoff">
-                      <button class="power-btn" [class.on]="item.action!.state === 'lock'"
-                          (click)="changeActionState(item.action!, item.action!.state === 'lock' ? 'unlock' : 'lock')"
-                          [matTooltip]="item.action!.state === 'lock' ? 'Unlock' : 'Lock'">
-                          <mat-icon>{{ item.action!.state === 'lock' ? 'lock' : 'lock_open' }}</mat-icon>
-                      </button>
-                  </div>
-                  }
-                  @case ('action.devices.traits.OpenClose') {
-                  <div class="control-onoff">
-                      <button class="power-btn" [class.on]="item.action!.state === 'on'"
-                          (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
-                          [matTooltip]="item.action!.state === 'on' ? 'Close' : 'Open'">
-                          <mat-icon>{{ item.action!.state === 'on' ? 'expand_less' : 'expand_more' }}</mat-icon>
-                      </button>
-                  </div>
-                  }
-                  @case ('action.devices.traits.StartStop') {
-                  <div class="control-onoff">
-                      <button class="power-btn" [class.on]="item.action!.state === 'on'"
-                          (click)="changeActionState(item.action!, item.action!.state === 'on' ? 'off' : 'on')"
-                          [matTooltip]="item.action!.state === 'on' ? 'Stop' : 'Start'">
-                          <mat-icon>{{ item.action!.state === 'on' ? 'stop' : 'play_arrow' }}</mat-icon>
-                      </button>
-                  </div>
-                  }
-                  @case ('action.devices.traits.ArmDisarm') {
-                  <div class="control-onoff">
-                      <button class="power-btn" [class.on]="item.action!.state === 'arm'"
-                          (click)="changeActionState(item.action!, item.action!.state === 'arm' ? 'disarm' : 'arm')"
-                          [matTooltip]="item.action!.state === 'arm' ? 'Disarm' : 'Arm'">
-                          <mat-icon>{{ item.action!.state === 'arm' ? 'shield' : 'shield_with_heart' }}</mat-icon>
-                      </button>
-                  </div>
-                  }
-                  @case ('action.devices.traits.FanSpeed') {
-                  <svg class="speed-dial" viewBox="-8 -8 136 96"
-                      (pointerdown)="onDialPointerDown($event, item.action!)"
-                      (pointermove)="onDialPointerMove($event, item.action!)">
-                      <path class="dial-track" [attr.d]="dialTrackPath()" />
-                      <path class="dial-active" [attr.d]="dialActivePath($any(item.action!.state) || 0)" />
-                      <circle class="dial-thumb" [attr.cx]="dialThumbPt($any(item.action!.state) || 0).x"
-                          [attr.cy]="dialThumbPt($any(item.action!.state) || 0).y" r="7" />
-                      <text x="60" y="48" text-anchor="middle" dominant-baseline="middle" class="dial-value">{{
-                          $any(item.action!.state) || 0 }}<tspan font-size="11" fill="#9e9e9e" dy="-3">%</tspan></text>
-                      <text x="60" y="62" text-anchor="middle" class="dial-unit">speed</text>
-                  </svg>
-                  }
-                  @case ('action.devices.traits.Brightness') {
-                  <svg class="speed-dial" viewBox="-8 -8 136 96"
-                      (pointerdown)="onDialPointerDown($event, item.action!)"
-                      (pointermove)="onDialPointerMove($event, item.action!)">
-                      <path class="dial-track" [attr.d]="dialTrackPath()" />
-                      <path class="dial-active" [attr.d]="dialActivePath($any(item.action!.state) || 0)" />
-                      <circle class="dial-thumb" [attr.cx]="dialThumbPt($any(item.action!.state) || 0).x"
-                          [attr.cy]="dialThumbPt($any(item.action!.state) || 0).y" r="7" />
-                      <text x="60" y="48" text-anchor="middle" dominant-baseline="middle" class="dial-value">{{
-                          $any(item.action!.state) || 0 }}<tspan font-size="11" fill="#9e9e9e" dy="-3">%</tspan></text>
-                      <text x="60" y="62" text-anchor="middle" class="dial-unit">brightness</text>
-                  </svg>
-                  }
-                  @case ('action.devices.traits.ColorSetting') {
-                  <div class="color-controls">
-                      @for (color of colorOptions; track color) {
-                      <button class="color-chip" [class.active]="item.action!.state === color"
-                          [ngClass]="'color-' + color"
-                          [matTooltip]="color"
-                          (click)="changeActionState(item.action!, color)">
-                      </button>
-                      }
-                  </div>
-                  }
-                }
-
-                <!-- Sensor read-outs (non-conflicting, shown regardless of active trait) -->
-                @if (hasTrait(item.action!, 'action.devices.traits.TemperatureSetting')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
-                    <span class="sensor-unit">°C</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.HumiditySetting')) {
-                <div class="sensor-display">
-                    <mat-icon class="sensor-icon">humidity_high</mat-icon>
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-0' }}</span>
-                    <span class="sensor-unit">%</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.WaterLevel')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
-                    <span class="sensor-unit">%</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.PhLevel')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-2' }}</span>
-                    <span class="sensor-unit">pH</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.TdsLevel')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-1' }}</span>
-                    <span class="sensor-unit">ppm</span>
-                </div>
-                }
-                @if (hasTrait(item.action!, 'action.devices.traits.CO2Level')) {
-                <div class="sensor-display">
-                    <span class="sensor-value">{{ $any(item.action!.state) | number:'1.0-0' }}</span>
-                    <span class="sensor-unit">ppm</span>
-                </div>
-                }
-                @if (isTelemetryAction(item.action!) || isCameraAction(item.action!)) {
-                <div class="sensor-received-badge" [class.on-frame]="isCameraAction(item.action!)">
-                    <app-received-badge [receivedAt]="item.action!.receivedAt"
-                        [variant]="isCameraAction(item.action!) ? 'overlay' : 'inline'"></app-received-badge>
-                </div>
-                }
-
-                <!-- Camera / doorbell feeds -->
-                @if (isCameraAction(item.action!)) {
-                <app-camera-display [action]="item.action!"></app-camera-display>
-                }
-
-                <!-- Trait switcher: only shown when there are 2+ controllable traits -->
-                @if (controllableTraits(item.action!).length > 1) {
-                <div class="trait-switcher">
-                    @for (trait of controllableTraits(item.action!); track trait.id) {
-                    <button mat-icon-button class="trait-chip"
-                        [class.active]="trait.id === item.action!.defaultTraitId"
-                        (click)="setDefaultTrait(item.action!, trait.id)"
-                        [matTooltip]="trait.name">
-                        <mat-icon>{{ traitIconName(trait.value) }}</mat-icon>
-                    </button>
-                    }
-                </div>
-                }
-            </div>
-
-        </div>
+        <app-action-card [action]="item.action!" (rename)="renameAction($event)"></app-action-card>
         } @else {
         <app-group-tile
             [group]="item.group!"
