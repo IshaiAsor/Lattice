@@ -63,7 +63,7 @@ export class LoginComponent implements OnInit {
   get linkedUsername(): string | null {
     if (!this.googleLinkRequest || !this.authService.isLoggedIn()) return null;
     const user = this.authService.getCurrentUser();
-    return user?.username || user?.email || 'your account';
+    return user?.username || user?.email || 'Your account';
   }
 
   // Hand the (now authenticated) session back to google-home, which mints the OAuth code and

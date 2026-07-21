@@ -56,7 +56,13 @@
 
       <div class="card-title">{{ googleLinkRequest ? 'Link your account' : 'Welcome back' }}</div>
       <div class="card-sub">
-        {{ googleLinkRequest ? 'Sign in to finish linking Google Home' : 'Sign in to your Lattice account' }}
+        @if (linkedUsername) {
+          Confirm the account you want to link
+        } @else if (googleLinkRequest) {
+          Sign in to finish linking Google Home
+        } @else {
+          Sign in to your Lattice account
+        }
       </div>
 
       @if (linkedUsername) {

@@ -199,7 +199,8 @@
 
 @media (max-width: 599px) {
   .scenes-section { padding: 4px 12px 0; }
-  .scene-card-wrapper { width: calc(50% - 6px); height: 160px; margin: 6px 6px 6px 0; }
+  /* Matches the phone-sized tile internals (44px badge, 10px padding) — see scene-tile CSS. */
+  .scene-card-wrapper { width: calc(50% - 6px); height: 132px; margin: 6px 6px 6px 0; }
 }
 
 /* ── Card grid layout ────────────────────────────────────────────── */
@@ -217,30 +218,50 @@
   flex-direction: row;
   border-radius: var(--radius-card);
   overflow: hidden;
-  margin: 10px;
-  width: 240px;
-  height: 300px;
+  margin: 9px;
+  width: 216px;
+  height: 188px;
   box-shadow: var(--card-shadow);
   transition: box-shadow 0.15s;
 }
 
 /* Tablet: narrower cards so 3 fit per row in the 64px-offset content area */
 @media (max-width: 1024px) {
-  .device-card-wrapper { width: 196px; height: 270px; margin: 8px; }
+  .device-card-wrapper { width: 186px; height: 178px; margin: 8px; }
   .card-grid { padding: 16px 10px 20px; }
+  /* 129px of body here — the dial has to stay under (129 - 39 switcher - 6 gap). Prefixed with
+     .card-content because this block precedes the base .speed-dial rule in the file. */
+  .card-content .speed-dial { max-height: 78px; }
 }
 
 /* Phone: 2-column grid, fixed height so height:100% on .device-card resolves correctly */
 @media (max-width: 599px) {
   .card-grid { padding: 12px 6px 16px; }
+  /* Two columns on a phone leave ~119px of body at the desktop height — not enough for a dial
+     plus its trait switcher, which then got clipped. Taller cards + a smaller dial cap so the
+     richest card (dial + switcher) fits with room to spare. */
   .device-card-wrapper {
     width: calc(50% - 12px);
-    height: 180px;
+    height: 200px;
     margin: 6px;
   }
-  .drag-placeholder { width: calc(50% - 12px); margin: 6px; }
+  .drag-placeholder { width: calc(50% - 12px); height: 200px; margin: 6px; }
+  /* .card-content prefix on purpose: this block sits above the base .speed-dial rule in the
+     file, so it needs the higher specificity to win rather than relying on source order. */
+  .card-content .speed-dial { max-height: 92px; }
+  .sensor-value { font-size: 1.75rem; }
   .stat-value { font-size: 24px; }
   .stat-icon { width: 34px; height: 34px; }
+
+  /* Stack the areas toolbar: chips wrap onto their own lines, so a right-floated button ends up
+     visually detached — put it on its own row instead. */
+  .area-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 16px 14px 0;
+  }
+  .area-manage-btn { align-self: flex-end; }
 }
 
 /* ── Left drag rail ──────────────────────────────────────────────── */
@@ -351,8 +372,9 @@
   grid-template-columns: 1fr;
   align-content: center;
   justify-items: center;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow: hidden;
 }
 
 .card-content.pending {
@@ -458,6 +480,11 @@
 
 .speed-dial {
   width: 100%;
+  /* The viewBox (136x96) makes this scale by width, so on a wide card it grows taller than the
+     compact body. Cap it at what's left after the trait switcher (~39px) — measured budget is
+     139px of body on desktop, so 88 leaves margin. Per-breakpoint overrides follow the card
+     sizes above. */
+  max-height: 88px;
   cursor: pointer;
   user-select: none;
   touch-action: none;
@@ -555,13 +582,17 @@
 
 /* ── CDK drag states ─────────────────────────────────────────────── */
 .drag-placeholder {
-  width: 240px;
-  min-height: 100px;
+  width: 216px;
+  height: 188px;
   border: 2px dashed var(--border-strong);
   border-radius: var(--radius-card);
   background: var(--surface-alt);
-  margin: 10px;
+  margin: 9px;
   box-sizing: border-box;
+}
+
+@media (max-width: 1024px) {
+  .drag-placeholder { width: 186px; height: 178px; margin: 8px; }
 }
 
 .cdk-drag-animating {
@@ -656,4 +687,101 @@
   color: var(--color-primary, #4f8ef7);
   background: color-mix(in srgb, var(--color-primary, #4f8ef7) 12%, transparent);
   border-radius: 8px;
+}
+
+/* ── Areas (F10.0): filter chips + section bands ─────────────────── */
+.area-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Generous top padding: this sits directly under the scenes strip, and a tight gap reads as
+     the chips belonging to (or colliding with) the last scene card. */
+  padding: 18px 24px 0;
+}
+.area-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.area-manage-btn {
+  flex: none;
+  font-size: 12.5px !important;
+  color: var(--text-muted) !important;
+}
+.area-manage-btn mat-icon {
+  font-size: 17px; width: 17px; height: 17px; margin-right: 2px;
+}
+.area-manage-btn:hover { color: var(--text) !important; }
+.area-fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.area-fchip:hover { color: var(--text); border-color: var(--border-strong); }
+.area-fchip.active {
+  color: var(--bg-solid, #020510);
+  background: var(--primary);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+.area-fchip-n { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.area-fchip.active .area-fchip-n { opacity: 0.9; }
+
+/* Full-width row break inside the flex card-grid → a visual section divider. */
+.area-band {
+  flex: 0 0 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 10px 4px;
+  padding: 4px 2px;
+  border-radius: 8px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.area-band:first-child { margin-top: 6px; }
+.area-caret { color: var(--text-dim, #4a5a78); font-size: 12px; }
+.area-name { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.01em; color: var(--text); }
+.area-band.unassigned .area-name { color: var(--text-muted); }
+.area-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.area-band-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--online);
+  box-shadow: 0 0 6px var(--online-glow, rgba(46, 204, 113, 0.4));
+}
+.area-rule { flex: 1; height: 1px; background: var(--border); }
+
+/* Drag-to-reassign (C): the band the pointer is over lights up as a drop target. */
+.area-band.area-drop-hover {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+.area-drop-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.area-drop-tag mat-icon {
+  font-size: 15px; width: 15px; height: 15px;
 }
