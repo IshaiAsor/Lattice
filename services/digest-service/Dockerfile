@@ -13,6 +13,7 @@ COPY packages/prisma-client packages/prisma-client
 COPY packages/ml            packages/ml
 COPY packages/ioredis       packages/ioredis
 COPY packages/capability-validation packages/capability-validation
+COPY packages/params        packages/params
 COPY services/digest-service services/digest-service
 # Root schema is the single source of truth; prisma-client's prepare step reads it.
 COPY prisma prisma
@@ -26,6 +27,7 @@ RUN npm run build -w @lattice/otel \
  && npm run build -w @lattice/ml \
  && npm run build -w @lattice/ioredis \
  && npm run build -w @lattice/capability-validation \
+ && npm run build -w @lattice/params \
  && npm run build -w @lattice/digest-service
 
 FROM node:22-slim
@@ -57,6 +59,9 @@ COPY --from=builder /workspace/packages/ioredis/package.json        ./node_modul
 COPY --from=builder /workspace/packages/ioredis/dist                ./node_modules/@lattice/ioredis/dist
 COPY --from=builder /workspace/packages/capability-validation/package.json ./node_modules/@lattice/capability-validation/package.json
 COPY --from=builder /workspace/packages/capability-validation/dist         ./node_modules/@lattice/capability-validation/dist
+# @lattice/params is dependency-free (pure TS), so no node_modules to copy.
+COPY --from=builder /workspace/packages/params/package.json ./node_modules/@lattice/params/package.json
+COPY --from=builder /workspace/packages/params/dist         ./node_modules/@lattice/params/dist
 
 COPY --from=builder /workspace/services/digest-service/dist ./dist
 

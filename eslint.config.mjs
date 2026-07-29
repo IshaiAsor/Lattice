@@ -11,6 +11,9 @@ export default tseslint.config(
       'ESP32Code/**',
       'coverage/**',
       '**/*.d.ts',
+      // Git worktrees live here. They carry their own tsconfig, so leaving them visible makes
+      // typescript-eslint see two candidate roots and refuse to parse anything.
+      '.claude/**',
     ],
   },
 
@@ -56,6 +59,11 @@ export default tseslint.config(
   {
     files: ['tools/**/*.js', 'tests/**/*.js'],
     extends: [...tseslint.configs.recommended],
+    // Syntax-only, so no projectService — but the root still has to be pinned, or the parser
+    // hunts for one and errors the moment more than one candidate exists.
+    languageOptions: {
+      parserOptions: { tsconfigRootDir: import.meta.dirname },
+    },
     rules: {
       '@typescript-eslint/no-var-requires': 'off',
       '@typescript-eslint/no-require-imports': 'off',

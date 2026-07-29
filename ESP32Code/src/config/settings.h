@@ -31,5 +31,9 @@ const int  READING_INTERVAL      = 10000;      // 10 seconds
 const long HEARTBEAT_INTERVAL_MS = 60L * 1000; // liveness ping cadence (must be < digest's last-seen TTL)
 const long JWT_REFRESH_POLICY    = 60 * 7.5;
 const bool FORCE_WPA3            = false;
-const bool PROVISION_ON_ERROR    = true;
-const long WIFI_TIMEOUT          = 1000 * 60 * 60; // 60 min
+#ifdef ENV_PROD
+const bool PROVISION_ON_ERROR = false;
+#else
+const bool PROVISION_ON_ERROR = true;
+#endif
+const long WIFI_TIMEOUT = 1000 * 60 * 60; // 60 min

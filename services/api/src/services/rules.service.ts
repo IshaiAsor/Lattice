@@ -108,7 +108,11 @@ class RulesService {
 
   async update(userId: number, id: number, dto: CreateRuleDto): Promise<RuleView> {
     validate(dto);
-    await this.ensureOwned(userId, id);
+    const existing = await this.ensureOwned(userId, id);
+    // Editing a blueprint-derived rule is what "drift" means (F10.6): from here on reconcile
+    // leaves this row alone and the instance page offers a reset. Only structural edits count —
+    // enabling/disabling is not an opinion about the rule's content.
+    const userModified = existing.blueprint_instance_id !== null ? true : undefined;
     // Replace conditions/actions wholesale so removed rows don't linger.
     const rule = await db.$transaction(async (tx) => {
       await tx.userRuleCondition.deleteMany({ where: { rule_id: id } });
@@ -120,6 +124,7 @@ class RulesService {
           condition_operator: dto.condition_operator === 'OR' ? 'OR' : 'AND',
           cooldown_seconds: dto.cooldown_seconds ?? 60,
           is_emergency: dto.is_emergency ?? false,
+          user_modified: userModified,
           updated_at: new Date(),
           conditions: { create: dto.conditions.map(conditionCreateData) },
           actions: {
@@ -162,10 +167,17 @@ class RulesService {
     await db.userRule.delete({ where: { id } }); // cascades conditions/actions/events
   }
 
-  private async ensureOwned(userId: number, id: number): Promise<void> {
-    const rule = await db.userRule.findUnique({ where: { id }, select: { user_id: true } });
+  private async ensureOwned(
+    userId: number,
+    id: number,
+  ): Promise<{ blueprint_instance_id: number | null }> {
+    const rule = await db.userRule.findUnique({
+      where: { id },
+      select: { user_id: true, blueprint_instance_id: true },
+    });
     if (!rule) throw Object.assign(new Error('Rule not found'), { statusCode: 404 });
     if (rule.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
+    return { blueprint_instance_id: rule.blueprint_instance_id };
   }
 
   private toView(r: {

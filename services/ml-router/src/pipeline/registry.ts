@@ -1,4 +1,8 @@
 import { db } from '@lattice/prisma-client';
+import { buildParamContext, EMPTY_PARAM_CONTEXT, type ParamContext } from '@lattice/params';
+import { createLogger } from '@lattice/logger';
+
+const log = createLogger('ml-router:pipeline:registry');
 
 // DeviceCapability.implementation_type value that produces image/camera-frame telemetry
 // (mirrors services/api/src/services/pipelines.service.ts and the backoffice pipeline editor).
@@ -15,7 +19,7 @@ export interface InferStagePlan {
   type: 'infer';
   dbId: number;
   model: { kind: string; name: string; version: string };
-  config?: { prompt_template?: string };
+  prompt_template?: string;
 }
 
 export interface CommandExecStagePlan {
@@ -47,6 +51,11 @@ export interface PipelinePlan {
   userId: number;
   stages: PipelineStagePlan[];
   sensors: PipelineSensorPlan[];
+  // Resolution context for a pipeline derived from a blueprint (F10.1b). A pipeline the user
+  // built by hand gets EMPTY_PARAM_CONTEXT, where literals pass through and a stray reference
+  // fails closed. Loaded once per plan: the prompt and every sensor bound resolve against the
+  // same snapshot, so one run cannot straddle a phase advance.
+  params: ParamContext;
 }
 
 export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
@@ -64,11 +73,24 @@ export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
           },
         },
       },
+      blueprint_instance: {
+        select: {
+          overrides: { select: { param_key: true, value: true } },
+          blueprint: { select: { params: { select: { key: true, default_value: true } } } },
+          current_phase: {
+            select: {
+              key: true,
+              name: true,
+              context_notes: true,
+              targets: { select: { param_key: true, value: true } },
+            },
+          },
+        },
+      },
     },
   });
 
   const stages: PipelineStagePlan[] = pipeline.stages.map((s) => {
-    const cfg = (s.config ?? {}) as Record<string, unknown>;
     if (s.kind === 'enrich') {
       return { type: 'enrich', dbId: s.id } satisfies EnrichStagePlan;
     }
@@ -78,9 +100,7 @@ export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
         type: 'infer',
         dbId: s.id,
         model: { kind: s.ml_model.kind, name: s.ml_model.name, version: s.ml_model.version },
-        config: cfg['prompt_template']
-          ? { prompt_template: cfg['prompt_template'] as string }
-          : undefined,
+        prompt_template: s.prompt_template ?? undefined,
       } satisfies InferStagePlan;
     }
     // command_exec
@@ -88,8 +108,8 @@ export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
       type: 'command_exec',
       dbId: s.id,
       config: {
-        notify: (cfg['notify'] as string) ?? 'none',
-        execute_condition: (cfg['execute_condition'] as string) ?? 'always',
+        notify: s.notify ?? 'none',
+        execute_condition: s.execute_condition ?? 'always',
       },
     } satisfies CommandExecStagePlan;
   });
@@ -110,5 +130,28 @@ export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
     is_image: IMAGE_IMPL_TYPES.has(s.user_device_action.capability.implementation_type),
   }));
 
-  return { pipelineId: pipeline.id, userId: pipeline.user_id, stages, sensors };
+  const params = pipeline.blueprint_instance
+    ? buildParamContext({
+        overrides: pipeline.blueprint_instance.overrides,
+        defaults: pipeline.blueprint_instance.blueprint.params,
+        currentPhase: pipeline.blueprint_instance.current_phase,
+      })
+    : EMPTY_PARAM_CONTEXT;
+
+  log.debug(
+    {
+      pipelineId: pipeline.id,
+      blueprintInstanceId: pipeline.blueprint_instance_id,
+      phase: params.phase?.key ?? null,
+      overrides: params.overrides,
+      phaseTargets: params.phaseTargets,
+      defaults: params.defaults,
+      sensorBounds: sensors
+        .filter((x) => x.min_value !== null || x.max_value !== null)
+        .map((x) => `${x.group_name}.${x.action_name}=[${x.min_value},${x.max_value}]`),
+    },
+    'pipeline plan loaded with its parameter context',
+  );
+
+  return { pipelineId: pipeline.id, userId: pipeline.user_id, stages, sensors, params };
 }

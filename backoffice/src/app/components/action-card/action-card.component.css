@@ -200,10 +200,17 @@
   height: 24px;
 }
 
-.power-btn:hover {
-  border-color: var(--primary);
-  background: var(--nav-active-bg);
-  color: var(--primary);
+/* Hover styling only on devices with a real pointer — on touch screens the
+   :hover state sticks after a tap and would leave the button looking "on"
+   until the user taps elsewhere. */
+@media (hover: hover) {
+  .power-btn:hover {
+    border-color: var(--primary);
+    background: var(--nav-active-bg);
+    color: var(--primary);
+  }
+
+  .power-btn.on:hover { box-shadow: 0 0 0 6px var(--primary-glow); }
 }
 
 .power-btn.on {
@@ -212,8 +219,6 @@
   color: var(--primary);
   box-shadow: 0 0 0 4px var(--primary-glow);
 }
-
-.power-btn.on:hover { box-shadow: 0 0 0 6px var(--primary-glow); }
 
 .power-btn:disabled {
   opacity: 0.4;
@@ -319,7 +324,9 @@
   transition: transform 0.15s, border-color 0.15s;
 }
 
-.color-chip:hover { transform: scale(1.15); }
+@media (hover: hover) {
+  .color-chip:hover { transform: scale(1.15); }
+}
 .color-chip.active { border-color: var(--text); transform: scale(1.1); }
 
 .color-chip.color-red    { background: #e53935; }

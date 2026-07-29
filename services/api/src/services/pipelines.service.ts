@@ -18,6 +18,30 @@ function windowToMinutes(value: number, unit: string): number {
   return value;
 }
 
+// Hoisted so the payload type can be named — an inline include leaks an unnameable
+// `.prisma/client/runtime` type into the exported service (TS2742).
+const pipelineDetailInclude = {
+  stages: { orderBy: { ordinal: 'asc' }, include: { ml_model: true } },
+  sensors: {
+    orderBy: { id: 'asc' },
+    include: {
+      user_device_action: {
+        select: {
+          action_name: true,
+          mqtt_action_name: true,
+          capability: {
+            select: {
+              implementation_type: true,
+              traits: { select: { google_trait: { select: { valid_parameters: true } } } },
+            },
+          },
+        },
+      },
+    },
+  },
+  triggers: true,
+} satisfies Prisma.PipelineInclude;
+
 function toPipelineWriteData(dto: CreatePipelineDto) {
   return {
     stages: {
@@ -25,12 +49,9 @@ function toPipelineWriteData(dto: CreatePipelineDto) {
         ordinal: s.ordinal,
         kind: s.kind,
         ml_model_id: s.kind === 'infer' ? s.ml_model_id : null,
-        config:
-          s.kind === 'enrich'
-            ? Prisma.DbNull
-            : s.config
-              ? (s.config as Prisma.InputJsonValue)
-              : Prisma.DbNull,
+        prompt_template: s.kind === 'infer' ? (s.prompt_template ?? null) : null,
+        notify: s.kind === 'command_exec' ? (s.notify ?? null) : null,
+        execute_condition: s.kind === 'command_exec' ? (s.execute_condition ?? null) : null,
       })),
     },
     sensors: {
@@ -97,27 +118,7 @@ class PipelinesService {
   async get(userId: number, id: number) {
     const p = await db.pipeline.findUnique({
       where: { id },
-      include: {
-        stages: { orderBy: { ordinal: 'asc' }, include: { ml_model: true } },
-        sensors: {
-          orderBy: { id: 'asc' },
-          include: {
-            user_device_action: {
-              select: {
-                action_name: true,
-                mqtt_action_name: true,
-                capability: {
-                  select: {
-                    implementation_type: true,
-                    traits: { select: { google_trait: { select: { valid_parameters: true } } } },
-                  },
-                },
-              },
-            },
-          },
-        },
-        triggers: true,
-      },
+      include: pipelineDetailInclude,
     });
     if (!p) throw err(404, 'Pipeline not found');
     if (p.user_id !== userId) throw err(403, 'Forbidden');
@@ -161,9 +162,14 @@ class PipelinesService {
 
   async update(userId: number, id: number, dto: CreatePipelineDto) {
     validate(dto);
-    const existing = await db.pipeline.findUnique({ where: { id }, select: { user_id: true } });
+    const existing = await db.pipeline.findUnique({
+      where: { id },
+      select: { user_id: true, blueprint_instance_id: true },
+    });
     if (!existing) throw err(404, 'Pipeline not found');
     if (existing.user_id !== userId) throw err(403, 'Forbidden');
+    // See rules.service.update — editing a derived pipeline is drift (F10.6).
+    const userModified = existing.blueprint_instance_id !== null ? true : undefined;
     await ensureOwnedActions(userId, dto);
 
     return db.$transaction(async (tx) => {
@@ -174,6 +180,7 @@ class PipelinesService {
         where: { id },
         data: {
           name: dto.name.trim(),
+          user_modified: userModified,
           updated_at: new Date(),
           ...toPipelineWriteData(dto),
         },

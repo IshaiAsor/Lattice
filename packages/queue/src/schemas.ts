@@ -158,6 +158,7 @@ export const notificationSendSchema = z.object({
   data: z.record(z.string(), z.unknown()),
   dedupeKey: z.string().optional(),
   channels: z.array(z.string()).optional(),
+  context: z.object({ area_id: z.number(), area_name: z.string() }).optional(),
 });
 
 // Routing key → schema. Dynamic ML-stage routing keys (mlStageRK) intentionally have no

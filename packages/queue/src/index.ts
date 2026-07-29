@@ -22,6 +22,7 @@ export const DLQ_ARGS = {
 // Static queue → routing key mapping (same key names, parallel arrays).
 const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.TELEMETRY_ARRIVED, RK.TELEMETRY_ARRIVED],
+  [QUEUES.TELEMETRY_ARRIVED_AUTOMATION, RK.TELEMETRY_ARRIVED],
   [QUEUES.RULES_EVALUATE, RK.RULES_EVALUATE],
   [QUEUES.PIPELINE_TRIGGER, RK.PIPELINE_TRIGGER],
   [QUEUES.PIPELINE_CANCEL, RK.PIPELINE_CANCEL],
@@ -76,6 +77,36 @@ export async function connect(url?: string): Promise<Channel> {
   }
 
   return ch;
+}
+
+/**
+ * Close the channel and its underlying connection.
+ *
+ * `connect()` returns the amqplib `Channel`, not the `ChannelModel` that owns the promise-style
+ * `close()`, so callers only reach the connection via `ch.connection` — and that low-level
+ * `Connection.close()` is callback-style (it returns `undefined`, not a promise). Promisify it here
+ * so a caller gets a single awaitable teardown instead of reaching into amqplib internals. Closing
+ * the connection also closes its channels.
+ */
+export async function close(ch: Channel): Promise<void> {
+  const conn = (ch as unknown as { connection: { close(cb: (err?: unknown) => void): void } })
+    .connection;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const done = (): void => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+    try {
+      conn.close(done);
+    } catch {
+      done();
+    }
+    // A stuck close must never hang the caller (e.g. a test's afterAll).
+    setTimeout(done, 2000);
+  });
 }
 
 /**

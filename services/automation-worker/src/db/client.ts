@@ -1,1 +1,1 @@
-export { db } from '@lattice/prisma-client';
+export { db, Prisma } from '@lattice/prisma-client';

@@ -39,7 +39,7 @@ export async function dispatch(payload: NotificationSendPayload): Promise<void> 
     return;
   }
 
-  const rendered = render(eventType, data);
+  const rendered = render(eventType, data, payload.context);
 
   const delivered: string[] = [];
   for (const name of enabled) {

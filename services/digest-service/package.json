@@ -13,6 +13,7 @@
     "@lattice/ioredis": "*",
     "@lattice/logger": "*",
     "@lattice/otel": "*",
+    "@lattice/params": "*",
     "@lattice/prisma-client": "*",
     "@lattice/queue": "*",
     "@socket.io/redis-emitter": "^5.1.0",

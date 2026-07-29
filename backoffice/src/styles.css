@@ -237,8 +237,29 @@ app-root {
 
 /* ── Mobile full-screen dialogs (<600px) ─────────────────────────────── */
 @media (max-width: 599px) {
+  /* The PANE has to stretch with the surface. Material sizes the pane from the
+     dialog's `width` config and leaves it centred, so a 100vw surface inside a
+     440px pane hangs off the right edge (buttons unreachable) while min-height
+     leaves a full-screen empty box under short content. */
+  .cdk-overlay-pane.mat-mdc-dialog-panel { width: 100vw !important; max-width: 100vw !important; }
   .mat-mdc-dialog-container { max-width: 100vw !important; }
-  .mdc-dialog__surface { border-radius: 0 !important; width: 100vw !important; min-height: 100dvh !important; }
+  .mdc-dialog__surface {
+    border-radius: 0 !important;
+    width: 100vw !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+  /* Full-bleed means square: the glass card's radius + 1px border would otherwise
+     round the corners and push the surface 1px past the right edge. compact-dialog
+     is exempt — it is a bottom sheet and keeps its rounded top. */
+  .glass-dialog:not(.compact-dialog) .mat-mdc-dialog-container,
+  .glass-dialog:not(.compact-dialog) .mat-mdc-dialog-surface {
+    border-radius: 0 !important;
+    border: none !important;
+  }
+  /* Scroll the content, not the surface, so the actions row stays pinned and
+     reachable (glass-dialog clears the default content max-height). */
+  .mat-mdc-dialog-content { min-height: 0; overflow: auto; }
 
   /* compact-dialog: anchor the CDK overlay PANE itself to the bottom.
      panelClass is applied to cdk-overlay-pane (position:absolute inside
@@ -307,6 +328,12 @@ app-root {
 .glass-dialog .mat-mdc-dialog-surface {
   background: transparent !important;
   border-radius: 20px !important;
+  /* Safety net: glass-dialog clears the content's default 65vh scroll cap
+     (below), so a tall dialog opened without a maxHeight config would grow
+     past the viewport with its actions row unreachable. Cap the surface so it
+     scrolls instead. At <600px the mobile !important rules above (100dvh /
+     compact 85dvh) override this; this only bites at >=600px widths. */
+  max-height: 90vh;
 }
 
 .glass-dialog .mat-mdc-dialog-title {

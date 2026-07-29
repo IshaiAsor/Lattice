@@ -21,13 +21,14 @@ export interface InferStageDto {
   kind: 'infer';
   ordinal: number;
   ml_model_id: number;
-  config?: { prompt_template?: string };
+  prompt_template?: string | null;
 }
 
 export interface CommandExecStageDto {
   kind: 'command_exec';
   ordinal: number;
-  config?: { notify?: string; execute_condition?: string };
+  notify?: string | null;
+  execute_condition?: string | null;
 }
 
 export type PipelineStageDto = EnrichStageDto | InferStageDto | CommandExecStageDto;

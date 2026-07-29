@@ -11,6 +11,10 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.ts', '**/tests/**/*.test.js'],
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  // `.claude/worktrees/` holds agent git worktrees — full checkouts of this repo. Jest's haste
+  // map crawls them regardless of testPathIgnorePatterns and then aborts on duplicate module
+  // names, so `npm test` breaks whenever a worktree exists. Exclude them from the map itself.
+  modulePathIgnorePatterns: ['<rootDir>/.claude/'],
   testTimeout: 30000,
   transform: {
     '^.+\\.ts$': [

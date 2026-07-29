@@ -10,14 +10,15 @@
   },
   "dependencies": {
     "@lattice/capability-validation": "*",
+    "@lattice/ioredis": "*",
     "@lattice/logger": "*",
     "@lattice/ml": "*",
-    "@lattice/ioredis": "*",
     "@lattice/otel": "*",
+    "@lattice/params": "*",
     "@lattice/prisma-client": "*",
     "@lattice/queue": "*",
-    "express": "^4.21.2",
     "@socket.io/redis-emitter": "^5.1.0",
+    "express": "^4.21.2",
     "ioredis": "^5.11.1"
   },
   "devDependencies": {

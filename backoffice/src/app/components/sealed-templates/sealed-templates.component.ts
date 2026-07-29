@@ -1,4 +1,6 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import {
   AdminCatalogCapability,
@@ -33,6 +35,8 @@ const BEHAVIORS = ['command', 'interval', 'on_demand'];
 })
 export class SealedTemplatesComponent implements OnInit {
   private service = inject(AdminDeviceConfigService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
 
   templates = signal<SealedTemplateSummary[]>([]);
   identities = signal<SealedIdentity[]>([]);
@@ -52,12 +56,44 @@ export class SealedTemplatesComponent implements OnInit {
   loading = signal(false);
 
   ngOnInit() {
-    this.reload();
-    this.service.getSealedIdentities().subscribe((ids) => this.identities.set(ids));
+    // Load the list + identities first (open() needs the identities to build its palette), then let
+    // the URL's id decide which template is open. Subscribing handles back/forward and our own
+    // select navigations.
+    forkJoin({
+      templates: this.service.listSealedTemplates(),
+      identities: this.service.getSealedIdentities(),
+    }).subscribe(({ templates, identities }) => {
+      this.templates.set(templates);
+      this.identities.set(identities);
+      this.route.paramMap.subscribe((pm) => this.applyRouteId(pm.get('id')));
+    });
   }
 
   reload() {
     this.service.listSealedTemplates().subscribe((t) => this.templates.set(t));
+  }
+
+  // Selecting is just navigation — the id in the URL drives the actual open via applyRouteId, so a
+  // refresh or shared /admin/sealed-templates/:id link reopens the same template.
+  select(id: number) {
+    this.router.navigate(['/admin/sealed-templates', id]);
+  }
+
+  // Open whatever the URL points at. The guard against the already-open id keeps our own select
+  // navigations from re-fetching the template once the param arrives.
+  private applyRouteId(idStr: string | null): void {
+    const id = idStr ? Number(idStr) : null;
+    if (id === (this.selected()?.id ?? null)) return;
+    if (id === null) {
+      this.selected.set(null);
+      return;
+    }
+    if (!this.templates().some((t) => t.id === id)) {
+      // A stale or deleted id — drop back to the no-selection state without leaving it in the URL.
+      this.router.navigate(['/admin/sealed-templates'], { replaceUrl: true });
+      return;
+    }
+    this.open(id);
   }
 
   get sealedTypes(): string[] {
@@ -83,8 +119,12 @@ export class SealedTemplatesComponent implements OnInit {
     this.service.createSealedTemplate(name).subscribe((t) => {
       this.creating.set(false);
       this.newName = '';
-      this.reload();
-      this.open(t.id);
+      // Refresh the list before routing: applyRouteId validates the id against the loaded list, so
+      // the new template must be present before we navigate to it (else it reads as a stale id).
+      this.service.listSealedTemplates().subscribe((rows) => {
+        this.templates.set(rows);
+        this.select(t.id);
+      });
     });
   }
 
@@ -247,7 +287,8 @@ export class SealedTemplatesComponent implements OnInit {
     const t = this.selected();
     if (!t || !confirm(`Delete template "${t.name}"?`)) return;
     this.service.deleteSealedTemplate(t.id).subscribe(() => {
-      this.selected.set(null);
+      // Navigating to the base clears the id from the URL (applyRouteId then nulls the selection).
+      this.router.navigate(['/admin/sealed-templates']);
       this.reload();
     });
   }

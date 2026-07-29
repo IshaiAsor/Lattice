@@ -217,7 +217,7 @@ export class UserDashboard implements OnInit {
   // Reorder / rename / delete areas. Areas are created by assigning a device on the device page;
   // this dialog is where their order and names live.
   openManageAreas() {
-    this.dialog.open(AreaManageDialogComponent, { width: '440px', panelClass: 'glass-dialog' })
+    this.dialog.open(AreaManageDialogComponent, { width: '440px', panelClass: ['glass-dialog', 'compact-dialog'] })
       .afterClosed()
       .subscribe((changed: boolean) => {
         if (!changed) return;
@@ -269,6 +269,7 @@ export class UserDashboard implements OnInit {
       data: { scene, actions },
       panelClass: 'glass-dialog',
       width: '520px',
+      maxHeight: '90vh',
     });
     ref.afterClosed().subscribe((saved: boolean) => {
       if (saved) this.loadScenes();

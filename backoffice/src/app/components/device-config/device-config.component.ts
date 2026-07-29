@@ -1,5 +1,5 @@
 import { Component, DestroyRef, inject, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
@@ -32,6 +32,7 @@ export class DeviceConfigComponent implements OnInit {
   private areasService = inject(AreasService);
   private snack = inject(MatSnackBar);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private socketService = inject(DeviceSocketService);
   private destroyRef = inject(DestroyRef);
@@ -110,8 +111,16 @@ export class DeviceConfigComponent implements OnInit {
   get updatesAvailable() { return this.devices.filter(d => d.update_available).length; }
 
   ngOnInit() {
-    this.loadDevices();
     this.loadAreas();
+
+    // Load the fleet first, then let the URL's id decide which device is open — the id lookup needs
+    // the list. Subscribing (not a one-off snapshot) also handles back/forward and our own
+    // navigate() calls from selectDevice/deleteDevice.
+    this.loadDevices(() => {
+      this.route.paramMap
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe((pm) => this.applyRouteId(pm.get('id')));
+    });
 
     this.socketService.onDeviceOnlineStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -178,7 +187,28 @@ export class DeviceConfigComponent implements OnInit {
     return !!this.selectedDevice?.is_sealed;
   }
 
+  // Selecting is just navigation — the id in the URL drives the actual selection via applyRouteId,
+  // so a refresh or shared /devices/:id link reopens the same device.
   selectDevice(device: DeviceView) {
+    this.router.navigate(['/devices', device.id]);
+  }
+
+  // Open whatever the URL points at. The guard against the already-open id keeps our own
+  // selectDevice navigations from re-fetching capabilities once the param arrives.
+  private applyRouteId(idStr: string | null): void {
+    const id = idStr ? Number(idStr) : null;
+    if (id === (this.selectedDevice?.id ?? null)) return;
+    if (id === null) {
+      this.selectedDevice = null;
+      this.capabilities = [];
+      return;
+    }
+    const device = this.devices.find((d) => d.id === id);
+    if (!device) {
+      // A stale or deleted id — drop back to the no-selection state without leaving it in the URL.
+      this.router.navigate(['/devices'], { replaceUrl: true });
+      return;
+    }
     this.selectedDevice = device;
     this.cancelAdd();
     this.cancelEdit();
@@ -423,8 +453,8 @@ export class DeviceConfigComponent implements OnInit {
       this.deviceMgmtService.deleteDevice(device.id).subscribe({
         next: () => {
           // Drop the selection: loadDevices() cannot re-point at a row that no longer exists.
-          this.selectedDevice = null;
-          this.capabilities = [];
+          // Navigating to /devices clears the id from the URL (applyRouteId then resets state).
+          if (this.selectedDevice?.id === device.id) this.router.navigate(['/devices']);
           this.loadDevices();
           this.snack.open('Device deleted', 'Close', { duration: 2000 });
         },

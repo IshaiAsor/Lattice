@@ -6,7 +6,9 @@ import cron from 'node-cron';
 import { env } from './config/env.config';
 import { db } from './db/client';
 import { rulesEvaluateConsumer } from './consumers/rules-evaluate.consumer';
+import { telemetryTriggerConsumer } from './consumers/telemetry-trigger.consumer';
 import { rulesEngine } from './services/rules.engine';
+import { advanceDuePhases } from './services/phases.service';
 import { healthRouter } from './routes/health.routes';
 
 const { metricsHandler } = initOTel('automation-worker');
@@ -20,10 +22,16 @@ async function main() {
   log.info('RabbitMQ connected');
 
   await consume(ch, QUEUES.RULES_EVALUATE, rulesEvaluateConsumer(ch));
-  log.info('consumer started (rules-evaluate)');
+  await consume(ch, QUEUES.TELEMETRY_ARRIVED_AUTOMATION, telemetryTriggerConsumer(ch));
+  log.info('consumers started (rules-evaluate, telemetry-trigger)');
 
   cron.schedule('*/10 * * * * *', () => rulesEngine.evaluateScheduledRules(ch));
   log.info('scheduled rules cron started (every 10 seconds)');
+
+  // Phase durations are hours at the shortest, so a minute of granularity is ample — and it
+  // keeps the 10s rules pass free of a second query it would almost never act on.
+  cron.schedule('0 * * * * *', () => advanceDuePhases(ch));
+  log.info('blueprint phase auto-advance cron started (every minute)');
 
   const app = express();
   app.use(createHttpLogger(log));

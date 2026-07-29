@@ -34,6 +34,11 @@ export const env = {
   rateLimit: {
     windowMs: parseInt(process.env['RATE_LIMIT_WINDOW_MS'] ?? String(15 * 60 * 1000), 10),
     limit: parseInt(process.env['RATE_LIMIT_MAX_REQUESTS'] ?? '150', 10),
+    // Brute-force protection on /auth. The default is the strict production value; only the dev
+    // and test compose stacks raise it, because an e2e run legitimately logs in dozens of times
+    // from one IP and would otherwise lock itself out mid-suite.
+    authWindowMs: parseInt(process.env['AUTH_RATE_LIMIT_WINDOW_MS'] ?? String(15 * 60 * 1000), 10),
+    authLimit: parseInt(process.env['AUTH_RATE_LIMIT_MAX_ATTEMPTS'] ?? '10', 10),
   },
 
   rabbitmqUrl: process.env['RABBITMQ_URL'] ?? 'amqp://localhost',

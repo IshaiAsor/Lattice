@@ -67,6 +67,15 @@ export const SOCKET_URL =
   TEST_TARGET === 'staging'
     ? requireStagingEnv('STAGING_SOCKET_URL')
     : withScheme(process.env.SOCKET_URL || 'http://localhost:3007');
+// Host-reachable AMQP URL for suites that publish events directly (bypassing a producer service).
+// The test stack maps RabbitMQ to host port 25672; the container-internal RABBITMQ_URL (…@rabbitmq)
+// that services use is unreachable from the host runner, so this deliberately does NOT fall back
+// to it — same host-port convention as the queue integration suite.
+export const RABBITMQ_URL =
+  TEST_TARGET === 'staging'
+    ? requireStagingEnv('STAGING_RABBITMQ_URL')
+    : process.env.RABBITMQ_TEST_URL ||
+      `amqp://${process.env.RABBITMQ_USER || 'guest'}:${process.env.RABBITMQ_PASSWORD || 'guest'}@localhost:25672`;
 
 // Test credentials. On staging this is ALWAYS the dedicated e2e-bot user (mutating acceptance
 // suites must never touch real user data — docs/TESTING.md safety model).
@@ -177,6 +186,43 @@ export async function apiPatch(pathname: string, token: string, body: unknown): 
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(`PATCH ${pathname} → ${r.status}: ${await r.text()}`);
+}
+
+export async function apiPut(pathname: string, token: string, body: unknown): Promise<any> {
+  const r = await fetch(`${API_URL}${pathname}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`PUT ${pathname} → ${r.status}: ${await r.text()}`);
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// Non-throwing variant for asserting on rejections — the apiX helpers above throw on !ok, which
+// makes "this must be a 400 that says X" awkward to express.
+export async function apiRaw(
+  method: string,
+  pathname: string,
+  token: string,
+  body?: unknown,
+): Promise<{ status: number; body: any }> {
+  const r = await fetch(`${API_URL}${pathname}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const text = await r.text();
+  let parsed: any = text;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    /* non-JSON error body — hand it back as text */
+  }
+  return { status: r.status, body: parsed };
 }
 
 export async function apiDelete(pathname: string, token: string): Promise<void> {

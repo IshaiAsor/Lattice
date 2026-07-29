@@ -13,6 +13,7 @@
     "@lattice/logger": "*",
     "@lattice/otel": "*",
     "@lattice/jwt": "*",
+    "@lattice/params": "*",
     "@lattice/prisma-client": "*",
     "@lattice/queue": "*",
     "bcrypt": "^6.0.0",

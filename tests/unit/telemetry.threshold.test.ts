@@ -1,6 +1,7 @@
-// Unit: pipeline sensor-threshold evaluation (digest-service/src/threshold.ts).
+// Unit: pipeline sensor-threshold evaluation (@lattice/params — shared by automation-worker's
+// trigger matcher and digest-service's fault guard).
 
-import { evaluateThreshold, isErrorReading } from '../../services/digest-service/src/threshold';
+import { evaluateThreshold, isErrorReading, isTriggerInCooldown } from '@lattice/params';
 
 describe('evaluateThreshold', () => {
   it.each([
@@ -58,5 +59,31 @@ describe('isErrorReading', () => {
     expect(isErrorReading(null)).toBe(false);
     expect(isErrorReading({ value: 'on' })).toBe(false);
     expect(isErrorReading({ error: 42 })).toBe(false); // error must be a string
+  });
+});
+
+describe('isTriggerInCooldown', () => {
+  const now = new Date('2026-07-28T10:00:30Z');
+
+  it('is not in cooldown when the trigger has never fired', () => {
+    expect(isTriggerInCooldown(null, 30, now)).toBe(false);
+    expect(isTriggerInCooldown(undefined, 30, now)).toBe(false);
+  });
+
+  it('is not in cooldown when no interval is set', () => {
+    expect(isTriggerInCooldown(new Date('2026-07-28T10:00:29Z'), null, now)).toBe(false);
+    expect(isTriggerInCooldown(new Date('2026-07-28T10:00:29Z'), 0, now)).toBe(false);
+  });
+
+  it('is in cooldown while inside the interval window', () => {
+    // fired 10s ago, 30s interval → still cooling down
+    expect(isTriggerInCooldown(new Date('2026-07-28T10:00:20Z'), 30, now)).toBe(true);
+  });
+
+  it('is out of cooldown once the interval has elapsed', () => {
+    // fired 30s ago, 30s interval → boundary is not "less than", so it may fire
+    expect(isTriggerInCooldown(new Date('2026-07-28T10:00:00Z'), 30, now)).toBe(false);
+    // fired 40s ago → well clear
+    expect(isTriggerInCooldown(new Date('2026-07-28T09:59:50Z'), 30, now)).toBe(false);
   });
 });

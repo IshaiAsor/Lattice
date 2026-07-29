@@ -184,10 +184,16 @@ export interface NotificationPublishPayload {
 //   - data is the template payload (rendered per channel); shape depends on eventType.
 //   - dedupeKey (optional) overrides the default (userId, eventType) dedupe window.
 //   - channels (optional) restricts delivery to a subset, still intersected with user prefs.
+//   - context (optional, F10.7) is *where* this happened, not what happened. A user with several
+//     Areas gets "Greenhouse · Automation triggered" instead of three identical alerts they have
+//     to open to tell apart. It is separate from `data` because it is cross-cutting: any event
+//     type can carry it, and templates prefix the title uniformly rather than each renderer
+//     re-implementing it.
 export interface NotificationSendPayload {
   userId: string;
   eventType: string;
   data: Record<string, unknown>;
   dedupeKey?: string;
   channels?: string[];
+  context?: { area_id: number; area_name: string };
 }

@@ -15,6 +15,7 @@ COPY packages/ml            packages/ml
 COPY packages/ioredis       packages/ioredis
 COPY packages/prisma-client packages/prisma-client
 COPY packages/capability-validation packages/capability-validation
+COPY packages/params        packages/params
 COPY services/ml-router services/ml-router
 # Root schema is the single source of truth; prisma-client's prepare step reads it.
 COPY prisma prisma
@@ -28,6 +29,7 @@ RUN npm run build -w @lattice/otel \
  && npm run build -w @lattice/ioredis \
  && npm run build -w @lattice/prisma-client \
  && npm run build -w @lattice/capability-validation \
+ && npm run build -w @lattice/params \
  && npm run build -w @lattice/ml-router
 
 FROM base
@@ -59,6 +61,8 @@ COPY --from=builder /workspace/packages/prisma-client/dist          ./node_modul
 COPY --from=builder /workspace/packages/prisma-client/node_modules  ./node_modules/@lattice/prisma-client/node_modules
 COPY --from=builder /workspace/packages/capability-validation/package.json ./node_modules/@lattice/capability-validation/package.json
 COPY --from=builder /workspace/packages/capability-validation/dist         ./node_modules/@lattice/capability-validation/dist
+COPY --from=builder /workspace/packages/params/package.json ./node_modules/@lattice/params/package.json
+COPY --from=builder /workspace/packages/params/dist         ./node_modules/@lattice/params/dist
 
 COPY --from=builder /workspace/services/ml-router/dist ./dist
 COPY --from=builder /workspace/services/ml-router/plans.json ./plans.json

@@ -198,33 +198,6 @@ services:
       - '4317:4317' # OTLP gRPC
     restart: always
 
-  # SSH tunnel to staging cluster for ollama models
-  # Forwards 11434 (all interfaces, so both the host port mapping and other
-  # containers on the compose network can reach it) to staging ollama-api service.
-  # ClusterIP is resolved at startup via `kubectl get svc` over SSH (same method as
-  # oci-k3s-gitops/scripts/open_cluster_tunnels.ps1) instead of being hardcoded, since
-  # it changes whenever the Service object is recreated.
-  cluster-tunnel:
-    image: alpine:latest
-    container_name: cluster-tunnel
-    command: >
-      sh -c "apk add --no-cache openssh-client &&
-      mkdir -p /root/.ssh &&
-      cp /root/.ssh-ro/k3s-a1.1.key /root/.ssh/k3s-a1.1.key &&
-      chmod 600 /root/.ssh/k3s-a1.1.key &&
-      OLLAMA_IP=$$(ssh -i /root/.ssh/k3s-a1.1.key -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@151.145.93.240 'sudo -n kubectl get svc ollama-api -n lattice-shared -o jsonpath={.spec.clusterIP}') &&
-      ssh -i /root/.ssh/k3s-a1.1.key
-      -o StrictHostKeyChecking=no
-      -o UserKnownHostsFile=/dev/null
-      -N
-      -L 0.0.0.0:11434:$$OLLAMA_IP:11434
-      ubuntu@151.145.93.240"
-    ports:
-      - '11434:11434'
-    volumes:
-      - ${K3S_SSH_KEY_PATH:-C:\\Users\\ishai\\Desktop\\k3s-infra\\k3s-a1.1.key}:/root/.ssh-ro/k3s-a1.1.key:ro
-    restart: always
-
   # Prisma migrations — run once on first setup or after schema changes:
   #   docker compose run --rm migrate
   migrate:

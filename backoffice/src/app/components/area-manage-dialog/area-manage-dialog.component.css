@@ -38,13 +38,20 @@
 .am-handle:active { cursor: grabbing; }
 .am-handle mat-icon { font-size: 20px; width: 20px; height: 20px; }
 
+/* flex:1 + min-width:0 so a long name ellipsizes instead of pushing the count and
+   the two icon buttons off a narrow (phone) row. */
 .am-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
 .am-count {
-  margin-left: auto;
+  flex: none;
   font-size: 12px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;

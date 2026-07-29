@@ -1,6 +1,15 @@
-import { connect, publish, RK } from '@lattice/queue';
+import { connect, close, publish, RK } from '@lattice/queue';
 import type { Channel } from 'amqplib';
-import { API_URL, itStack, login, apiGet, apiPost, apiDelete, poll } from './helpers/stack';
+import {
+  API_URL,
+  RABBITMQ_URL,
+  itStack,
+  login,
+  apiGet,
+  apiPost,
+  apiDelete,
+  poll,
+} from './helpers/stack';
 
 // F15 notification-service e2e. Exercises the api HTTP surface (preferences + the F15.8 login
 // gate) and the full delivery path (publish notification.send → notification-service → inbox).
@@ -34,7 +43,9 @@ describe('notifications (F15)', () => {
   let ch: Channel | null = null;
 
   afterAll(async () => {
-    if (ch) await ch.close().catch(() => undefined);
+    // close() tears down the underlying connection, not just the channel — otherwise the open
+    // socket leaks and jest force-exits the worker.
+    if (ch) await close(ch).catch(() => undefined);
   });
 
   itStack('preferences round-trip: flip a configurable cell and it persists', async () => {
@@ -90,7 +101,7 @@ describe('notifications (F15)', () => {
     const token = await login();
     const me: { id: number } = await apiGet('/api/users/me', token);
 
-    ch = await connect(process.env.RABBITMQ_URL);
+    ch = await connect(RABBITMQ_URL);
     const marker = `E2E-${Date.now()}`;
     publish(ch, RK.NOTIFICATION_SEND, {
       userId: String(me.id),
@@ -121,7 +132,7 @@ describe('notifications (F15)', () => {
     const token = await login();
     const me: { id: number } = await apiGet('/api/users/me', token);
 
-    ch ??= await connect(process.env.RABBITMQ_URL);
+    ch ??= await connect(RABBITMQ_URL);
     const send = (marker: string) =>
       publish(ch!, RK.NOTIFICATION_SEND, {
         userId: String(me.id),

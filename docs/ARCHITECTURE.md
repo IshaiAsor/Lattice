@@ -22,8 +22,7 @@ What the system _is_ today. Plans and history live in
 \* container default from each service's `env.config.ts`.
 
 **Infra (compose / cluster):** EMQX (1883 mqtt, 8883 tls, 18083 dashboard), PostgreSQL,
-RabbitMQ, Valkey (cache), Adminer; cluster-tunnel container exposes the k3s cluster's
-Ollama/ONNX inference for local ML dev.
+RabbitMQ, Valkey (cache), Adminer.
 
 ## Event flow
 
@@ -32,17 +31,21 @@ ESP32 / SimDevice
    │  MQTT  users/{userId}/devices/{deviceId}/{version}/{channel}/{action}
    ▼         channels: status | telemetry | command | ack | ota
 mqtt-service  ── publishes to RabbitMQ exchange `iot` (topic) ──▶  @lattice/queue RKs
-   ▼
-digest-service ── persists state (Prisma/PostgreSQL, Valkey cache), resolves pending
-   │              requests, emits socket events
-   ├──▶ socket-server ──▶ Angular UI (Socket.IO)
-   ├──▶ automation-worker (rules.evaluate on telemetry)
-   └──▶ google-home (q.action.result.google-home → HomeGraph report-state)
+   │
+   │  telemetry.arrived fans out to two independent queues (topic exchange):
+   ├──▶ digest-service ── persists state (Prisma/PostgreSQL, Valkey cache), resolves
+   │      │                pending requests, emits socket events
+   │      ├──▶ socket-server ──▶ Angular UI (Socket.IO)
+   │      ├──▶ automation-worker (rules.evaluate on every scalar write)
+   │      └──▶ google-home (q.action.result.google-home → HomeGraph report-state)
+   └──▶ automation-worker ── matches pipeline sensor_threshold triggers, publishes
+                             pipeline.trigger (cooldown persisted on the trigger row)
 
 UI intent:  api → action.requested → digest (optimistic write) → action.dispatch
             → mqtt-service → device → ack → action.result → digest (authoritative write)
 
-ML pipeline: pipeline.trigger → ml-router stages (sensor_digest / command_exec /
+ML pipeline: pipeline.trigger (from automation-worker's sensor_threshold match, or a
+             manual/scheduled run) → ml-router stages (sensor_digest / command_exec /
              per-model q.pipeline.stage.{kind}.{name}.{version} on ml-executor)
              → pipeline.stage.done.v1 → pipeline.result
              Fresh camera frames via picture.requested / picture.result.

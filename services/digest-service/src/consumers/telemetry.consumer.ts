@@ -2,7 +2,7 @@ import type { Channel } from 'amqplib';
 import type { TelemetryArrivedPayload, PictureResultPayload } from '@lattice/queue';
 import { publish, RK } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
-import { db, Prisma } from '../db/client';
+import { db } from '../db/client';
 import { valkey, keys } from '../cache/valkey';
 import { resolveUserDeviceAction } from '../resolve';
 import { asString } from '../util';
@@ -10,7 +10,7 @@ import { socket } from '../socket/emitter';
 import { writeScalarState } from '../state-write';
 import { takePendingPicture } from '../cache/pending';
 import * as timeout from '../pending-timeout';
-import { evaluateThreshold, isErrorReading, type ErrorReading } from '../threshold';
+import { isErrorReading, type ErrorReading } from '@lattice/params';
 
 const log = createLogger('digest-service:telemetry');
 
@@ -113,6 +113,8 @@ async function handleImage(
 
 // Scalar sensor reading. Delegates to the shared authoritative-state writer (also used
 // by the action-result/ack path) — state write is authoritative, the rest best-effort.
+// Pipeline sensor-threshold matching is NOT done here: automation-worker consumes the same
+// telemetry.arrived stream (its own queue) and owns all trigger matching.
 async function handleScalar(
   ch: Channel,
   userActionId: number,
@@ -121,15 +123,14 @@ async function handleScalar(
   const { userId, deviceId, actionName, value, timestamp } = payload;
 
   // Fault reading: record it to history (timestamped, so error *duration* is queryable —
-  // the basis for the roadmapped sensor_error_duration trigger) but never touch current_state
-  // or fire value-threshold pipelines. The last good value stays authoritative.
+  // the basis for the roadmapped sensor_error_duration trigger) but never touch current_state.
+  // The last good value stays authoritative.
   if (isErrorReading(value)) {
     await recordErrorReading(userActionId, value, timestamp);
     return;
   }
 
   await writeScalarState(ch, userActionId, { userId, deviceId, actionName, value, timestamp });
-  await firePipelineTriggers(ch, userId, userActionId, value);
 }
 
 // A fault reading is persisted to sensor_history as a structured error row (value NULL,
@@ -155,58 +156,4 @@ async function recordErrorReading(
       recorded_at: new Date(timestamp),
     },
   });
-}
-
-async function firePipelineTriggers(
-  ch: Channel,
-  userId: string,
-  userActionId: number,
-  value: unknown,
-): Promise<void> {
-  try {
-    const triggers = await db.pipelineTrigger.findMany({
-      where: {
-        pipeline: { enabled: true, user_id: parseInt(userId, 10) },
-        trigger_type: 'sensor_threshold',
-        user_device_action_id: userActionId,
-      },
-      include: { pipeline: { select: { id: true, user_id: true } } },
-    });
-
-    for (const trigger of triggers) {
-      if (!evaluateThreshold(value, trigger.operator!, trigger.threshold_value!)) continue;
-
-      if (trigger.min_interval_sec) {
-        const ck = `pipeline:cooldown:${trigger.id}`;
-        const locked = await valkey.get(ck);
-        if (locked) continue;
-        await valkey.set(ck, '1', 'EX', trigger.min_interval_sec);
-      }
-
-      const run = await db.pipelineRun.create({
-        data: {
-          pipeline_id: trigger.pipeline.id,
-          status: 'queued',
-          trigger_type: 'sensor_threshold',
-          trigger_payload: {
-            triggerId: trigger.id,
-            actionId: userActionId,
-            value: String(value),
-          } as Prisma.InputJsonValue,
-        },
-      });
-
-      publish(ch, RK.PIPELINE_TRIGGER, {
-        userId: String(trigger.pipeline.user_id),
-        pipelineId: String(trigger.pipeline.id),
-        runId: run.id,
-        deviceId: undefined,
-        actionName: undefined,
-        value,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  } catch (err) {
-    log.error({ err, userActionId }, 'pipeline trigger check failed (best-effort)');
-  }
 }

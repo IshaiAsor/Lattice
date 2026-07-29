@@ -1,4 +1,5 @@
 import { Component, inject, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import {
   AdminDeviceConfigService,
@@ -20,6 +21,8 @@ export interface DeviceTypeGroup {
 })
 export class AdminDeviceConfigComponent implements OnInit {
   private service = inject(AdminDeviceConfigService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
 
   deviceTypes: AdminDeviceType[] = [];
   deviceTypeGroups: DeviceTypeGroup[] = [];
@@ -29,17 +32,43 @@ export class AdminDeviceConfigComponent implements OnInit {
   loading = false;
 
   ngOnInit() {
-    this.loadDeviceTypes();
+    // Load the list first, then let the URL's id decide which device type is open — the id lookup
+    // needs the loaded types. Subscribing handles back/forward and our own selectDevice navigations.
+    this.loadDeviceTypes(() => {
+      this.route.paramMap.subscribe((pm) => this.applyRouteId(pm.get('id')));
+    });
   }
 
-  loadDeviceTypes() {
+  loadDeviceTypes(onLoaded?: () => void) {
     this.service.getDeviceTypes().subscribe((types) => {
       this.deviceTypes = types;
       this.deviceTypeGroups = this.buildGroups(types);
       if (this.selectedDevice) {
         this.selectedDevice = types.find((t) => t.id === this.selectedDevice!.id) ?? null;
       }
+      onLoaded?.();
     });
+  }
+
+  // Open whatever the URL points at. The guard against the already-open id keeps our own
+  // selectDevice navigations from re-fetching actions once the param arrives.
+  private applyRouteId(idStr: string | null): void {
+    const id = idStr ? Number(idStr) : null;
+    if (id === (this.selectedDevice?.id ?? null)) return;
+    if (id === null) {
+      this.selectedDevice = null;
+      this.actions = [];
+      return;
+    }
+    const device = this.deviceTypes.find((t) => t.id === id);
+    if (!device) {
+      // A stale or deleted id — drop back to the no-selection state without leaving it in the URL.
+      this.router.navigate(['/admin/templates'], { replaceUrl: true });
+      return;
+    }
+    this.selectedType = device.type; // expand the group the selected version belongs to
+    this.selectedDevice = device;
+    this.loadActions();
   }
 
   private buildGroups(types: AdminDeviceType[]): DeviceTypeGroup[] {
@@ -59,9 +88,10 @@ export class AdminDeviceConfigComponent implements OnInit {
     this.selectedType = this.selectedType === type ? null : type;
   }
 
+  // Selecting is just navigation — the id in the URL drives the actual selection via applyRouteId,
+  // so a refresh reopens the same device type.
   selectDevice(device: AdminDeviceType) {
-    this.selectedDevice = device;
-    this.loadActions();
+    this.router.navigate(['/admin/templates', device.id]);
   }
 
   loadActions() {

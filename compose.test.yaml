@@ -149,6 +149,11 @@ services:
     environment:
       - PORT=3000
       - JWT_SECRET=${JWT_SECRET}
+      # Dev/test only: a full e2e run makes thousands of requests and logs in dozens of
+      # times, all from one IP. Production keeps the strict defaults from env.config
+      # (10 logins / 150 requests per 15 min).
+      - AUTH_RATE_LIMIT_MAX_ATTEMPTS=10000
+      - RATE_LIMIT_MAX_REQUESTS=100000
       - ALLOWED_ORIGINS=http://localhost:14200
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
@@ -246,6 +251,31 @@ services:
         condition: service_started
     restart: always
 
+  # Consumes notification.send → writes the in-app inbox the notifications e2e reads. Only the
+  # queue + Valkey + DB are structurally required; SMTP/VAPID/Twilio stay unset (email/push are
+  # no-ops here — the tests exercise only the in-app inbox path).
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    container_name: notification-service-test
+    ports:
+      - '3011:3011'
+    environment:
+      - PORT=3011
+      - LATTICE_ENV=test
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
+      - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-lattice_test}?sslmode=disable
+      - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      cache:
+        condition: service_started
+    restart: always
+
   automation-worker:
     build:
       context: .
@@ -331,9 +361,7 @@ services:
     restart: always
 
   # Not required by tests/e2e/device-sim.e2e.test.ts today — enable with `--profile full` for
-  # broader smoke-testing. ml-executor talks to the cluster-tunnel-test service below for
-  # Ollama (inference runs on the cluster, not locally — see project memory); google-home
-  # needs real Google creds.
+  # broader smoke-testing. google-home needs real Google creds.
   ml-router:
     build:
       context: .
@@ -368,39 +396,9 @@ services:
       - PORT=3002
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
-      - OLLAMA_URL=${OLLAMA_URL:-http://cluster-tunnel-test:11434}
     depends_on:
       - rabbitmq
       - cache
-      - cluster-tunnel-test
-    restart: always
-    profiles:
-      - full
-
-  # SSH tunnel to staging cluster for ollama models — same approach as compose.yaml's
-  # cluster-tunnel (ClusterIP resolved at startup via `sudo -n kubectl get svc` over SSH,
-  # since it changes whenever the Service object is recreated), but on its own container
-  # name/host port so this stack stays self-contained and can run standalone or alongside
-  # the regular dev compose.yaml without a port clash.
-  cluster-tunnel-test:
-    image: alpine:latest
-    container_name: cluster-tunnel-test
-    command: >
-      sh -c "apk add --no-cache openssh-client &&
-      mkdir -p /root/.ssh &&
-      cp /root/.ssh-ro/k3s-a1.1.key /root/.ssh/k3s-a1.1.key &&
-      chmod 600 /root/.ssh/k3s-a1.1.key &&
-      OLLAMA_IP=$$(ssh -i /root/.ssh/k3s-a1.1.key -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@151.145.93.240 'sudo -n kubectl get svc ollama-api -n lattice-shared -o jsonpath={.spec.clusterIP}') &&
-      ssh -i /root/.ssh/k3s-a1.1.key
-      -o StrictHostKeyChecking=no
-      -o UserKnownHostsFile=/dev/null
-      -N
-      -L 0.0.0.0:11434:$$OLLAMA_IP:11434
-      ubuntu@151.145.93.240"
-    ports:
-      - '21434:11434'
-    volumes:
-      - ${K3S_SSH_KEY_PATH:-C:\\Users\\ishai\\Desktop\\k3s-infra\\k3s-a1.1.key}:/root/.ssh-ro/k3s-a1.1.key:ro
     restart: always
     profiles:
       - full

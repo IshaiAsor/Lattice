@@ -53,6 +53,10 @@ export function mlStageRK(kind: string, name: string, version: string): string {
 
 export const QUEUES = {
   TELEMETRY_ARRIVED: 'q.telemetry.arrived',
+  // Second consumer of telemetry.arrived: automation-worker's pipeline sensor-threshold matcher.
+  // The `iot` topic exchange copies each telemetry message to both this queue and
+  // TELEMETRY_ARRIVED, so digest (state) and automation-worker (triggers) consume independently.
+  TELEMETRY_ARRIVED_AUTOMATION: 'q.telemetry.arrived.automation',
   RULES_EVALUATE: 'q.rules.evaluate',
   PIPELINE_TRIGGER: 'q.pipeline.trigger',
   PIPELINE_CANCEL: 'q.pipeline.cancel',

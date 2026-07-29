@@ -11,6 +11,7 @@
     { "path": "packages/ml" },
     { "path": "packages/ioredis" },
     { "path": "packages/capability-validation" },
+    { "path": "packages/params" },
     { "path": "services/api" },
     { "path": "services/automation-worker" },
     { "path": "services/device-gateway" },

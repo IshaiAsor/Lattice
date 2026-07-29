@@ -7,7 +7,7 @@
 // Skips (does not fail) when the broker is unreachable — same philosophy as itStack.
 
 import type { Channel } from 'amqplib';
-import { connect, publish, consume, QUEUES, DLQ_ARGS } from '../../packages/queue/src';
+import { connect, close, publish, consume, QUEUES, DLQ_ARGS } from '../../packages/queue/src';
 
 jest.setTimeout(30000);
 
@@ -34,10 +34,7 @@ describe('queue integration (real broker)', () => {
     for (const q of testQueues) {
       await ch.deleteQueue(q).catch(() => {});
     }
-    interface WithConnection {
-      connection: { close(): Promise<void> };
-    }
-    await (ch as unknown as WithConnection).connection.close().catch(() => {});
+    await close(ch);
   });
 
   function itBroker(name: string, fn: () => Promise<void>): void {

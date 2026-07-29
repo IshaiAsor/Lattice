@@ -10,10 +10,11 @@ export const globalRateLimiter = rateLimit({
   message: { error: 'Too many requests from this IP, please try again later.' },
 });
 
-// Stricter limiter for auth routes — brute-force protection.
+// Stricter limiter for auth routes — brute-force protection. Configurable so the dev/test stacks
+// can raise it (see env.config); the defaults are the strict production values.
 export const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
+  windowMs: env.rateLimit.authWindowMs,
+  limit: env.rateLimit.authLimit,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: 'Too many login attempts from this IP, please try again after 15 minutes.' },

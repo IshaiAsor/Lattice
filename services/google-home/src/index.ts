@@ -27,9 +27,14 @@ async function main() {
   log.info('action-result consumer started');
 
   const app = express();
+  app.set('trust proxy', 1); // behind Traefik — honour X-Forwarded-For for rate limiting/audit.
   app.use(createHttpLogger(log));
   app.use(cors());
   app.use(express.json());
+  // Google's OAuth token exchange (POST /api/google/token) is application/x-www-form-urlencoded,
+  // as is the Basic-auth-less client-credential body — without this the body is unparsed and the
+  // client check fails with invalid_client.
+  app.use(express.urlencoded({ extended: true }));
 
   app.use('/health', healthRouter);
   app.get('/metrics', (req, res) => metricsHandler(req, res));

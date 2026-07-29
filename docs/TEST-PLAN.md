@@ -40,6 +40,8 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - never satisfies a threshold for a fault reading
 - recognizes a fault envelope
 - rejects normal scalar/object readings
+- cooldown: not in cooldown when never fired / no interval; in cooldown inside the window;
+  out of cooldown at and past the interval boundary
 
 ### Telemetry — `telemetry.topic-parser.test.ts` ✅
 
@@ -49,6 +51,71 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - joins multi-segment action names
 - rejects topics with fewer than six segments
 - rejects topics with empty required segments
+
+### Blueprints — `blueprints.params-resolver.test.ts` ✅ (F10.1 `@lattice/params`)
+
+- recognises a whole-value reference
+- treats a literal as a literal
+- rejects a reference with text around it as a whole-value reference
+- parses kind and dotted key
+- does not swallow a trailing full stop
+- finds every reference embedded in free text
+- resolves a phase reference to the current phase target
+- lets a user override beat the phase target
+- falls back to the blueprint default when the phase sets no target
+- ignores the phase target for a @param reference
+- lets a user override beat the default for a @param reference
+- passes a literal through untouched
+- resolves an unknown parameter to null so the caller fails closed
+- resolves against an empty context to null, never to the raw reference
+- resolves @phase.name and @phase.key to the current phase
+- resolves absent context notes to an empty string, not null
+- resolves phase metadata to null when the instance has no current phase
+- does not let an override shadow phase metadata
+- substitutes references inside a prompt template
+- drops an unresolvable reference from the text and reports it
+- leaves text with no references untouched
+- accepts a reference to a declared parameter
+- rejects a reference to an undeclared parameter and names it
+- accepts phase metadata without it being a declared parameter
+- validates every reference embedded in free text
+- accepts a literal with no references
+- rejects a parameter key that collides with phase metadata
+- rejects a malformed parameter key
+- accepts a dotted parameter key
+- maps each layer onto the shape the resolver expects
+- produces a context the resolver reads with the documented precedence
+- yields no phase and no targets for an instance between phases
+- normalises absent phase notes to null rather than undefined
+- resolves every reference to null in the empty context, so a non-blueprint entity fails closed
+
+### Blueprints — `blueprints.phase-schedule.test.ts` ✅ (F10.4 phase auto-advance)
+
+- converts each supported unit to milliseconds
+- returns null for an unknown unit rather than guessing one
+- treats a missing, zero or negative value as no duration
+- is due once the full duration has elapsed
+- is due when the duration is overshot, so a downtime gap still advances
+- is not due one millisecond early
+- is never due for a phase that did not opt in to auto-advance
+- is never due for the last phase — a terminal phase is a resting state, not an error
+- is never due when the phase was never entered
+- is never due when the duration is missing or unparseable
+- picks the next-highest ordinal, not ordinal + 1
+- skips a gap left by a phase removed in a later blueprint version
+- returns null from the last phase
+- returns null when the current ordinal is past every declared phase
+- is order-independent — it sorts rather than trusting the query order
+
+### Blueprints — `blueprints.phase-scope-gate.test.ts` ✅ (F10 phase scoping)
+
+- is active in any phase
+- is active even with no current phase
+- treats null/undefined scope like an empty one (defensive)
+- is active when the current phase is in scope
+- is inactive when the current phase is not in scope
+- matches any one of several scoped phases
+- is inactive when the instance has no current phase — it cannot be "in" an unset phase
 
 ### Automation — `automation.rules-logic.test.ts` ✅
 
@@ -255,6 +322,31 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - ⬜ schedule rule fires at the configured minute
 - ⬜ cooldown suppresses an immediate refire
 - ⬜ pipeline sensor-threshold trigger → pipelineRun row queued, cooldown respected
+
+### Blueprints — `blueprints.e2e.test.ts` ✅ (F10.2–F10.4)
+
+- refuses to publish a blueprint whose action is not on the slot template
+- imports and publishes a valid blueprint
+- offers each slot the devices its sealed template covers
+- refuses a binding whose device does not match the slot
+- derives an instance with an area, bindings and every templated entity
+- stores references verbatim in the derived rule, not resolved values
+- resolves a param through phase → default → override, in that order
+  - and asserts the rule row is byte-identical across all three — the central invariant
+- refuses to override a param the blueprint marked phase-driven
+- marks a derived rule the user edits as drift
+- publishes a v2 into the live setup, keeping the user edit and updating the rest
+- restores an edited rule from the blueprint on reset
+- offers both boards as candidates for a multi-device slot
+- fans a scene member and a rule action out to every bound board
+  - a `max_count > 1` slot binds several devices; each template leaf that names it expands to one derived row per bound device
+- still rejects a device that does not match the multi slot
+- refuses to publish an automation scoped to an undeclared phase
+- derives a scoped rule and scene, preserving their phase_scope
+- refuses to run a scene out of its phase, then allows it after advancing
+  - phase scope is read at evaluation time; advancing a phase is one column write and touches no scene/rule rows
+- ⬜ derived rule fires end-to-end against sim telemetry at the phase's threshold
+- ⬜ auto-advance cron rolls an elapsed phase over
 
 ### ML pipeline — `mlpipeline.e2e.test.ts` ⬜
 

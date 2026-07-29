@@ -27,6 +27,14 @@ const RENDERERS: Record<string, Renderer> = {
     title: 'Automation triggered',
     body: `Rule "${str(d, 'ruleName', 'automation')}" fired.`,
   }),
+  blueprint_updated: (d) => ({
+    title: 'Your setup was updated',
+    body: `"${str(d, 'instanceName', 'Your setup')}" was updated to version ${str(d, 'version', 'a new version')}: ${str(d, 'applied', '0')} change(s) applied${Number(d['skipped']) > 0 ? `, ${str(d, 'skipped')} left alone because you had edited them` : ''}.`,
+  }),
+  blueprint_phase_advanced: (d) => ({
+    title: 'Setup moved to a new phase',
+    body: `"${str(d, 'instanceName', 'Your setup')}" moved from ${str(d, 'fromPhase', 'its previous phase')} to ${str(d, 'toPhase', 'the next phase')}. Its automations now use the new phase's targets.`,
+  }),
   device_offline: (d) => ({
     title: 'Device offline',
     body: `${str(d, 'deviceName', 'A device')} went offline.`,
@@ -41,9 +49,28 @@ const RENDERERS: Record<string, Renderer> = {
   }),
 };
 
-export function render(eventType: string, data: Record<string, unknown>): Rendered {
+/** Where the event happened (F10.7). Optional — most producers have no area to report. */
+export interface NotificationContext {
+  area_id: number;
+  area_name: string;
+}
+
+export function render(
+  eventType: string,
+  data: Record<string, unknown>,
+  context?: NotificationContext,
+): Rendered {
   const renderer = RENDERERS[eventType];
-  if (renderer) return renderer(data);
-  // Unknown event type — deliver something rather than dropping it.
-  return { title: eventType.replace(/_/g, ' '), body: JSON.stringify(data) };
+  const rendered = renderer
+    ? renderer(data)
+    : // Unknown event type — deliver something rather than dropping it.
+      { title: eventType.replace(/_/g, ' '), body: JSON.stringify(data) };
+
+  // Prefixed once here rather than inside each renderer: the area is cross-cutting, and a user
+  // with several areas needs to tell three otherwise-identical alerts apart from the title alone
+  // (notification surfaces truncate the body, and push shows the title first).
+  if (context?.area_name) {
+    return { ...rendered, title: `${context.area_name} · ${rendered.title}` };
+  }
+  return rendered;
 }

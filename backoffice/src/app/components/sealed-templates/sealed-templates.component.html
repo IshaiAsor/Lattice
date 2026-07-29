@@ -42,7 +42,7 @@
 
     <div class="rows">
       @for (t of templates(); track t.id) {
-        <button class="template-row" [class.active]="selected()?.id === t.id" (click)="open(t.id)">
+        <button class="template-row" [class.active]="selected()?.id === t.id" (click)="select(t.id)">
           <span class="row-icon"><mat-icon>dashboard_customize</mat-icon></span>
           <span class="tname">{{ t.name }}</span>
           <span class="badge" [class.released]="t.status === 'released'">{{ t.status }}</span>

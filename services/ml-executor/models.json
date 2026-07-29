@@ -1,13 +1,5 @@
 [
   {
-    "kind": "vlm",
-    "name": "yolo-lettuce",
-    "version": "v1",
-    "backend": "onnx",
-    "modelFile": "yolo.onnx",
-    "classes": ["immature", "mature", "damaged"]
-  },
-  {
     "kind": "llm",
     "name": "groq",
     "version": "v1",

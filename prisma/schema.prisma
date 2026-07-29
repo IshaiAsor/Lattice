@@ -1,7 +1,7 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 //
-// Tables are ordered by dependency tier (0 → 6). Keep prisma/SCHEMA.md in sync
+// Tables are ordered by dependency tier (0 → 7). Keep prisma/SCHEMA.md in sync
 // with any change here (mermaid ERD + per-table examples).
 
 generator client {
@@ -148,8 +148,9 @@ model SealedTemplate {
   created_at DateTime @default(now()) @db.Timestamp(6)
   updated_at DateTime @default(now()) @db.Timestamp(6)
 
-  targets SealedTemplateTarget[]
-  entries SealedTemplateEntry[]
+  targets         SealedTemplateTarget[]
+  entries         SealedTemplateEntry[]
+  blueprint_slots BlueprintSlot[]
 
   @@map("sealed_templates")
 }
@@ -230,7 +231,8 @@ model MlModel {
   config       Json?
   created_at   DateTime @default(now()) @db.Timestamp(6)
 
-  pipeline_stages PipelineStage[]
+  pipeline_stages           PipelineStage[]
+  blueprint_template_stages BlueprintPipelineTemplateStage[]
 
   @@unique([kind, name, version])
   @@map("ml_models")
@@ -269,6 +271,7 @@ model User {
   notification_prefs   NotificationPreference[]
   notification_history NotificationHistory[]
   push_subscriptions   PushSubscription[]
+  blueprint_instances  BlueprintInstance[]
 
   @@map("users")
 }
@@ -370,12 +373,13 @@ model UserDevice {
   created_at               DateTime  @default(now()) @db.Timestamp(6)
   updated_at               DateTime  @default(now()) @db.Timestamp(6)
 
-  device              Device              @relation("CurrentDevice", fields: [device_type_id], references: [id], onDelete: Cascade)
-  pending_device      Device?             @relation("PendingDevice", fields: [pending_device_type_id], references: [id], onDelete: SetNull)
-  user                User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  area                Area?               @relation(fields: [area_id], references: [id], onDelete: SetNull)
+  device              Device                 @relation("CurrentDevice", fields: [device_type_id], references: [id], onDelete: Cascade)
+  pending_device      Device?                @relation("PendingDevice", fields: [pending_device_type_id], references: [id], onDelete: SetNull)
+  user                User                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area                Area?                  @relation(fields: [area_id], references: [id], onDelete: SetNull)
   user_device_actions UserDeviceAction[]
   rule_conditions     UserRuleCondition[]
+  blueprint_bindings  BlueprintSlotBinding[]
 
   @@index([area_id])
   @@map("user_devices")
@@ -410,11 +414,12 @@ model Area {
   created_at DateTime @default(now()) @db.Timestamp(6)
   updated_at DateTime @default(now()) @db.Timestamp(6)
 
-  user      User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   devices   UserDevice[]
   scenes    Scene[]
   rules     UserRule[]
   pipelines Pipeline[]
+  instances BlueprintInstance[]
 
   @@unique([user_id, name])
   @@index([user_id, sort_order])
@@ -494,25 +499,37 @@ model UserDeviceActionPin {
 // ═══ Tier 4 — Automation (rules; emergencies are rules with is_emergency) ═══════
 
 model UserRule {
-  id                 Int       @id @default(autoincrement())
-  user_id            Int
-  name               String    @db.VarChar(255)
-  enabled            Boolean   @default(true)
-  is_emergency       Boolean   @default(false)
-  condition_operator String    @default("AND") @db.VarChar(3)
-  cooldown_seconds   Int       @default(60)
-  last_triggered     DateTime? @db.Timestamp(6)
-  area_id            Int?
-  created_at         DateTime  @default(now()) @db.Timestamp(6)
-  updated_at         DateTime  @default(now()) @db.Timestamp(6)
+  id                    Int       @id @default(autoincrement())
+  user_id               Int
+  name                  String    @db.VarChar(255)
+  enabled               Boolean   @default(true)
+  is_emergency          Boolean   @default(false)
+  condition_operator    String    @default("AND") @db.VarChar(3)
+  cooldown_seconds      Int       @default(60)
+  last_triggered        DateTime? @db.Timestamp(6)
+  area_id               Int?
+  // Blueprint provenance (F10). blueprint_key names the template this was derived from and is
+  // the reconcile identity; user_modified is set by the ordinary update path in rules.service
+  // whenever the row belongs to an instance, and makes reconcile skip it and surface it as drift.
+  blueprint_instance_id Int?
+  blueprint_key         String?   @db.VarChar(64)
+  // Phases this rule is active in (F10). Empty = every phase (the default); a non-empty set makes
+  // the rule inert unless the instance's current phase key is in it. Gated at evaluation time, so
+  // a phase change never rewrites the rule — same principle as @phase parameterization.
+  phase_scope           String[]  @default([])
+  user_modified         Boolean   @default(false)
+  created_at            DateTime  @default(now()) @db.Timestamp(6)
+  updated_at            DateTime  @default(now()) @db.Timestamp(6)
 
-  user       User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  area       Area?               @relation(fields: [area_id], references: [id], onDelete: SetNull)
-  conditions UserRuleCondition[]
-  actions    UserRuleAction[]
-  events     UserRuleEvent[]
+  user               User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area               Area?               @relation(fields: [area_id], references: [id], onDelete: SetNull)
+  blueprint_instance BlueprintInstance?  @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  conditions         UserRuleCondition[]
+  actions            UserRuleAction[]
+  events             UserRuleEvent[]
 
   @@index([area_id])
+  @@index([blueprint_instance_id])
   @@map("user_rules")
 }
 
@@ -572,21 +589,30 @@ model UserRuleEvent {
 // folder (exclusive group_id on the action, no target value); a SceneMember is a join row
 // carrying the DESIRED value, so one action can belong to many scenes.
 model Scene {
-  id         Int      @id @default(autoincrement())
-  user_id    Int
-  name       String   @db.VarChar(255)
-  sort_order Int      @default(0)
-  area_id    Int?
-  created_at DateTime @default(now()) @db.Timestamp(6)
-  updated_at DateTime @default(now()) @db.Timestamp(6)
+  id                    Int      @id @default(autoincrement())
+  user_id               Int
+  name                  String   @db.VarChar(255)
+  sort_order            Int      @default(0)
+  area_id               Int?
+  // Blueprint provenance (F10) — see UserRule.
+  blueprint_instance_id Int?
+  blueprint_key         String?  @db.VarChar(64)
+  // Phases this scene is offered in (F10). Empty = every phase. A scene is on-demand, so this
+  // gates manual execution and dashboard visibility rather than automatic firing.
+  phase_scope           String[] @default([])
+  user_modified         Boolean  @default(false)
+  created_at            DateTime @default(now()) @db.Timestamp(6)
+  updated_at            DateTime @default(now()) @db.Timestamp(6)
 
-  user    User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  area    Area?         @relation(fields: [area_id], references: [id], onDelete: SetNull)
-  members SceneMember[]
+  user               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area               Area?              @relation(fields: [area_id], references: [id], onDelete: SetNull)
+  blueprint_instance BlueprintInstance? @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  members            SceneMember[]
 
   @@unique([user_id, name])
   @@index([user_id, sort_order])
   @@index([area_id])
+  @@index([blueprint_instance_id])
   @@map("scenes")
 }
 
@@ -609,22 +635,31 @@ model SceneMember {
 // ═══ Tier 5 — Pipelines (ML execution) ═════════════════════════════════════════
 
 model Pipeline {
-  id         Int      @id @default(autoincrement())
-  user_id    Int
-  name       String   @db.VarChar(255)
-  enabled    Boolean  @default(true)
-  area_id    Int?
-  created_at DateTime @default(now()) @db.Timestamp(6)
-  updated_at DateTime @default(now()) @db.Timestamp(6)
+  id                    Int      @id @default(autoincrement())
+  user_id               Int
+  name                  String   @db.VarChar(255)
+  enabled               Boolean  @default(true)
+  area_id               Int?
+  // Blueprint provenance (F10) — see UserRule.
+  blueprint_instance_id Int?
+  blueprint_key         String?  @db.VarChar(64)
+  // Phases this pipeline's triggers are live in (F10). Empty = every phase; otherwise a trigger
+  // only fires while the instance's current phase key is in the set. Gated at evaluation time.
+  phase_scope           String[] @default([])
+  user_modified         Boolean  @default(false)
+  created_at            DateTime @default(now()) @db.Timestamp(6)
+  updated_at            DateTime @default(now()) @db.Timestamp(6)
 
-  user     User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  area     Area?             @relation(fields: [area_id], references: [id], onDelete: SetNull)
-  sensors  PipelineSensor[]
-  stages   PipelineStage[]
-  triggers PipelineTrigger[]
-  runs     PipelineRun[]
+  user               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area               Area?              @relation(fields: [area_id], references: [id], onDelete: SetNull)
+  blueprint_instance BlueprintInstance? @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  sensors            PipelineSensor[]
+  stages             PipelineStage[]
+  triggers           PipelineTrigger[]
+  runs               PipelineRun[]
 
   @@index([area_id])
+  @@index([blueprint_instance_id])
   @@map("pipelines")
 }
 
@@ -656,7 +691,13 @@ model PipelineStage {
   ordinal     Int
   kind        String @db.VarChar(20)
   ml_model_id Int?
-  config      Json?
+  // Typed columns per `kind`, not a JSON `config` blob — same treatment as user_rule_conditions.
+  // JSON here is reserved for ML audit blobs and model/Google metadata.
+  //   infer        → prompt_template (may embed @phase./@param., resolved by ml-router per run)
+  //   command_exec → notify, execute_condition
+  prompt_template   String? @db.Text
+  notify            String? @db.VarChar(20)
+  execute_condition String? @db.VarChar(20)
 
   pipeline   Pipeline           @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
   ml_model   MlModel?           @relation(fields: [ml_model_id], references: [id], onDelete: Restrict)
@@ -671,10 +712,13 @@ model PipelineTrigger {
   pipeline_id           Int
   trigger_type          String  @db.VarChar(20)
   user_device_action_id Int?
-  operator              String? @db.VarChar(5)
-  threshold_value       String? @db.VarChar(100)
-  schedule_cron         String? @db.VarChar(100)
+  operator              String?   @db.VarChar(5)
+  threshold_value       String?   @db.VarChar(100)
+  schedule_cron         String?   @db.VarChar(100)
   min_interval_sec      Int?
+  // Last time this trigger fired, used by automation-worker to enforce min_interval_sec.
+  // Persisted here (not in Valkey) so cooldowns survive a restart and cannot double-fire.
+  last_fired_at         DateTime? @db.Timestamp(6)
 
   pipeline           Pipeline          @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
   user_device_action UserDeviceAction? @relation("PipelineTrig", fields: [user_device_action_id], references: [id], onDelete: Cascade)
@@ -731,4 +775,342 @@ model SensorHistory {
 
   @@index([user_device_action_id, recorded_at])
   @@map("sensor_history")
+}
+
+// ═══ Tier 7 — Blueprints (F10) ══════════════════════════════════════════════════
+//
+// A blueprint is an admin-authored description of a whole working multi-device setup; a user
+// derives an *instance* of it, which binds their real devices and materializes the scenes,
+// rules and pipelines. Two halves live here:
+//
+//   definition (admin, versioned, published)  Blueprint → slots / params / phases / *Template
+//   instance   (user, live)                   BlueprintInstance → bindings / overrides
+//
+// Design notes that the field names alone don't carry (docs/plans/blueprints-redesign.md):
+//
+//  - Slots bind through a released SealedTemplate, never through a device type directly. That
+//    tier already solves "which firmware version does this config apply to" and materializes
+//    per-device config idempotently; a blueprint only adds the layer above it.
+//  - Template entities address devices as (slot_key, action_name) rather than by row id, and
+//    carry a stable `key` — that key is the *reconcile identity*, the thing that says "this
+//    derived rule came from that template" across a v2 release.
+//  - `action_name` is the sealed template ENTRY's mqtt_action_name, not a capability_key. A
+//    template may activate the same capability several times (8 i2c_socket_8 channels →
+//    socket, socket_2, …), so capability_key does not identify one action; mqtt_action_name is
+//    exactly what materialization upserts user_device_actions on, so it is what derive resolves.
+//  - Value fields accept a literal OR an `@param.x` / `@phase.x` reference resolved at
+//    evaluation time by @lattice/params. Storing the reference (not the value) is what lets
+//    reconcile, phase advance and user overrides write to disjoint places, so they cannot
+//    clobber each other.
+
+model Blueprint {
+  id            Int      @id @default(autoincrement())
+  key           String   @unique @db.VarChar(100)
+  name          String   @db.VarChar(255)
+  description   String?
+  // Bumped on publish, NOT on every edit — instances record the version they were derived from,
+  // and reconcile is what moves them forward.
+  version       Int      @default(1)
+  status        String   @default("draft") @db.VarChar(20) // draft | published (only published derives)
+  context_notes String? // free text handed to the LLM as setup context (F11)
+  created_at    DateTime @default(now()) @db.Timestamp(6)
+  updated_at    DateTime @default(now()) @db.Timestamp(6)
+
+  slots     BlueprintSlot[]
+  params    BlueprintParam[]
+  phases    BlueprintPhase[]
+  scenes    BlueprintSceneTemplate[]
+  rules     BlueprintRuleTemplate[]
+  pipelines BlueprintPipelineTemplate[]
+  instances BlueprintInstance[]
+
+  @@map("blueprints")
+}
+
+// One device requirement. The sealed template decides what qualifies (device type + firmware
+// version range); non-sealed, hand-configured devices are deliberately out of scope — a
+// blueprint orchestrates factory-defined device types, nothing else.
+model BlueprintSlot {
+  id                 Int     @id @default(autoincrement())
+  blueprint_id       Int
+  key                String  @db.VarChar(64) // referenced by templates + bindings
+  label              String  @db.VarChar(255)
+  required           Boolean @default(true)
+  min_count          Int     @default(1)
+  max_count          Int     @default(1)
+  sealed_template_id Int
+  sort_order         Int     @default(0)
+
+  blueprint       Blueprint      @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  // Restrict: a sealed template with live blueprint slots must not vanish underneath them.
+  sealed_template SealedTemplate @relation(fields: [sealed_template_id], references: [id], onDelete: Restrict)
+
+  @@unique([blueprint_id, key])
+  @@map("blueprint_slots")
+}
+
+// The declared tuning surface. Anything a phase can set or a user can override must be declared
+// here first, so the builder UI, write-time validation and the instance page all work off one list.
+model BlueprintParam {
+  id            Int     @id @default(autoincrement())
+  blueprint_id  Int
+  key           String  @db.VarChar(64) // "humidity.min" — what @param./@phase. resolves against
+  label         String  @db.VarChar(255)
+  default_value String  @db.VarChar(100)
+  unit          String? @db.VarChar(20)
+  user_tunable  Boolean @default(true) // false ⇒ phase-driven only, no override UI
+  sort_order    Int     @default(0)
+
+  blueprint Blueprint @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+
+  @@unique([blueprint_id, key])
+  @@map("blueprint_params")
+}
+
+// An ordered lifecycle step. Advancing writes one column on the instance and retunes every
+// @phase reference at once — no rule, scene or pipeline row is rewritten.
+model BlueprintPhase {
+  id             Int     @id @default(autoincrement())
+  blueprint_id   Int
+  key            String  @db.VarChar(64)
+  name           String  @db.VarChar(255)
+  ordinal        Int
+  duration_value Int?
+  duration_unit  String? @db.VarChar(10) // seconds | minutes | hours | days | weeks | months
+  auto_advance   Boolean @default(false) // elapsed duration advances it automatically
+  context_notes  String? // resolved by @phase.context_notes, e.g. into an LLM prompt
+
+  blueprint Blueprint              @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  targets   BlueprintPhaseTarget[]
+  instances BlueprintInstance[]
+
+  @@unique([blueprint_id, key])
+  @@index([blueprint_id, ordinal])
+  @@map("blueprint_phases")
+}
+
+// What this phase sets a param to. No row ⇒ the param's own default applies in this phase.
+model BlueprintPhaseTarget {
+  id        Int    @id @default(autoincrement())
+  phase_id  Int
+  param_key String @db.VarChar(64)
+  value     String @db.VarChar(100)
+
+  phase BlueprintPhase @relation(fields: [phase_id], references: [id], onDelete: Cascade)
+
+  @@unique([phase_id, param_key])
+  @@map("blueprint_phase_targets")
+}
+
+// ─── Template entities — mirror their concrete counterparts, addressed by slot ──────────────
+
+model BlueprintSceneTemplate {
+  id           Int      @id @default(autoincrement())
+  blueprint_id Int
+  key          String   @db.VarChar(64) // reconcile identity
+  name         String   @db.VarChar(255)
+  sort_order   Int      @default(0)
+  phase_scope  String[] @default([]) // phase keys this scene is offered in; empty = all phases
+
+  blueprint Blueprint                      @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  members   BlueprintSceneTemplateMember[]
+
+  @@unique([blueprint_id, key])
+  @@map("blueprint_scene_templates")
+}
+
+model BlueprintSceneTemplateMember {
+  id             Int    @id @default(autoincrement())
+  template_id    Int
+  slot_key      String @db.VarChar(64) // ← together these replace user_device_action_id
+  action_name   String @db.VarChar(64) // ← the slot's sealed template entry mqtt_action_name
+  target_state  String @db.VarChar(255) // literal OR "@param.pump_speed"
+  sort_order    Int    @default(0)
+  delay_seconds Int    @default(0)
+
+  template BlueprintSceneTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@unique([template_id, slot_key, action_name])
+  @@map("blueprint_scene_template_members")
+}
+
+model BlueprintRuleTemplate {
+  id                 Int     @id @default(autoincrement())
+  blueprint_id       Int
+  key                String   @db.VarChar(64) // reconcile identity
+  name               String   @db.VarChar(255)
+  is_emergency       Boolean  @default(false)
+  condition_operator String   @default("AND") @db.VarChar(3)
+  cooldown_seconds   Int      @default(60)
+  phase_scope        String[] @default([]) // phase keys this rule is active in; empty = all phases
+
+  blueprint  Blueprint                        @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  conditions BlueprintRuleTemplateCondition[]
+  actions    BlueprintRuleTemplateAction[]
+
+  @@unique([blueprint_id, key])
+  @@map("blueprint_rule_templates")
+}
+
+model BlueprintRuleTemplateCondition {
+  id              Int     @id @default(autoincrement())
+  template_id     Int
+  condition_type  String  @db.VarChar(20) // threshold | device_status | schedule
+  slot_key        String? @db.VarChar(64)
+  action_name     String? @db.VarChar(64)
+  operator        String? @db.VarChar(5)
+  threshold_value String? @db.VarChar(100) // literal OR "@phase.humidity.min"
+  status_value    String? @db.VarChar(20)
+  schedule_time   String? @db.VarChar(5)
+  schedule_days   Int[]   @default([])
+
+  template BlueprintRuleTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@map("blueprint_rule_template_conditions")
+}
+
+model BlueprintRuleTemplateAction {
+  id            Int    @id @default(autoincrement())
+  template_id   Int
+  slot_key      String @db.VarChar(64)
+  action_name   String @db.VarChar(64)
+  target_state  String @db.VarChar(255) // literal OR "@param.pump_speed"
+  delay_seconds Int    @default(0)
+
+  template BlueprintRuleTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@map("blueprint_rule_template_actions")
+}
+
+model BlueprintPipelineTemplate {
+  id           Int      @id @default(autoincrement())
+  blueprint_id Int
+  key          String   @db.VarChar(64) // reconcile identity
+  name         String   @db.VarChar(255)
+  enabled      Boolean  @default(true)
+  phase_scope  String[] @default([]) // phase keys this pipeline's triggers are live in; empty = all
+
+  blueprint Blueprint                          @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  sensors   BlueprintPipelineTemplateSensor[]
+  stages    BlueprintPipelineTemplateStage[]
+  triggers  BlueprintPipelineTemplateTrigger[]
+
+  @@unique([blueprint_id, key])
+  @@map("blueprint_pipeline_templates")
+}
+
+model BlueprintPipelineTemplateSensor {
+  id               Int     @id @default(autoincrement())
+  template_id      Int
+  group_name       String  @db.VarChar(100)
+  description      String  @db.VarChar(500)
+  slot_key         String  @db.VarChar(64)
+  action_name      String  @db.VarChar(64)
+  inject_as_sensor Boolean @default(true)
+  inject_as_action Boolean @default(false)
+  // Bounds are the pipeline-side @phase references: what "normal" means changes per phase.
+  min_value        String? @db.VarChar(50)
+  max_value        String? @db.VarChar(50)
+  compression      String  @default("average") @db.VarChar(20)
+  window_minutes   Int     @default(60)
+  n                Int?
+
+  template BlueprintPipelineTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@unique([template_id, slot_key, action_name])
+  @@map("blueprint_pipeline_template_sensors")
+}
+
+model BlueprintPipelineTemplateStage {
+  id          Int    @id @default(autoincrement())
+  template_id Int
+  ordinal     Int
+  kind        String @db.VarChar(20)
+  ml_model_id Int?
+  // Mirrors PipelineStage's typed stage columns, for the same reason.
+  prompt_template   String? @db.Text
+  notify            String? @db.VarChar(20)
+  execute_condition String? @db.VarChar(20)
+
+  template BlueprintPipelineTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  ml_model MlModel?                  @relation(fields: [ml_model_id], references: [id], onDelete: Restrict)
+
+  @@unique([template_id, ordinal])
+  @@map("blueprint_pipeline_template_stages")
+}
+
+model BlueprintPipelineTemplateTrigger {
+  id               Int     @id @default(autoincrement())
+  template_id      Int
+  trigger_type     String  @db.VarChar(20)
+  slot_key         String? @db.VarChar(64)
+  action_name      String? @db.VarChar(64)
+  operator         String? @db.VarChar(5)
+  threshold_value  String? @db.VarChar(100) // literal OR a reference
+  schedule_cron    String? @db.VarChar(100)
+  min_interval_sec Int?
+
+  template BlueprintPipelineTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@map("blueprint_pipeline_template_triggers")
+}
+
+// ─── Instance — user-owned ──────────────────────────────────────────────────────────────────
+
+model BlueprintInstance {
+  id                Int       @id @default(autoincrement())
+  user_id           Int
+  blueprint_id      Int
+  blueprint_version Int // the version this was derived from / last reconciled to
+  area_id           Int
+  name              String    @db.VarChar(255)
+  current_phase_id  Int?
+  phase_started_at  DateTime? @db.Timestamp(6)
+  created_at        DateTime  @default(now()) @db.Timestamp(6)
+  updated_at        DateTime  @default(now()) @db.Timestamp(6)
+
+  user          User                     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  // Restrict: a blueprint with live instances must not be deletable out from under them.
+  blueprint     Blueprint                @relation(fields: [blueprint_id], references: [id], onDelete: Restrict)
+  area          Area                     @relation(fields: [area_id], references: [id], onDelete: Cascade)
+  current_phase BlueprintPhase?          @relation(fields: [current_phase_id], references: [id], onDelete: SetNull)
+  bindings      BlueprintSlotBinding[]
+  overrides     BlueprintParamOverride[]
+  scenes        Scene[]
+  rules         UserRule[]
+  pipelines     Pipeline[]
+
+  @@unique([user_id, name])
+  @@index([blueprint_id])
+  @@map("blueprint_instances")
+}
+
+model BlueprintSlotBinding {
+  id             Int     @id @default(autoincrement())
+  instance_id    Int
+  // Plain string, not an FK: the binding survives the slot row being edited or replaced by a
+  // later blueprint version, which is the whole point of key-based reconcile identity.
+  slot_key       String  @db.VarChar(64)
+  user_device_id Int
+  auto_bound     Boolean @default(false) // bound with no user input (exactly one candidate)
+
+  instance    BlueprintInstance @relation(fields: [instance_id], references: [id], onDelete: Cascade)
+  user_device UserDevice        @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+
+  @@unique([instance_id, slot_key, user_device_id])
+  @@map("blueprint_slot_bindings")
+}
+
+// The user's own tuning. Beats the phase target and the blueprint default. Reconcile never
+// touches this table — that is what makes a v2 release non-destructive to user intent.
+model BlueprintParamOverride {
+  id          Int    @id @default(autoincrement())
+  instance_id Int
+  param_key   String @db.VarChar(64)
+  value       String @db.VarChar(100)
+
+  instance BlueprintInstance @relation(fields: [instance_id], references: [id], onDelete: Cascade)
+
+  @@unique([instance_id, param_key])
+  @@map("blueprint_param_overrides")
 }

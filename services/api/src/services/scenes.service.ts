@@ -1,4 +1,5 @@
 import { publish, RK, type ActionRequestedPayload } from '@lattice/queue';
+import { isPhaseInScope } from '@lattice/params';
 import { db } from '../db';
 import { getChannel } from '../queue';
 
@@ -34,6 +35,10 @@ export interface SceneView {
   name: string;
   sort_order: number;
   members: SceneMemberView[];
+  // Phase scope (F10): the phases this derived scene is offered in (empty = all), and whether the
+  // instance is currently in one of them. `in_phase` is always true for hand-written scenes.
+  phase_scope: string[];
+  in_phase: boolean;
 }
 
 function validate(dto: CreateSceneDto): void {
@@ -76,7 +81,11 @@ function memberCreateData(m: SceneMemberDto, index: number) {
   };
 }
 
-const memberInclude = { members: { orderBy: { sort_order: 'asc' as const } } };
+const memberInclude = {
+  members: { orderBy: { sort_order: 'asc' as const } },
+  // The instance's current phase drives `in_phase` (F10); absent for hand-written scenes.
+  blueprint_instance: { select: { current_phase: { select: { key: true } } } },
+};
 
 class ScenesService {
   async list(userId: number): Promise<SceneView[]> {
@@ -108,7 +117,9 @@ class ScenesService {
 
   async update(userId: number, id: number, dto: CreateSceneDto): Promise<SceneView> {
     validate(dto);
-    await this.ensureOwned(userId, id);
+    const existing = await this.ensureOwned(userId, id);
+    // See rules.service.update — editing a derived scene is drift (F10.6).
+    const userModified = existing.blueprint_instance_id !== null ? true : undefined;
     await this.ensureActionsOwned(userId, dto.members);
     await this.ensureNameFree(userId, dto.name.trim(), id);
     // Replace members wholesale so removed rows don't linger.
@@ -119,6 +130,7 @@ class ScenesService {
         data: {
           name: dto.name.trim(),
           sort_order: dto.sort_order ?? 0,
+          user_modified: userModified,
           updated_at: new Date(),
           members: { create: dto.members.map(memberCreateData) },
         },
@@ -136,7 +148,15 @@ class ScenesService {
   // Fire-and-forget fan-out: one ACTION_REQUESTED per member. Returns immediately (route
   // answers 202); per-device acks surface through the normal digest → socket state path.
   async execute(userId: number, id: number): Promise<{ queued: number }> {
-    await this.ensureOwned(userId, id);
+    const { phase_scope, currentPhaseKey } = await this.ensureOwned(userId, id);
+    // A phase-scoped derived scene is only runnable while its instance is in one of its phases
+    // (F10). Blueprint-authored; empty scope (all hand-written scenes) is always runnable.
+    if (!isPhaseInScope(phase_scope, currentPhaseKey)) {
+      throw Object.assign(
+        new Error('This scene is not available in the current phase of its setup'),
+        { statusCode: 409 },
+      );
+    }
     const members = await db.sceneMember.findMany({
       where: { scene_id: id },
       orderBy: { sort_order: 'asc' },
@@ -167,10 +187,30 @@ class ScenesService {
     return { queued: members.length };
   }
 
-  private async ensureOwned(userId: number, id: number): Promise<void> {
-    const scene = await db.scene.findUnique({ where: { id }, select: { user_id: true } });
+  private async ensureOwned(
+    userId: number,
+    id: number,
+  ): Promise<{
+    blueprint_instance_id: number | null;
+    phase_scope: string[];
+    currentPhaseKey: string | null;
+  }> {
+    const scene = await db.scene.findUnique({
+      where: { id },
+      select: {
+        user_id: true,
+        blueprint_instance_id: true,
+        phase_scope: true,
+        blueprint_instance: { select: { current_phase: { select: { key: true } } } },
+      },
+    });
     if (!scene) throw Object.assign(new Error('Scene not found'), { statusCode: 404 });
     if (scene.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
+    return {
+      blueprint_instance_id: scene.blueprint_instance_id,
+      phase_scope: scene.phase_scope,
+      currentPhaseKey: scene.blueprint_instance?.current_phase?.key ?? null,
+    };
   }
 
   // Pre-check the (user_id, name) unique index so a collision is a clean 409 rather than a
@@ -203,6 +243,8 @@ class ScenesService {
     id: number;
     name: string;
     sort_order: number;
+    phase_scope: string[];
+    blueprint_instance: { current_phase: { key: string } | null } | null;
     members: {
       id: number;
       user_device_action_id: number;
@@ -211,10 +253,13 @@ class ScenesService {
       delay_seconds: number;
     }[];
   }): SceneView {
+    const currentPhaseKey = s.blueprint_instance?.current_phase?.key ?? null;
     return {
       id: s.id,
       name: s.name,
       sort_order: s.sort_order,
+      phase_scope: s.phase_scope,
+      in_phase: isPhaseInScope(s.phase_scope, currentPhaseKey),
       members: s.members.map((m) => ({
         id: m.id,
         user_device_action_id: m.user_device_action_id,

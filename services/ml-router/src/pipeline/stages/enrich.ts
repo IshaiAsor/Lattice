@@ -2,6 +2,7 @@ import type { Channel } from 'amqplib';
 import { db, Prisma } from '@lattice/prisma-client';
 import { createLogger } from '@lattice/logger';
 import { deriveValidParameters } from '@lattice/capability-validation';
+import { resolveParam, type ParamContext } from '@lattice/params';
 import { env } from '../../config/env.config';
 import { requestPicture } from '../picture-capture';
 import type { Run } from '../types';
@@ -51,9 +52,18 @@ export async function runEnrich(
     sensorDigest = await buildSensorDigest(run.plan);
   }
 
+  const expectedRanges = buildExpectedRanges(run.plan);
+  if (Object.keys(expectedRanges).length > 0) {
+    log.debug(
+      { runId: run.runId, phase: run.plan.params.phase?.key ?? null, expectedRanges },
+      'enrich: sensor bounds resolved for the current phase',
+    );
+  }
+
   const enrichOutput: Record<string, unknown> = {
     current_state: currentState,
     sensors: sensorDigest,
+    ...(Object.keys(expectedRanges).length > 0 ? { expected_ranges: expectedRanges } : {}),
     available_actions: await enrichActions(
       run.plan.sensors
         .filter((s) => s.inject_as_action)
@@ -84,6 +94,38 @@ export async function runEnrich(
     },
   });
   log.info({ runId: run.runId, stageId: stage.dbId }, 'enrich stage complete');
+}
+
+// What "normal" is for each sensor, per group. Bounds have been configurable on a pipeline sensor
+// since F5 but were loaded and never used — nothing reached the model. They matter now because a
+// blueprint stores them as `@phase.level.min`, so the band the LLM judges against is exactly what
+// the current phase says it is, with no pipeline row rewritten on a phase advance.
+//
+// Resolved per run against the plan's context: a literal bound resolves to itself, an
+// unresolvable reference is omitted rather than shown as raw text.
+function buildExpectedRanges(plan: PipelinePlan): Record<string, Record<string, unknown>> {
+  const ranges: Record<string, Record<string, unknown>> = {};
+  for (const sensor of plan.sensors) {
+    if (sensor.is_image) continue;
+    const min = resolveBound(sensor.min_value, plan.params);
+    const max = resolveBound(sensor.max_value, plan.params);
+    if (min === null && max === null) continue;
+    if (!ranges[sensor.group_name]) ranges[sensor.group_name] = {};
+    ranges[sensor.group_name]![sensor.action_name] = {
+      ...(min !== null ? { min } : {}),
+      ...(max !== null ? { max } : {}),
+    };
+  }
+  return ranges;
+}
+
+function resolveBound(value: string | null, params: ParamContext): string | null {
+  if (value === null || value === '') return null;
+  const resolved = resolveParam(value, params);
+  if (resolved === null) {
+    log.warn({ bound: value }, 'sensor bound references an unresolvable parameter — omitted');
+  }
+  return resolved;
 }
 
 // Enrich each configured action with trait names (last segment of the Google trait URI,
