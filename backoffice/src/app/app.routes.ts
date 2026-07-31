@@ -7,6 +7,9 @@ import { LegalComponent } from './components/legal/legal.component';
 import { UserDashboard } from './components/user-dashboard/user-dashboard';
 import { AdminDeviceConfigComponent } from './components/admin-device-config/admin-device-config.component';
 import { SealedTemplatesComponent } from './components/sealed-templates/sealed-templates.component';
+import { AdminBlueprintsComponent } from './components/admin-blueprints/admin-blueprints.component';
+import { BlueprintsComponent } from './components/blueprints/blueprints.component';
+import { BlueprintInstanceComponent } from './components/blueprint-instance/blueprint-instance.component';
 import { DeviceConfigComponent } from './components/device-config/device-config.component';
 import { AutomationsComponent } from './components/automations/automations.component';
 import { NotificationsComponent } from './components/notifications/notifications.component';
@@ -33,6 +36,13 @@ export const routes: Routes = [
     canActivate: [authGuard],
   },
   {
+    // Same component — the id in the URL is which device is selected, so a refresh or a shared
+    // link reopens it. Reuses the component instance (only the param changes).
+    path: 'devices/:id',
+    component: DeviceConfigComponent,
+    canActivate: [authGuard],
+  },
+  {
     path: 'dashboard',
     component: UserDashboard,
     canActivate: [authGuard],
@@ -48,6 +58,17 @@ export const routes: Routes = [
     canActivate: [authGuard],
   },
   {
+    path: 'blueprints',
+    component: BlueprintsComponent,
+    canActivate: [authGuard],
+  },
+  {
+    // Declared after the list route; Angular matches in order, so the static path wins.
+    path: 'blueprints/:id',
+    component: BlueprintInstanceComponent,
+    canActivate: [authGuard],
+  },
+  {
     path: 'notifications',
     component: NotificationsComponent,
     canActivate: [authGuard],
@@ -58,8 +79,32 @@ export const routes: Routes = [
     canActivate: [authGuard, adminGuard],
   },
   {
+    // Same component — the id in the URL is which device type is selected, so a refresh reopens it.
+    path: 'admin/templates/:id',
+    component: AdminDeviceConfigComponent,
+    canActivate: [authGuard, adminGuard],
+  },
+  {
     path: 'admin/sealed-templates',
     component: SealedTemplatesComponent,
+    canActivate: [authGuard, adminGuard],
+  },
+  {
+    // Same component — the id in the URL is which sealed template is open, so a refresh reopens it.
+    path: 'admin/sealed-templates/:id',
+    component: SealedTemplatesComponent,
+    canActivate: [authGuard, adminGuard],
+  },
+  {
+    path: 'admin/blueprints',
+    component: AdminBlueprintsComponent,
+    canActivate: [authGuard, adminGuard],
+  },
+  {
+    // Same component — the id in the URL is which blueprint is open, so a refresh or a shared
+    // link reopens it. Reuses the component instance (only the param changes).
+    path: 'admin/blueprints/:id',
+    component: AdminBlueprintsComponent,
     canActivate: [authGuard, adminGuard],
   },
   { path: 'login', component: LoginComponent, data: { hideSidebar: true } },

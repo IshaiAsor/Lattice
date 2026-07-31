@@ -1,14 +1,18 @@
 <div
     class="scene-tile"
     [class.running]="running()"
-    (click)="execute.emit()"
-    (keydown.enter)="execute.emit()"
+    [class.out-of-phase]="!scene().in_phase"
+    (click)="scene().in_phase && execute.emit()"
+    (keydown.enter)="scene().in_phase && execute.emit()"
     tabindex="0"
     role="button"
+    [attr.aria-disabled]="!scene().in_phase"
     [attr.aria-label]="'Run scene ' + scene().name">
     <div class="scene-header">
         <mat-icon class="scene-icon">auto_awesome</mat-icon>
-        <span class="scene-name">{{ scene().name }}</span>
+        <!-- Derived scene names carry the instance name and routinely outrun 190px, so the full
+             name has to stay reachable once the tile ellipsises it. -->
+        <span class="scene-name" [title]="scene().name">{{ scene().name }}</span>
         <span class="header-spacer"></span>
         <button mat-icon-button [matMenuTriggerFor]="sceneMenu" class="card-menu-btn"
             (click)="$event.stopPropagation()">
@@ -38,4 +42,11 @@
             {{ scene().members.length }} {{ scene().members.length === 1 ? 'action' : 'actions' }}
         </span>
     </div>
+
+    @if (!scene().in_phase) {
+        <div class="scene-phase-note">
+            <mat-icon>schedule</mat-icon>
+            <span>Not available in this phase</span>
+        </div>
+    }
 </div>

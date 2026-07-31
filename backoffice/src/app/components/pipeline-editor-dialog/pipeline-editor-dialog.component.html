@@ -199,20 +199,11 @@
             }
           </mat-form-field>
 
+          <!-- Vision-model (VLM/YOLO) selector parked: a camera item's frame now goes straight to
+               the multimodal LLM. Re-enable by restoring this block plus the stage push and
+               validation in pipeline-editor-dialog.component.ts. -->
           @if (hasImageSensor) {
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Vision model</mat-label>
-              <mat-select formControlName="vlm_model_id">
-                @for (m of vlmModels; track m.id) {
-                  <mat-option [value]="m.id">{{ m.name }} {{ m.version }}</mat-option>
-                }
-              </mat-select>
-              @if (!vlmModels.length) {
-                <mat-hint>No VLM models in catalog yet — required because this pipeline includes a camera item</mat-hint>
-              } @else {
-                <mat-hint>Runs before the language model; its detections are added to the prompt</mat-hint>
-              }
-            </mat-form-field>
+            <p class="vision-note">A camera item is included — its frame is sent to the language model to analyze directly.</p>
           }
 
           <mat-form-field appearance="outline" class="full-width">

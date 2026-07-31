@@ -1,0 +1,1611 @@
+<div class="admin-blueprints">
+  @if (busy()) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
+  <div class="layout">
+    <!-- ── Blueprint list ──────────────────────────────────────────────── -->
+    <aside class="list-pane lattice-card">
+      <div class="pane-head">
+        <span class="pane-title">Blueprints</span>
+        <button mat-icon-button (click)="newBlueprint()" matTooltip="New blueprint">
+          <mat-icon>add</mat-icon>
+        </button>
+      </div>
+
+      @if (blueprints().length === 0) {
+        <p class="pane-empty">None yet.</p>
+      }
+
+      @for (bp of blueprints(); track bp.id) {
+        <div
+          class="bp-row"
+          role="button"
+          tabindex="0"
+          [class.active]="selected()?.id === bp.id"
+          (click)="select(bp)"
+          (keyup.enter)="select(bp)"
+        >
+          <div class="bp-text">
+            <span class="bp-name">{{ bp.name }}</span>
+            <span class="bp-meta">
+              {{ bp.key }} · v{{ bp.version }}
+              @if (bp.instance_count > 0) {
+                · {{ bp.instance_count }} live
+              }
+            </span>
+          </div>
+          <span class="status-chip" [class.published]="bp.status === 'published'">
+            {{ bp.status }}
+          </span>
+          <button
+            mat-icon-button
+            class="del-btn"
+            (click)="remove(bp); $event.stopPropagation()"
+            matTooltip="Delete"
+          >
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+      }
+
+      @if (releasedTemplates().length === 0) {
+        <p class="pane-empty warn">
+          No released sealed templates. A slot cannot be published without one.
+        </p>
+      }
+    </aside>
+
+    <!-- ── Builder ─────────────────────────────────────────────────────── -->
+    <section class="editor-pane">
+      <div class="editor-head">
+        <span class="editor-title">{{ selected() ? selected()!.name : 'New blueprint' }}</span>
+        <span class="spacer"></span>
+        <!-- No longer needs a saved blueprint: validation runs on the document in the form. -->
+        <button mat-stroked-button (click)="validate()" [disabled]="busy()">Validate</button>
+        <button mat-stroked-button (click)="save()" [disabled]="!canSave()">Save draft</button>
+        <button mat-flat-button color="primary" (click)="publish()" [disabled]="!canSave()">
+          Publish
+        </button>
+
+        <!-- The result belongs to the button that produced it: pressing Validate at the top of a
+             long form and having to hunt for the verdict at the bottom is how a failed publish gets
+             read as nothing happening. Wraps onto its own line inside the sticky toolbar and scrolls
+             internally, so a long problem list can't grow the bar over the form. -->
+        @if (validated()) {
+          @if (problems().length === 0) {
+            <div class="result-pane valid">
+              <mat-icon>check_circle</mat-icon>
+              <div>
+                <strong>Valid</strong>
+                <p>Ready to publish.</p>
+              </div>
+            </div>
+          } @else {
+            <div class="result-pane invalid">
+              <mat-icon>error_outline</mat-icon>
+              <div>
+                <strong>{{ problems().length }} problem(s) to fix</strong>
+                <ul>
+                  @for (problem of problems(); track problem) {
+                    <li>{{ problem }}</li>
+                  }
+                </ul>
+              </div>
+            </div>
+          }
+        }
+      </div>
+
+      <!-- ── Details ─────────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('details')"
+            (click)="toggleSection('details')"
+            (keyup.enter)="toggleSection('details')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('details') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Details</h3>
+          </div>
+        </div>
+        @if (sectionOpen('details')) {
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>Name</mat-label>
+            <input matInput [(ngModel)]="draft.name" (ngModelChange)="onNameChange()" />
+          </mat-form-field>
+          @if (draft.key) {
+            <p class="generated-id">
+              id <code>{{ draft.key }}</code>
+              @if (selected()) {
+                <span class="dim"
+                  >— fixed; saving updates this blueprint rather than making a new one</span
+                >
+              }
+            </p>
+          }
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>Description</mat-label>
+            <textarea matInput rows="2" [(ngModel)]="draft.description"></textarea>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+            <mat-label>Context notes</mat-label>
+            <textarea matInput rows="2" [(ngModel)]="draft.context_notes"></textarea>
+            <mat-hint>Background handed to the LLM for setups of this kind</mat-hint>
+          </mat-form-field>
+        }
+      </div>
+
+      <!-- ── Slots ───────────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('slots')"
+            (click)="toggleSection('slots')"
+            (keyup.enter)="toggleSection('slots')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('slots') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Devices this needs</h3>
+            <span class="count-chip">{{ draft.slots.length }}</span>
+          </div>
+          <span class="spacer"></span>
+          @if (sectionOpen('slots')) {
+            <button mat-stroked-button (click)="addSlot()">
+              <mat-icon>add</mat-icon> Add slot
+            </button>
+          }
+        </div>
+        @if (sectionOpen('slots')) {
+          @if (draft.slots.length === 0) {
+            <p class="hint-empty">A blueprint needs at least one slot.</p>
+          }
+          @for (slot of draft.slots; track $index) {
+            <div class="row-card slot-card" [class.open]="isRowOpen(slot)">
+              <div class="row-head">
+                <div
+                  class="row-toggle"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-expanded]="isRowOpen(slot)"
+                  (click)="toggleRow(slot)"
+                  (keyup.enter)="toggleRow(slot)"
+                >
+                  <mat-icon class="caret">{{
+                    isRowOpen(slot) ? 'expand_more' : 'chevron_right'
+                  }}</mat-icon>
+                  <code class="row-key">{{ slot.key || 'new slot' }}</code>
+                  <span class="row-name">{{ slot.label }}</span>
+                  <span class="row-meta">{{ slotSummary(slot) }}</span>
+                  @if (!slot.required) {
+                    <span class="row-chip">optional</span>
+                  }
+                </div>
+                <button mat-icon-button (click)="removeAt(draft.slots, $index)" matTooltip="Remove">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              @if (isRowOpen(slot)) {
+                <!-- The template comes first because it decides everything below it: which of the
+                     user's devices can fill this slot, and which actions the slot can address. -->
+                <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                  <mat-label>Kind of device</mat-label>
+                  <mat-select
+                    [(ngModel)]="slot.sealed_template"
+                    (ngModelChange)="onSlotTemplateChange(slot)"
+                  >
+                    @for (t of releasedTemplates(); track t.id) {
+                      <mat-option [value]="t.name">{{ t.name }}</mat-option>
+                    }
+                  </mat-select>
+                  <mat-hint>A released sealed template — it decides which devices qualify</mat-hint>
+                </mat-form-field>
+
+                @if (slot.sealed_template) {
+                  <div class="slot-actions">
+                    <span class="slot-actions-title">
+                      Rules, scenes and pipelines can address these {{ slotActions(slot).length }}
+                      action(s):
+                    </span>
+                    <ul>
+                      @for (action of slotActions(slot); track action.name) {
+                        <li>
+                          <span class="action-label">{{ action.label }}</span>
+                          <code>{{ action.name }}</code>
+                        </li>
+                      }
+                    </ul>
+                    @if (slotActions(slot).length === 0) {
+                      <p class="slot-actions-empty">
+                        This template has no entries — nothing can be addressed on it.
+                      </p>
+                    }
+                  </div>
+                }
+
+                <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                  <mat-label>What to call it</mat-label>
+                  <input
+                    matInput
+                    [(ngModel)]="slot.label"
+                    (ngModelChange)="onSlotLabelChange(slot)"
+                    placeholder="Tank monitor"
+                  />
+                  <mat-hint>Shown to the user when they pick a device for this slot</mat-hint>
+                </mat-form-field>
+                @if (slot.key) {
+                  <p class="generated-id">
+                    id <code>{{ slot.key }}</code>
+                    @if (frozen(slot)) {
+                      <span class="dim"
+                        >— fixed, {{ selected()!.instance_count }} live setup(s) are bound to it;
+                        renaming won't move it</span
+                      >
+                    }
+                  </p>
+                }
+
+                <div class="row-foot slot-foot">
+                  <mat-checkbox [(ngModel)]="slot.required">
+                    Required — a setup can't be created without it
+                  </mat-checkbox>
+                  <mat-checkbox
+                    [checked]="isMultiSlot(slot)"
+                    (change)="setSlotMulti(slot, $event.checked)"
+                  >
+                    Allow several devices — automations fan out to each one
+                  </mat-checkbox>
+                </div>
+                @if (isMultiSlot(slot)) {
+                  <div class="count-range">
+                    <mat-form-field appearance="outline" class="narrow" subscriptSizing="dynamic">
+                      <mat-label>Fewest</mat-label>
+                      <input matInput type="number" min="0" [(ngModel)]="slot.min_count" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="narrow" subscriptSizing="dynamic">
+                      <mat-label>Most</mat-label>
+                      <input matInput type="number" [attr.min]="slot.min_count" [(ngModel)]="slot.max_count" />
+                    </mat-form-field>
+                    <span class="count-hint">
+                      A setup binds between {{ slot.min_count }} and {{ slot.max_count }} of these
+                      devices; every rule, scene and pipeline action that names this slot is
+                      repeated for each bound device.
+                    </span>
+                  </div>
+                }
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <!-- ── Parameters ──────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('params')"
+            (click)="toggleSection('params')"
+            (keyup.enter)="toggleSection('params')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('params') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Parameters</h3>
+            <span class="count-chip">{{ draft.params.length }}</span>
+          </div>
+        </div>
+        @if (sectionOpen('params')) {
+          <p class="hint-empty">
+            Anything a phase can set or a user can override must be declared here first.
+          </p>
+
+          <!-- Adjustable — variables the user tunes; the setup page renders an input for each. -->
+          <div class="param-group">
+            <div class="param-group-head">
+              <span class="param-group-title">Adjustable</span>
+              <span class="param-group-note">Shown on the setup page for the user to tune.</span>
+              <span class="spacer"></span>
+              <button mat-stroked-button (click)="addParam(true)">
+                <mat-icon>add</mat-icon> Add
+              </button>
+            </div>
+            @if (tunableParams().length === 0) {
+              <p class="hint-inline">None — nothing here is user-adjustable yet.</p>
+            }
+            @for (param of tunableParams(); track param) {
+              <ng-container
+                [ngTemplateOutlet]="paramCard"
+                [ngTemplateOutletContext]="{ $implicit: param }"
+              />
+            }
+          </div>
+
+          <!-- Fixed — aliases the blueprint asserts. Not a variable: a user changing one (an
+               inverted pump signal, say) would break the automation rather than tune it. -->
+          <div class="param-group param-group--fixed">
+            <div class="param-group-head">
+              <span class="param-group-title">Fixed</span>
+              <span class="param-group-note">
+                Named values the automations reference. The user can't change them.
+              </span>
+              <span class="spacer"></span>
+              <button mat-stroked-button (click)="addParam(false)">
+                <mat-icon>add</mat-icon> Add
+              </button>
+            </div>
+            @if (fixedParams().length === 0) {
+              <p class="hint-inline">None.</p>
+            }
+            @for (param of fixedParams(); track param) {
+              <ng-container
+                [ngTemplateOutlet]="paramCard"
+                [ngTemplateOutletContext]="{ $implicit: param }"
+              />
+            }
+          </div>
+        }
+      </div>
+
+      <!-- One parameter card, rendered into whichever group its user_tunable flag puts it in.
+           Flipping "User can override" moves it between the groups (the getters re-filter). -->
+      <ng-template #paramCard let-param>
+        <div
+          class="row-card param-card"
+          [class.mode-user]="param.user_tunable"
+          [class.mode-fixed]="!param.user_tunable"
+        >
+          <div class="row-head">
+            <div
+              class="row-toggle"
+              role="button"
+              tabindex="0"
+              [attr.aria-expanded]="isRowOpen(param)"
+              (click)="toggleRow(param)"
+              (keyup.enter)="toggleRow(param)"
+            >
+              <mat-icon class="caret">{{
+                isRowOpen(param) ? 'expand_more' : 'chevron_right'
+              }}</mat-icon>
+              <code class="row-key">{{ param.key || 'new parameter' }}</code>
+              <span class="row-name">{{ param.label }}</span>
+              <span class="row-meta value">{{ paramSummary(param) }}</span>
+            </div>
+            <button mat-icon-button (click)="removeParam(param)" matTooltip="Remove">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+
+          @if (isRowOpen(param)) {
+            <!-- The kind is the group the card is in, so there is no "user can override" checkbox
+                 here — inside Fixed it would contradict the heading. This button moves the param to
+                 the other group instead. -->
+            <div class="mode-row">
+              <span class="mode-note">
+                {{
+                  param.user_tunable
+                    ? 'Editable on the setup page'
+                    : "A fixed value; the user can't change it"
+                }}
+              </span>
+              <span class="spacer"></span>
+              <button mat-stroked-button (click)="setParamTunable(param, !param.user_tunable)">
+                <mat-icon>swap_horiz</mat-icon>
+                {{ param.user_tunable ? 'Make fixed' : 'Make adjustable' }}
+              </button>
+            </div>
+
+            <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+              <mat-label>Label</mat-label>
+              <input
+                matInput
+                [(ngModel)]="param.label"
+                (ngModelChange)="onParamLabelChange(param)"
+              />
+              <!-- The namespace is not cosmetic: `@phase.` resolves override → phase → default,
+                   `@param.` skips the phase. A fixed param is *defined* as the value a phase may
+                   not retune, so naming it `@phase.` here told admins to write the one namespace
+                   that contradicts the mode they just chose. -->
+              <mat-hint>
+                {{ param.user_tunable ? 'Shown to the user' : 'For your reference' }} — referenced
+                as &#64;{{ param.user_tunable ? 'phase' : 'param' }}.{{ param.key || '…' }}
+                <!-- The reference echoes the key, so it reads as a live preview of the label being
+                     typed — but the key stops following the label once the blueprint is in use.
+                     Say that here rather than leaving it to be inferred from the id line below. -->
+                @if (frozen(param)) {
+                  <span class="dim">(fixed — renaming won't move it)</span>
+                }
+              </mat-hint>
+            </mat-form-field>
+            @if (param.key && frozen(param)) {
+              <p class="generated-id">
+                id <code>{{ param.key }}</code>
+                <span class="dim"
+                  >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming won't
+                  move it</span
+                >
+              </p>
+            }
+
+            @if (param.user_tunable) {
+              <!-- Default and Unit are one value, so they sit together rather than being split
+                   across a four-column grid that strands the unit on its own row. -->
+              <div class="field-grid pair">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Default</mat-label>
+                  <input matInput [(ngModel)]="param.default_value" />
+                  <mat-hint>Used when no phase sets it and the user hasn't overridden</mat-hint>
+                </mat-form-field>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Unit</mat-label>
+                  <input matInput [(ngModel)]="param.unit" placeholder="%" />
+                  <mat-hint>Display only</mat-hint>
+                </mat-form-field>
+              </div>
+            } @else {
+              <!-- A fixed alias resolves to one value and has no unit — "on" has nothing to label.
+                   Lowercase placeholder on purpose: this value is dispatched verbatim and checked
+                   against the capability's valid_parameters, whose OnOff enum is ["on","off"] —
+                   an "ON" suggested here becomes a command every device rejects. -->
+              <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                <mat-label>Value</mat-label>
+                <input matInput [(ngModel)]="param.default_value" placeholder="on" />
+                <mat-hint>What this alias resolves to</mat-hint>
+              </mat-form-field>
+            }
+          }
+        </div>
+      </ng-template>
+
+      <!-- Reusable "Active in phases" picker (F10), shared by rules, scenes and pipelines. Every
+           phase is a checkbox, all ticked by default; untick to exclude a phase. All-ticked is
+           stored as an empty scope (= every phase, including ones added in a later blueprint
+           version). Hidden until the blueprint declares a phase. -->
+      <ng-template #phaseScopeField let-item let-noun="noun">
+        @if (scopablePhases().length > 0) {
+          <div class="phase-scope-field">
+            <span class="phase-scope-label">Active in phases</span>
+            <div class="phase-scope-checks">
+              @for (phase of scopablePhases(); track phase.key) {
+                <mat-checkbox
+                  [checked]="isPhaseChecked(item, phase.key)"
+                  [disabled]="isOnlyCheckedPhase(item, phase.key)"
+                  (change)="setPhaseChecked(item, phase.key, $event.checked)"
+                >
+                  {{ phase.name }}
+                </mat-checkbox>
+              }
+            </div>
+            <span class="phase-scope-hint">
+              {{ noun }} is
+              {{
+                item.phase_scope.length
+                  ? 'limited to ' + phaseScopeSummary(item.phase_scope)
+                  : 'active in all phases'
+              }}.
+            </span>
+          </div>
+        }
+      </ng-template>
+
+      <!-- ── Phases ──────────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('phases')"
+            (click)="toggleSection('phases')"
+            (keyup.enter)="toggleSection('phases')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('phases') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Phases</h3>
+            <span class="count-chip">{{ draft.phases.length }}</span>
+          </div>
+          <span class="spacer"></span>
+          @if (sectionOpen('phases')) {
+            <button mat-stroked-button (click)="addPhase()">
+              <mat-icon>add</mat-icon> Add phase
+            </button>
+          }
+        </div>
+        @if (sectionOpen('phases')) {
+          @for (phase of draft.phases; track $index) {
+            <div class="row-card">
+              <div class="row-head">
+                <div
+                  class="row-toggle"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-expanded]="isRowOpen(phase)"
+                  (click)="toggleRow(phase)"
+                  (keyup.enter)="toggleRow(phase)"
+                >
+                  <mat-icon class="caret">{{
+                    isRowOpen(phase) ? 'expand_more' : 'chevron_right'
+                  }}</mat-icon>
+                  <span class="ordinal-badge">{{ phase.ordinal }}</span>
+                  <code class="row-key">{{ phase.key || 'new phase' }}</code>
+                  <span class="row-name">{{ phase.name }}</span>
+                  <span class="row-meta">{{ phaseSummary(phase) }}</span>
+                  @if (phase.auto_advance) {
+                    <span class="row-chip">auto</span>
+                  }
+                </div>
+                <button
+                  mat-icon-button
+                  (click)="removeAt(draft.phases, $index); renumber(draft.phases)"
+                  matTooltip="Remove"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              @if (isRowOpen(phase)) {
+                <div class="field-grid four">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Name</mat-label>
+                    <input
+                      matInput
+                      [(ngModel)]="phase.name"
+                      (ngModelChange)="onPhaseNameChange(phase)"
+                    />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Lasts</mat-label>
+                    <input matInput type="number" [(ngModel)]="phase.duration_value" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Unit</mat-label>
+                    <mat-select [(ngModel)]="phase.duration_unit">
+                      @for (u of durationUnits; track u) {
+                        <mat-option [value]="u">{{ u }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+                @if (phase.key && frozen(phase)) {
+                  <p class="generated-id">
+                    id <code>{{ phase.key }}</code>
+                    <span class="dim"
+                      >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming
+                      won't move it</span
+                    >
+                  </p>
+                }
+
+                <mat-form-field appearance="outline" class="full">
+                  <mat-label>Context notes (given to the LLM in this phase)</mat-label>
+                  <textarea matInput rows="2" [(ngModel)]="phase.context_notes"></textarea>
+                </mat-form-field>
+
+                <!-- Phase targets -->
+                <div class="sub-head">
+                  <span class="sub-title">Sets</span>
+                  <button mat-button (click)="addPhaseTarget(phase)">
+                    <mat-icon>add</mat-icon> Set a parameter
+                  </button>
+                </div>
+                @if (phase.targets.length === 0) {
+                  <p class="hint-inline">
+                    No targets — every parameter keeps its default in this phase.
+                  </p>
+                }
+                @for (target of phase.targets; track $index) {
+                  <div class="inline-row">
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Parameter</mat-label>
+                      <mat-select [(ngModel)]="target.param_key">
+                        @for (key of paramKeys(); track key) {
+                          <mat-option [value]="key">{{ paramLabel(key) }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Value in this phase</mat-label>
+                      <input matInput [(ngModel)]="target.value" />
+                    </mat-form-field>
+                    <button mat-icon-button (click)="removeAt(phase.targets, $index)">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </div>
+                }
+
+                <div class="row-foot">
+                  <mat-checkbox [(ngModel)]="phase.auto_advance">
+                    Move on automatically when the duration elapses
+                  </mat-checkbox>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <!-- ── Rules ───────────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('rules')"
+            (click)="toggleSection('rules')"
+            (keyup.enter)="toggleSection('rules')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('rules') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Rules</h3>
+            <span class="count-chip">{{ draft.rules.length }}</span>
+          </div>
+          <span class="spacer"></span>
+          @if (sectionOpen('rules')) {
+            <button mat-stroked-button (click)="addRule()">
+              <mat-icon>add</mat-icon> Add rule
+            </button>
+          }
+        </div>
+        @if (sectionOpen('rules')) {
+          @for (rule of draft.rules; track $index) {
+            <div class="row-card">
+              <div class="row-head">
+                <div
+                  class="row-toggle"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-expanded]="isRowOpen(rule)"
+                  (click)="toggleRow(rule)"
+                  (keyup.enter)="toggleRow(rule)"
+                >
+                  <mat-icon class="caret">{{
+                    isRowOpen(rule) ? 'expand_more' : 'chevron_right'
+                  }}</mat-icon>
+                  <code class="row-key">{{ rule.key || 'new rule' }}</code>
+                  <span class="row-name">{{ rule.name }}</span>
+                  <span class="row-meta">{{ ruleSummary(rule) }}</span>
+                  @if (rule.phase_scope.length > 0) {
+                    <span class="row-chip">{{ phaseScopeSummary(rule.phase_scope) }}</span>
+                  }
+                  @if (rule.is_emergency) {
+                    <span class="row-chip danger">emergency</span>
+                  }
+                </div>
+                <button mat-icon-button (click)="removeAt(draft.rules, $index)" matTooltip="Remove">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              @if (isRowOpen(rule)) {
+                <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                  <mat-label>Name</mat-label>
+                  <input
+                    matInput
+                    [(ngModel)]="rule.name"
+                    (ngModelChange)="onRuleNameChange(rule)"
+                  />
+                </mat-form-field>
+                @if (rule.key && frozen(rule)) {
+                  <p class="generated-id">
+                    id <code>{{ rule.key }}</code>
+                    <span class="dim"
+                      >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming
+                      won't move it</span
+                    >
+                  </p>
+                }
+                <!-- Cooldown as a value + unit; stored as seconds. min 0 so it can't go negative. -->
+                <div class="field-grid pair">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Cooldown</mat-label>
+                    <input matInput type="number" min="0" [(ngModel)]="rule.cooldown_value" />
+                    <mat-hint>Minimum gap between firings</mat-hint>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Unit</mat-label>
+                    <mat-select [(ngModel)]="rule.cooldown_unit">
+                      @for (u of cooldownUnits; track u) {
+                        <mat-option [value]="u">{{ u }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+
+                <!-- Conditions -->
+                <div class="sub-head">
+                  <span class="sub-title">If</span>
+                  <!-- AND/OR only means something once there are two conditions to combine. The
+                       engine reads AND as "every" and anything else as "some". -->
+                  @if (rule.conditions.length > 1) {
+                    <mat-form-field
+                      appearance="outline"
+                      class="op-select"
+                      subscriptSizing="dynamic"
+                    >
+                      <mat-select [(ngModel)]="rule.condition_operator">
+                        <mat-option value="AND">all of these</mat-option>
+                        <mat-option value="OR">any of these</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                    <span class="sub-note">are true</span>
+                  }
+                  <button mat-button (click)="addCondition(rule)">
+                    <mat-icon>add</mat-icon> Add condition
+                  </button>
+                </div>
+                @for (cond of rule.conditions; track $index) {
+                  <div class="inline-row wrap">
+                    <mat-form-field appearance="outline" class="narrow">
+                      <mat-label>Type</mat-label>
+                      <mat-select [(ngModel)]="cond.condition_type">
+                        @for (t of conditionTypes; track t) {
+                          <mat-option [value]="t">{{ t }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+
+                    @if (cond.condition_type !== 'schedule') {
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>Slot</mat-label>
+                        <mat-select
+                          [(ngModel)]="cond.slot_key"
+                          (ngModelChange)="onSlotChange(cond)"
+                        >
+                          @for (key of slotKeys(); track key) {
+                            <mat-option [value]="key">{{ slotLabel(key) }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="grow">
+                        <mat-label>Action</mat-label>
+                        <mat-select [(ngModel)]="cond.action_name" [disabled]="!cond.slot_key">
+                          @for (a of actionsForSlot(cond.slot_key); track a.name) {
+                            <mat-option [value]="a.name">
+                              {{ a.label }} <span class="dim">{{ a.name }}</span>
+                            </mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                    }
+
+                    @if (cond.condition_type === 'threshold') {
+                      <mat-form-field appearance="outline" class="tiny">
+                        <mat-label>Op</mat-label>
+                        <mat-select [(ngModel)]="cond.operator">
+                          @for (o of operators; track o) {
+                            <mat-option [value]="o">{{ o }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="grow">
+                        <mat-label>Threshold</mat-label>
+                        <input matInput [(ngModel)]="cond.threshold_value" placeholder="20" />
+                        <button
+                          matSuffix
+                          mat-icon-button
+                          [matMenuTriggerFor]="thresholdParams"
+                          matTooltip="Use a parameter instead of a fixed number"
+                        >
+                          <mat-icon>data_object</mat-icon>
+                        </button>
+                        <mat-menu #thresholdParams="matMenu">
+                          @for (key of paramKeys(); track key) {
+                            <button mat-menu-item (click)="insertRef(cond, 'threshold_value', key)">
+                              {{ paramLabel(key) }}
+                              <span class="dim">&#64;phase.{{ key }}</span>
+                            </button>
+                          }
+                          @if (paramKeys().length === 0) {
+                            <button mat-menu-item disabled>Declare a parameter first</button>
+                          }
+                        </mat-menu>
+                      </mat-form-field>
+                    }
+                    @if (cond.condition_type === 'device_status') {
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>Status</mat-label>
+                        <mat-select [(ngModel)]="cond.status_value">
+                          <mat-option value="online">online</mat-option>
+                          <mat-option value="offline">offline</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                    }
+                    @if (cond.condition_type === 'schedule') {
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>At (HH:MM)</mat-label>
+                        <input matInput [(ngModel)]="cond.schedule_time" placeholder="07:30" />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="grow" subscriptSizing="dynamic">
+                        <mat-label>On days</mat-label>
+                        <mat-select [(ngModel)]="cond.schedule_days" multiple>
+                          @for (d of weekdays; track d.value) {
+                            <mat-option [value]="d.value">{{ d.label }}</mat-option>
+                          }
+                        </mat-select>
+                        <mat-hint>Leave empty for every day</mat-hint>
+                      </mat-form-field>
+                    }
+
+                    <button mat-icon-button (click)="removeAt(rule.conditions, $index)">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </div>
+                }
+
+                <!-- Actions -->
+                <div class="sub-head">
+                  <span class="sub-title">Then</span>
+                  <button mat-button (click)="addRuleAction(rule)">
+                    <mat-icon>add</mat-icon> Add action
+                  </button>
+                </div>
+                @for (act of rule.actions; track $index) {
+                  <div class="inline-row wrap">
+                    <mat-form-field appearance="outline" class="narrow">
+                      <mat-label>Slot</mat-label>
+                      <mat-select [(ngModel)]="act.slot_key" (ngModelChange)="onSlotChange(act)">
+                        @for (key of slotKeys(); track key) {
+                          <mat-option [value]="key">{{ slotLabel(key) }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Action</mat-label>
+                      <mat-select [(ngModel)]="act.action_name" [disabled]="!act.slot_key">
+                        @for (a of actionsForSlot(act.slot_key); track a.name) {
+                          <mat-option [value]="a.name">
+                            {{ a.label }} <span class="dim">{{ a.name }}</span>
+                          </mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Set to</mat-label>
+                      <input matInput [(ngModel)]="act.target_state" placeholder="ON" />
+                      <button matSuffix mat-icon-button [matMenuTriggerFor]="actParams">
+                        <mat-icon>data_object</mat-icon>
+                      </button>
+                      <mat-menu #actParams="matMenu">
+                        @for (key of paramKeys(); track key) {
+                          <button mat-menu-item (click)="insertRef(act, 'target_state', key)">
+                            {{ paramLabel(key) }}
+                            <span class="dim">&#64;phase.{{ key }}</span>
+                          </button>
+                        }
+                        @if (paramKeys().length === 0) {
+                          <button mat-menu-item disabled>Declare a parameter first</button>
+                        }
+                      </mat-menu>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="tiny">
+                      <mat-label>Delay</mat-label>
+                      <input matInput type="number" [(ngModel)]="act.delay_seconds" />
+                    </mat-form-field>
+                    <button mat-icon-button (click)="removeAt(rule.actions, $index)">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </div>
+                }
+
+                <ng-container
+                  [ngTemplateOutlet]="phaseScopeField"
+                  [ngTemplateOutletContext]="{ $implicit: rule, noun: 'this rule' }"
+                ></ng-container>
+
+                <div class="row-foot">
+                  <mat-checkbox [(ngModel)]="rule.is_emergency">Emergency</mat-checkbox>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <!-- ── Scenes ──────────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('scenes')"
+            (click)="toggleSection('scenes')"
+            (keyup.enter)="toggleSection('scenes')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('scenes') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Scenes</h3>
+            <span class="count-chip">{{ draft.scenes.length }}</span>
+          </div>
+          <span class="spacer"></span>
+          @if (sectionOpen('scenes')) {
+            <button mat-stroked-button (click)="addScene()">
+              <mat-icon>add</mat-icon> Add scene
+            </button>
+          }
+        </div>
+        @if (sectionOpen('scenes')) {
+          @for (scene of draft.scenes; track $index) {
+            <div class="row-card">
+              <div class="row-head">
+                <div
+                  class="row-toggle"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-expanded]="isRowOpen(scene)"
+                  (click)="toggleRow(scene)"
+                  (keyup.enter)="toggleRow(scene)"
+                >
+                  <mat-icon class="caret">{{
+                    isRowOpen(scene) ? 'expand_more' : 'chevron_right'
+                  }}</mat-icon>
+                  <code class="row-key">{{ scene.key || 'new scene' }}</code>
+                  <span class="row-name">{{ scene.name }}</span>
+                  <span class="row-meta">{{ sceneSummary(scene) }}</span>
+                  @if (scene.phase_scope.length > 0) {
+                    <span class="row-chip">{{ phaseScopeSummary(scene.phase_scope) }}</span>
+                  }
+                </div>
+                <button
+                  mat-icon-button
+                  (click)="removeAt(draft.scenes, $index)"
+                  matTooltip="Remove"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              @if (isRowOpen(scene)) {
+                <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                  <mat-label>Name</mat-label>
+                  <input
+                    matInput
+                    [(ngModel)]="scene.name"
+                    (ngModelChange)="onSceneNameChange(scene)"
+                  />
+                </mat-form-field>
+                @if (scene.key && frozen(scene)) {
+                  <p class="generated-id">
+                    id <code>{{ scene.key }}</code>
+                    <span class="dim"
+                      >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming
+                      won't move it</span
+                    >
+                  </p>
+                }
+                <div class="sub-head">
+                  <span class="sub-title">Does</span>
+                  <button mat-button (click)="addSceneMember(scene)">
+                    <mat-icon>add</mat-icon> Add action
+                  </button>
+                </div>
+                @for (member of scene.members; track $index) {
+                  <div class="inline-row wrap">
+                    <mat-form-field appearance="outline" class="narrow">
+                      <mat-label>Slot</mat-label>
+                      <mat-select
+                        [(ngModel)]="member.slot_key"
+                        (ngModelChange)="onSlotChange(member)"
+                      >
+                        @for (key of slotKeys(); track key) {
+                          <mat-option [value]="key">{{ slotLabel(key) }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Action</mat-label>
+                      <mat-select [(ngModel)]="member.action_name" [disabled]="!member.slot_key">
+                        @for (a of actionsForSlot(member.slot_key); track a.name) {
+                          <mat-option [value]="a.name">
+                            {{ a.label }} <span class="dim">{{ a.name }}</span>
+                          </mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Set to</mat-label>
+                      <input matInput [(ngModel)]="member.target_state" placeholder="OFF" />
+                      <!-- Scene target_state may hold a reference too (the seed's stop scene uses
+                           @param.pump.off_state), so it gets the same inserter as a rule action. -->
+                      <button matSuffix mat-icon-button [matMenuTriggerFor]="sceneParams">
+                        <mat-icon>data_object</mat-icon>
+                      </button>
+                      <mat-menu #sceneParams="matMenu">
+                        @for (key of paramKeys(); track key) {
+                          <button mat-menu-item (click)="insertRef(member, 'target_state', key)">
+                            {{ paramLabel(key) }}
+                            <span class="dim">&#64;phase.{{ key }}</span>
+                          </button>
+                        }
+                        @if (paramKeys().length === 0) {
+                          <button mat-menu-item disabled>Declare a parameter first</button>
+                        }
+                      </mat-menu>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="tiny">
+                      <mat-label>Delay</mat-label>
+                      <input matInput type="number" [(ngModel)]="member.delay_seconds" />
+                    </mat-form-field>
+                    <button mat-icon-button (click)="removeAt(scene.members, $index)">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </div>
+                }
+                <ng-container
+                  [ngTemplateOutlet]="phaseScopeField"
+                  [ngTemplateOutletContext]="{ $implicit: scene, noun: 'this scene' }"
+                ></ng-container>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <!-- ── Pipelines ───────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('pipelines')"
+            (click)="toggleSection('pipelines')"
+            (keyup.enter)="toggleSection('pipelines')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('pipelines') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">AI pipelines</h3>
+            <span class="count-chip">{{ draft.pipelines.length }}</span>
+          </div>
+          <span class="spacer"></span>
+          @if (sectionOpen('pipelines')) {
+            <button mat-stroked-button (click)="addPipeline()">
+              <mat-icon>add</mat-icon> Add pipeline
+            </button>
+          }
+        </div>
+        @if (sectionOpen('pipelines')) {
+          @for (pipeline of draft.pipelines; track $index) {
+            <div class="row-card">
+              <div class="row-head">
+                <div
+                  class="row-toggle"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-expanded]="isRowOpen(pipeline)"
+                  (click)="toggleRow(pipeline)"
+                  (keyup.enter)="toggleRow(pipeline)"
+                >
+                  <mat-icon class="caret">{{
+                    isRowOpen(pipeline) ? 'expand_more' : 'chevron_right'
+                  }}</mat-icon>
+                  <code class="row-key">{{ pipeline.key || 'new pipeline' }}</code>
+                  <span class="row-name">{{ pipeline.name }}</span>
+                  <span class="row-meta">{{ pipelineSummary(pipeline) }}</span>
+                  @if (pipeline.phase_scope.length > 0) {
+                    <span class="row-chip">{{ phaseScopeSummary(pipeline.phase_scope) }}</span>
+                  }
+                  @if (!pipeline.enabled) {
+                    <span class="row-chip">disabled</span>
+                  }
+                </div>
+                <button
+                  mat-icon-button
+                  (click)="removeAt(draft.pipelines, $index)"
+                  matTooltip="Remove"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              @if (isRowOpen(pipeline)) {
+                <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                  <mat-label>Name</mat-label>
+                  <input
+                    matInput
+                    [(ngModel)]="pipeline.name"
+                    (ngModelChange)="onPipelineNameChange(pipeline)"
+                  />
+                </mat-form-field>
+                @if (pipeline.key && frozen(pipeline)) {
+                  <p class="generated-id">
+                    id <code>{{ pipeline.key }}</code>
+                    <span class="dim"
+                      >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming
+                      won't move it</span
+                    >
+                  </p>
+                }
+
+                <!-- Readings, bucketed by group. The enrich stage buckets by group_name, so a
+                     group holds many readings — the UI shows the bucket rather than repeating the
+                     name on every row. -->
+                <div class="sub-head">
+                  <span class="sub-title">Reads</span>
+                  <button mat-button (click)="addSensorGroup(pipeline)">
+                    <mat-icon>add</mat-icon> Add group
+                  </button>
+                </div>
+                @for (group of sensorGroups(pipeline); track $index) {
+                  <div class="sensor-group">
+                    <div class="sensor-group-head">
+                      <mat-form-field
+                        appearance="outline"
+                        class="group-name"
+                        subscriptSizing="dynamic"
+                      >
+                        <mat-label>Group</mat-label>
+                        <input
+                          matInput
+                          [ngModel]="group.name"
+                          (ngModelChange)="renameSensorGroup(pipeline, group.name, $event)"
+                          placeholder="tank"
+                        />
+                      </mat-form-field>
+                      <span class="group-count">{{ group.sensors.length }} reading(s)</span>
+                      <span class="spacer"></span>
+                      <button mat-button (click)="addSensorToGroup(pipeline, group.name)">
+                        <mat-icon>add</mat-icon> Add reading
+                      </button>
+                    </div>
+
+                    @for (sensor of group.sensors; track $index) {
+                      <div class="row-card sensor-card">
+                        <div class="field-grid">
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                            <mat-label>Slot</mat-label>
+                            <mat-select
+                              [(ngModel)]="sensor.slot_key"
+                              (ngModelChange)="onSlotChange(sensor)"
+                            >
+                              @for (key of slotKeys(); track key) {
+                                <mat-option [value]="key">{{ slotLabel(key) }}</mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                            <mat-label>Action</mat-label>
+                            <mat-select
+                              [(ngModel)]="sensor.action_name"
+                              [disabled]="!sensor.slot_key"
+                            >
+                              @for (a of actionsForSlot(sensor.slot_key); track a.name) {
+                                <mat-option [value]="a.name">
+                                  {{ a.label }} <span class="dim">{{ a.name }}</span>
+                                </mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+                        </div>
+
+                        <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                          <mat-label>Description for the model</mat-label>
+                          <input matInput [(ngModel)]="sensor.description" />
+                          <mat-hint>How this value is explained in the prompt</mat-hint>
+                        </mat-form-field>
+
+                        <!-- These two decide what the rest of the card means, so they lead. -->
+                        <div class="mode-row">
+                          <mat-checkbox [(ngModel)]="sensor.inject_as_sensor">
+                            Reading — its values go to the model
+                          </mat-checkbox>
+                          <mat-checkbox [(ngModel)]="sensor.inject_as_action">
+                            Actionable — the model may command it
+                          </mat-checkbox>
+                          <span class="spacer"></span>
+                          <button
+                            mat-icon-button
+                            (click)="removeSensor(pipeline, sensor)"
+                            matTooltip="Remove reading"
+                          >
+                            <mat-icon>delete</mat-icon>
+                          </button>
+                        </div>
+
+                        <!-- Ranges and compression only describe a *reading*; an actuator that is
+                             only "actionable" has no series to summarise or bound. -->
+                        @if (sensor.inject_as_sensor) {
+                          <div class="field-grid">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                              <mat-label>Normal min</mat-label>
+                              <input matInput [(ngModel)]="sensor.min_value" />
+                              <button matSuffix mat-icon-button [matMenuTriggerFor]="minParams">
+                                <mat-icon>data_object</mat-icon>
+                              </button>
+                              <mat-menu #minParams="matMenu">
+                                @for (key of paramKeys(); track key) {
+                                  <button
+                                    mat-menu-item
+                                    (click)="insertRef(sensor, 'min_value', key)"
+                                  >
+                                    {{ paramLabel(key) }}
+                                    <span class="dim">&#64;phase.{{ key }}</span>
+                                  </button>
+                                }
+                              </mat-menu>
+                              <mat-hint>Expected range told to the model</mat-hint>
+                            </mat-form-field>
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                              <mat-label>Normal max</mat-label>
+                              <input matInput [(ngModel)]="sensor.max_value" />
+                              <button matSuffix mat-icon-button [matMenuTriggerFor]="maxParams">
+                                <mat-icon>data_object</mat-icon>
+                              </button>
+                              <mat-menu #maxParams="matMenu">
+                                @for (key of paramKeys(); track key) {
+                                  <button
+                                    mat-menu-item
+                                    (click)="insertRef(sensor, 'max_value', key)"
+                                  >
+                                    {{ paramLabel(key) }}
+                                    <span class="dim">&#64;phase.{{ key }}</span>
+                                  </button>
+                                }
+                              </mat-menu>
+                            </mat-form-field>
+                          </div>
+
+                          <div class="field-grid">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                              <mat-label>Compression</mat-label>
+                              <mat-select [(ngModel)]="sensor.compression">
+                                @for (c of compressions; track c) {
+                                  <mat-option [value]="c">{{ c }}</mat-option>
+                                }
+                              </mat-select>
+                              <mat-hint
+                                >How the window is reduced before the model sees it</mat-hint
+                              >
+                            </mat-form-field>
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                              <mat-label>Window (minutes)</mat-label>
+                              <input
+                                matInput
+                                type="number"
+                                min="1"
+                                [(ngModel)]="sensor.window_minutes"
+                              />
+                              <mat-hint>How far back to read</mat-hint>
+                            </mat-form-field>
+                            @if (sensor.compression === 'last_n') {
+                              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                                <mat-label>Samples (n)</mat-label>
+                                <input matInput type="number" min="1" [(ngModel)]="sensor.n" />
+                              </mat-form-field>
+                            }
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- Stages -->
+                <div class="sub-head">
+                  <span class="sub-title">Then</span>
+                  <button mat-button (click)="addStage(pipeline)">
+                    <mat-icon>add</mat-icon> Add stage
+                  </button>
+                </div>
+                @for (stage of pipeline.stages; track $index) {
+                  <div class="stage-block">
+                    <div class="inline-row">
+                      <span class="ordinal">{{ stage.ordinal }}</span>
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>Stage</mat-label>
+                        <mat-select [(ngModel)]="stage.kind">
+                          @for (k of stageKinds; track k) {
+                            <mat-option [value]="k">{{ k }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                      @if (stage.kind === 'infer') {
+                        <mat-form-field appearance="outline" class="grow">
+                          <mat-label>Model</mat-label>
+                          <mat-select [(ngModel)]="stage.ml_model" [compareWith]="compareModel">
+                            @for (m of mlModels(); track m.id) {
+                              <mat-option
+                                [value]="{ kind: m.kind, name: m.name, version: m.version }"
+                              >
+                                {{ m.kind }}/{{ m.name }}/{{ m.version }}
+                              </mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+                      }
+                      <span class="spacer"></span>
+                      <button
+                        mat-icon-button
+                        (click)="removeAt(pipeline.stages, $index); renumber(pipeline.stages)"
+                      >
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    </div>
+                    <!-- command_exec options: what it may act on, and whether to tell the user. -->
+                    @if (stage.kind === 'command_exec') {
+                      <div class="field-grid">
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                          <mat-label>Execute when</mat-label>
+                          <mat-select [(ngModel)]="stage.execute_condition">
+                            @for (c of executeConditions; track c) {
+                              <mat-option [value]="c">{{ c }}</mat-option>
+                            }
+                          </mat-select>
+                          <mat-hint>Which recommendations are carried out</mat-hint>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                          <mat-label>Notify</mat-label>
+                          <mat-select [(ngModel)]="stage.notify">
+                            @for (n of notifyModes; track n) {
+                              <mat-option [value]="n">{{ n }}</mat-option>
+                            }
+                          </mat-select>
+                          <mat-hint>Tell the user when it acts</mat-hint>
+                        </mat-form-field>
+                      </div>
+                    }
+                    <!-- Only a text model takes a prompt. A vision model scores frames and has no
+                         context to read, so the field is hidden rather than silently ignored. -->
+                    @if (stage.kind === 'infer' && !stageTakesPrompt(stage) && stage.ml_model) {
+                      <p class="hint-inline">
+                        {{ stage.ml_model.kind }}/{{ stage.ml_model.name }} takes no text prompt.
+                      </p>
+                    }
+                    @if (stageTakesPrompt(stage)) {
+                      <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                        <mat-label>Prompt</mat-label>
+                        <textarea matInput rows="3" [(ngModel)]="stage.prompt_template"></textarea>
+                        <mat-hint> Insert a parameter or phase detail — resolved per run </mat-hint>
+                      </mat-form-field>
+                      <div class="ref-chips">
+                        @for (ref of phaseMetaRefs(); track ref) {
+                          <button
+                            mat-stroked-button
+                            class="ref-chip"
+                            (click)="appendRef(stage, 'prompt_template', ref)"
+                          >
+                            {{ ref }}
+                          </button>
+                        }
+                        @for (key of paramKeys(); track key) {
+                          <button
+                            mat-stroked-button
+                            class="ref-chip"
+                            (click)="appendRef(stage, 'prompt_template', '@phase.' + key)"
+                          >
+                            {{ paramLabel(key) }}
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- Triggers -->
+                <div class="sub-head">
+                  <span class="sub-title">Runs when</span>
+                  <button mat-button (click)="addTrigger(pipeline)">
+                    <mat-icon>add</mat-icon> Add trigger
+                  </button>
+                </div>
+                @for (trigger of pipeline.triggers; track $index) {
+                  <div class="inline-row wrap">
+                    <mat-form-field appearance="outline" class="narrow">
+                      <mat-label>Trigger</mat-label>
+                      <mat-select [(ngModel)]="trigger.trigger_type">
+                        @for (t of triggerTypes; track t) {
+                          <mat-option [value]="t">{{ t }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <!-- Cron stays the stored form, but it is built here from plain language. -->
+                    @if (trigger.trigger_type === 'schedule') {
+                      @let sched = scheduleOf(trigger);
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>How often</mat-label>
+                        <mat-select
+                          [ngModel]="sched.mode"
+                          (ngModelChange)="setSchedule(trigger, { mode: $event })"
+                        >
+                          @for (m of scheduleModes; track m.id) {
+                            <mat-option [value]="m.id">{{ m.label }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      @if (sched.mode === 'minutes' || sched.mode === 'hours') {
+                        <mat-form-field appearance="outline" class="tiny">
+                          <mat-label>Every</mat-label>
+                          <input
+                            matInput
+                            type="number"
+                            min="1"
+                            [ngModel]="sched.every"
+                            (ngModelChange)="setSchedule(trigger, { every: $event })"
+                          />
+                        </mat-form-field>
+                      }
+                      @if (sched.mode === 'weekly') {
+                        <mat-form-field appearance="outline" class="narrow">
+                          <mat-label>Day</mat-label>
+                          <mat-select
+                            [ngModel]="sched.weekday"
+                            (ngModelChange)="setSchedule(trigger, { weekday: $event })"
+                          >
+                            @for (d of weekdays; track d.value) {
+                              <mat-option [value]="d.value">{{ d.label }}</mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+                      }
+                      @if (sched.mode === 'daily' || sched.mode === 'weekly') {
+                        <mat-form-field appearance="outline" class="tiny">
+                          <mat-label>Hour</mat-label>
+                          <input
+                            matInput
+                            type="number"
+                            min="0"
+                            max="23"
+                            [ngModel]="sched.hour"
+                            (ngModelChange)="setSchedule(trigger, { hour: $event })"
+                          />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" class="tiny">
+                          <mat-label>Minute</mat-label>
+                          <input
+                            matInput
+                            type="number"
+                            min="0"
+                            max="59"
+                            [ngModel]="sched.minute"
+                            (ngModelChange)="setSchedule(trigger, { minute: $event })"
+                          />
+                        </mat-form-field>
+                      }
+                      @if (sched.mode === 'cron') {
+                        <mat-form-field appearance="outline" class="grow">
+                          <mat-label>Cron</mat-label>
+                          <input
+                            matInput
+                            [(ngModel)]="trigger.schedule_cron"
+                            placeholder="0 */6 * * *"
+                          />
+                        </mat-form-field>
+                      }
+                      <span class="schedule-summary">{{ scheduleSummary(trigger) }}</span>
+                    }
+                    <!-- A floor on how often this pipeline may run, whatever fires it. Optional —
+                         empty means no floor. -->
+                    <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
+                      <mat-label>Min gap (s)</mat-label>
+                      <input
+                        matInput
+                        type="number"
+                        min="0"
+                        [(ngModel)]="trigger.min_interval_sec"
+                      />
+                    </mat-form-field>
+                    @if (trigger.trigger_type === 'sensor_threshold') {
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>Slot</mat-label>
+                        <mat-select
+                          [(ngModel)]="trigger.slot_key"
+                          (ngModelChange)="onSlotChange(trigger)"
+                        >
+                          @for (key of slotKeys(); track key) {
+                            <mat-option [value]="key">{{ slotLabel(key) }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="grow">
+                        <mat-label>Action</mat-label>
+                        <mat-select
+                          [(ngModel)]="trigger.action_name"
+                          [disabled]="!trigger.slot_key"
+                        >
+                          @for (a of actionsForSlot(trigger.slot_key); track a.name) {
+                            <mat-option [value]="a.name">
+                              {{ a.label }} <span class="dim">{{ a.name }}</span>
+                            </mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="tiny">
+                        <mat-label>Op</mat-label>
+                        <mat-select [(ngModel)]="trigger.operator">
+                          @for (o of operators; track o) {
+                            <mat-option [value]="o">{{ o }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>Value</mat-label>
+                        <input matInput [(ngModel)]="trigger.threshold_value" />
+                      </mat-form-field>
+                    }
+                    <button mat-icon-button (click)="removeAt(pipeline.triggers, $index)">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </div>
+                }
+
+                <ng-container
+                  [ngTemplateOutlet]="phaseScopeField"
+                  [ngTemplateOutletContext]="{ $implicit: pipeline, noun: 'this pipeline' }"
+                ></ng-container>
+
+                <div class="row-foot">
+                  <mat-checkbox [(ngModel)]="pipeline.enabled">Enabled</mat-checkbox>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <p class="publish-note">
+        Publishing validates the definition and updates every live setup derived from it. Entities a
+        user has edited are left alone.
+      </p>
+
+      <!-- Backup / restore, not an authoring surface: blueprints are built in the form above and
+           keys come from the labels. This is only how one is saved to a file and loaded back. -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('backup')"
+            (click)="toggleSection('backup')"
+            (keyup.enter)="toggleSection('backup')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('backup') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Save or load</h3>
+          </div>
+        </div>
+        @if (sectionOpen('backup')) {
+          <p class="hint-empty">Back this blueprint up to a file, or restore a saved one.</p>
+          <div class="io-actions">
+            <button mat-stroked-button (click)="downloadJson()">
+              <mat-icon>download</mat-icon> Save to file
+            </button>
+            <button mat-stroked-button (click)="showJson(jsonBox)">
+              <mat-icon>content_copy</mat-icon> Show as text
+            </button>
+            <span class="spacer"></span>
+            <button mat-stroked-button (click)="importJson(jsonBox.value)">
+              <mat-icon>upload</mat-icon> Restore from text
+            </button>
+          </div>
+          <textarea
+            #jsonBox
+            class="json-box"
+            rows="8"
+            spellcheck="false"
+            placeholder="Paste a previously saved blueprint here, or press “Show as text” to copy this one."
+          ></textarea>
+          <p class="hint-empty">
+            Restoring keeps the saved ids so a blueprint that is already in use still matches its
+            live setups. Building a new one is done in the form above — ids are generated from the
+            names.
+          </p>
+        }
+      </div>
+    </section>
+  </div>
+</div>

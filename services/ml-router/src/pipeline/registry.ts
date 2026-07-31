@@ -75,7 +75,7 @@ export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
       },
       blueprint_instance: {
         select: {
-          overrides: { select: { param_key: true, value: true } },
+          overrides: { select: { param_key: true, phase_key: true, value: true } },
           blueprint: { select: { params: { select: { key: true, default_value: true } } } },
           current_phase: {
             select: {
@@ -143,6 +143,7 @@ export async function loadPipeline(pipelineId: number): Promise<PipelinePlan> {
       pipelineId: pipeline.id,
       blueprintInstanceId: pipeline.blueprint_instance_id,
       phase: params.phase?.key ?? null,
+      phaseOverrides: params.phaseOverrides,
       overrides: params.overrides,
       phaseTargets: params.phaseTargets,
       defaults: params.defaults,

@@ -1,7 +1,11 @@
 import { publish, RK, type ActionRequestedPayload } from '@lattice/queue';
-import { isPhaseInScope } from '@lattice/params';
+import { isPhaseInScope, resolveParam } from '@lattice/params';
+import { createLogger } from '@lattice/logger';
 import { db } from '../db';
 import { getChannel } from '../queue';
+import { loadParamContext } from './blueprints.param-context';
+
+const log = createLogger('api:scenes');
 
 // Scenes (F10.5) — a user-named set of device actions fired on demand. Structurally a
 // UserRule without conditions, so this mirrors rules.service.ts. Execution fans out the
@@ -148,7 +152,10 @@ class ScenesService {
   // Fire-and-forget fan-out: one ACTION_REQUESTED per member. Returns immediately (route
   // answers 202); per-device acks surface through the normal digest → socket state path.
   async execute(userId: number, id: number): Promise<{ queued: number }> {
-    const { phase_scope, currentPhaseKey } = await this.ensureOwned(userId, id);
+    const { blueprint_instance_id, phase_scope, currentPhaseKey } = await this.ensureOwned(
+      userId,
+      id,
+    );
     // A phase-scoped derived scene is only runnable while its instance is in one of its phases
     // (F10). Blueprint-authored; empty scope (all hand-written scenes) is always runnable.
     if (!isPhaseInScope(phase_scope, currentPhaseKey)) {
@@ -163,28 +170,53 @@ class ScenesService {
     });
     if (members.length === 0) return { queued: 0 };
 
+    // A derived member's target_state may be a stored `@param.` / `@phase.` reference — derive
+    // writes those verbatim and resolution belongs to whoever dispatches, exactly as the
+    // automation-worker's rule engine does. Unresolved, the reference would travel to
+    // digest-service as a literal, fail the capability's valid_parameters check and come back as
+    // "device did not confirm" without a command ever reaching the device.
+    //
+    // Resolved once, up front, rather than per member at send time: a scene is one user gesture,
+    // so every member should act on the values as they were when it was pressed — a delayed
+    // member must not silently use a different phase's numbers because the phase advanced while
+    // it waited.
+    const ctx = await loadParamContext(blueprint_instance_id);
+
     const ch = await getChannel();
     const send = (actionId: number, value: string): void => {
       const payload: ActionRequestedPayload = { userId: String(userId), actionId, value };
       publish(ch, RK.ACTION_REQUESTED, payload);
     };
 
+    let queued = 0;
     for (const m of members) {
+      // Fail closed, like the rule engine: a reference with nothing behind it is dropped with a
+      // warning rather than dispatched as raw text.
+      const target = resolveParam(m.target_state, ctx);
+      if (target === null) {
+        log.warn(
+          { sceneId: id, actionId: m.user_device_action_id, target_state: m.target_state },
+          'scene member references an unresolvable parameter — not dispatched',
+        );
+        continue;
+      }
+      queued++;
+
       if (m.delay_seconds > 0) {
         // Best-effort in-process stagger; a restart drops pending delayed members.
         setTimeout(() => {
           try {
-            send(m.user_device_action_id, m.target_state);
+            send(m.user_device_action_id, target);
           } catch {
             // Channel gone (restart/reconnect) — the scene is fire-and-forget, so drop it
             // rather than crashing the timer callback.
           }
         }, m.delay_seconds * 1000).unref();
       } else {
-        send(m.user_device_action_id, m.target_state);
+        send(m.user_device_action_id, target);
       }
     }
-    return { queued: members.length };
+    return { queued };
   }
 
   private async ensureOwned(

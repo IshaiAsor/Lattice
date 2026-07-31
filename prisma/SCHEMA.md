@@ -517,6 +517,7 @@ erDiagram
     int id PK
     int instance_id FK
     string param_key
+    string phase_key "empty = every phase; else that phase only"
     string value "beats phase target and default"
   }
 
@@ -994,23 +995,26 @@ accept references too — that is how a phase reaches the LLM.
 | 80  | 12          | tank     | 44             | true       |
 | 81  | 12          | pump     | 45             | false      |
 
-#### `blueprint_param_overrides` (`BlueprintParamOverride`) — the user's own tuning. **Beats the phase target and the default, in every phase.** Reconcile never touches this table, which is what makes a v2 release non-destructive to user intent. Unique `(instance_id, param_key)`.
+#### `blueprint_param_overrides` (`BlueprintParamOverride`) — the user's own tuning, always **per instance**, so two instances of one blueprint tune independently and neither can write the shared template. `phase_key` scopes the row: `''` = every phase, a phase key = that phase alone. Reconcile never touches this table, which is what makes a v2 release non-destructive to user intent. Unique `(instance_id, param_key, phase_key)`.
 
-| id  | instance_id | param_key    | value |
-| --- | ----------- | ------------ | ----- |
-| 90  | 12          | humidity.min | 50    |
+| id  | instance_id | param_key    | phase_key | value |
+| --- | ----------- | ------------ | --------- | ----- |
+| 90  | 12          | humidity.min | `''`      | 50    |
+| 91  | 12          | humidity.min | mature    | 45    |
 
 **Resolution worked through** — rule 51's condition holds `@phase.humidity.min`, instance 12 is in
 Seedling:
 
-| Source                           | Value | Wins? |
-| -------------------------------- | ----- | ----- |
-| `blueprint_param_overrides` (90) | 50    | ✅    |
-| `blueprint_phase_targets` (40)   | 60    |       |
-| `blueprint_params.default` (20)  | 40    |       |
+| Source                                       | Value | Wins? |
+| -------------------------------------------- | ----- | ----- |
+| `blueprint_param_overrides` phase=`seedling` | —     |       |
+| `blueprint_param_overrides` all-phases (90)  | 50    | ✅    |
+| `blueprint_phase_targets` (40)               | 60    |       |
+| `blueprint_params.default` (20)              | 40    |       |
 
-Remove override 90 and it resolves to 60; advance to Mature (no target row) and it falls through to
-40 — with zero writes to the rule.
+Advance to Mature and row 91 wins with 45 — the more specific row beats the all-phases one. Remove
+both overrides and Seedling resolves to 60 (its target), Mature falls through to the default 40 —
+with zero writes to the rule in every case.
 
 ---
 

@@ -55,16 +55,23 @@ blueprintsRouter.put('/instances/:id/phase', async (req, res, next) => {
 });
 
 // Set (or clear, with value null) the user's own value for one parameter. An override is its own
-// row, so this never edits a derived rule and reconcile can never clobber it.
+// row on the instance, so this never edits a derived rule, never touches the shared blueprint, and
+// reconcile can never clobber it. Optional `phase_key` scopes it to one phase; omitted means every
+// phase.
 blueprintsRouter.put('/instances/:id/params/:key', async (req, res, next) => {
   try {
-    const { value } = req.body ?? {};
+    const { value, phase_key } = req.body ?? {};
+    if (phase_key !== undefined && phase_key !== null && typeof phase_key !== 'string') {
+      res.status(400).json({ error: 'phase_key must be a string' });
+      return;
+    }
     res.json(
       await blueprintInstancesService.setOverride(
         req.user!.id,
         Number(req.params.id),
         req.params.key!,
         value === null || value === undefined ? null : String(value),
+        phase_key ?? null,
       ),
     );
   } catch (err) {

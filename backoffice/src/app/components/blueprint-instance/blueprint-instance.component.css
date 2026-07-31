@@ -1,0 +1,342 @@
+/* Pages own their inset — the app shell adds none. Matches the automations shell so
+   Set up and Automate line up when you switch between them. */
+.instance-page {
+  padding: 20px 24px 32px;
+  max-width: 960px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.head-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.instance-name {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.instance-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 20px 0 8px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ── Update notice ───────────────────────────────────────────────────── */
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--primary);
+  font-size: 13px;
+}
+.notice mat-icon {
+  color: var(--primary);
+}
+.notice button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Phase timeline ──────────────────────────────────────────────────── */
+
+.phase-track {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.phase-step {
+  flex: 1 1 0;
+  min-width: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.phase-step:not(:disabled):hover {
+  border-color: var(--primary);
+}
+.phase-step:disabled {
+  cursor: default;
+}
+.phase-step.current {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.phase-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+.phase-step.current .phase-dot {
+  background: var(--primary);
+}
+
+.phase-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.phase-duration {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ── Parameters ──────────────────────────────────────────────────────── */
+
+.param-list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.param-row:last-child {
+  border-bottom: none;
+}
+.param-row.overridden {
+  border-left: 3px solid var(--primary);
+  padding-left: 11px;
+}
+
+.param-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.param-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.param-source {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.param-input {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.param-fixed {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.reset-param,
+.expand-param {
+  flex-shrink: 0;
+}
+
+/* ── Per-phase parameter breakdown ───────────────────────────────────── */
+
+/* Indented and tinted so the phase rows read as belonging to the param above them rather than as
+   more params. The left rule carries the eye down the group. */
+.phase-params {
+  display: flex;
+  flex-direction: column;
+  margin: 0 14px 8px 24px;
+  border-left: 2px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2, transparent) 60%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+
+.phase-param-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+}
+
+.phase-param-row.current {
+  border-left: 3px solid var(--primary);
+  margin-left: -2px;
+  padding-left: 11px;
+}
+
+.now-chip,
+.tuned-chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.now-chip {
+  margin-left: 6px;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.tuned-chip {
+  flex-shrink: 0;
+}
+
+/* ── Devices ─────────────────────────────────────────────────────────── */
+
+.binding-list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.binding-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.binding-row:last-child {
+  border-bottom: none;
+}
+
+.binding-icon {
+  color: var(--text-dim);
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.binding-label {
+  font-weight: 500;
+}
+
+.binding-device {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.auto-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--surface-2, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Drift ───────────────────────────────────────────────────────────── */
+
+.drift-list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.drift-intro {
+  margin: 8px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.drift-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.drift-icon {
+  color: var(--warn, #ffa726);
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.drift-name {
+  font-weight: 500;
+}
+
+.drift-kind {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.page-actions .spacer {
+  flex: 1;
+}
+
+/* Destructive, so it reads as such and sits at the far end from the safe action. */
+.delete-setup {
+  color: var(--offline, #ef5350);
+}
+
+@media (max-width: 600px) {
+  .instance-page {
+    padding: 12px 12px 24px;
+  }
+
+  .phase-step {
+    min-width: 120px;
+  }
+  .param-input {
+    width: 90px;
+  }
+}

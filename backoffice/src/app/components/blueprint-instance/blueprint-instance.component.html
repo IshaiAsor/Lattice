@@ -1,0 +1,211 @@
+@if (loading) {
+  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+}
+
+@if (instance) {
+  <div class="instance-page">
+    <div class="page-head">
+      <button mat-icon-button (click)="back()" matTooltip="Back to blueprints">
+        <mat-icon>arrow_back</mat-icon>
+      </button>
+      <div class="head-text">
+        <h1 class="instance-name">{{ instance.name }}</h1>
+        <!-- The area is created with the setup's own name, so showing both is noise. Only worth
+             saying when the user has since renamed one of them. -->
+        <span class="instance-sub">
+          {{ instance.blueprint.name }} · v{{ instance.blueprint.version }}
+          @if (instance.area && instance.area.name !== instance.name) {
+            · in {{ instance.area.name }}
+          }
+        </span>
+      </div>
+    </div>
+
+    <!-- ── A newer blueprint version exists ────────────────────────────── -->
+    @if (instance.blueprint_version_behind) {
+      <div class="notice lattice-card">
+        <mat-icon>system_update_alt</mat-icon>
+        <span>A newer version of this blueprint is available. Your own edits are kept.</span>
+        <button mat-flat-button color="primary" (click)="reconcile()" [disabled]="busy">
+          Update
+        </button>
+      </div>
+    }
+
+    <!-- ── Phase timeline ──────────────────────────────────────────────── -->
+    @if (instance.phases.length > 0) {
+      <h2 class="section-title">Phase</h2>
+      <div class="phase-track">
+        @for (phase of instance.phases; track phase.id) {
+          <button
+            class="phase-step"
+            [class.current]="phase.is_current"
+            [disabled]="busy || phase.is_current"
+            (click)="setPhase(phase)"
+            [matTooltip]="phase.is_current ? 'Current phase' : 'Move to this phase'">
+            <span class="phase-dot"></span>
+            <span class="phase-name">{{ phase.name }}</span>
+            @if (phaseDuration(phase)) {
+              <span class="phase-duration">{{ phaseDuration(phase) }}</span>
+            }
+          </button>
+        }
+      </div>
+    }
+
+    <!-- ── Parameters ──────────────────────────────────────────────────── -->
+    @if (instance.params.length > 0) {
+      <h2 class="section-title">Settings</h2>
+      <div class="param-list lattice-card">
+        @for (param of instance.params; track param.key) {
+          <div class="param-row" [class.overridden]="param.source.endsWith('override')">
+            <div class="param-text">
+              <span class="param-label">{{ param.label }}</span>
+              <span class="param-source">{{ sourceLabel(param.source) }}</span>
+            </div>
+
+            @if (param.user_tunable) {
+              <mat-form-field appearance="outline" class="param-input" subscriptSizing="dynamic">
+                <input
+                  matInput
+                  [(ngModel)]="drafts[draftKey(param, null)]"
+                  (blur)="commitParam(param)"
+                  (keyup.enter)="commitParam(param)"
+                  [disabled]="busy"
+                  matTooltip="Sets this for every phase" />
+                @if (param.unit) {
+                  <span matTextSuffix>{{ param.unit }}</span>
+                }
+              </mat-form-field>
+
+              <button
+                mat-icon-button
+                class="reset-param"
+                [disabled]="busy || !isPinned(param, null)"
+                (click)="clearParam(param)"
+                matTooltip="Use the blueprint's value again">
+                <mat-icon>settings_backup_restore</mat-icon>
+              </button>
+            } @else {
+              <span class="param-fixed">{{ param.value }}{{ param.unit }}</span>
+            }
+
+            <!-- Per-phase breakdown. Collapsed by default: the common case is one value for the
+                 whole lifecycle, and the grid is only interesting when it isn't. -->
+            @if (param.phases.length > 0) {
+              <button
+                mat-icon-button
+                class="expand-param"
+                (click)="toggleExpanded(param)"
+                [matTooltip]="
+                  isExpanded(param) ? 'Hide phases' : 'Set a different value per phase'
+                ">
+                <mat-icon>{{ isExpanded(param) ? 'expand_less' : 'expand_more' }}</mat-icon>
+              </button>
+              @if (!isExpanded(param) && tunedPhaseCount(param) > 0) {
+                <span
+                  class="tuned-chip"
+                  matTooltip="You set a value for {{ tunedPhaseCount(param) }} phase(s)">
+                  {{ tunedPhaseCount(param) }} tuned
+                </span>
+              }
+            }
+          </div>
+
+          @if (isExpanded(param)) {
+            <div class="phase-params">
+              @for (cell of param.phases; track cell.phase_key) {
+                <div class="phase-param-row" [class.current]="cell.is_current">
+                  <div class="param-text">
+                    <span class="param-label">
+                      {{ cell.phase_name }}
+                      @if (cell.is_current) {
+                        <span class="now-chip">now</span>
+                      }
+                    </span>
+                    <span class="param-source">{{ sourceLabel(cell.source) }}</span>
+                  </div>
+
+                  @if (param.user_tunable) {
+                    <mat-form-field
+                      appearance="outline"
+                      class="param-input"
+                      subscriptSizing="dynamic">
+                      <input
+                        matInput
+                        [(ngModel)]="drafts[draftKey(param, cell)]"
+                        (blur)="commitParam(param, cell)"
+                        (keyup.enter)="commitParam(param, cell)"
+                        [disabled]="busy" />
+                      @if (param.unit) {
+                        <span matTextSuffix>{{ param.unit }}</span>
+                      }
+                    </mat-form-field>
+
+                    <button
+                      mat-icon-button
+                      class="reset-param"
+                      [disabled]="busy || !isPinned(param, cell)"
+                      (click)="clearParam(param, cell)"
+                      matTooltip="Use the blueprint's value for this phase again">
+                      <mat-icon>settings_backup_restore</mat-icon>
+                    </button>
+                  } @else {
+                    <span class="param-fixed">{{ cell.value }}{{ param.unit }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+
+    <!-- ── Devices ─────────────────────────────────────────────────────── -->
+    <h2 class="section-title">Devices</h2>
+    <div class="binding-list lattice-card">
+      @for (binding of instance.bindings; track binding.slot_key) {
+        <div class="binding-row">
+          <mat-icon class="binding-icon">developer_board</mat-icon>
+          <span class="binding-label">{{ binding.label }}</span>
+          <span class="binding-device">device #{{ binding.user_device_id }}</span>
+          @if (binding.auto_bound) {
+            <span class="auto-chip" matTooltip="Matched automatically">auto</span>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- ── Drift ───────────────────────────────────────────────────────── -->
+    @if (driftedEntities().length > 0) {
+      <h2 class="section-title">Your edits</h2>
+      <div class="drift-list lattice-card">
+        <p class="drift-intro">
+          These were changed by you, so blueprint updates leave them alone.
+        </p>
+        @for (entity of driftedEntities(); track entity.kind + entity.id) {
+          <div class="drift-row">
+            <mat-icon class="drift-icon">edit</mat-icon>
+            <span class="drift-name">{{ entity.name }}</span>
+            <span class="drift-kind">{{ entity.kind }}</span>
+            <button mat-stroked-button (click)="reset(entity)" [disabled]="busy">
+              Restore
+            </button>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="page-actions">
+      <button mat-stroked-button class="delete-setup" (click)="remove()" [disabled]="busy">
+        <mat-icon>delete_outline</mat-icon>
+        Delete setup
+      </button>
+      <span class="spacer"></span>
+      <button mat-stroked-button (click)="reconcile()" [disabled]="busy">
+        <mat-icon>sync</mat-icon>
+        Update from blueprint
+      </button>
+    </div>
+  </div>
+}

@@ -1,0 +1,93 @@
+<div class="blueprints-page">
+  @if (loading) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
+  <!-- ── Your setups ─────────────────────────────────────────────────── -->
+  @if (setups.length > 0) {
+    <h2 class="section-title">Your setups</h2>
+    <div class="setup-list">
+      @for (setup of setups; track setup.id) {
+        <div
+          class="setup-card lattice-card"
+          role="button"
+          tabindex="0"
+          (click)="open(setup)"
+          (keyup.enter)="open(setup)"
+          (keyup.space)="open(setup)">
+          <mat-icon class="setup-icon">hub</mat-icon>
+          <div class="setup-text">
+            <span class="setup-name">{{ setup.name }}</span>
+            <span class="setup-sub">from {{ setup.blueprint_key }}</span>
+          </div>
+          <mat-icon class="chevron">chevron_right</mat-icon>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ── Gallery ─────────────────────────────────────────────────────── -->
+  <h2 class="section-title">{{ setups.length > 0 ? 'Set up something else' : 'Available setups' }}</h2>
+
+  @if (!loading && available.length === 0) {
+    <div class="empty-state lattice-card">
+      <mat-icon class="empty-icon">architecture</mat-icon>
+      <p>No blueprints have been published yet.</p>
+    </div>
+  }
+
+  <div class="gallery">
+    @for (bp of available; track bp.blueprint_id) {
+      <div class="bp-card lattice-card" [class.not-ready]="!isReady(bp)">
+        <div class="bp-header">
+          <mat-icon class="bp-icon">architecture</mat-icon>
+          <span class="bp-name">{{ bp.name }}</span>
+          <span class="spacer"></span>
+          <span class="bp-version">v{{ bp.version }}</span>
+        </div>
+
+        <div class="slot-list">
+          <!-- Counts are of *free* devices: one already running another setup cannot fill a slot
+               here, so counting it would promise a device the wizard then refuses to offer. -->
+          @for (slot of bp.slots; track slot.slot_key) {
+            @let free = freeCandidates(slot);
+            <div
+              class="slot-row"
+              [class.unmet]="slot.required && free.length === 0"
+              [class.choice]="free.length > 1">
+              <mat-icon class="slot-status">
+                {{
+                  free.length === 0
+                    ? (slot.required ? 'error_outline' : 'remove')
+                    : free.length > 1
+                      ? 'help_outline'
+                      : 'check_circle'
+                }}
+              </mat-icon>
+              <span class="slot-label">{{ slot.label }}</span>
+              <span class="slot-detail">
+                @if (free.length === 1) {
+                  {{ free[0].name }}
+                } @else if (free.length > 1) {
+                  {{ free.length }} to choose from
+                } @else if (slot.candidates.length > 0) {
+                  already in another setup
+                } @else {
+                  no matching device
+                }
+              </span>
+            </div>
+          }
+        </div>
+
+        <div class="bp-footer">
+          <span class="readiness" [class.ok]="isReady(bp)">{{ readinessText(bp) }}</span>
+          <span class="spacer"></span>
+          <button mat-flat-button color="primary" [disabled]="!isReady(bp)" (click)="derive(bp)">
+            Set up
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+</div>

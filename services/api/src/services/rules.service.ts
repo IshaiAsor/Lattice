@@ -43,6 +43,8 @@ export interface RuleView {
   is_emergency: boolean;
   condition_operator: string;
   cooldown_seconds: number;
+  // Phases this rule is active in (F10, blueprint-authored). Empty = every phase.
+  phase_scope: string[];
   last_triggered: Date | null;
   conditions: RuleConditionView[];
   actions: RuleActionView[];
@@ -187,6 +189,7 @@ class RulesService {
     is_emergency: boolean;
     condition_operator: string;
     cooldown_seconds: number;
+    phase_scope: string[];
     last_triggered: Date | null;
     conditions: {
       id: number;
@@ -213,6 +216,7 @@ class RulesService {
       is_emergency: r.is_emergency,
       condition_operator: r.condition_operator,
       cooldown_seconds: r.cooldown_seconds,
+      phase_scope: r.phase_scope,
       last_triggered: r.last_triggered,
       conditions: r.conditions.map((c) => ({
         id: c.id,

@@ -270,6 +270,12 @@
 }
 .exec-note mat-icon { font-size: 16px; width: 16px; height: 16px; }
 
+.vision-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0 8px;
+}
+
 .exec-fields {
   display: flex;
   flex-wrap: wrap;

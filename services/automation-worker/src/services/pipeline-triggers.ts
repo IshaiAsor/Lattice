@@ -3,12 +3,15 @@ import type { TelemetryArrivedPayload } from '@lattice/queue';
 import { publish, RK } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import {
+  EMPTY_PARAM_CONTEXT,
   evaluateThreshold,
   isErrorReading,
   isPhaseInScope,
   isTriggerInCooldown,
+  resolveParam,
 } from '@lattice/params';
 import { db, Prisma } from '../db/client';
+import { loadParamContexts } from './param-context';
 
 const log = createLogger('automation-worker:pipeline-triggers');
 
@@ -53,17 +56,38 @@ export async function matchPipelineTriggers(
           id: true,
           user_id: true,
           phase_scope: true,
+          blueprint_instance_id: true,
           blueprint_instance: { select: { current_phase: { select: { key: true } } } },
         },
       },
     },
   });
 
+  // `threshold_value` is one of the positions a blueprint may fill with a `@param.` / `@phase.`
+  // reference, stored verbatim by derive — so it has to be resolved here for the same reason the
+  // rule engine resolves its condition thresholds. Unresolved, `evaluateThreshold` parses the
+  // reference to NaN, falls back to string equality against the reading, and the trigger simply
+  // never fires: no error, no log, a dead automation.
+  const contexts = await loadParamContexts(triggers.map((t) => t.pipeline.blueprint_instance_id));
+
   const now = new Date();
   for (const trigger of triggers) {
     const currentPhaseKey = trigger.pipeline.blueprint_instance?.current_phase?.key ?? null;
     if (!isPhaseInScope(trigger.pipeline.phase_scope, currentPhaseKey)) continue;
-    if (!evaluateThreshold(value, trigger.operator!, trigger.threshold_value!)) continue;
+
+    const instanceId = trigger.pipeline.blueprint_instance_id;
+    const ctx = (instanceId !== null ? contexts.get(instanceId) : undefined) ?? EMPTY_PARAM_CONTEXT;
+    // Fail closed, like the rule engine: a reference with nothing behind it must not be compared
+    // as raw text.
+    const threshold = resolveParam(trigger.threshold_value, ctx);
+    if (threshold === null) {
+      log.warn(
+        { triggerId: trigger.id, threshold_value: trigger.threshold_value },
+        'pipeline trigger threshold references an unresolvable parameter — not evaluated',
+      );
+      continue;
+    }
+    if (!evaluateThreshold(value, trigger.operator!, threshold)) continue;
 
     // Per-trigger cooldown, persisted on the trigger row (durable across restarts — unlike the
     // former Valkey key, which reset on restart and could double-fire).

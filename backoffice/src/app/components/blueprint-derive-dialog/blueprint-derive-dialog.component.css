@@ -1,0 +1,126 @@
+.derive-content {
+  padding-top: 8px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.slots-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 4px 0 8px;
+  letter-spacing: 0.02em;
+}
+
+.slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slot-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.slot-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.slot-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.optional-badge,
+.auto-badge,
+.taken-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.optional-badge {
+  background: var(--surface-2, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+}
+
+.auto-badge {
+  margin-left: auto;
+  color: var(--online, #4caf50);
+}
+.auto-badge mat-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.matched-device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.matched-device mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+.matched-device.none {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.taken-badge {
+  margin-left: auto;
+  color: var(--text-dim);
+}
+.taken-badge mat-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.matched-device.taken {
+  color: var(--text-dim);
+}
+
+.device-type {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Shown only for same-named twins, so it must read as an identifier, not decoration. */
+.device-mac {
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface-2, rgba(128, 128, 128, 0.15));
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.in-use {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.derive-error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(239, 83, 80, 0.12);
+  color: var(--offline, #ef5350);
+  font-size: 13px;
+}

@@ -1103,14 +1103,23 @@ model BlueprintSlotBinding {
 
 // The user's own tuning. Beats the phase target and the blueprint default. Reconcile never
 // touches this table — that is what makes a v2 release non-destructive to user intent.
+// The user's own value for a param — always per *instance*, never on the blueprint, so two
+// instances of the same blueprint can be tuned independently without either touching the shared
+// template. `phase_key` narrows it further: "" means every phase, a phase key means that phase
+// alone, so correcting one phase is no longer the same act as opting out of the schedule.
+//
+// "" rather than NULL because Postgres treats NULLs as distinct in a unique index (two all-phases
+// rows would both be accepted) and Prisma cannot take a null component in a compound-unique where,
+// which the upsert in blueprints.instances.service depends on.
 model BlueprintParamOverride {
   id          Int    @id @default(autoincrement())
   instance_id Int
   param_key   String @db.VarChar(64)
+  phase_key   String @default("") @db.VarChar(64)
   value       String @db.VarChar(100)
 
   instance BlueprintInstance @relation(fields: [instance_id], references: [id], onDelete: Cascade)
 
-  @@unique([instance_id, param_key])
+  @@unique([instance_id, param_key, phase_key])
   @@map("blueprint_param_overrides")
 }

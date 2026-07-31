@@ -1,0 +1,196 @@
+{
+  "key": "monitored_tank",
+  "name": "Monitored Tank Loop",
+  "description": "A liquid tank with a level reading and a two-channel socket board driving a top-up pump. The pump refills the tank below a threshold and an assessment pipeline reviews the readings on a schedule.",
+  "context_notes": "A closed tank kept between a low and high level by a single pump. Prefer short pump runs over long ones. The second socket channel is a spare with nothing attached, and is only touched by the stop-everything scene \u2014 which is why it is driven by a literal OFF while every write aimed at the pump goes through the pump on/off value parameters.",
+  "slots": [
+    {
+      "key": "tank_monitor",
+      "label": "Tank monitor",
+      "required": true,
+      "sealed_template": "Tank Monitor Board",
+      "sort_order": 0
+    },
+    {
+      "key": "socket_board",
+      "label": "Socket board",
+      "required": true,
+      "sealed_template": "Socket Board 2ch",
+      "sort_order": 1
+    }
+  ],
+  "params": [
+    {
+      "key": "refill_below",
+      "label": "Refill below",
+      "default_value": "20",
+      "unit": "%"
+    },
+    {
+      "key": "stop_filling_at",
+      "label": "Stop filling at",
+      "default_value": "90",
+      "unit": "%"
+    },
+    {
+      "key": "pump_on_value",
+      "label": "Pump on value",
+      "default_value": "on",
+      "user_tunable": false
+    },
+    {
+      "key": "pump_off_value",
+      "label": "Pump off value",
+      "default_value": "off",
+      "user_tunable": false
+    }
+  ],
+  "phases": [
+    {
+      "key": "commissioning",
+      "name": "Commissioning",
+      "ordinal": 1,
+      "duration_value": 2,
+      "duration_unit": "days",
+      "auto_advance": true,
+      "context_notes": "The loop was just set up; readings may be unstable and the tank is being filled for the first time. Be conservative about flagging anomalies.",
+      "targets": [
+        {
+          "param_key": "refill_below",
+          "value": "40"
+        },
+        {
+          "param_key": "stop_filling_at",
+          "value": "95"
+        }
+      ]
+    },
+    {
+      "key": "steady_state",
+      "name": "Steady state",
+      "ordinal": 2,
+      "auto_advance": false,
+      "context_notes": "The loop has been running normally. Treat a sustained drop in level as a possible leak.",
+      "targets": [
+        {
+          "param_key": "refill_below",
+          "value": "20"
+        }
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "key": "stop_the_loop",
+      "name": "Stop the loop",
+      "members": [
+        {
+          "slot_key": "socket_board",
+          "action_name": "i2c_socket_8",
+          "target_state": "@param.pump_off_value"
+        },
+        {
+          "slot_key": "socket_board",
+          "action_name": "i2c_socket_8_2",
+          "target_state": "off"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "key": "refill_the_tank",
+      "name": "Refill the tank",
+      "cooldown_seconds": 300,
+      "conditions": [
+        {
+          "condition_type": "threshold",
+          "slot_key": "tank_monitor",
+          "action_name": "water_level",
+          "operator": "<",
+          "threshold_value": "@phase.refill_below"
+        }
+      ],
+      "actions": [
+        {
+          "slot_key": "socket_board",
+          "action_name": "i2c_socket_8",
+          "target_state": "@param.pump_on_value"
+        }
+      ]
+    },
+    {
+      "key": "stop_refilling",
+      "name": "Stop refilling",
+      "cooldown_seconds": 60,
+      "conditions": [
+        {
+          "condition_type": "threshold",
+          "slot_key": "tank_monitor",
+          "action_name": "water_level",
+          "operator": ">=",
+          "threshold_value": "@phase.stop_filling_at"
+        }
+      ],
+      "actions": [
+        {
+          "slot_key": "socket_board",
+          "action_name": "i2c_socket_8",
+          "target_state": "@param.pump_off_value"
+        }
+      ]
+    }
+  ],
+  "pipelines": [
+    {
+      "key": "loop_review",
+      "name": "Loop review",
+      "sensors": [
+        {
+          "group_name": "tank",
+          "description": "Liquid level in the tank",
+          "slot_key": "tank_monitor",
+          "action_name": "water_level",
+          "min_value": "@phase.refill_below",
+          "max_value": "@phase.stop_filling_at",
+          "compression": "average",
+          "window_minutes": 60
+        },
+        {
+          "group_name": "actuators",
+          "description": "The top-up pump",
+          "slot_key": "socket_board",
+          "action_name": "i2c_socket_8",
+          "inject_as_sensor": false,
+          "inject_as_action": true
+        }
+      ],
+      "stages": [
+        {
+          "ordinal": 1,
+          "kind": "enrich"
+        },
+        {
+          "ordinal": 2,
+          "kind": "infer",
+          "ml_model": {
+            "kind": "llm",
+            "name": "gemini",
+            "version": "v1"
+          },
+          "prompt_template": "This loop is in its @phase.name phase. @phase.context_notes The tank should stay between @phase.refill_below% and @phase.stop_filling_at%. Assess the readings and decide whether the pump should run."
+        },
+        {
+          "ordinal": 3,
+          "kind": "command_exec"
+        }
+      ],
+      "triggers": [
+        {
+          "trigger_type": "schedule",
+          "schedule_cron": "0 */6 * * *"
+        }
+      ]
+    }
+  ]
+}

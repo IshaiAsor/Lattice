@@ -1,0 +1,756 @@
+/* Full-width two-pane, same inset as the sealed-templates admin page. */
+.admin-blueprints {
+  padding: 18px;
+  box-sizing: border-box;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ── List pane ───────────────────────────────────────────────────────── */
+
+.list-pane {
+  padding: 4px 0 8px;
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pane-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.pane-empty {
+  padding: 12px 14px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.pane-empty.warn {
+  color: var(--offline, #ef5350);
+}
+
+.bp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 8px 9px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.bp-row:hover {
+  background: var(--surface-2, rgba(128, 128, 128, 0.08));
+}
+.bp-row.active {
+  border-left: 3px solid var(--primary);
+  padding-left: 11px;
+}
+
+.bp-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.bp-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.status-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--surface-2, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.status-chip.published {
+  background: color-mix(in srgb, var(--online, #4caf50) 20%, transparent);
+  color: var(--online, #4caf50);
+}
+
+.del-btn {
+  flex-shrink: 0;
+}
+
+/* ── Builder pane ────────────────────────────────────────────────────── */
+
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* A floating toolbar, styled as a card so it belongs with the sections below it rather than
+   reading as a bare band of buttons on the page gradient. Same tokens as .lattice-card (minus its
+   hover shadow); inset to top: 8px so it floats like the blueprint list pane opposite it, and the
+   frosted blur turns cards scrolling underneath into a soft wash instead of a hard overlap. */
+.editor-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+}
+
+.editor-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.section {
+  padding: 12px 14px 14px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* An outline mat-form-field's floating label rides UP out of the box into its own border, so a
+     heading above one needs real clearance — 8px still reads as collided text. */
+  margin-bottom: 14px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  /* Spacing comes from .section-head; the title itself sits inside the toggle, where an `auto`
+     margin would shove the count chip to the far end of the row. */
+  margin: 0;
+}
+
+/* Collapsed, a section is only its header — it shouldn't reserve body padding underneath. */
+.section:not(:has(.row-card, .field-grid, .hint-empty, mat-form-field)) {
+  padding-bottom: 4px;
+}
+.section:not(:has(.row-card, .field-grid, .hint-empty, mat-form-field)) .section-head {
+  margin-bottom: 0;
+}
+
+/* The whole heading is the hit target, not just the caret — a 20px icon is a poor thing to have
+   to aim at when the row it opens is 300px wide. */
+.section-toggle,
+.row-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+}
+.section-toggle:focus-visible,
+.row-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.caret {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+/* How many rows are inside — the one thing worth knowing about a collapsed section. */
+.count-chip {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  text-align: center;
+  background: var(--surface-2, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+}
+
+/* ── Collapsed row summary ───────────────────────────────────────────── */
+
+.row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* An expanded card puts a field straight under this header, and an outline field's floating label
+   rides UP out of its box — so without clearance the label sits on the header text. `:not(:last-child)`
+   scopes it to the expanded state: collapsed, the header is the only child and stays tight. */
+.row-head:not(:last-child) {
+  margin-bottom: 14px;
+}
+.row-head .row-toggle {
+  flex: 1;
+  padding: 4px 2px;
+  overflow: hidden;
+}
+
+/* The key leads: it is what rules, phase targets and bindings actually reference. */
+.row-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(128, 128, 128, 0.12));
+  flex-shrink: 0;
+}
+
+.row-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-left: auto;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* A parameter's default is the point of the row, so it reads as a value rather than as meta. */
+.row-meta.value {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-chip {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--primary);
+}
+.row-chip.fixed {
+  background: var(--surface-2, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+}
+.row-chip.danger {
+  background: rgba(239, 83, 80, 0.16);
+  color: var(--offline, #ef5350);
+}
+
+.ordinal-badge {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.hint-empty,
+.hint-inline {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.hint-inline {
+  margin-left: 2px;
+}
+
+/* The actions a slot brings — read-only, because a slot exposes all of its template's entries
+   and the choice of which one to use belongs to the rule/scene/pipeline that addresses it. */
+.slot-actions {
+  border-left: 2px solid var(--primary);
+  padding: 2px 0 2px 10px;
+  margin: 0 0 10px;
+}
+
+.slot-actions-title {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.slot-actions ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.slot-actions li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.action-label {
+  font-weight: 500;
+}
+
+.slot-actions code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.slot-actions-empty {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--offline, #ef5350);
+}
+
+/* One row of the repeatable lists. */
+.row-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 12px;
+  margin-bottom: 10px;
+}
+/* Padding only opens up once there are fields to clear — a collapsed row is a single line. */
+.row-card:has(.field-grid),
+.row-card:has(.mode-row) {
+  padding: 4px 12px 6px;
+}
+
+/* Fixed and tunable parameters are the same shape but opposite in meaning, so the mode is carried
+   on the card itself and not only by a checkbox at the far end of the form. */
+.param-card {
+  border-left: 3px solid var(--border);
+}
+.param-card.mode-user {
+  border-left-color: var(--primary);
+}
+.param-card.mode-fixed {
+  border-left-color: var(--text-dim);
+}
+
+/* Adjustable vs fixed params, split into two labelled groups. The kinds are opposite in meaning
+   — a variable the user tunes vs an alias the blueprint asserts — and read as the same thing when
+   interleaved in one list. */
+.param-group + .param-group {
+  margin-top: 18px;
+}
+
+.param-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.param-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.param-group--fixed .param-group-title {
+  color: var(--text-dim);
+}
+
+.param-group-note {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.mode-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 0 8px;
+}
+
+.mode-note {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.field-grid {
+  display: grid;
+  /* Top-aligned, not stretched: with subscriptSizing="dynamic" only a field that *has* a hint
+     reserves subscript space, so stretching makes the hintless neighbour's box taller than the
+     one beside it and the two boxes stop lining up. */
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  /* Row gap, not 0: a wrapping mat-hint sits below the box while the next field's floating
+     label rides up into its border, so merely-touching rows still read as collided text. */
+  gap: 10px 10px;
+}
+.field-grid.four {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+/* A value and its unit are one thing: the unit is a suffix, not a peer field. Fixed columns
+   rather than auto-fit, so it can't reflow onto its own row away from the value it qualifies. */
+.field-grid.pair {
+  grid-template-columns: 2fr 1fr;
+}
+
+/* Same reason: a field following a hinted grid needs clearance — the grid's mat-hint sits below
+   its box while the next field's floating label rides up into its own border, so the two meet in
+   the gap. Measured overlap without this is 6px. Both orders need it. */
+.field-grid + .full,
+.field-grid + .field-grid,
+.full + .field-grid,
+.full + .full {
+  margin-top: 14px;
+}
+
+.full {
+  width: 100%;
+}
+
+.row-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+/* Two device-count controls wrap onto their own lines on a narrow card rather than crowding. */
+.slot-foot {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 4px;
+}
+
+.count-range {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+.count-range .narrow {
+  flex: 0 1 110px;
+}
+.count-hint {
+  flex: 1 1 220px;
+  min-width: 200px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  align-self: center;
+}
+
+/* "Active in phases" checkbox group — one box per phase, all ticked by default. */
+.phase-scope-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.phase-scope-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.phase-scope-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.phase-scope-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.sub-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+
+.sub-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+/* The AND/OR combinator, sized to read as part of the "If … are true" sentence. */
+.op-select {
+  flex: 0 0 150px;
+}
+
+.sub-note {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* A condition / action / member: fields side by side, wrapping on narrow screens. */
+.inline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.inline-row.wrap {
+  flex-wrap: wrap;
+}
+.inline-row .grow {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+/* Sized for a human label ("Tank monitor"), not the short machine key these selects used to
+   show — 140px truncated them, which defeats the point of showing the label at all. */
+.inline-row .narrow {
+  flex: 0 1 172px;
+}
+.inline-row .tiny {
+  flex: 0 1 100px;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  padding-top: 6px;
+}
+
+/* ── Pipeline reading groups ─────────────────────────────────────────── */
+
+.sensor-group {
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+  margin: 0 0 14px;
+}
+
+.sensor-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.group-name {
+  flex: 0 1 200px;
+}
+
+.group-count {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sensor-card {
+  margin-bottom: 8px;
+}
+
+.schedule-summary {
+  font-size: 12px;
+  color: var(--text-dim);
+  align-self: center;
+  padding-top: 6px;
+}
+
+.stage-block {
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+  margin-bottom: 8px;
+}
+
+.ordinal {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  padding-top: 18px;
+}
+
+/* Quick-insert buttons for @phase./@param. references inside prompt text. */
+.ref-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 10px;
+}
+.ref-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+/* A machine id shown beside the human name it belongs to — the name leads, the id is a
+   disambiguator, never the label itself. */
+mat-option .dim,
+.mat-mdc-menu-item .dim {
+  margin-left: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+/* Generated machine id, shown so it is discoverable (logs, the JSON document, support) without
+   being another field to fill in. */
+.generated-id {
+  /* No negative top margin: the field above may carry a wrapping mat-hint, and pulling up into it
+     is exactly the collision this line is meant to sit clear of. */
+  margin: 2px 0 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.generated-id code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-muted);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(128, 128, 128, 0.12));
+}
+
+.io-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.json-box {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* Tinted rather than transparent so it reads as an input on the card behind it, the same way a
+     filled mat-form-field does — a transparent box on glass reads as an outline drawn on nothing. */
+  background: var(--surface-2, rgba(128, 128, 128, 0.08));
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.json-box::placeholder {
+  color: var(--text-dim);
+}
+.json-box:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* ── Validation result ───────────────────────────────────────────────── */
+
+.result-pane {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.result-pane strong {
+  display: block;
+  margin-bottom: 2px;
+}
+.result-pane p {
+  margin: 0;
+  color: var(--text-muted);
+}
+.result-pane ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+.result-pane li {
+  margin-bottom: 3px;
+}
+
+/* In the sticky toolbar the pane takes its own line under the buttons and caps its height, so a
+   twenty-problem list scrolls inside the bar instead of pushing the form off the screen. */
+.editor-head .result-pane {
+  flex-basis: 100%;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.result-pane.valid {
+  background: color-mix(in srgb, var(--online, #4caf50) 12%, transparent);
+}
+.result-pane.valid mat-icon {
+  color: var(--online, #4caf50);
+}
+
+.result-pane.invalid {
+  background: rgba(239, 83, 80, 0.12);
+}
+.result-pane.invalid mat-icon {
+  color: var(--offline, #ef5350);
+}
+
+.publish-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .list-pane {
+    position: static;
+    max-height: none;
+  }
+}

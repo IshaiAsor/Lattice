@@ -1,6 +1,5 @@
 @if (!hideSidebar()) {
   <aside class="sidebar" [class.collapsed]="sidebarCollapsed()">
-
     <!-- Brand -->
     <div class="sidebar-brand">
       <div class="brand-icon-wrap">
@@ -14,72 +13,152 @@
     <!-- Nav links -->
     @if (authService.getCurrentUser(); as user) {
       <nav class="sidebar-nav">
-
         @if (!sidebarCollapsed()) {
           <span class="nav-section-label">Main</span>
         }
 
-        <a class="sidebar-link" routerLink="/dashboard" routerLinkActive="active"
-           [matTooltip]="sidebarCollapsed() ? 'Dashboard' : ''" matTooltipPosition="right">
+        <a
+          class="sidebar-link"
+          routerLink="/dashboard"
+          routerLinkActive="active"
+          [matTooltip]="sidebarCollapsed() ? 'Dashboard' : ''"
+          matTooltipPosition="right"
+        >
           <mat-icon>dashboard</mat-icon>
-          @if (!sidebarCollapsed()) { <span>Dashboard</span> }
+          @if (!sidebarCollapsed()) {
+            <span>Dashboard</span>
+          }
         </a>
 
-        <a class="sidebar-link" routerLink="/devices" routerLinkActive="active"
-           [matTooltip]="sidebarCollapsed() ? 'Devices' : ''" matTooltipPosition="right">
+        <a
+          class="sidebar-link"
+          routerLink="/devices"
+          routerLinkActive="active"
+          [matTooltip]="sidebarCollapsed() ? 'Devices' : ''"
+          matTooltipPosition="right"
+        >
           <mat-icon>device_hub</mat-icon>
-          @if (!sidebarCollapsed()) { <span>Devices</span> }
+          @if (!sidebarCollapsed()) {
+            <span>Devices</span>
+          }
         </a>
 
-        <a class="sidebar-link" routerLink="/automations" routerLinkActive="active"
-           [matTooltip]="sidebarCollapsed() ? 'Automate' : ''" matTooltipPosition="right">
+        <a
+          class="sidebar-link"
+          routerLink="/automations"
+          routerLinkActive="active"
+          [matTooltip]="sidebarCollapsed() ? 'Automate' : ''"
+          matTooltipPosition="right"
+        >
           <mat-icon>bolt</mat-icon>
-          @if (!sidebarCollapsed()) { <span>Automate</span> }
+          @if (!sidebarCollapsed()) {
+            <span>Automate</span>
+          }
         </a>
 
-        <a class="sidebar-link sidebar-link--badge" routerLink="/notifications" routerLinkActive="active"
-           [matTooltip]="sidebarCollapsed() ? 'Notifications' : ''" matTooltipPosition="right">
+        <a
+          class="sidebar-link"
+          routerLink="/blueprints"
+          routerLinkActive="active"
+          [matTooltip]="sidebarCollapsed() ? 'Set up' : ''"
+          matTooltipPosition="right"
+        >
+          <mat-icon>architecture</mat-icon>
+          @if (!sidebarCollapsed()) {
+            <span>Set up</span>
+          }
+        </a>
+
+        <a
+          class="sidebar-link sidebar-link--badge"
+          routerLink="/notifications"
+          routerLinkActive="active"
+          [matTooltip]="sidebarCollapsed() ? 'Notifications' : ''"
+          matTooltipPosition="right"
+        >
           <span class="nav-icon-wrap">
             <mat-icon>notifications</mat-icon>
             @if (notifications.unreadCount() > 0) {
-              <span class="nav-badge">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span>
+              <span class="nav-badge">{{
+                notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount()
+              }}</span>
             }
           </span>
-          @if (!sidebarCollapsed()) { <span>Notifications</span> }
+          @if (!sidebarCollapsed()) {
+            <span>Notifications</span>
+          }
         </a>
 
         @if (!sidebarCollapsed()) {
           <span class="nav-section-label">Tools</span>
         }
 
-        <a class="sidebar-link" (click)="openAIEditor()" (keyup.enter)="openAIEditor()" tabindex="0"
-           [matTooltip]="sidebarCollapsed() ? 'Ask AI' : ''" matTooltipPosition="right">
+        <a
+          class="sidebar-link"
+          (click)="openAIEditor()"
+          (keyup.enter)="openAIEditor()"
+          tabindex="0"
+          [matTooltip]="sidebarCollapsed() ? 'Ask AI' : ''"
+          matTooltipPosition="right"
+        >
           <mat-icon>auto_awesome</mat-icon>
-          @if (!sidebarCollapsed()) { <span>Ask AI</span> }
+          @if (!sidebarCollapsed()) {
+            <span>Ask AI</span>
+          }
         </a>
 
         @if (user.role === 'admin') {
           @if (!sidebarCollapsed()) {
             <span class="nav-section-label">Admin</span>
           }
-          <a class="sidebar-link" routerLink="/admin/templates" routerLinkActive="active"
-             [matTooltip]="sidebarCollapsed() ? 'Templates' : ''" matTooltipPosition="right">
+          <a
+            class="sidebar-link"
+            routerLink="/admin/templates"
+            routerLinkActive="active"
+            [matTooltip]="sidebarCollapsed() ? 'Device Catalog' : ''"
+            matTooltipPosition="right"
+          >
             <mat-icon>build</mat-icon>
-            @if (!sidebarCollapsed()) { <span>Templates</span> }
+            @if (!sidebarCollapsed()) {
+              <span>Device Catalog</span>
+            }
           </a>
-          <a class="sidebar-link" routerLink="/admin/sealed-templates" routerLinkActive="active"
-             [matTooltip]="sidebarCollapsed() ? 'Sealed Templates' : ''" matTooltipPosition="right">
+          <a
+            class="sidebar-link"
+            routerLink="/admin/sealed-templates"
+            routerLinkActive="active"
+            [matTooltip]="sidebarCollapsed() ? 'Sealed Device Template' : ''"
+            matTooltipPosition="right"
+          >
             <mat-icon>lock</mat-icon>
-            @if (!sidebarCollapsed()) { <span>Sealed Templates</span> }
+            @if (!sidebarCollapsed()) {
+              <span>Sealed Device Template</span>
+            }
+          </a>
+          <a
+            class="sidebar-link"
+            routerLink="/admin/blueprints"
+            routerLinkActive="active"
+            [matTooltip]="sidebarCollapsed() ? 'Blueprints' : ''"
+            matTooltipPosition="right"
+          >
+            <mat-icon>architecture</mat-icon>
+            @if (!sidebarCollapsed()) {
+              <span>Blueprints</span>
+            }
           </a>
         }
-
       </nav>
 
       <!-- Profile -->
       <div class="sidebar-profile" [class.collapsed]="sidebarCollapsed()">
-        <button mat-icon-button [matMenuTriggerFor]="profileMenu" class="profile-avatar-btn"
-                [matTooltip]="sidebarCollapsed() ? user.username : ''" matTooltipPosition="right">
+        <button
+          mat-icon-button
+          [matMenuTriggerFor]="profileMenu"
+          class="profile-avatar-btn"
+          [matTooltip]="sidebarCollapsed() ? user.username : ''"
+          matTooltipPosition="right"
+        >
           @if (user.profileImage) {
             <img [src]="user.profileImage" class="profile-pic" alt="Profile" />
           } @else {
@@ -100,25 +179,32 @@
 
     <!-- Footer: theme toggle + collapse -->
     <div class="sidebar-footer">
-      <button class="icon-btn" (click)="themeService.toggle()"
+      <button
+        class="icon-btn"
+        (click)="themeService.toggle()"
         [matTooltip]="themeService.theme() === 'dark' ? 'Switch to light' : 'Switch to dark'"
-        matTooltipPosition="right">
+        matTooltipPosition="right"
+      >
         <mat-icon>{{ themeService.theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
       </button>
-      <button class="icon-btn collapse-btn" (click)="toggleSidebar()"
+      <button
+        class="icon-btn collapse-btn"
+        (click)="toggleSidebar()"
         [matTooltip]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
-        matTooltipPosition="right">
+        matTooltipPosition="right"
+      >
         <mat-icon>{{ sidebarCollapsed() ? 'chevron_right' : 'chevron_left' }}</mat-icon>
       </button>
     </div>
-
   </aside>
 }
 
 <!-- Main content -->
-<main class="app-main"
+<main
+  class="app-main"
   [class.sidebar-hidden]="hideSidebar()"
-  [class.sidebar-collapsed]="sidebarCollapsed()">
+  [class.sidebar-collapsed]="sidebarCollapsed()"
+>
   <router-outlet></router-outlet>
 </main>
 
@@ -133,10 +219,13 @@
       <div class="tab-icon-wrap"><mat-icon>device_hub</mat-icon></div>
       <span>Devices</span>
     </a>
-    <button type="button" class="tab-item" (click)="openAIEditor()">
-      <div class="tab-icon-wrap"><mat-icon>auto_awesome</mat-icon></div>
-      <span>Ask AI</span>
-    </button>
+    <!-- Set up (the user-facing blueprint gallery). Labelled to match the sidebar's MAIN item,
+         not "Blueprints" — that name is the admin builder. Ask AI moved to the Account menu to
+         free this slot. -->
+    <a class="tab-item" routerLink="/blueprints" routerLinkActive="active">
+      <div class="tab-icon-wrap"><mat-icon>architecture</mat-icon></div>
+      <span>Set up</span>
+    </a>
     <a class="tab-item" routerLink="/automations" routerLinkActive="active">
       <div class="tab-icon-wrap"><mat-icon>bolt</mat-icon></div>
       <span>Automate</span>
@@ -150,7 +239,9 @@
           <div class="tab-avatar-initials">{{ (user?.username ?? '?')[0] | uppercase }}</div>
         }
         @if (notifications.unreadCount() > 0) {
-          <span class="tab-badge">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span>
+          <span class="tab-badge">{{
+            notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount()
+          }}</span>
         }
       </span>
       <span>Account</span>
@@ -163,8 +254,15 @@
     <mat-icon>notifications</mat-icon>
     <span>Notifications</span>
     @if (notifications.unreadCount() > 0) {
-      <span class="menu-badge">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span>
+      <span class="menu-badge">{{
+        notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount()
+      }}</span>
     }
+  </button>
+  <!-- Ask AI lives here on mobile now that Set up took its bottom-bar slot. -->
+  <button mat-menu-item (click)="openAIEditor()">
+    <mat-icon>auto_awesome</mat-icon>
+    <span>Ask AI</span>
   </button>
   <mat-divider></mat-divider>
   <button mat-menu-item (click)="themeService.toggle()">

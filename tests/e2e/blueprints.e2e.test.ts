@@ -8,6 +8,13 @@
 // That is the whole redesign; if it regresses, reconcile and phase advance start clobbering
 // each other again.
 //
+// Storage is only half of it, and this suite used to test only that half. A reference is worth
+// nothing unless the code that acts on it resolves it, so the derived entities are also *run*
+// here — a scene is executed and asserted at the sim board, and a pipeline trigger is crossed
+// with real telemetry. Both of those paths shipped unresolved and neither shape assertion
+// noticed, because an unresolved reference does not throw: it is dispatched as text, or
+// compared as text, and the failure is a snackbar or a silence.
+//
 // Mutating (sealed templates, blueprint, instance, devices) with full cleanup. Admin-only
 // endpoints are used for authoring, so this suite needs an admin token.
 
@@ -23,6 +30,7 @@ import {
   apiRaw,
   apiDelete,
   simOpts,
+  poll,
 } from './helpers/stack';
 
 jest.setTimeout(120000);
@@ -48,7 +56,12 @@ function blueprintDoc() {
     ],
     params: [
       { key: 'level.min', label: 'Refill below', default_value: '20', unit: '%' },
-      { key: 'pump.state', label: 'Pump on value', default_value: 'ON', user_tunable: false },
+      // Lowercase on purpose. A fixed param's value is dispatched verbatim and checked against
+      // the capability's valid_parameters, whose OnOff enum is ["on","off"] and is matched
+      // case-sensitively — "ON" here would be a command every device rejects, which is exactly
+      // the bug the execution tests below exist to catch.
+      { key: 'pump.state', label: 'Pump on value', default_value: 'on', user_tunable: false },
+      { key: 'pump.off', label: 'Pump off value', default_value: 'off', user_tunable: false },
     ],
     phases: [
       {
@@ -67,9 +80,11 @@ function blueprintDoc() {
       {
         key: 'stop_all',
         name: `Stop the loop ${SUFFIX}`,
+        // One member by reference, one literal — a scene has to dispatch both correctly, and
+        // only the reference exercises resolution at execute time.
         members: [
-          { slot_key: 'sockets', action_name: 'i2c_socket_8', target_state: 'OFF' },
-          { slot_key: 'sockets', action_name: 'i2c_socket_8_2', target_state: 'OFF' },
+          { slot_key: 'sockets', action_name: 'i2c_socket_8', target_state: '@param.pump.off' },
+          { slot_key: 'sockets', action_name: 'i2c_socket_8_2', target_state: 'off' },
         ],
       },
     ],
@@ -89,6 +104,36 @@ function blueprintDoc() {
         ],
         actions: [
           { slot_key: 'sockets', action_name: 'i2c_socket_8', target_state: '@param.pump.state' },
+        ],
+      },
+    ],
+    pipelines: [
+      {
+        key: 'tank_watch',
+        name: `Tank watch ${SUFFIX}`,
+        sensors: [
+          {
+            group_name: 'tank',
+            description: 'Liquid level in the tank',
+            slot_key: 'tank',
+            action_name: 'water_level',
+            min_value: '@phase.level.min',
+          },
+        ],
+        // enrich-only: no model, so the run is deterministic and needs no LLM on the stack.
+        stages: [{ ordinal: 1, kind: 'enrich' }],
+        triggers: [
+          {
+            trigger_type: 'sensor_threshold',
+            slot_key: 'tank',
+            action_name: 'water_level',
+            operator: '<',
+            // A reference, not a number. Unresolved, evaluateThreshold parses it to NaN and falls
+            // back to string equality against the reading — the trigger then never fires, with no
+            // error anywhere. That silence is why this needs an execution test, not a shape one.
+            threshold_value: '@phase.level.min',
+            min_interval_sec: 1,
+          },
         ],
       },
     ],
@@ -273,7 +318,7 @@ describe('blueprints e2e (F10)', () => {
     instanceId = result.instance_id;
 
     expect(result.current_phase).toBe('commissioning');
-    expect(result.created).toEqual({ scenes: 1, rules: 1, pipelines: 0 });
+    expect(result.created).toEqual({ scenes: 1, rules: 1, pipelines: 1 });
     // Explicit picks are recorded as such — auto_bound distinguishes "the system chose" from
     // "the user chose", which is what the instance page shows and reconcile respects.
     expect(result.bindings.every((b: any) => b.auto_bound === false)).toBe(true);
@@ -286,12 +331,111 @@ describe('blueprints e2e (F10)', () => {
     expect(bound.every((d: any) => d.area_id === result.area_id)).toBe(true);
   });
 
-  itStack('stores references verbatim in the derived rule, not resolved values', async () => {
-    const rules = await apiGet('/api/rules', token);
-    const derived = rules.find((r: any) => r.name === `Refill the tank ${SUFFIX}`);
-    expect(derived).toBeDefined();
-    expect(derived.conditions[0].threshold_value).toBe('@phase.level.min');
-    expect(derived.actions[0].target_state).toBe('@param.pump.state');
+  // ── Reference storage, and the dispatch that must undo it ────────────────
+  //
+  // These two tests are a pair and must stay one. "Stored verbatim" is only half the contract:
+  // on its own it is satisfied by a platform that stores references and then never resolves
+  // them — which is exactly what shipped, because every consumer had to opt in to resolution
+  // and two of them (scene execution, pipeline trigger matching) never did. Whenever a new
+  // reference-bearing field is added here, its dispatch site gets a test below, not just this
+  // one.
+
+  itStack('stores references verbatim in every derived entity, not resolved values', async () => {
+    const derivedRule = (await apiGet('/api/rules', token)).find(
+      (r: any) => r.name === `Refill the tank ${SUFFIX}`,
+    );
+    expect(derivedRule).toBeDefined();
+    expect(derivedRule.conditions[0].threshold_value).toBe('@phase.level.min');
+    expect(derivedRule.actions[0].target_state).toBe('@param.pump.state');
+
+    const derivedScene = (await apiGet('/api/scenes', token)).find(
+      (s: any) => s.name === `Stop the loop ${SUFFIX}`,
+    );
+    expect(derivedScene).toBeDefined();
+    const byRef = derivedScene.members.find((m: any) => m.target_state.startsWith('@'));
+    expect(byRef?.target_state).toBe('@param.pump.off');
+    // The literal member is stored as-is, so execution has to handle both shapes.
+    expect(derivedScene.members.map((m: any) => m.target_state).sort()).toEqual([
+      '@param.pump.off',
+      'off',
+    ]);
+  });
+
+  itStack(
+    'runs a derived scene, resolving a @param member into a real device command',
+    async () => {
+      const scene = (await apiGet('/api/scenes', token)).find(
+        (s: any) => s.name === `Stop the loop ${SUFFIX}`,
+      );
+
+      // Asserted at the board, not at the API: a 202 is returned before anything is dispatched,
+      // so status alone cannot tell a working scene from one whose members are rejected.
+      const fromRef = socketDev.waitFor(
+        'command',
+        (c: any) => c.action === 'i2c_socket_8' && c.value === 'off',
+        20000,
+      );
+      const fromLiteral = socketDev.waitFor(
+        'command',
+        (c: any) => c.action === 'i2c_socket_8_2' && c.value === 'off',
+        20000,
+      );
+
+      const run = await apiRaw('POST', `/api/scenes/${scene.id}/execute`, token, {});
+      expect(run.status).toBe(202);
+      expect(run.body.queued).toBe(2); // both members dispatched — neither dropped as unresolvable
+
+      expect((await fromRef).valid).toBe(true);
+      expect((await fromLiteral).valid).toBe(true);
+
+      // …and the device's ack was accepted, which is the half that fails when a resolved value is
+      // outside the capability's valid_parameters (e.g. "OFF" against the OnOff enum).
+      await poll(
+        () => apiGet('/api/actions', token),
+        (actions: any[]) =>
+          actions.find(
+            (a: any) => a.deviceId === socketDev.deviceId && a.mqttName === 'i2c_socket_8',
+          )?.state === 'off',
+        { timeoutMs: 20000 },
+      );
+    },
+  );
+
+  itStack('fires a pipeline whose trigger threshold is a phase reference', async () => {
+    const pipeline = (await apiGet('/api/pipelines', token)).find(
+      (p: any) => p.name === `Tank watch ${SUFFIX}`,
+    );
+    expect(pipeline).toBeDefined();
+
+    const before = (await apiGet(`/api/pipelines/${pipeline.id}/runs`, token)).length;
+
+    // Commissioning sets level.min = 40, so the stored '@phase.level.min' has to resolve to 40
+    // for a reading of 10 to be under it.
+    tankDev.publishTelemetry('water_level', 10);
+
+    const runs = await poll(
+      () => apiGet(`/api/pipelines/${pipeline.id}/runs`, token),
+      (rs: any[]) => rs.length > before,
+      { timeoutMs: 25000 },
+    );
+    expect(runs[0].trigger_type).toBe('sensor_threshold');
+  });
+
+  itStack('does not fire that pipeline for a reading above the resolved threshold', async () => {
+    const pipeline = (await apiGet('/api/pipelines', token)).find(
+      (p: any) => p.name === `Tank watch ${SUFFIX}`,
+    );
+    // Past the 1s cooldown from the previous fire, so a non-fire here is the threshold's doing.
+    await new Promise((r) => setTimeout(r, 1500));
+    const before = (await apiGet(`/api/pipelines/${pipeline.id}/runs`, token)).length;
+
+    // 80 > 40. Guards the other direction: a resolver that returned something falsy would make
+    // the comparison pass for everything, and the positive test alone would not notice.
+    tankDev.publishTelemetry('water_level', 80);
+    await new Promise((r) => setTimeout(r, 6000));
+
+    const after = (await apiGet(`/api/pipelines/${pipeline.id}/runs`, token)).length;
+    expect(after).toBe(before);
   });
 
   itStack('resolves a param through phase → default → override, in that order', async () => {

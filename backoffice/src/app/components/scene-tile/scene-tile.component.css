@@ -7,9 +7,17 @@
 
 .scene-tile {
   flex: 1;
+  /* Every link in the flex chain (:host → .scene-tile → .scene-header → .scene-name) needs this,
+     not just the ends. A flex item defaults to `min-width: auto`, so without it the tile refuses
+     to shrink below the header's intrinsic width — a long scene name made the header 300px wide
+     inside its 190px wrapper and painted across the neighbouring tile, with the name's own
+     ellipsis never engaging because the name was never the thing being squeezed. */
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
+  /* The rounded border is the tile's edge; nothing inside may paint past it. */
+  overflow: hidden;
   background: var(--card-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -29,6 +37,30 @@
   box-shadow: var(--card-shadow-hover);
 }
 
+/* A blueprint scene outside its active phase: dimmed and non-interactive (the API refuses it too,
+   this is the visible half). Its menu still works, so pointer-events stay on the header. */
+.scene-tile.out-of-phase {
+  opacity: 0.55;
+  cursor: default;
+}
+.scene-tile.out-of-phase:hover {
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+.scene-phase-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.scene-phase-note mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
 /* Tap feedback — the run is fire-and-forget, so this is the only local confirmation. */
 .scene-tile:active {
   transform: scale(0.98);
@@ -41,6 +73,7 @@
 .scene-header {
   display: flex;
   align-items: center;
+  min-width: 0;
   padding: 10px 6px 8px 12px;
   gap: 6px;
   border-bottom: 1px solid var(--border);

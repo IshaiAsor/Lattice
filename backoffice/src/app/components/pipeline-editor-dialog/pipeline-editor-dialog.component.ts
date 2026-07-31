@@ -519,9 +519,6 @@ export class PipelineEditorDialogComponent implements OnInit {
     if (!this.form.get('prompt_template')?.value?.trim()) {
       errors.push('Add context for the LLM in the LLM step.');
     }
-    if (this.hasImageSensor && !this.form.get('vlm_model_id')?.value) {
-      errors.push('This pipeline includes a camera/vision item — select a vision model in the LLM step.');
-    }
     if (this.imageItemPairs.length > 1) {
       errors.push('Only one camera item is supported per pipeline.');
     }
@@ -573,9 +570,9 @@ export class PipelineEditorDialogComponent implements OnInit {
 
     const stages: PipelineStageDto[] = [];
     stages.push({ kind: 'enrich', ordinal: stages.length });
-    if (v.vlm_model_id) {
-      stages.push({ kind: 'infer', ordinal: stages.length, ml_model_id: v.vlm_model_id });
-    }
+    // VLM/YOLO stage parked: a camera item's frame now flows from enrich straight to the
+    // multimodal LLM (see ml-executor). No separate vision stage is constructed. Re-enable by
+    // un-hiding the Vision-model control in the template and restoring this push.
     stages.push({
       kind: 'infer', ordinal: stages.length, ml_model_id: v.llm_model_id!,
       config: v.prompt_template ? { prompt_template: v.prompt_template } : undefined,

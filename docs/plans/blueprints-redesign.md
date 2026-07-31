@@ -110,8 +110,14 @@ UserRuleCondition.threshold_value = "@phase.humidity.min"
 Resolution happens at evaluation time, with precedence:
 
 ```
-user override  →  current phase  →  blueprint param default
+user override (this phase)  →  user override (all phases)  →  current phase  →  blueprint default
 ```
+
+> **Amended 2026-07-31 (F10.11).** The original design had a single, instance-wide override layer,
+> so correcting one phase and opting out of the schedule entirely were the same act — the value won
+> in every phase. Overrides now carry a `phase_key` (`''` = all phases), and the more specific row
+> wins. Both layers remain **per instance**: two setups derived from one blueprint tune
+> independently, and neither can write the shared template.
 
 | Actor         | What it writes                                        | What it never touches |
 | ------------- | ----------------------------------------------------- | --------------------- |
@@ -123,11 +129,11 @@ They are physically incapable of clobbering each other, because they write to di
 
 **Reference grammar** (validated on write, resolved on read):
 
-| Form             | Resolves to                                             |
-| ---------------- | ------------------------------------------------------- |
-| `@param.<key>`   | override → blueprint default (ignores phase)            |
-| `@phase.<key>`   | override → current phase target → blueprint default     |
-| literal (`"40"`) | itself — untouched, what every existing rule uses today |
+| Form             | Resolves to                                                               |
+| ---------------- | ------------------------------------------------------------------------- |
+| `@param.<key>`   | all-phases override → blueprint default (ignores everything phase-scoped) |
+| `@phase.<key>`   | phase override → all-phases override → phase target → blueprint default   |
+| literal (`"40"`) | itself — untouched, what every existing rule uses today                   |
 
 **Where it plugs in.** The resolver is one step in front of an existing line —
 `services/automation-worker/src/services/rules.engine.ts:142`:
@@ -747,15 +753,28 @@ PUT /api/blueprint-instances/12/params/humidity.min   { "value": "50" }
 blueprint_param_overrides   instance=12  param_key="humidity.min"  value="50"
 ```
 
-Resolution now short-circuits at the first step, in **every** phase:
+With no `phase_key`, that is the all-phases scope, so it wins in **every** phase:
 
-| Phase    | Phase target | Override | Resolves to |
-| -------- | ------------ | -------- | ----------- |
-| Seedling | 60           | 50       | **50**      |
-| Mature   | 40           | 50       | **50**      |
+| Phase    | Phase target | Override (all) | Resolves to |
+| -------- | ------------ | -------------- | ----------- |
+| Seedling | 60           | 50             | **50**      |
+| Mature   | 40           | 50             | **50**      |
 
-The instance page shows the param as overridden with a **Reset** action; reset deletes the row and
-phase-driven behavior resumes. No rule row was ever touched, in either direction.
+To correct one phase instead, the same call carries a scope — `{ "value": "45", "phase_key": "mature" }`:
+
+```
+blueprint_param_overrides   instance=12  param_key="humidity.min"  phase_key="mature"  value="45"
+```
+
+| Phase    | Phase target | Override (all) | Override (phase) | Resolves to |
+| -------- | ------------ | -------------- | ---------------- | ----------- |
+| Seedling | 60           | 50             | —                | **50**      |
+| Mature   | 40           | 50             | 45               | **45**      |
+
+The instance page shows every phase resolved at once, so the user can tune a phase they have not
+reached yet — advancing is no longer the way to find out what a phase is set to. Each scope has its
+own **Reset**, which deletes only that row; clearing a phase's value never wipes the all-phases one.
+No rule row was ever touched, in any direction.
 
 **Two kinds of user change, deliberately different:**
 

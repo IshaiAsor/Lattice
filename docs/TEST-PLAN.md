@@ -40,8 +40,10 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - never satisfies a threshold for a fault reading
 - recognizes a fault envelope
 - rejects normal scalar/object readings
-- cooldown: not in cooldown when never fired / no interval; in cooldown inside the window;
-  out of cooldown at and past the interval boundary
+- is not in cooldown when the trigger has never fired
+- is not in cooldown when no interval is set
+- is in cooldown while inside the interval window
+- is out of cooldown once the interval has elapsed
 
 ### Telemetry — `telemetry.topic-parser.test.ts` ✅
 
@@ -88,6 +90,11 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - yields no phase and no targets for an instance between phases
 - normalises absent phase notes to null rather than undefined
 - resolves every reference to null in the empty context, so a non-blueprint entity fails closed
+- applies a phase-scoped override only while the instance is in that phase
+- lets the more specific phase row beat the user’s all-phases row
+- keeps a phase-scoped row out of @param., which addresses the blueprint value
+- ignores a row scoped to a phase the instance is not in, including when it has none
+- reports the layer it used, so the instance page cannot mislabel a value
 
 ### Blueprints — `blueprints.phase-schedule.test.ts` ✅ (F10.4 phase auto-advance)
 

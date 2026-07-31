@@ -1,0 +1,371 @@
+import { db, Prisma } from '../db';
+
+// Per-entity reconcile diff (scenes / rules / pipelines). Split out of the reconcile service so
+// the orchestration (load, resolve, disable-removed, version bump) stays readable and each
+// entity's create/update/skip/unresolvable decision lives in one focused function.
+//
+// Each function reconciles ONE template against its derived counterpart and returns the single
+// ReconcileChange describing what happened. The rules that govern all three (match by
+// blueprint_key, skip user_modified, never write a half-wired entity) live in the service header.
+
+export interface ReconcileChange {
+  kind: 'scene' | 'rule' | 'pipeline';
+  blueprint_key: string;
+  name: string;
+  action: 'created' | 'updated' | 'skipped_user_modified' | 'disabled' | 'unresolvable';
+  detail?: string;
+}
+
+// (slot, action) → the action ids on every bound device, or null when the reference is not fully
+// resolvable (unbound slot, or the action missing on a bound device). Supplied by the service.
+export type ResolveAll = (slotKey: string, actionName: string) => number[] | null;
+
+// The bits of the instance a diff needs — its identity and where derived rows should land.
+export interface DiffContext {
+  userId: number;
+  areaId: number;
+  instanceId: number;
+  instanceName: string;
+  resolveAll: ResolveAll;
+}
+
+type SceneTemplate = Prisma.BlueprintSceneTemplateGetPayload<{ include: { members: true } }>;
+type RuleTemplate = Prisma.BlueprintRuleTemplateGetPayload<{
+  include: { conditions: true; actions: true };
+}>;
+type PipelineTemplate = Prisma.BlueprintPipelineTemplateGetPayload<{
+  include: { sensors: true; stages: true; triggers: true };
+}>;
+type DerivedScene = Prisma.SceneGetPayload<object>;
+type DerivedRule = Prisma.UserRuleGetPayload<object>;
+type DerivedPipeline = Prisma.PipelineGetPayload<object>;
+
+// A scene name must be unique per user; a v2 that adds a scene can collide with something the user
+// already has. Qualify with the instance name, then fall back to a counter.
+export async function freeSceneName(
+  userId: number,
+  base: string,
+  instanceName: string,
+): Promise<string> {
+  const taken = new Set(
+    (await db.scene.findMany({ where: { user_id: userId }, select: { name: true } })).map(
+      (s) => s.name,
+    ),
+  );
+  if (!taken.has(base)) return base;
+  const qualified = `${base} (${instanceName})`;
+  if (!taken.has(qualified)) return qualified;
+  for (let n = 2; ; n++) {
+    const candidate = `${qualified} ${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
+export async function reconcileSceneTemplate(
+  template: SceneTemplate,
+  existing: DerivedScene | undefined,
+  ctx: DiffContext,
+): Promise<ReconcileChange> {
+  if (existing?.user_modified) {
+    return {
+      kind: 'scene',
+      blueprint_key: template.key,
+      name: existing.name,
+      action: 'skipped_user_modified',
+    };
+  }
+  let unresolved = 0;
+  let sortOrder = 0;
+  const memberData: Prisma.SceneMemberUncheckedCreateWithoutSceneInput[] = [];
+  for (const m of template.members) {
+    const ids = ctx.resolveAll(m.slot_key, m.action_name);
+    if (ids === null) {
+      unresolved++;
+      continue;
+    }
+    for (const id of ids) {
+      memberData.push({
+        user_device_action_id: id,
+        target_state: m.target_state,
+        sort_order: sortOrder++,
+        delay_seconds: m.delay_seconds,
+      });
+    }
+  }
+  if (unresolved > 0) {
+    return {
+      kind: 'scene',
+      blueprint_key: template.key,
+      name: template.name,
+      action: 'unresolvable',
+      detail: `${unresolved} member reference(s) not present on the bound devices`,
+    };
+  }
+
+  if (existing) {
+    await db.$transaction(async (tx) => {
+      await tx.sceneMember.deleteMany({ where: { scene_id: existing.id } });
+      await tx.scene.update({
+        where: { id: existing.id },
+        data: {
+          phase_scope: template.phase_scope,
+          updated_at: new Date(),
+          members: { create: memberData },
+        },
+      });
+    });
+    return { kind: 'scene', blueprint_key: template.key, name: existing.name, action: 'updated' };
+  }
+
+  const name = await freeSceneName(ctx.userId, template.name, ctx.instanceName);
+  await db.scene.create({
+    data: {
+      user_id: ctx.userId,
+      name,
+      sort_order: template.sort_order,
+      area_id: ctx.areaId,
+      blueprint_instance_id: ctx.instanceId,
+      blueprint_key: template.key,
+      phase_scope: template.phase_scope,
+      members: { create: memberData },
+    },
+  });
+  return { kind: 'scene', blueprint_key: template.key, name, action: 'created' };
+}
+
+export async function reconcileRuleTemplate(
+  template: RuleTemplate,
+  existing: DerivedRule | undefined,
+  ctx: DiffContext,
+): Promise<ReconcileChange> {
+  if (existing?.user_modified) {
+    return {
+      kind: 'rule',
+      blueprint_key: template.key,
+      name: existing.name,
+      action: 'skipped_user_modified',
+    };
+  }
+  let unresolved = 0;
+  const conditionData: Prisma.UserRuleConditionUncheckedCreateWithoutRuleInput[] = [];
+  for (const c of template.conditions) {
+    // Schedule/status conditions carry no device action — pass them through unchanged.
+    if (!(c.slot_key && c.action_name)) {
+      conditionData.push({
+        condition_type: c.condition_type,
+        user_device_action_id: null,
+        operator: c.operator,
+        threshold_value: c.threshold_value,
+        status_value: c.status_value,
+        schedule_time: c.schedule_time,
+        schedule_days: c.schedule_days,
+      });
+      continue;
+    }
+    const ids = ctx.resolveAll(c.slot_key, c.action_name);
+    if (ids === null) {
+      unresolved++;
+      continue;
+    }
+    for (const id of ids) {
+      conditionData.push({
+        condition_type: c.condition_type,
+        user_device_action_id: id,
+        operator: c.operator,
+        threshold_value: c.threshold_value,
+        status_value: c.status_value,
+        schedule_time: c.schedule_time,
+        schedule_days: c.schedule_days,
+      });
+    }
+  }
+  const actionData: Prisma.UserRuleActionUncheckedCreateWithoutRuleInput[] = [];
+  for (const a of template.actions) {
+    const ids = ctx.resolveAll(a.slot_key, a.action_name);
+    if (ids === null) {
+      unresolved++;
+      continue;
+    }
+    for (const id of ids) {
+      actionData.push({
+        user_device_action_id: id,
+        target_state: a.target_state,
+        delay_seconds: a.delay_seconds,
+      });
+    }
+  }
+  if (unresolved > 0) {
+    return {
+      kind: 'rule',
+      blueprint_key: template.key,
+      name: template.name,
+      action: 'unresolvable',
+      detail: `${unresolved} referenced action(s) not present on the bound devices`,
+    };
+  }
+
+  if (existing) {
+    await db.$transaction(async (tx) => {
+      await tx.userRuleCondition.deleteMany({ where: { rule_id: existing.id } });
+      await tx.userRuleAction.deleteMany({ where: { rule_id: existing.id } });
+      await tx.userRule.update({
+        where: { id: existing.id },
+        data: {
+          name: template.name,
+          is_emergency: template.is_emergency,
+          condition_operator: template.condition_operator,
+          cooldown_seconds: template.cooldown_seconds,
+          phase_scope: template.phase_scope,
+          updated_at: new Date(),
+          conditions: { create: conditionData },
+          actions: { create: actionData },
+        },
+      });
+    });
+    return { kind: 'rule', blueprint_key: template.key, name: template.name, action: 'updated' };
+  }
+
+  await db.userRule.create({
+    data: {
+      user_id: ctx.userId,
+      name: template.name,
+      is_emergency: template.is_emergency,
+      condition_operator: template.condition_operator,
+      cooldown_seconds: template.cooldown_seconds,
+      phase_scope: template.phase_scope,
+      area_id: ctx.areaId,
+      blueprint_instance_id: ctx.instanceId,
+      blueprint_key: template.key,
+      conditions: { create: conditionData },
+      actions: { create: actionData },
+    },
+  });
+  return { kind: 'rule', blueprint_key: template.key, name: template.name, action: 'created' };
+}
+
+export async function reconcilePipelineTemplate(
+  template: PipelineTemplate,
+  existing: DerivedPipeline | undefined,
+  ctx: DiffContext,
+): Promise<ReconcileChange> {
+  if (existing?.user_modified) {
+    return {
+      kind: 'pipeline',
+      blueprint_key: template.key,
+      name: existing.name,
+      action: 'skipped_user_modified',
+    };
+  }
+  let unresolved = 0;
+  const sensorData: Prisma.PipelineSensorUncheckedCreateWithoutPipelineInput[] = [];
+  for (const s of template.sensors) {
+    const ids = ctx.resolveAll(s.slot_key, s.action_name);
+    if (ids === null) {
+      unresolved++;
+      continue;
+    }
+    for (const id of ids) {
+      sensorData.push({
+        group_name: s.group_name,
+        description: s.description,
+        user_device_action_id: id,
+        inject_as_sensor: s.inject_as_sensor,
+        inject_as_action: s.inject_as_action,
+        min_value: s.min_value,
+        max_value: s.max_value,
+        compression: s.compression,
+        window_minutes: s.window_minutes,
+        n: s.n,
+      });
+    }
+  }
+  const triggerData: Prisma.PipelineTriggerUncheckedCreateWithoutPipelineInput[] = [];
+  for (const t of template.triggers) {
+    // Schedule triggers carry no device action — pass through unchanged.
+    if (!(t.slot_key && t.action_name)) {
+      triggerData.push({
+        trigger_type: t.trigger_type,
+        user_device_action_id: null,
+        operator: t.operator,
+        threshold_value: t.threshold_value,
+        schedule_cron: t.schedule_cron,
+        min_interval_sec: t.min_interval_sec,
+      });
+      continue;
+    }
+    const ids = ctx.resolveAll(t.slot_key, t.action_name);
+    if (ids === null) {
+      unresolved++;
+      continue;
+    }
+    for (const id of ids) {
+      triggerData.push({
+        trigger_type: t.trigger_type,
+        user_device_action_id: id,
+        operator: t.operator,
+        threshold_value: t.threshold_value,
+        schedule_cron: t.schedule_cron,
+        min_interval_sec: t.min_interval_sec,
+      });
+    }
+  }
+  if (unresolved > 0) {
+    return {
+      kind: 'pipeline',
+      blueprint_key: template.key,
+      name: template.name,
+      action: 'unresolvable',
+      detail: `${unresolved} referenced action(s) not present on the bound devices`,
+    };
+  }
+  const stageData = template.stages.map((s) => ({
+    ordinal: s.ordinal,
+    kind: s.kind,
+    ml_model_id: s.ml_model_id,
+    prompt_template: s.prompt_template,
+    notify: s.notify,
+    execute_condition: s.execute_condition,
+  }));
+
+  if (existing) {
+    await db.$transaction(async (tx) => {
+      await tx.pipelineStage.deleteMany({ where: { pipeline_id: existing.id } });
+      await tx.pipelineSensor.deleteMany({ where: { pipeline_id: existing.id } });
+      await tx.pipelineTrigger.deleteMany({ where: { pipeline_id: existing.id } });
+      await tx.pipeline.update({
+        where: { id: existing.id },
+        data: {
+          name: template.name,
+          enabled: template.enabled,
+          phase_scope: template.phase_scope,
+          updated_at: new Date(),
+          sensors: { create: sensorData },
+          stages: { create: stageData },
+          triggers: { create: triggerData },
+        },
+      });
+    });
+    return {
+      kind: 'pipeline',
+      blueprint_key: template.key,
+      name: template.name,
+      action: 'updated',
+    };
+  }
+
+  await db.pipeline.create({
+    data: {
+      user_id: ctx.userId,
+      name: template.name,
+      enabled: template.enabled,
+      phase_scope: template.phase_scope,
+      area_id: ctx.areaId,
+      blueprint_instance_id: ctx.instanceId,
+      blueprint_key: template.key,
+      sensors: { create: sensorData },
+      stages: { create: stageData },
+      triggers: { create: triggerData },
+    },
+  });
+  return { kind: 'pipeline', blueprint_key: template.key, name: template.name, action: 'created' };
+}

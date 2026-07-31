@@ -24,6 +24,10 @@ export interface SceneView {
   name: string;
   sort_order: number;
   members: (SceneMemberDto & { id: number; sort_order: number; delay_seconds: number })[];
+  // Phase scope (F10): the phases a blueprint-derived scene is offered in (empty = all), and
+  // whether its setup is currently in one of them. `in_phase` is always true for hand-made scenes.
+  phase_scope: string[];
+  in_phase: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

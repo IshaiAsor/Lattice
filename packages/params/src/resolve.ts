@@ -33,7 +33,12 @@ export interface PhaseMeta {
  * keeps costing exactly what it costs today.
  */
 export interface ParamContext {
-  /** `blueprint_param_overrides` — the user's own tuning. Beats everything. */
+  /**
+   * `blueprint_param_overrides` rows scoped to the instance's *current* phase. The most specific
+   * layer there is: "in this phase, for this setup, use this".
+   */
+  phaseOverrides: Record<string, string>;
+  /** `blueprint_param_overrides` rows the user set for every phase. */
   overrides: Record<string, string>;
   /** `blueprint_phase_targets` for the instance's current phase. */
   phaseTargets: Record<string, string>;
@@ -77,6 +82,59 @@ export function findParamRefs(text: string | null | undefined): ParamRef[] {
   return refs;
 }
 
+/** Which layer supplied a resolved value. */
+export type ParamSource = 'phase_override' | 'override' | 'phase' | 'default';
+
+export interface ResolvedWithSource {
+  value: string | null;
+  source: ParamSource;
+}
+
+/**
+ * The precedence, written once as data. Everything that needs to know the order — resolution and
+ * the instance page's "where did this come from" label — walks this same array, so the page cannot
+ * attribute a value to a layer the resolver didn't actually use.
+ *
+ * `phaseScoped` layers are skipped for `@param.`, which addresses the blueprint's own value for the
+ * settings a phase is not allowed to retune: neither the phase's target nor a phase-scoped
+ * override may leak into it.
+ */
+const PARAM_LAYERS = [
+  { source: 'phase_override', phaseScoped: true, pick: (c: ParamContext) => c.phaseOverrides },
+  { source: 'override', phaseScoped: false, pick: (c: ParamContext) => c.overrides },
+  { source: 'phase', phaseScoped: true, pick: (c: ParamContext) => c.phaseTargets },
+  { source: 'default', phaseScoped: false, pick: (c: ParamContext) => c.defaults },
+] as const satisfies readonly {
+  source: ParamSource;
+  phaseScoped: boolean;
+  pick: (c: ParamContext) => Record<string, string>;
+}[];
+
+function walkLayers(
+  key: string,
+  ctx: ParamContext,
+  includePhaseScoped: boolean,
+): ResolvedWithSource {
+  for (const layer of PARAM_LAYERS) {
+    if (layer.phaseScoped && !includePhaseScoped) continue;
+    // `?? {}` because resolution runs inside the rule-evaluation loop: a context assembled by hand
+    // (or by a service built against an older shape) must degrade to "that layer is empty", never
+    // throw. Failing closed is the contract here — a throw would take down the whole pass.
+    const value = (layer.pick(ctx) ?? {})[key];
+    if (value !== undefined) return { value, source: layer.source };
+  }
+  return { value: null, source: 'default' };
+}
+
+/**
+ * Resolve a declared param key and report the layer that supplied it, with `@phase.` precedence.
+ * The instance page uses this so its "your value" / "from this phase" labels are the resolver's
+ * own answer rather than a second implementation of the same order.
+ */
+export function resolveParamWithSource(key: string, ctx: ParamContext): ResolvedWithSource {
+  return walkLayers(key, ctx, true);
+}
+
 function resolveRef(ref: ParamRef, ctx: ParamContext): string | null {
   if (ref.kind === 'phase') {
     // Phase metadata is addressed directly and is not overridable — it describes the phase,
@@ -93,17 +151,7 @@ function resolveRef(ref: ParamRef, ctx: ParamContext): string | null {
     }
   }
 
-  const override = ctx.overrides[ref.key];
-  if (override !== undefined) return override;
-
-  // `@param.` deliberately skips the phase: it addresses the blueprint's own value, for the
-  // settings a phase is not allowed to retune.
-  if (ref.kind === 'phase') {
-    const target = ctx.phaseTargets[ref.key];
-    if (target !== undefined) return target;
-  }
-
-  return ctx.defaults[ref.key] ?? null;
+  return walkLayers(ref.key, ctx, ref.kind === 'phase').value;
 }
 
 /**

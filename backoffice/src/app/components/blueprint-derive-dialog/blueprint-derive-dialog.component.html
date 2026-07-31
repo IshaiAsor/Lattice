@@ -1,0 +1,116 @@
+<h2 mat-dialog-title>Set up {{ preview.name }}</h2>
+
+<mat-dialog-content class="derive-content">
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Name this setup</mat-label>
+    <input matInput [(ngModel)]="name" maxlength="120" />
+    <mat-hint>Its devices are grouped into an area with this name.</mat-hint>
+  </mat-form-field>
+
+  <h3 class="slots-title">Devices</h3>
+
+  <div class="slot-list">
+    @for (slot of preview.slots; track slot.slot_key) {
+      <div class="slot-block">
+        <div class="slot-head">
+          <span class="slot-label">{{ slot.label }}</span>
+          @if (isMulti(slot)) {
+            <span class="optional-badge">{{ slot.min_count }}–{{ slot.max_count }} devices</span>
+          }
+          @if (!slot.required) {
+            <span class="optional-badge">optional</span>
+          }
+          @if (!needsChoice(slot) && pickedCount(slot) > 0) {
+            <span class="auto-badge"><mat-icon>check</mat-icon>matched</span>
+          } @else if (hasOnlyTaken(slot)) {
+            <span class="taken-badge"><mat-icon>block</mat-icon>in use</span>
+          }
+        </div>
+
+        @if (isMulti(slot) && needsChoice(slot)) {
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Choose devices</mat-label>
+            <mat-select multiple [(ngModel)]="chosen[slot.slot_key]">
+              <!-- Devices already in another setup stay on the list but are not selectable: the
+                   user needs to see that the device exists and why it is out of reach. -->
+              @for (candidate of slot.candidates; track candidate.user_device_id) {
+                <mat-option [value]="candidate.user_device_id" [disabled]="!candidate.free">
+                  {{ candidate.name }}
+                  @if (needsMac(slot, candidate)) {
+                    <span class="device-mac">{{ candidate.mac_id }}</span>
+                  }
+                  @if (!candidate.free) {
+                    <span class="in-use"> — already in another setup</span>
+                  }
+                </mat-option>
+              }
+            </mat-select>
+            <mat-hint>
+              {{ pickedCount(slot) }} chosen — pick {{ slot.min_count }} to {{ slot.max_count }}. The
+              blueprint's actions run on each one.
+            </mat-hint>
+          </mat-form-field>
+        } @else if (needsChoice(slot)) {
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Choose a device</mat-label>
+            <mat-select
+              [ngModel]="singlePick(slot)"
+              (ngModelChange)="setSingle(slot, $event)"
+            >
+              @for (candidate of slot.candidates; track candidate.user_device_id) {
+                <mat-option [value]="candidate.user_device_id" [disabled]="!candidate.free">
+                  {{ candidate.name }}
+                  @if (needsMac(slot, candidate)) {
+                    <span class="device-mac">{{ candidate.mac_id }}</span>
+                  }
+                  @if (!candidate.free) {
+                    <span class="in-use"> — already in another setup</span>
+                  }
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        } @else if (soleFree(slot); as device) {
+          <div class="matched-device">
+            <mat-icon>developer_board</mat-icon>
+            <span>{{ device.name }}</span>
+            <!-- With an identical twin in the slot the name alone is not an answer to "which
+                 board?", so name the one it actually took. -->
+            @if (needsMac(slot, device)) {
+              <span class="device-mac">{{ device.mac_id }}</span>
+            }
+            <!-- A device the user never renamed still carries its type as its name, so printing
+                 both just says the same thing twice. Only worth showing when they differ. -->
+            @if (device.device_type !== device.name) {
+              <span class="device-type">{{ device.device_type }}</span>
+            }
+          </div>
+        } @else if (hasOnlyTaken(slot)) {
+          <div class="matched-device taken">
+            <mat-icon>block</mat-icon>
+            <span>
+              {{ slot.candidates.length === 1 ? 'The matching device is' : 'Every matching device is' }}
+              already in another setup{{ slot.required ? '' : ' — this part will be skipped' }}
+            </span>
+          </div>
+        } @else {
+          <div class="matched-device none">
+            <mat-icon>remove</mat-icon>
+            <span>No matching device — this part will be skipped</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  @if (error) {
+    <div class="derive-error">{{ error }}</div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="submitting">Cancel</button>
+  <button mat-flat-button color="primary" (click)="submit()" [disabled]="!canSubmit()">
+    {{ submitting ? 'Setting up…' : 'Create setup' }}
+  </button>
+</mat-dialog-actions>

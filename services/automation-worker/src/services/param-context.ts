@@ -16,7 +16,7 @@ export async function loadParamContext(instanceId: number): Promise<ParamContext
   const instance = await db.blueprintInstance.findUnique({
     where: { id: instanceId },
     select: {
-      overrides: { select: { param_key: true, value: true } },
+      overrides: { select: { param_key: true, phase_key: true, value: true } },
       blueprint: { select: { params: { select: { key: true, default_value: true } } } },
       current_phase: {
         select: {
@@ -42,11 +42,12 @@ export async function loadParamContext(instanceId: number): Promise<ParamContext
     {
       instanceId,
       phase: ctx.phase?.key ?? null,
+      phaseOverrides: ctx.phaseOverrides,
       overrides: ctx.overrides,
       phaseTargets: ctx.phaseTargets,
       defaults: ctx.defaults,
     },
-    'param context loaded (precedence: override → phase → default)',
+    'param context loaded (precedence: phase override → override → phase → default)',
   );
   return ctx;
 }

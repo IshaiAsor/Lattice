@@ -2,13 +2,14 @@
 //
 // This is the contract three services depend on — automation-worker resolves thresholds,
 // api validates on write, ml-router resolves sensor bounds and prompt text. The precedence
-// (override → phase → default) is what lets reconcile, phase advance and user tuning coexist,
-// so it is pinned here rather than left to each caller.
+// (phase override → all-phases override → phase target → default) is what lets reconcile, phase
+// advance and user tuning coexist, so it is pinned here rather than left to each caller.
 
 import {
   ParamContext,
   EMPTY_PARAM_CONTEXT,
   buildParamContext,
+  resolveParamWithSource,
   findParamRefs,
   isParamRef,
   parseParamRef,
@@ -19,6 +20,7 @@ import {
 } from '../../packages/params/src';
 
 const ctx = (over: Partial<ParamContext> = {}): ParamContext => ({
+  phaseOverrides: {},
   overrides: {},
   phaseTargets: {},
   defaults: {},
@@ -192,7 +194,7 @@ describe('parameter references — write-time validation', () => {
 // rules never act on.
 describe('parameter references — context assembly', () => {
   const source = {
-    overrides: [{ param_key: 'level.min', value: '55' }],
+    overrides: [{ param_key: 'level.min', phase_key: '', value: '55' }],
     defaults: [
       { key: 'level.min', default_value: '20' },
       { key: 'level.max', default_value: '90' },
@@ -208,6 +210,7 @@ describe('parameter references — context assembly', () => {
   it('maps each layer onto the shape the resolver expects', () => {
     const ctx = buildParamContext(source);
     expect(ctx.overrides).toEqual({ 'level.min': '55' });
+    expect(ctx.phaseOverrides).toEqual({});
     expect(ctx.phaseTargets).toEqual({ 'level.min': '40' });
     expect(ctx.defaults).toEqual({ 'level.min': '20', 'level.max': '90' });
     expect(ctx.phase).toEqual({
@@ -242,5 +245,78 @@ describe('parameter references — context assembly', () => {
     expect(resolveParam('@phase.level.min', EMPTY_PARAM_CONTEXT)).toBeNull();
     expect(resolveParam('@param.anything', EMPTY_PARAM_CONTEXT)).toBeNull();
     expect(resolveParam('42', EMPTY_PARAM_CONTEXT)).toBe('42');
+  });
+});
+
+// Per-phase user overrides. The point of the scope is that "correct this one phase" and "ignore the
+// schedule entirely" stopped being the same act — so the tests that matter are the ones showing a
+// value applying in one phase and *not* in the others.
+describe('parameter references — per-phase overrides', () => {
+  const defaults = [{ key: 'level.min', default_value: '20' }];
+  const seedling = {
+    key: 'seedling',
+    name: 'Seedling',
+    targets: [{ param_key: 'level.min', value: '40' }],
+  };
+  const mature = {
+    key: 'mature',
+    name: 'Mature',
+    targets: [{ param_key: 'level.min', value: '60' }],
+  };
+
+  const ctxFor = (
+    overrides: { param_key: string; phase_key: string; value: string }[],
+    phase: typeof seedling | null,
+  ) => buildParamContext({ overrides, defaults, currentPhase: phase });
+
+  it('applies a phase-scoped override only while the instance is in that phase', () => {
+    const overrides = [{ param_key: 'level.min', phase_key: 'mature', value: '75' }];
+    expect(resolveParam('@phase.level.min', ctxFor(overrides, mature))).toBe('75');
+    // Seedling is untouched by it and stays on the blueprint's own schedule.
+    expect(resolveParam('@phase.level.min', ctxFor(overrides, seedling))).toBe('40');
+  });
+
+  it('lets the more specific phase row beat the user’s all-phases row', () => {
+    const overrides = [
+      { param_key: 'level.min', phase_key: '', value: '55' },
+      { param_key: 'level.min', phase_key: 'mature', value: '75' },
+    ];
+    expect(resolveParam('@phase.level.min', ctxFor(overrides, mature))).toBe('75');
+    expect(resolveParam('@phase.level.min', ctxFor(overrides, seedling))).toBe('55');
+  });
+
+  it('keeps a phase-scoped row out of @param., which addresses the blueprint value', () => {
+    const overrides = [{ param_key: 'level.min', phase_key: 'mature', value: '75' }];
+    expect(resolveParam('@param.level.min', ctxFor(overrides, mature))).toBe('20');
+  });
+
+  it('ignores a row scoped to a phase the instance is not in, including when it has none', () => {
+    const overrides = [{ param_key: 'level.min', phase_key: 'mature', value: '75' }];
+    const ctx = ctxFor(overrides, null);
+    expect(ctx.phaseOverrides).toEqual({});
+    expect(resolveParam('@phase.level.min', ctx)).toBe('20');
+  });
+
+  it('reports the layer it used, so the instance page cannot mislabel a value', () => {
+    const overrides = [
+      { param_key: 'level.min', phase_key: '', value: '55' },
+      { param_key: 'level.min', phase_key: 'mature', value: '75' },
+    ];
+    expect(resolveParamWithSource('level.min', ctxFor(overrides, mature))).toEqual({
+      value: '75',
+      source: 'phase_override',
+    });
+    expect(resolveParamWithSource('level.min', ctxFor(overrides, seedling))).toEqual({
+      value: '55',
+      source: 'override',
+    });
+    expect(resolveParamWithSource('level.min', ctxFor([], seedling))).toEqual({
+      value: '40',
+      source: 'phase',
+    });
+    expect(resolveParamWithSource('level.min', ctxFor([], null))).toEqual({
+      value: '20',
+      source: 'default',
+    });
   });
 });
