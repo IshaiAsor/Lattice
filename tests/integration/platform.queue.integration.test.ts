@@ -6,7 +6,7 @@
 //
 // Skips (does not fail) when the broker is unreachable — same philosophy as itStack.
 
-import type { Channel } from 'amqplib';
+import type { Channel, GetMessage } from 'amqplib';
 import { connect, close, publish, consume, QUEUES, DLQ_ARGS } from '../../packages/queue/src';
 
 jest.setTimeout(30000);
@@ -93,8 +93,13 @@ describe('queue integration (real broker)', () => {
 
       publish(ch!, rk, { marker });
 
-      // The message must land in q.dlq with its content intact. Bounded get-loop: requeue
-      // anything that isn't ours so real DLQ traffic in the test stack is left alone.
+      // The message must land in q.dlq with its content intact. Bounded get-loop over a queue
+      // that also carries real DLQ traffic from the stack, so anything that isn't ours is put
+      // back — but only once the search is over. Requeueing a foreign message immediately
+      // returns it to the head of the queue, and the loop then re-reads that same message until
+      // the deadline, never reaching ours. Holding them unacked instead is what makes the loop
+      // advance; nacking at the end leaves the queue as it was found.
+      const foreign: GetMessage[] = [];
       let found = false;
       const deadline = Date.now() + 10000;
       while (!found && Date.now() < deadline) {
@@ -103,15 +108,14 @@ describe('queue integration (real broker)', () => {
           await new Promise((r) => setTimeout(r, 200));
           continue;
         }
-        const body = msg.content.toString();
-        if (body.includes(marker)) {
+        if (msg.content.toString().includes(marker)) {
           ch!.ack(msg);
           found = true;
         } else {
-          ch!.nack(msg, false, true); // not ours — put it back
-          await new Promise((r) => setTimeout(r, 100));
+          foreign.push(msg);
         }
       }
+      for (const msg of foreign) ch!.nack(msg, false, true);
       expect(found).toBe(true);
       expect(attempts).toBe(1); // nack(requeue=false): no redelivery loop
     },

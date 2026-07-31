@@ -337,7 +337,13 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - offers each slot the devices its sealed template covers
 - refuses a binding whose device does not match the slot
 - derives an instance with an area, bindings and every templated entity
-- stores references verbatim in the derived rule, not resolved values
+- stores references verbatim in every derived entity, not resolved values
+  - rule condition/action **and** scene member; a literal member stays literal, so execution has to handle both shapes
+- runs a derived scene, resolving a @param member into a real device command
+  - asserted at the board and at the ack — `POST /scenes/:id/execute` returns 202 before anything is dispatched
+- fires a pipeline whose trigger threshold is a phase reference
+- does not fire that pipeline for a reading above the resolved threshold
+  - the other direction: a resolver returning something falsy would make every comparison pass
 - resolves a param through phase → default → override, in that order
   - and asserts the rule row is byte-identical across all three — the central invariant
 - refuses to override a param the blueprint marked phase-driven

@@ -579,6 +579,16 @@ describe('blueprints e2e (F10)', () => {
   // out to one derived row per bound device. One socket board became two above; a blueprint whose
   // sockets slot holds both must produce a scene and a rule that act on both, from a single
   // template leaf each.
+  //
+  // A device belongs to at most one setup (derive refuses a device another instance already
+  // holds — blueprints.derive.service `candidate.free`), and this suite only has one fleet, so
+  // each section below hands its boards back before the next one binds them.
+
+  async function releaseInstance(id: number | undefined): Promise<void> {
+    if (id === undefined) return;
+    const { status } = await apiRaw('DELETE', `/api/blueprints/instances/${id}`, token);
+    expect(status).toBe(204); // a silent failure here resurfaces as an unrelated 400 on the next derive
+  }
 
   function multiDoc() {
     return {
@@ -623,6 +633,11 @@ describe('blueprints e2e (F10)', () => {
   }
 
   itStack('offers both boards as candidates for a multi-device slot', async () => {
+    // The tank loop above holds socketDev, and a held device is neither a candidate nor
+    // auto-bindable. Hand the whole setup back first, so this section starts from a free fleet.
+    await releaseInstance(instanceId);
+    instanceId = undefined;
+
     const imported = await apiPost('/api/admin/blueprints/import', token, multiDoc());
     multiBlueprintId = imported.id;
     await apiPost(`/api/admin/blueprints/${multiBlueprintId}/publish`, token, {});
@@ -638,6 +653,28 @@ describe('blueprints e2e (F10)', () => {
       expect(sockets.auto_bind).toContain(socketDev.deviceId);
       expect(sockets.auto_bind).toContain(socketDev2.deviceId);
     }
+  });
+
+  // Runs before the derive below: a rejection has to come from the *type* check, and once the
+  // fan-out test binds the socket boards the first binding in this call would be refused as held,
+  // which would pass the status assertion for the wrong reason.
+  itStack('still rejects a device that does not match the multi slot', async () => {
+    // Multi-binding relaxes "how many", not "which kind": the tank board is the wrong sealed type
+    // for the sockets slot and must be refused however many devices the slot accepts.
+    const { status, body } = await apiRaw(
+      'POST',
+      `/api/blueprints/${multiBlueprintId}/derive`,
+      token,
+      {
+        name: `E2E Multi Mismatch ${SUFFIX}`,
+        bindings: [
+          { slot_key: 'sockets', user_device_id: socketDev.deviceId },
+          { slot_key: 'sockets', user_device_id: tankDev.deviceId },
+        ],
+      },
+    );
+    expect(status).toBe(400);
+    expect(body.error).toContain('does not match slot "sockets"');
   });
 
   itStack('fans a scene member and a rule action out to every bound board', async () => {
@@ -667,25 +704,6 @@ describe('blueprints e2e (F10)', () => {
     expect(rule.conditions).toHaveLength(2);
     expect(rule.actions).toHaveLength(2);
     expect(new Set(rule.actions.map((a: any) => a.user_device_action_id)).size).toBe(2);
-  });
-
-  itStack('still rejects a device that does not match the multi slot', async () => {
-    // Multi-binding relaxes "how many", not "which kind": the tank board is the wrong sealed type
-    // for the sockets slot and must be refused however many devices the slot accepts.
-    const { status, body } = await apiRaw(
-      'POST',
-      `/api/blueprints/${multiBlueprintId}/derive`,
-      token,
-      {
-        name: `E2E Multi Mismatch ${SUFFIX}`,
-        bindings: [
-          { slot_key: 'sockets', user_device_id: socketDev.deviceId },
-          { slot_key: 'sockets', user_device_id: tankDev.deviceId },
-        ],
-      },
-    );
-    expect(status).toBe(400);
-    expect(body.error).toContain('does not match slot "sockets"');
   });
 
   // ── Phase-scoped automations ───────────────────────────────────────────────
@@ -758,6 +776,10 @@ describe('blueprints e2e (F10)', () => {
   });
 
   itStack('derives a scoped rule and scene, preserving their phase_scope', async () => {
+    // Same one-setup-per-device rule as above: the multi loop holds both socket boards.
+    await releaseInstance(multiInstanceId);
+    multiInstanceId = undefined;
+
     const imported = await apiPost('/api/admin/blueprints/import', token, scopeDoc());
     scopeBlueprintId = imported.id;
     await apiPost(`/api/admin/blueprints/${scopeBlueprintId}/publish`, token, {});
