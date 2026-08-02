@@ -14,8 +14,8 @@
           role="button"
           tabindex="0"
           (click)="open(setup)"
-          (keyup.enter)="open(setup)"
-          (keyup.space)="open(setup)"
+          (keyup.enter)="openFromKey(setup, $event)"
+          (keyup.space)="openFromKey(setup, $event)"
         >
           <mat-icon class="setup-icon">hub</mat-icon>
           <div class="setup-text">
@@ -36,8 +36,9 @@
             }
           </div>
 
-          <!-- Every action stops the click travelling; the row itself opens the setup. -->
-          <div class="setup-actions" (click)="$event.stopPropagation()">
+          <!-- Each action handler stops its own click travelling to the row; keyboard activation
+               is filtered by the row's own keyup guard. -->
+          <div class="setup-actions">
             <!-- Pause/Continue apply to every setup: holding its automations is meaningful with or
                  without a lifecycle. Reset is phase-only — there is no banked time to discard and
                  no "not started" to return to when the blueprint declares no phases. -->

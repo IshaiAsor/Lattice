@@ -243,4 +243,14 @@ export class BlueprintsComponent implements OnInit, OnDestroy {
   open(setup: InstanceSummary): void {
     void this.router.navigate(['/blueprints', setup.id]);
   }
+
+  /**
+   * The row is a button, but it also holds the per-setup action buttons. Keyboard activation of an
+   * action bubbles its keyup up to the row, so only open when the row itself was the focused
+   * element — the mouse path is covered by each action stopping its own click.
+   */
+  openFromKey(setup: InstanceSummary, event: Event): void {
+    if (event.target !== event.currentTarget) return;
+    this.open(setup);
+  }
 }
