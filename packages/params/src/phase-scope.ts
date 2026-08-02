@@ -22,3 +22,40 @@ export function isPhaseInScope(
   if (!scope || scope.length === 0) return true;
   return currentPhaseKey != null && scope.includes(currentPhaseKey);
 }
+
+// ── Setup lifecycle (F10.13) ────────────────────────────────────────────────────────────────
+//
+// A derived setup is not running until the user starts it, and can be stopped again. That is a
+// coarser gate than phase scope and sits in front of it: a stopped setup does *nothing*, whether
+// or not the automation declared phases.
+
+export type InstanceLifecycle = 'not_started' | 'running' | 'stopped';
+
+/**
+ * Whether a setup is live. Null/undefined means the automation belongs to no blueprint instance at
+ * all — a hand-written rule — and those are always live, which is what keeps this gate invisible
+ * to everything outside blueprints.
+ */
+export function isInstanceRunning(state: string | null | undefined): boolean {
+  return state == null || state === 'running';
+}
+
+/**
+ * The single question every automation site actually asks: may this rule / scene / pipeline act
+ * right now? Two gates, in order of coarseness — is its setup running, and is it in scope for the
+ * phase that setup is in.
+ *
+ * Both live here rather than in each service because the three callers (rule engine, pipeline
+ * triggers, scene execution) must not disagree: an automation that fires in one path and is held
+ * in another is a bug no test in a single service would catch.
+ *
+ * Note that a stopped setup holds *everything*, emergency rules included. Stopping is meant to be
+ * "this setup is off", not "this setup is off except the parts that matter".
+ */
+export function isAutomationLive(
+  scope: readonly string[] | null | undefined,
+  currentPhaseKey: string | null | undefined,
+  lifecycleState: string | null | undefined,
+): boolean {
+  return isInstanceRunning(lifecycleState) && isPhaseInScope(scope, currentPhaseKey);
+}

@@ -1,18 +1,18 @@
 # Lattice v2.2 — Database Schema Review
 
 Single source of truth is `prisma/schema.prisma`. **Keep this file in sync with every schema
-change** (mermaid ERD + per-table examples). 46 tables, ordered by dependency tier 0 → 7.
+change** (mermaid ERD + per-table examples). 47 tables, ordered by dependency tier 0 → 7.
 
-| Tier | Theme                                                                                | Tables                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ---- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0    | External catalog                                                                     | `google_action_types`, `google_device_traits`                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| 1    | Device & ML catalog                                                                  | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models`                                                                                                                                                                                                                                                                                                                                                                             |
-| 2    | Identity                                                                             | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`                                                                                                                                                                                                                                                                                                                                                                                |
-| 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                                                                                                                                                                                                                                                                                                                                                                                                     |
-| 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                                                                                                                                                                                                                                                                                                                                                                                              |
-| 6    | Telemetry                                                                            | `sensor_history`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| 7    | Blueprints (F10 — admin definition + user instance)                                  | `blueprints`, `blueprint_slots`, `blueprint_params`, `blueprint_phases`, `blueprint_phase_targets`, `blueprint_scene_templates`, `blueprint_scene_template_members`, `blueprint_rule_templates`, `blueprint_rule_template_conditions`, `blueprint_rule_template_actions`, `blueprint_pipeline_templates`, `blueprint_pipeline_template_sensors`, `blueprint_pipeline_template_stages`, `blueprint_pipeline_template_triggers`, `blueprint_instances`, `blueprint_slot_bindings`, `blueprint_param_overrides` |
+| Tier | Theme                                                                                | Tables                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | External catalog                                                                     | `google_action_types`, `google_device_traits`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 1    | Device & ML catalog                                                                  | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models`                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 2    | Identity                                                                             | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| 6    | Telemetry                                                                            | `sensor_history`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 7    | Blueprints (F10 — admin definition + user instance)                                  | `blueprints`, `blueprint_slots`, `blueprint_params`, `blueprint_phases`, `blueprint_phase_targets`, `blueprint_scene_templates`, `blueprint_scene_template_members`, `blueprint_rule_templates`, `blueprint_rule_template_conditions`, `blueprint_rule_template_actions`, `blueprint_pipeline_templates`, `blueprint_pipeline_template_sensors`, `blueprint_pipeline_template_stages`, `blueprint_pipeline_template_triggers`, `blueprint_instances`, `blueprint_slot_bindings`, `blueprint_param_overrides`, `blueprint_instance_phase_state` |
 
 ---
 
@@ -501,8 +501,9 @@ erDiagram
     int blueprint_version "derived from / reconciled to"
     int area_id FK
     string name
-    int current_phase_id FK "nullable; advancing writes ONLY this"
-    datetime phase_started_at "nullable"
+    string lifecycle_state "not_started | running | stopped — nothing acts unless running"
+    int current_phase_id FK "nullable; a phase change writes ONLY this + phase_started_at"
+    datetime phase_started_at "nullable; start of the CURRENT visit, null whenever parked"
     datetime created_at
     datetime updated_at
   }
@@ -519,6 +520,14 @@ erDiagram
     string param_key
     string phase_key "empty = every phase; else that phase only"
     string value "beats phase target and default"
+  }
+  BlueprintInstancePhaseState {
+    int id PK
+    int instance_id FK
+    string phase_key "banked per phase, survives a v2"
+    int accrued_seconds "time from PREVIOUS visits; current run is live"
+    datetime last_exited_at "nullable"
+    datetime updated_at
   }
 
   %% ── Relationships ──
@@ -601,6 +610,7 @@ erDiagram
   BlueprintPhase        |o--o{ BlueprintInstance      : "current phase of"
   BlueprintInstance     ||--o{ BlueprintSlotBinding   : "binds slots"
   BlueprintInstance     ||--o{ BlueprintParamOverride : "user tuning"
+  BlueprintInstance     ||--o{ BlueprintInstancePhaseState : "banked phase time"
   UserDevice            ||--o{ BlueprintSlotBinding   : "bound to slot"
   BlueprintInstance     |o--o{ Scene                  : "derived"
   BlueprintInstance     |o--o{ UserRule               : "derived"
@@ -982,11 +992,27 @@ follow the identical pattern against `scenes`/`scene_members` and `pipelines`/`p
 pipeline template's sensor bounds (`min_value`/`max_value`) and its stage `prompt_template`
 accept references too — that is how a phase reaches the LLM.
 
-#### `blueprint_instances` (`BlueprintInstance`) — a user's live copy. **Advancing a phase writes `current_phase_id` and nothing else**; no rule, scene or pipeline row is rewritten. Unique `(user_id, name)`.
+#### `blueprint_instances` (`BlueprintInstance`) — a user's live copy. **Changing phase writes `current_phase_id` + `phase_started_at` and a `blueprint_instance_phase_state` row, and nothing else**; no rule, scene or pipeline row is rewritten. Unique `(user_id, name)`.
 
-| id  | user_id | blueprint_id | blueprint_version | area_id | name           | current_phase_id | phase_started_at     |
-| --- | ------- | ------------ | ----------------- | ------- | -------------- | ---------------- | -------------------- |
-| 12  | 7       | 3            | 1                 | 9       | Main reservoir | 30 (Seedling)    | 2026-07-21T09:00:00Z |
+| id  | user_id | blueprint_id | blueprint_version | area_id | name           | lifecycle_state | current_phase_id | phase_started_at     |
+| --- | ------- | ------------ | ----------------- | ------- | -------------- | --------------- | ---------------- | -------------------- |
+| 12  | 7       | 3            | 1                 | 9       | Main reservoir | running         | 30 (Seedling)    | 2026-07-21T09:00:00Z |
+
+**`lifecycle_state` — deriving builds a setup, it does not start it.** Binding a board says nothing
+about when the process that board watches actually began, so the start instant is a decision the
+user makes (which phase, and how far into it), not a side effect of finishing the wizard.
+
+| State         | `current_phase_id` | `phase_started_at` | What runs                            |
+| ------------- | ------------------ | ------------------ | ------------------------------------ |
+| `not_started` | null               | null               | nothing this setup derived           |
+| `running`     | set                | set                | everything, subject to `phase_scope` |
+| `stopped`     | **remembered**     | null               | nothing this setup derived           |
+
+A null `phase_started_at` is the single mechanism behind "parked": the auto-advance cron's
+due-check reads it, and so does every elapsed number, so one column stops the clock everywhere.
+The gate on _acting_ is `isAutomationLive` in `@lattice/params`, applied by the rule engine,
+pipeline triggers and scene execution alike — **including emergency rules**, because stopping a
+setup is meant to mean the setup is off, not off except the parts that matter.
 
 #### `blueprint_slot_bindings` (`BlueprintSlotBinding`) — slot → real device. `slot_key` is a plain string, not an FK, so the binding survives the slot row being edited in a later version. `auto_bound=true` means exactly one candidate matched and the user confirmed nothing. Unique `(instance_id, slot_key, user_device_id)`.
 
@@ -1016,6 +1042,25 @@ Advance to Mature and row 91 wins with 45 — the more specific row beats the al
 both overrides and Seedling resolves to 60 (its target), Mature falls through to the default 40 —
 with zero writes to the rule in every case.
 
+#### `blueprint_instance_phase_state` (`BlueprintInstancePhaseState`) — time already banked in each phase, written when the instance **leaves** it. The phase it is in right now is not in here: its live run is `now - blueprint_instances.phase_started_at`, added at read time, so a running timer costs no writes. Keyed by phase key (like the overrides table) so a bank survives a v2 that recreates the phase rows. Unique `(instance_id, phase_key)`.
+
+| id  | instance_id | phase_key  | accrued_seconds | last_exited_at       |
+| --- | ----------- | ---------- | --------------- | -------------------- |
+| 60  | 12          | seedling   | 604800          | 2026-07-28T09:00:00Z |
+| 61  | 12          | vegetative | 273600          | 2026-07-30T14:00:00Z |
+
+This is what makes rolling a phase back an undo rather than a restart. Instance 12 spent 3d 4h in
+Vegetative, rolled back to Seedling, and comes back later:
+
+| Re-entering Vegetative with… | `accrued_seconds` becomes | Elapsed shown       |
+| ---------------------------- | ------------------------- | ------------------- |
+| `timer: "resume"`            | 273600 (kept)             | 3d 4h, and counting |
+| `timer: "reset"`             | 0                         | from zero           |
+| `timer: "at"` (2 days)       | 172800                    | 2d, and counting    |
+| auto-advance cron            | 0 — always resets         | from zero           |
+
+Only a person ever spends a bank; the clock alone cannot resurrect time from an earlier visit.
+
 ---
 
 ## Notes / invariants
@@ -1038,10 +1083,10 @@ with zero writes to the rule in every case.
 - **Blueprints store references, not values.** A derived rule's `threshold_value` may be
   `@phase.humidity.min` rather than a number, resolved at evaluation time by `@lattice/params`
   (precedence: override → current phase → default). This is deliberate: it makes reconcile,
-  phase advance and user tuning write to **disjoint** places — a phase advance touches one column
-  on `blueprint_instances`, an override is its own row, and reconcile only ever changes entity
-  structure — so none of the three can clobber another. An unresolvable reference resolves to
-  null and the caller must fail closed.
+  phase advance and user tuning write to **disjoint** places — a phase change touches the phase
+  columns on `blueprint_instances` plus its own `blueprint_instance_phase_state` row, an override
+  is its own row, and reconcile only ever changes entity structure — so none of the three can
+  clobber another. An unresolvable reference resolves to null and the caller must fail closed.
 - **Blueprint slots bind through `sealed_templates`, never through `devices` directly.** That tier
   already owns "which firmware versions does this config apply to" and materializes per-device
   config idempotently; a blueprint only adds the multi-device layer above it. Non-sealed,

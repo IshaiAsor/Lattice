@@ -71,20 +71,84 @@ bound (user choice)` ×2 → `derive: resolving (slot, action_name)…` → `blu
 On the instance page, the **Settings** card. Each row shows the resolved value _and where it came
 from_ — that label is the point of the whole design.
 
-| Step                                   | Expect                                                                                                                       |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Fresh setup, phase **Commissioning**   | `Refill below` = **40** "from this phase"; `Stop filling at` = **95** "from this phase"                                      |
-| `Pump on value`                        | shown read-only (`user_tunable: false`) — no input, no restore button                                                        |
-| Click the **Steady state** phase       | `Refill below` → **20** "from this phase"; `Stop filling at` → **90** **"blueprint default"** (steady sets no target for it) |
-| Type `33` into `Refill below`, tab out | → **33**, "your value", row gets a left accent bar                                                                           |
-| Click the **restore** icon on that row | → back to **20**, "from this phase"                                                                                          |
+| Step                                     | Expect                                                                                                                       |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Fresh setup, phase **Commissioning**     | `Refill below` = **40** "from this phase"; `Stop filling at` = **95** "from this phase"                                      |
+| `Pump on value`                          | shown read-only (`user_tunable: false`) — no input, no restore button                                                        |
+| Click **Steady state** → **Start fresh** | `Refill below` → **20** "from this phase"; `Stop filling at` → **90** **"blueprint default"** (steady sets no target for it) |
+| Type `33` into `Refill below`, tab out   | → **33**, "your value", row gets a left accent bar                                                                           |
+| Click the **restore** icon on that row   | → back to **20**, "from this phase"                                                                                          |
 
 **The load-bearing check:** open **Automate → Refill the tank** while doing the above. Its
 threshold stays the literal text `@phase.level.min` throughout. Nothing rewrites the rule — only
-`current_phase_id` / an override row changes.
+the phase columns / a bank row / an override row change.
 
-`api` logs: `phase set manually — one column written, no automation rows touched`, and
-`override set — its own row, so reconcile can never clobber it`.
+`api` logs: `phase set manually — phase columns + time bank written, no automation rows touched`,
+and `override set — its own row, so reconcile can never clobber it`.
+
+---
+
+## 2a · Starting and stopping a setup (F10.13)
+
+Deriving builds a setup; it does not start it. The instance page leads with a lifecycle card.
+
+| Step                                           | Expect                                                                                                            |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Right after deriving                           | card reads **Not started**; the phase track is dimmed and every step is unclickable                               |
+| **Automate** → the derived rule                | present and enabled, but it never fires — a not-started setup acts on nothing                                     |
+| **Dashboard** → the derived scene              | greyed out; running it returns "This scene's setup is not running"                                                |
+| Press **Start**                                | dialog asks the phase **and** how far into it — "just starting", "carry on", or a value you name                  |
+| Choose Commissioning, "already underway 1 day" | card reads **Running**, the phase track lights up, and Commissioning shows ~1d elapsed                            |
+| Run the derived scene again                    | it fires, and the board acks                                                                                      |
+| Press **Pause** → confirm                      | card reads **Paused**; the confirm names how many automations are held and says emergencies too                   |
+| While paused, watch `automation-worker` logs   | `rule skipped — its setup is not running`                                                                         |
+| Press **Continue**                             | defaults to the phase it was parked in, offering to **carry on** from the banked time                             |
+| Press the **reset** icon → confirm             | back to **Not started**, every phase's banked time gone — but the devices, tuning and automations all still there |
+
+The load-bearing check here is the **scene**, not the rule: it is unscoped, so the phase gate alone
+would never hold it. If it runs while the setup is paused, the lifecycle gate is not doing its job.
+
+**Also check the setups list** (sidebar → _Set up_). Each row carries the state chip, the phase and
+its progress, and the same three actions — so the common case never needs the instance page at all.
+A **paused** row reads `1d in, paused` rather than a countdown: nothing is counting down, and a
+"23h 59m left" that still says the same tomorrow is a promise the page cannot keep.
+
+### Blueprints with no phases
+
+Not every blueprint is time-dependent, and some declare no phases at all. Import one with
+`"phases": []` and derive it:
+
+| Step                        | Expect                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| Derive it                   | born **Running** — there is no lifecycle to start, and holding it inert would make it useless  |
+| Its row in the setups list  | **no state chip, no phase line, no progress bar** — just `from <blueprint>`, exactly as before |
+| Its row's actions           | **Pause** only; no Reset, because there is no banked time to discard                           |
+| Instance page               | the lifecycle card is there ("its automations are simply live"), the phase track is not        |
+| Pause it, then **Continue** | both work — the trap this closes: `stop` accepted it with no phase for `start` to enter        |
+
+---
+
+## 2b · Phase timers (F10.12)
+
+Every phase change asks what to do with the clock, because before this a rollback silently
+restarted the phase. Author a throwaway blueprint whose phases are measured in **seconds**
+(`A` = 60s auto-advance → `B` = 120s auto-advance → `C` = no duration) — the whole lifecycle is
+then observable in a couple of minutes instead of a fortnight.
+
+| Step                                           | Expect                                                                                                    |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Derive it                                      | phase **A** is current, its bar fills, `… left` counts down; the clock started on the wizard's last click |
+| Wait for the cron                              | advances to **B** at 60s, with the usual `blueprint_phase_advanced` notification                          |
+| ~30s into **B**, click **A** → **Start fresh** | A restarts from 0; **B** now reads `30s banked` and its bar is frozen there                               |
+| Let A advance into **B** again                 | B starts at **0**, not 30s — auto-advance always resets; only a person spends a bank                      |
+| Click **B** → **Resume**                       | dialog offers `30s in · 1m 30s left`; B continues from 30s and advances 90s later                         |
+| Click **B** → **Start at** `5` `minutes`       | the ⚠ row appears ("will advance again straight away") and it does, on the next 10s tick                  |
+| Sit in **C**                                   | no bar, a rising `in this phase 1m 20s`, and it never advances — a terminal phase is a resting state      |
+| Click the **current** phase → **Start fresh**  | its running timer restarts; this is also how a mis-set clock is corrected                                 |
+| Click the current phase → **Resume**           | not offered — there is no earlier visit to resume, only the run in flight                                 |
+
+`api` logs carry `mode`, `banked` and `entering` on every change; `automation-worker` logs
+`accrued` in `phase cron: evaluated`, which is the number that makes a resumed phase fire early.
 
 ---
 

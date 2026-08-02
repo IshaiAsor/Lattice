@@ -16,6 +16,7 @@ export async function loadParamContext(instanceId: number): Promise<ParamContext
   const instance = await db.blueprintInstance.findUnique({
     where: { id: instanceId },
     select: {
+      lifecycle_state: true,
       overrides: { select: { param_key: true, phase_key: true, value: true } },
       blueprint: { select: { params: { select: { key: true, default_value: true } } } },
       current_phase: {
@@ -37,11 +38,15 @@ export async function loadParamContext(instanceId: number): Promise<ParamContext
     overrides: instance.overrides,
     defaults: instance.blueprint.params,
     currentPhase: instance.current_phase,
+    // Carried on the context so the run/hold gate and the resolved values come from one read of
+    // one row — they cannot disagree about which setup they describe.
+    lifecycle: instance.lifecycle_state,
   });
   log.debug(
     {
       instanceId,
       phase: ctx.phase?.key ?? null,
+      lifecycle: ctx.lifecycle,
       phaseOverrides: ctx.phaseOverrides,
       overrides: ctx.overrides,
       phaseTargets: ctx.phaseTargets,

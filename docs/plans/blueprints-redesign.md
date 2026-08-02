@@ -119,13 +119,29 @@ user override (this phase)  →  user override (all phases)  →  current phase 
 > wins. Both layers remain **per instance**: two setups derived from one blueprint tune
 > independently, and neither can write the shared template.
 
-| Actor         | What it writes                                        | What it never touches |
-| ------------- | ----------------------------------------------------- | --------------------- |
-| Reconcile     | entity **structure** (exists? wired to which action?) | values, overrides     |
-| Phase advance | `BlueprintInstance.current_phase_id` — **one column** | any rule/pipeline row |
-| User override | a `BlueprintParamOverride` row                        | the rule row itself   |
+| Actor         | What it writes                                                         | What it never touches |
+| ------------- | ---------------------------------------------------------------------- | --------------------- |
+| Reconcile     | entity **structure** (exists? wired to which action?)                  | values, overrides     |
+| Phase change  | the two phase columns + that phase's `BlueprintInstancePhaseState` row | any rule/pipeline row |
+| User override | a `BlueprintParamOverride` row                                         | the rule row itself   |
 
 They are physically incapable of clobbering each other, because they write to disjoint places.
+
+> **Amended 2026-07-31 (F10.13).** Deriving a setup no longer starts it. A `lifecycle_state`
+> (`not_started` / `running` / `stopped`) is set by the user, who also says which phase the real
+> process is in and how far into it — because binding a board carries none of that. The gate is
+> `isAutomationLive` in `@lattice/params`, and it sits in front of the phase-scope gate: while a
+> setup is not running **nothing it derived acts**, emergency rules included. Parking works by
+> nulling `phase_started_at`, so one column stops the clock for both the cron and the UI.
+
+> **Amended 2026-07-31 (F10.12).** A phase change used to be literally one column write. It is now
+> three rows in one transaction — `current_phase_id` + `phase_started_at`, the leaving phase's time
+> bank, and the entering phase's — because re-stamping `phase_started_at` on every move meant a
+> rolled-back phase restarted from zero, with nowhere to record the time already spent in it.
+> Leaving a phase banks its run; entering one either spends that bank (`resume`), discards it
+> (`reset`) or takes a value the user names (`at`). Auto-advance always resets, so the clock alone
+> can never spend a bank. The invariant the row above is really asserting is unchanged and is the
+> one that matters: **no rule, scene or pipeline row is written by a phase change.**
 
 **Reference grammar** (validated on write, resolved on read):
 

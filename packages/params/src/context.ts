@@ -24,6 +24,12 @@ export interface ParamContextSource {
     context_notes?: string | null;
     targets: { param_key: string; value: string }[];
   } | null;
+  /**
+   * `blueprint_instances.lifecycle_state` (F10.13). Carried through so a caller that loaded a
+   * context for resolution also holds the run/hold gate — the two questions are answered from one
+   * read of the same row, which is what stops them drifting apart.
+   */
+  lifecycle?: string | null;
 }
 
 /** `phase_key` on an override row: the empty string means "in every phase". */
@@ -52,6 +58,7 @@ export function buildParamContext(src: ParamContextSource): ParamContext {
           context_notes: src.currentPhase.context_notes ?? null,
         }
       : null,
+    lifecycle: src.lifecycle ?? null,
   };
 }
 
@@ -66,4 +73,6 @@ export const EMPTY_PARAM_CONTEXT: ParamContext = Object.freeze({
   phaseTargets: {},
   defaults: {},
   phase: null,
+  // Not from a setup, so no setup can hold it: a hand-written rule is unaffected by F10.13.
+  lifecycle: null,
 });

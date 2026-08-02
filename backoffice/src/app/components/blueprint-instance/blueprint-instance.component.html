@@ -32,21 +32,103 @@
       </div>
     }
 
+    <!-- ── Lifecycle ───────────────────────────────────────────────────────
+         Deriving builds a setup; the user starts it, saying where in the lifecycle the real
+         process already is. Until then nothing it derived acts, so the page leads with that
+         rather than showing a timeline that looks live.
+
+         Shown even when the blueprint declares no phases: plenty are not time-dependent, and
+         pausing still means "hold this setup's automations". Only the phase-shaped parts drop
+         away — there is nothing to position and nothing to count. -->
+    <div class="lifecycle lattice-card" [class.inert]="!running">
+      <mat-icon class="lifecycle-icon">{{
+        running ? 'play_circle' : stopped ? 'pause_circle' : 'schedule'
+      }}</mat-icon>
+      <div class="lifecycle-text">
+        <span class="lifecycle-state">
+          @if (running) {
+            Running
+          } @else if (stopped) {
+            Paused
+          } @else {
+            Not started
+          }
+        </span>
+        <span class="lifecycle-hint">
+          @if (!hasPhases) {
+            @if (running) {
+              This setup has no phases — its automations are simply live.
+            } @else {
+              Held. Nothing in this setup is running — including anything marked as an emergency.
+            }
+          } @else if (running) {
+            In {{ instance.current_phase?.name }} · {{ lifecycleSummary() }}
+          } @else if (stopped) {
+            Held in {{ instance.current_phase?.name }} at {{ lifecycleSummary() }}. Nothing in this
+            setup is running — including anything marked as an emergency.
+          } @else {
+            Nothing runs until you say the process has begun, and where in the lifecycle it is.
+          }
+        </span>
+      </div>
+      <div class="lifecycle-actions">
+        @if (running) {
+          <button mat-stroked-button (click)="stop()" [disabled]="busy">Pause</button>
+        } @else {
+          <button mat-flat-button color="primary" (click)="start()" [disabled]="busy">
+            {{ stopped ? 'Continue' : 'Start' }}
+          </button>
+        }
+        <!-- Reset is phase-only: nothing banked to discard without a lifecycle. -->
+        @if (hasPhases && !notStarted) {
+          <button
+            mat-icon-button
+            (click)="resetLifecycle()"
+            [disabled]="busy"
+            matTooltip="Back to not started — discards the time counted in every phase"
+          >
+            <mat-icon>restart_alt</mat-icon>
+          </button>
+        }
+      </div>
+    </div>
+
     <!-- ── Phase timeline ──────────────────────────────────────────────── -->
     @if (instance.phases.length > 0) {
       <h2 class="section-title">Phase</h2>
-      <div class="phase-track">
+      <div class="phase-track" [class.inert]="!running">
         @for (phase of instance.phases; track phase.id) {
+          <!-- The current step is clickable too: that is how its timer is restarted or moved. -->
           <button
             class="phase-step"
             [class.current]="phase.is_current"
-            [disabled]="busy || phase.is_current"
+            [disabled]="busy || !running"
             (click)="setPhase(phase)"
-            [matTooltip]="phase.is_current ? 'Current phase' : 'Move to this phase'">
-            <span class="phase-dot"></span>
-            <span class="phase-name">{{ phase.name }}</span>
-            @if (phaseDuration(phase)) {
-              <span class="phase-duration">{{ phaseDuration(phase) }}</span>
+            [matTooltip]="
+              !running
+                ? 'Start this setup to choose a phase'
+                : phase.is_current
+                  ? 'Restart or move this phase’s timer'
+                  : 'Move to this phase'
+            "
+          >
+            <span class="phase-head">
+              <span class="phase-dot"></span>
+              <span class="phase-name">{{ phase.name }}</span>
+              @if (phase.is_current) {
+                <span class="now-chip">now</span>
+              }
+            </span>
+            <span class="phase-duration">{{ phaseDuration(phase) }}</span>
+
+            @if (showProgressBar(phase)) {
+              <span class="phase-progress">
+                <span class="phase-progress-fill" [style.width.%]="phaseProgress(phase)"></span>
+              </span>
+              <span class="phase-elapsed">{{ phaseProgressLabel(phase) }}</span>
+            }
+            @if (phaseTimerLabel(phase)) {
+              <span class="phase-timer">{{ phaseTimerLabel(phase) }}</span>
             }
           </button>
         }
@@ -72,7 +154,8 @@
                   (blur)="commitParam(param)"
                   (keyup.enter)="commitParam(param)"
                   [disabled]="busy"
-                  matTooltip="Sets this for every phase" />
+                  matTooltip="Sets this for every phase"
+                />
                 @if (param.unit) {
                   <span matTextSuffix>{{ param.unit }}</span>
                 }
@@ -83,7 +166,8 @@
                 class="reset-param"
                 [disabled]="busy || !isPinned(param, null)"
                 (click)="clearParam(param)"
-                matTooltip="Use the blueprint's value again">
+                matTooltip="Use the blueprint's value again"
+              >
                 <mat-icon>settings_backup_restore</mat-icon>
               </button>
             } @else {
@@ -97,15 +181,15 @@
                 mat-icon-button
                 class="expand-param"
                 (click)="toggleExpanded(param)"
-                [matTooltip]="
-                  isExpanded(param) ? 'Hide phases' : 'Set a different value per phase'
-                ">
+                [matTooltip]="isExpanded(param) ? 'Hide phases' : 'Set a different value per phase'"
+              >
                 <mat-icon>{{ isExpanded(param) ? 'expand_less' : 'expand_more' }}</mat-icon>
               </button>
               @if (!isExpanded(param) && tunedPhaseCount(param) > 0) {
                 <span
                   class="tuned-chip"
-                  matTooltip="You set a value for {{ tunedPhaseCount(param) }} phase(s)">
+                  matTooltip="You set a value for {{ tunedPhaseCount(param) }} phase(s)"
+                >
                   {{ tunedPhaseCount(param) }} tuned
                 </span>
               }
@@ -130,13 +214,15 @@
                     <mat-form-field
                       appearance="outline"
                       class="param-input"
-                      subscriptSizing="dynamic">
+                      subscriptSizing="dynamic"
+                    >
                       <input
                         matInput
                         [(ngModel)]="drafts[draftKey(param, cell)]"
                         (blur)="commitParam(param, cell)"
                         (keyup.enter)="commitParam(param, cell)"
-                        [disabled]="busy" />
+                        [disabled]="busy"
+                      />
                       @if (param.unit) {
                         <span matTextSuffix>{{ param.unit }}</span>
                       }
@@ -147,7 +233,8 @@
                       class="reset-param"
                       [disabled]="busy || !isPinned(param, cell)"
                       (click)="clearParam(param, cell)"
-                      matTooltip="Use the blueprint's value for this phase again">
+                      matTooltip="Use the blueprint's value for this phase again"
+                    >
                       <mat-icon>settings_backup_restore</mat-icon>
                     </button>
                   } @else {
@@ -180,17 +267,13 @@
     @if (driftedEntities().length > 0) {
       <h2 class="section-title">Your edits</h2>
       <div class="drift-list lattice-card">
-        <p class="drift-intro">
-          These were changed by you, so blueprint updates leave them alone.
-        </p>
+        <p class="drift-intro">These were changed by you, so blueprint updates leave them alone.</p>
         @for (entity of driftedEntities(); track entity.kind + entity.id) {
           <div class="drift-row">
             <mat-icon class="drift-icon">edit</mat-icon>
             <span class="drift-name">{{ entity.name }}</span>
             <span class="drift-kind">{{ entity.kind }}</span>
-            <button mat-stroked-button (click)="reset(entity)" [disabled]="busy">
-              Restore
-            </button>
+            <button mat-stroked-button (click)="reset(entity)" [disabled]="busy">Restore</button>
           </div>
         }
       </div>

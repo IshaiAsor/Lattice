@@ -10,16 +10,71 @@
       @for (setup of setups; track setup.id) {
         <div
           class="setup-card lattice-card"
+          [class.inert]="!isRunning(setup)"
           role="button"
           tabindex="0"
           (click)="open(setup)"
           (keyup.enter)="open(setup)"
-          (keyup.space)="open(setup)">
+          (keyup.space)="open(setup)"
+        >
           <mat-icon class="setup-icon">hub</mat-icon>
           <div class="setup-text">
-            <span class="setup-name">{{ setup.name }}</span>
-            <span class="setup-sub">from {{ setup.blueprint_key }}</span>
+            <span class="setup-name">
+              {{ setup.name }}
+              @if (showStateChip(setup)) {
+                <span class="state-chip" [class.live]="isRunning(setup)">
+                  <mat-icon>{{ stateIcon(setup) }}</mat-icon>
+                  {{ stateLabel(setup) }}
+                </span>
+              }
+            </span>
+            <span class="setup-sub">{{ phaseLine(setup) }}</span>
+            @if (showProgressBar(setup)) {
+              <span class="setup-progress">
+                <span class="setup-progress-fill" [style.width.%]="progress(setup)"></span>
+              </span>
+            }
           </div>
+
+          <!-- Every action stops the click travelling; the row itself opens the setup. -->
+          <div class="setup-actions" (click)="$event.stopPropagation()">
+            <!-- Pause/Continue apply to every setup: holding its automations is meaningful with or
+                 without a lifecycle. Reset is phase-only — there is no banked time to discard and
+                 no "not started" to return to when the blueprint declares no phases. -->
+            @if (isRunning(setup)) {
+              <button
+                mat-icon-button
+                (click)="stop(setup, $event)"
+                [disabled]="busyId !== null"
+                matTooltip="Pause — holds every automation this setup owns"
+              >
+                <mat-icon>pause</mat-icon>
+              </button>
+            } @else {
+              <button
+                mat-icon-button
+                class="start-action"
+                (click)="start(setup, $event)"
+                [disabled]="busyId !== null"
+                [matTooltip]="
+                  isStopped(setup) ? 'Continue from where it was paused' : 'Start this setup'
+                "
+              >
+                <mat-icon>play_arrow</mat-icon>
+              </button>
+            }
+            @if (setup.has_phases && setup.lifecycle_state !== 'not_started') {
+              <button
+                mat-icon-button
+                (click)="resetLifecycle(setup, $event)"
+                [disabled]="busyId !== null"
+                matTooltip="Reset — back to not started, discards the time counted in every phase"
+              >
+                <mat-icon>restart_alt</mat-icon>
+              </button>
+            }
+          </div>
+
           <mat-icon class="chevron">chevron_right</mat-icon>
         </div>
       }
@@ -27,7 +82,9 @@
   }
 
   <!-- ── Gallery ─────────────────────────────────────────────────────── -->
-  <h2 class="section-title">{{ setups.length > 0 ? 'Set up something else' : 'Available setups' }}</h2>
+  <h2 class="section-title">
+    {{ setups.length > 0 ? 'Set up something else' : 'Available setups' }}
+  </h2>
 
   @if (!loading && available.length === 0) {
     <div class="empty-state lattice-card">
@@ -54,11 +111,14 @@
             <div
               class="slot-row"
               [class.unmet]="slot.required && free.length === 0"
-              [class.choice]="free.length > 1">
+              [class.choice]="free.length > 1"
+            >
               <mat-icon class="slot-status">
                 {{
                   free.length === 0
-                    ? (slot.required ? 'error_outline' : 'remove')
+                    ? slot.required
+                      ? 'error_outline'
+                      : 'remove'
                     : free.length > 1
                       ? 'help_outline'
                       : 'check_circle'

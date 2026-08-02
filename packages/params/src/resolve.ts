@@ -46,6 +46,12 @@ export interface ParamContext {
   defaults: Record<string, string>;
   /** Null when the instance has no current phase (a blueprint without phases, say). */
   phase?: PhaseMeta | null;
+  /**
+   * The setup's lifecycle (F10.13), carried here so the callers that already load a context for
+   * resolution get the run/hold gate from the same read. Null/absent means "not from a blueprint
+   * instance", which is always live.
+   */
+  lifecycle?: string | null;
 }
 
 /**

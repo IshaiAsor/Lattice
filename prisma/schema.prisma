@@ -1057,6 +1057,17 @@ model BlueprintPipelineTemplateTrigger {
 
 // ─── Instance — user-owned ──────────────────────────────────────────────────────────────────
 
+// Deriving a setup builds it; it does not start it. `lifecycle_state` is that distinction:
+//
+//   not_started  no phase, no clock — the user has not said the real-world process began
+//   running      a phase is current and its clock is ticking
+//   stopped      the phase is remembered, the clock is parked (phase_started_at = null)
+//
+// Connecting a device says nothing about when the thing it watches actually started, so the start
+// instant is a decision the user makes — with a phase and a position inside it — not a side effect
+// of finishing the wizard. **Nothing derived from a setup acts while it is not running**: the gate
+// is `isAutomationLive` in @lattice/params, applied by the rule engine, pipeline triggers and scene
+// execution alike. That includes emergency rules — stopping a setup stops all of it.
 model BlueprintInstance {
   id                Int       @id @default(autoincrement())
   user_id           Int
@@ -1064,7 +1075,10 @@ model BlueprintInstance {
   blueprint_version Int // the version this was derived from / last reconciled to
   area_id           Int
   name              String    @db.VarChar(255)
+  lifecycle_state   String    @default("not_started") @db.VarChar(20)
   current_phase_id  Int?
+  // Start of the CURRENT run. Null whenever the clock is not ticking (not_started or stopped),
+  // which is also what makes the auto-advance cron structurally unable to move a stopped setup.
   phase_started_at  DateTime? @db.Timestamp(6)
   created_at        DateTime  @default(now()) @db.Timestamp(6)
   updated_at        DateTime  @default(now()) @db.Timestamp(6)
@@ -1076,6 +1090,7 @@ model BlueprintInstance {
   current_phase BlueprintPhase?          @relation(fields: [current_phase_id], references: [id], onDelete: SetNull)
   bindings      BlueprintSlotBinding[]
   overrides     BlueprintParamOverride[]
+  phase_state   BlueprintInstancePhaseState[]
   scenes        Scene[]
   rules         UserRule[]
   pipelines     Pipeline[]
@@ -1122,4 +1137,33 @@ model BlueprintParamOverride {
 
   @@unique([instance_id, param_key, phase_key])
   @@map("blueprint_param_overrides")
+}
+
+// How long the instance has *already* spent in each phase, banked when it leaves. The phase it is
+// in right now is not counted here — the live run is `now - phase_started_at`, added at read time
+// — so a running timer costs no writes and needs no cron of its own.
+//
+// This is what makes rolling a phase back a real undo rather than a restart: leaving banks the
+// time, and re-entering can either spend that bank ("resume"), discard it ("reset") or replace it
+// with a value the user names. Only a person spends a bank — auto-advance always resets, so the
+// clock alone can never resurrect time from an earlier visit.
+//
+// Keyed by phase *key*, like BlueprintParamOverride and for the same reason: a v2 publish can
+// recreate the phase rows, and time spent in "vegetative" should survive that. A key that no
+// longer names a phase is simply never read — kept rather than pruned, so re-adding the phase in a
+// later version restores its bank.
+model BlueprintInstancePhaseState {
+  id              Int       @id @default(autoincrement())
+  instance_id     Int
+  phase_key       String    @db.VarChar(64)
+  // Seconds, not milliseconds: an Int of seconds spans 68 years, while a BigInt of milliseconds
+  // cannot be JSON.stringify'd and would break the instance response.
+  accrued_seconds Int       @default(0)
+  last_exited_at  DateTime? @db.Timestamp(6)
+  updated_at      DateTime  @default(now()) @db.Timestamp(6)
+
+  instance BlueprintInstance @relation(fields: [instance_id], references: [id], onDelete: Cascade)
+
+  @@unique([instance_id, phase_key])
+  @@map("blueprint_instance_phase_state")
 }

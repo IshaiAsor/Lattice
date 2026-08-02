@@ -96,25 +96,38 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - ignores a row scoped to a phase the instance is not in, including when it has none
 - reports the layer it used, so the instance page cannot mislabel a value
 
-### Blueprints — `blueprints.phase-schedule.test.ts` ✅ (F10.4 phase auto-advance)
+### Blueprints — `blueprints.phase-schedule.test.ts` ✅ (F10.4 phase auto-advance + F10.12 time bank)
 
-- converts each supported unit to milliseconds
+- converts each supported unit to seconds
 - returns null for an unknown unit rather than guessing one
 - treats a missing, zero or negative value as no duration
 - is due once the full duration has elapsed
 - is due when the duration is overshot, so a downtime gap still advances
-- is not due one millisecond early
+- is not due one second early
 - is never due for a phase that did not opt in to auto-advance
 - is never due for the last phase — a terminal phase is a resting state, not an error
 - is never due when the phase was never entered
 - is never due when the duration is missing or unparseable
+- counts banked time, so a resumed phase fires early by exactly what it banked
+- is due on the spot when the bank already covers the duration
+- ignores a bank on a phase that never elapses, rather than inventing a deadline
 - picks the next-highest ordinal, not ordinal + 1
 - skips a gap left by a phase removed in a later blueprint version
 - returns null from the last phase
 - returns null when the current ordinal is past every declared phase
 - is order-independent — it sorts rather than trusting the query order
+- floors to whole seconds
+- never returns a negative, so a clock stepping back cannot credit unspent time
+- adds the live run to the bank for the phase in flight
+- is the bank alone for a phase not currently running
+- treats a missing or negative bank as zero
+- reset discards the bank — what the cron always does
+- resume keeps the bank, which is what makes a rollback an undo
+- at takes the requested value and ignores the bank
+- floors a fractional request and refuses a negative one
+- clamps to what the column can hold rather than overflowing it
 
-### Blueprints — `blueprints.phase-scope-gate.test.ts` ✅ (F10 phase scoping)
+### Blueprints — `blueprints.phase-scope-gate.test.ts` ✅ (F10 phase scoping + F10.13 lifecycle gate)
 
 - is active in any phase
 - is active even with no current phase
@@ -123,6 +136,14 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - is inactive when the current phase is not in scope
 - matches any one of several scoped phases
 - is inactive when the instance has no current phase — it cannot be "in" an unset phase
+- is running only in the running state
+- treats "no instance" as live — a hand-written rule is not gated by blueprints at all
+- refuses an unrecognised state rather than assuming it means running
+- needs the setup running AND the phase in scope
+- holds an unscoped automation too — stopping a setup stops all of it
+  - the load-bearing case for F10.13: empty scope passes the phase gate, so only the lifecycle gate can hold it
+- leaves hand-written automations untouched
+- holds a scoped automation whose setup is stopped in one of its phases
 
 ### Automation — `automation.rules-logic.test.ts` ✅
 
@@ -330,7 +351,7 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - ⬜ cooldown suppresses an immediate refire
 - ⬜ pipeline sensor-threshold trigger → pipelineRun row queued, cooldown respected
 
-### Blueprints — `blueprints.e2e.test.ts` ✅ (F10.2–F10.4)
+### Blueprints — `blueprints.e2e.test.ts` ✅ (F10.2–F10.4, F10.12–F10.13)
 
 - refuses to publish a blueprint whose action is not on the slot template
 - imports and publishes a valid blueprint
@@ -347,9 +368,29 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - resolves a param through phase → default → override, in that order
   - and asserts the rule row is byte-identical across all three — the central invariant
 - refuses to override a param the blueprint marked phase-driven
+- starts the setup, entering the phase the user names
+  - deriving builds a setup; starting it is a separate act, because when the real process began is something only the user knows
+- banks the time spent in a phase when the setup leaves it
+- resumes a phase from its bank rather than restarting it
+  - the rollback case F10.12 exists for: leaving banks, re-entering can spend the bank instead of restarting from zero
+- starts a phase at a point the caller names
+- resets a phase to zero, discarding what it had banked
+- rejects a malformed timer request rather than guessing at it
+  - unknown `timer`, `at` without `elapsed_seconds`, and resuming the phase already running
+- holds a scene while the setup is stopped, and releases it on start
+  - the scene is **unscoped**, so the phase gate alone would never hold it — this is the lifecycle gate or nothing
+- banks the run when stopped, and carries on from it when started again
+- lists a setup with the lifecycle needed to read it without opening it
+  - the setups list carries state + current phase + that phase's timer, so the landing page can answer "is this doing anything?"
+- refuses a phase change while the setup is not running
+- resets to never-started, discarding the banks but keeping the setup
+- rejects a malformed or contradictory lifecycle request
+- leaves every automation row untouched by a timer change
 - marks a derived rule the user edits as drift
 - publishes a v2 into the live setup, keeping the user edit and updating the rest
 - restores an edited rule from the blueprint on reset
+- derives a phase-less blueprint already running, and pauses/resumes it
+  - not every blueprint is time-dependent; pausing still holds its automations, and resuming must work with no phase to enter
 - offers both boards as candidates for a multi-device slot
 - fans a scene member and a rule action out to every bound board
   - a `max_count > 1` slot binds several devices; each template leaf that names it expands to one derived row per bound device

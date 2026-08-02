@@ -5,7 +5,8 @@ import { createLogger } from '@lattice/logger';
 import { db } from '../db/client';
 import {
   resolveParam,
-  isPhaseInScope,
+  isAutomationLive,
+  isInstanceRunning,
   EMPTY_PARAM_CONTEXT,
   type ParamContext,
 } from '@lattice/params';
@@ -60,14 +61,22 @@ class RulesEngine {
           (rule.blueprint_instance_id !== null
             ? contexts.get(rule.blueprint_instance_id)
             : undefined) ?? EMPTY_PARAM_CONTEXT;
-        // Phase scope (F10): a blueprint rule may be active only in certain phases. Empty scope
-        // (every hand-written rule, and blueprint rules left unscoped) is always active. Gated on
-        // the instance's current phase, so advancing a phase silently activates/deactivates rules
-        // without touching a row.
-        if (!isPhaseInScope(rule.phase_scope, ctx.phase?.key ?? null)) {
+        // Two gates, coarse first (F10.13 then F10). A rule is held when its setup is not running
+        // — a stopped setup does nothing at all, emergencies included — and then when the rule's
+        // phase scope does not cover the phase the setup is in. Empty scope (every hand-written
+        // rule, and blueprint rules left unscoped) is always in scope. Both are read at evaluation
+        // time, so starting, stopping or advancing changes what fires without touching a row.
+        if (!isAutomationLive(rule.phase_scope, ctx.phase?.key ?? null, ctx.lifecycle)) {
           log.debug(
-            { rule: rule.name, scope: rule.phase_scope, phase: ctx.phase?.key ?? null },
-            'rule skipped — not active in the current phase',
+            {
+              rule: rule.name,
+              scope: rule.phase_scope,
+              phase: ctx.phase?.key ?? null,
+              lifecycle: ctx.lifecycle,
+            },
+            isInstanceRunning(ctx.lifecycle)
+              ? 'rule skipped — not active in the current phase'
+              : 'rule skipped — its setup is not running',
           );
           continue;
         }

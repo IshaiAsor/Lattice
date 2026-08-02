@@ -1,5 +1,5 @@
 import { publish, RK, type ActionRequestedPayload } from '@lattice/queue';
-import { isPhaseInScope, resolveParam } from '@lattice/params';
+import { isAutomationLive, isInstanceRunning, resolveParam } from '@lattice/params';
 import { createLogger } from '@lattice/logger';
 import { db } from '../db';
 import { getChannel } from '../queue';
@@ -87,8 +87,11 @@ function memberCreateData(m: SceneMemberDto, index: number) {
 
 const memberInclude = {
   members: { orderBy: { sort_order: 'asc' as const } },
-  // The instance's current phase drives `in_phase` (F10); absent for hand-written scenes.
-  blueprint_instance: { select: { current_phase: { select: { key: true } } } },
+  // The setup's lifecycle and current phase together drive `in_phase` (F10.13 + F10); absent for
+  // hand-written scenes, which are never gated.
+  blueprint_instance: {
+    select: { lifecycle_state: true, current_phase: { select: { key: true } } },
+  },
 };
 
 class ScenesService {
@@ -152,13 +155,16 @@ class ScenesService {
   // Fire-and-forget fan-out: one ACTION_REQUESTED per member. Returns immediately (route
   // answers 202); per-device acks surface through the normal digest → socket state path.
   async execute(userId: number, id: number): Promise<{ queued: number }> {
-    const { blueprint_instance_id, phase_scope, currentPhaseKey } = await this.ensureOwned(
-      userId,
-      id,
-    );
-    // A phase-scoped derived scene is only runnable while its instance is in one of its phases
-    // (F10). Blueprint-authored; empty scope (all hand-written scenes) is always runnable.
-    if (!isPhaseInScope(phase_scope, currentPhaseKey)) {
+    const { blueprint_instance_id, phase_scope, currentPhaseKey, lifecycleState } =
+      await this.ensureOwned(userId, id);
+    // A derived scene is runnable only while its setup is running (F10.13) and, if it declared
+    // phases, while the setup is in one of them (F10). Hand-written scenes belong to no setup and
+    // pass both gates unconditionally. The two messages are separate because the fixes are: start
+    // the setup, versus wait for (or move to) the right phase.
+    if (!isInstanceRunning(lifecycleState)) {
+      throw Object.assign(new Error('This scene’s setup is not running'), { statusCode: 409 });
+    }
+    if (!isAutomationLive(phase_scope, currentPhaseKey, lifecycleState)) {
       throw Object.assign(
         new Error('This scene is not available in the current phase of its setup'),
         { statusCode: 409 },
@@ -226,6 +232,7 @@ class ScenesService {
     blueprint_instance_id: number | null;
     phase_scope: string[];
     currentPhaseKey: string | null;
+    lifecycleState: string | null;
   }> {
     const scene = await db.scene.findUnique({
       where: { id },
@@ -233,7 +240,9 @@ class ScenesService {
         user_id: true,
         blueprint_instance_id: true,
         phase_scope: true,
-        blueprint_instance: { select: { current_phase: { select: { key: true } } } },
+        blueprint_instance: {
+          select: { lifecycle_state: true, current_phase: { select: { key: true } } },
+        },
       },
     });
     if (!scene) throw Object.assign(new Error('Scene not found'), { statusCode: 404 });
@@ -242,6 +251,7 @@ class ScenesService {
       blueprint_instance_id: scene.blueprint_instance_id,
       phase_scope: scene.phase_scope,
       currentPhaseKey: scene.blueprint_instance?.current_phase?.key ?? null,
+      lifecycleState: scene.blueprint_instance?.lifecycle_state ?? null,
     };
   }
 
@@ -276,7 +286,10 @@ class ScenesService {
     name: string;
     sort_order: number;
     phase_scope: string[];
-    blueprint_instance: { current_phase: { key: string } | null } | null;
+    blueprint_instance: {
+      lifecycle_state: string;
+      current_phase: { key: string } | null;
+    } | null;
     members: {
       id: number;
       user_device_action_id: number;
@@ -286,12 +299,13 @@ class ScenesService {
     }[];
   }): SceneView {
     const currentPhaseKey = s.blueprint_instance?.current_phase?.key ?? null;
+    const lifecycleState = s.blueprint_instance?.lifecycle_state ?? null;
     return {
       id: s.id,
       name: s.name,
       sort_order: s.sort_order,
       phase_scope: s.phase_scope,
-      in_phase: isPhaseInScope(s.phase_scope, currentPhaseKey),
+      in_phase: isAutomationLive(s.phase_scope, currentPhaseKey, lifecycleState),
       members: s.members.map((m) => ({
         id: m.id,
         user_device_action_id: m.user_device_action_id,

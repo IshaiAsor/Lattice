@@ -37,17 +37,92 @@ blueprintsRouter.get('/instances/:id', async (req, res, next) => {
   }
 });
 
-// Manual phase change — the counterpart to automation-worker's auto-advance cron. Writes one
-// column; no rule, scene or pipeline row is touched.
+// ─── Lifecycle (F10.13) ───────────────────────────────────────────────────────────────────────
+//
+// Deriving builds a setup; starting it is a separate act, because when the real-world process
+// began is something only the user knows. While a setup is not running, nothing it derived acts.
+
+// Start or resume. `phase_key` defaults to where it was parked (else the first phase), and
+// `timer`/`elapsed_seconds` position the clock inside that phase — "it started two days ago".
+blueprintsRouter.post('/instances/:id/start', async (req, res, next) => {
+  try {
+    const { phase_key, timer, elapsed_seconds } = req.body ?? {};
+    if (phase_key !== undefined && phase_key !== null && typeof phase_key !== 'string') {
+      res.status(400).json({ error: 'phase_key must be a string' });
+      return;
+    }
+    const mode = timer ?? 'reset';
+    if (mode !== 'reset' && mode !== 'resume' && mode !== 'at') {
+      res.status(400).json({ error: 'timer must be reset, resume or at' });
+      return;
+    }
+    if (mode === 'at' && !Number.isInteger(elapsed_seconds)) {
+      res.status(400).json({ error: 'elapsed_seconds (a whole number) is required when timer=at' });
+      return;
+    }
+    res.json(
+      await blueprintInstancesService.start(
+        req.user!.id,
+        Number(req.params.id),
+        phase_key ?? null,
+        mode,
+        mode === 'at' ? Number(elapsed_seconds) : 0,
+      ),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Park it: banks the run, stops the clock, remembers the phase, holds every automation.
+blueprintsRouter.post('/instances/:id/stop', async (req, res, next) => {
+  try {
+    res.json(await blueprintInstancesService.stop(req.user!.id, Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Back to never-started. Discards the time banks only — bindings, tuning and the derived
+// automations all survive, which is what separates this from DELETE.
+blueprintsRouter.post('/instances/:id/reset-lifecycle', async (req, res, next) => {
+  try {
+    res.json(await blueprintInstancesService.reset(req.user!.id, Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Manual phase change — the counterpart to automation-worker's auto-advance cron. Writes the phase
+// columns and the phase's time bank; no rule, scene or pipeline row is touched.
+//
+// `timer` says what the phase being entered starts from: `reset` from zero (the default, and what
+// every caller did before banks existed), `resume` from the time it banked on an earlier visit, or
+// `at` from a value the caller names in `elapsed_seconds`.
 blueprintsRouter.put('/instances/:id/phase', async (req, res, next) => {
   try {
-    const { phase_key } = req.body ?? {};
+    const { phase_key, timer, elapsed_seconds } = req.body ?? {};
     if (typeof phase_key !== 'string' || !phase_key.trim()) {
       res.status(400).json({ error: 'phase_key is required' });
       return;
     }
+    const mode = timer ?? 'reset';
+    if (mode !== 'reset' && mode !== 'resume' && mode !== 'at') {
+      res.status(400).json({ error: 'timer must be reset, resume or at' });
+      return;
+    }
+    if (mode === 'at' && !Number.isInteger(elapsed_seconds)) {
+      res.status(400).json({ error: 'elapsed_seconds (a whole number) is required when timer=at' });
+      return;
+    }
     res.json(
-      await blueprintInstancesService.setPhase(req.user!.id, Number(req.params.id), phase_key),
+      await blueprintInstancesService.setPhase(
+        req.user!.id,
+        Number(req.params.id),
+        phase_key,
+        mode,
+        mode === 'at' ? Number(elapsed_seconds) : 0,
+      ),
     );
   } catch (err) {
     next(err);

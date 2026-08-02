@@ -5,8 +5,8 @@ import { createLogger } from '@lattice/logger';
 import {
   EMPTY_PARAM_CONTEXT,
   evaluateThreshold,
+  isAutomationLive,
   isErrorReading,
-  isPhaseInScope,
   isTriggerInCooldown,
   resolveParam,
 } from '@lattice/params';
@@ -50,14 +50,17 @@ export async function matchPipelineTriggers(
     },
     include: {
       pipeline: {
-        // phase_scope + the instance's current phase gate a blueprint pipeline's triggers to the
-        // phases it belongs to (F10). Unscoped pipelines (empty scope) fire in every phase.
+        // Two gates on a blueprint pipeline's triggers: its setup must be running (F10.13), and
+        // its phase_scope must cover the phase that setup is in (F10). Unscoped pipelines (empty
+        // scope) fire in every phase — but still only while the setup runs.
         select: {
           id: true,
           user_id: true,
           phase_scope: true,
           blueprint_instance_id: true,
-          blueprint_instance: { select: { current_phase: { select: { key: true } } } },
+          blueprint_instance: {
+            select: { lifecycle_state: true, current_phase: { select: { key: true } } },
+          },
         },
       },
     },
@@ -72,8 +75,17 @@ export async function matchPipelineTriggers(
 
   const now = new Date();
   for (const trigger of triggers) {
-    const currentPhaseKey = trigger.pipeline.blueprint_instance?.current_phase?.key ?? null;
-    if (!isPhaseInScope(trigger.pipeline.phase_scope, currentPhaseKey)) continue;
+    const instanceRow = trigger.pipeline.blueprint_instance;
+    const currentPhaseKey = instanceRow?.current_phase?.key ?? null;
+    if (
+      !isAutomationLive(
+        trigger.pipeline.phase_scope,
+        currentPhaseKey,
+        instanceRow?.lifecycle_state ?? null,
+      )
+    ) {
+      continue;
+    }
 
     const instanceId = trigger.pipeline.blueprint_instance_id;
     const ctx = (instanceId !== null ? contexts.get(instanceId) : undefined) ?? EMPTY_PARAM_CONTEXT;

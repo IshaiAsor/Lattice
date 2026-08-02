@@ -56,7 +56,12 @@ export interface DeriveResult {
   instance_id: number;
   area_id: number;
   name: string;
+  /** `not_started` for anything with phases — deriving builds a setup, it does not start it. */
+  lifecycle_state: string;
+  /** Always null now: nothing is entered until the user starts the setup (F10.13). */
   current_phase: string | null;
+  /** The phase Start will offer first, so the caller can name where it is about to begin. */
+  first_phase: string | null;
   bindings: { slot_key: string; user_device_id: number; auto_bound: boolean }[];
   created: { scenes: number; rules: number; pipelines: number };
 }
@@ -392,8 +397,15 @@ export const blueprintsDeriveService = {
           blueprint_version: bp.version,
           area_id: area.id,
           name: instanceName,
-          current_phase_id: firstPhase?.id ?? null,
-          phase_started_at: firstPhase ? new Date() : null,
+          // Derive builds the setup; it does not start it (F10.13). Binding a board says nothing
+          // about when the process it watches began, so no phase is entered and no clock runs
+          // until the user starts it and says where in the lifecycle they are.
+          //
+          // A blueprint with no phases has no lifecycle to start, and would be permanently inert
+          // under the run/hold gate — so it is born running instead.
+          lifecycle_state: firstPhase ? 'not_started' : 'running',
+          current_phase_id: null,
+          phase_started_at: null,
           bindings: { create: bindings },
         },
       });
@@ -529,7 +541,11 @@ export const blueprintsDeriveService = {
       instance_id: result.instance.id,
       area_id: result.area.id,
       name: instanceName,
-      current_phase: firstPhase?.key ?? null,
+      lifecycle_state: result.instance.lifecycle_state,
+      // Null until the user starts it — the wizard's next step, not its side effect.
+      current_phase: null,
+      /** The phase Start will offer first, so the wizard can name where it is about to begin. */
+      first_phase: firstPhase?.key ?? null,
       bindings,
       created: {
         scenes: sceneMembers.filter((s) => !s.skip).length,

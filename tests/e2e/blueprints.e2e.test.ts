@@ -152,6 +152,8 @@ describe('blueprints e2e (F10)', () => {
   let multiInstanceId: number | undefined;
   let scopeBlueprintId: number | undefined;
   let scopeInstanceId: number | undefined;
+  let noPhaseBlueprintId: number | undefined;
+  let noPhaseInstanceId: number | undefined;
 
   beforeAll(async () => {
     if (!(await stackUp())) return;
@@ -221,6 +223,10 @@ describe('blueprints e2e (F10)', () => {
 
   afterAll(async () => {
     if (!token) return;
+    if (noPhaseInstanceId)
+      await apiDelete(`/api/blueprints/instances/${noPhaseInstanceId}`, token).catch(() => {});
+    if (noPhaseBlueprintId)
+      await apiDelete(`/api/admin/blueprints/${noPhaseBlueprintId}`, token).catch(() => {});
     if (scopeInstanceId)
       await apiDelete(`/api/blueprints/instances/${scopeInstanceId}`, token).catch(() => {});
     if (scopeBlueprintId)
@@ -317,7 +323,11 @@ describe('blueprints e2e (F10)', () => {
     });
     instanceId = result.instance_id;
 
-    expect(result.current_phase).toBe('commissioning');
+    // Deriving builds the setup; it does not start it (F10.13). No phase is entered and no clock
+    // runs until the user says the real process has begun.
+    expect(result.lifecycle_state).toBe('not_started');
+    expect(result.current_phase).toBeNull();
+    expect(result.first_phase).toBe('commissioning');
     expect(result.created).toEqual({ scenes: 1, rules: 1, pipelines: 1 });
     // Explicit picks are recorded as such — auto_bound distinguishes "the system chose" from
     // "the user chose", which is what the instance page shows and reconcile respects.
@@ -329,6 +339,17 @@ describe('blueprints e2e (F10)', () => {
     const bound = devices.filter((d: any) => [tankDev.deviceId, socketDev.deviceId].includes(d.id));
     expect(bound).toHaveLength(2);
     expect(bound.every((d: any) => d.area_id === result.area_id)).toBe(true);
+  });
+
+  itStack('starts the setup, entering the phase the user names', async () => {
+    // Everything below this point exercises a *live* setup, so the suite starts it here — which is
+    // itself the first assertion that starting works.
+    const instance = await apiPost(`/api/blueprints/instances/${instanceId}/start`, token, {
+      phase_key: 'commissioning',
+    });
+    expect(instance.lifecycle_state).toBe('running');
+    expect(instance.current_phase.key).toBe('commissioning');
+    expect(instance.phases.find((p: any) => p.key === 'commissioning').started_at).not.toBeNull();
   });
 
   // ── Reference storage, and the dispatch that must undo it ────────────────
@@ -491,6 +512,232 @@ describe('blueprints e2e (F10)', () => {
     expect(status).toBe(400);
     expect(body.error).toContain('phase-driven');
   });
+
+  // ── Phase timers (F10.12) ────────────────────────────────────────────────
+  //
+  // Leaving a phase banks the time spent in it, so re-entering can resume rather than restart.
+  // Before this, rolling a phase back silently reset it — five days into a seven-day phase became
+  // seven days again, with nowhere to record that those days happened.
+
+  itStack('banks the time spent in a phase when the setup leaves it', async () => {
+    // The suite has been sitting in `steady` since the resolution test above, so it has a run to
+    // bank. One second of sleep makes the bank a number rather than a rounding question.
+    await new Promise((r) => setTimeout(r, 1100));
+
+    const instance = await apiPut(`/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: 'commissioning',
+      timer: 'reset',
+    });
+
+    const steady = instance.phases.find((p: any) => p.key === 'steady');
+    const commissioning = instance.phases.find((p: any) => p.key === 'commissioning');
+    expect(steady.accrued_seconds).toBeGreaterThan(0);
+    // Not current, so its elapsed is the bank alone and it stops moving.
+    expect(steady.elapsed_seconds).toBe(steady.accrued_seconds);
+    expect(steady.started_at).toBeNull();
+    // The entered phase was reset, and is the one now running.
+    expect(commissioning.accrued_seconds).toBe(0);
+    expect(commissioning.is_current).toBe(true);
+    expect(commissioning.started_at).not.toBeNull();
+  });
+
+  itStack('resumes a phase from its bank rather than restarting it', async () => {
+    const before = await apiGet(`/api/blueprints/instances/${instanceId}`, token);
+    const banked = before.phases.find((p: any) => p.key === 'steady').accrued_seconds;
+    expect(banked).toBeGreaterThan(0);
+
+    const instance = await apiPut(`/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: 'steady',
+      timer: 'resume',
+    });
+
+    const steady = instance.phases.find((p: any) => p.key === 'steady');
+    expect(steady.is_current).toBe(true);
+    expect(steady.accrued_seconds).toBe(banked); // the bank survived the round trip
+    expect(steady.elapsed_seconds).toBeGreaterThanOrEqual(banked); // …and the run continues on top
+  });
+
+  itStack('starts a phase at a point the caller names', async () => {
+    const instance = await apiPut(`/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: 'steady',
+      timer: 'at',
+      elapsed_seconds: 3600,
+    });
+
+    const steady = instance.phases.find((p: any) => p.key === 'steady');
+    expect(steady.accrued_seconds).toBe(3600);
+    expect(steady.elapsed_seconds).toBeGreaterThanOrEqual(3600);
+  });
+
+  itStack('resets a phase to zero, discarding what it had banked', async () => {
+    const instance = await apiPut(`/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: 'steady',
+      timer: 'reset',
+    });
+    expect(instance.phases.find((p: any) => p.key === 'steady').accrued_seconds).toBe(0);
+  });
+
+  itStack('rejects a malformed timer request rather than guessing at it', async () => {
+    const bad = await apiRaw('PUT', `/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: 'steady',
+      timer: 'rewind',
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toContain('timer must be');
+
+    const missing = await apiRaw('PUT', `/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: 'steady',
+      timer: 'at',
+    });
+    expect(missing.status).toBe(400);
+    expect(missing.body.error).toContain('elapsed_seconds');
+
+    // Resuming the phase you are already in has no earlier visit to resume.
+    const current = await apiGet(`/api/blueprints/instances/${instanceId}`, token);
+    const sameAgain = await apiRaw('PUT', `/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: current.current_phase.key,
+      timer: 'resume',
+    });
+    expect(sameAgain.status).toBe(400);
+    expect(sameAgain.body.error).toContain('already in');
+  });
+
+  // ── Lifecycle: start / stop / reset (F10.13) ─────────────────────────────
+  //
+  // A stopped setup does *nothing* — not its unscoped rules, not its scenes, not its emergencies.
+  // That is the whole point of the switch, and it is the assertion most worth pinning: the phase
+  // gate alone would let an unscoped automation keep firing.
+
+  itStack('holds a scene while the setup is stopped, and releases it on start', async () => {
+    const sceneName = `Stop the loop ${SUFFIX}`;
+    const scene = (await apiGet('/api/scenes', token)).find((s: any) => s.name === sceneName);
+    expect(scene).toBeDefined();
+    // Unscoped, so the phase gate alone would never hold it — only the lifecycle can.
+    expect(scene.phase_scope).toEqual([]);
+    expect(scene.in_phase).toBe(true);
+
+    const stopped = await apiPost(`/api/blueprints/instances/${instanceId}/stop`, token, {});
+    expect(stopped.lifecycle_state).toBe('stopped');
+    // The phase is remembered and its clock parked, so starting again can carry on.
+    expect(stopped.current_phase).not.toBeNull();
+    expect(stopped.phases.find((p: any) => p.is_current).started_at).toBeNull();
+
+    const held = (await apiGet('/api/scenes', token)).find((s: any) => s.name === sceneName);
+    expect(held.in_phase).toBe(false);
+    const refused = await apiRaw('POST', `/api/scenes/${scene.id}/execute`, token, {});
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toContain('not running');
+
+    const started = await apiPost(`/api/blueprints/instances/${instanceId}/start`, token, {
+      timer: 'resume',
+    });
+    expect(started.lifecycle_state).toBe('running');
+    const live = (await apiGet('/api/scenes', token)).find((s: any) => s.name === sceneName);
+    expect(live.in_phase).toBe(true);
+  });
+
+  itStack('banks the run when stopped, and carries on from it when started again', async () => {
+    // Arrive on a clean, running `steady`: the previous test left the setup running elsewhere.
+    await apiPut(`/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: 'steady',
+      timer: 'reset',
+    });
+    await new Promise((r) => setTimeout(r, 1100));
+
+    const stopped = await apiPost(`/api/blueprints/instances/${instanceId}/stop`, token, {});
+    const banked = stopped.phases.find((p: any) => p.key === 'steady').accrued_seconds;
+    expect(banked).toBeGreaterThan(0);
+    // Parked: elapsed is the bank and nothing more, because no run is in flight.
+    expect(stopped.phases.find((p: any) => p.key === 'steady').elapsed_seconds).toBe(banked);
+
+    const resumed = await apiPost(`/api/blueprints/instances/${instanceId}/start`, token, {
+      timer: 'resume',
+    });
+    expect(resumed.current_phase.key).toBe('steady'); // remembered, so no argument was needed
+    expect(resumed.phases.find((p: any) => p.key === 'steady').accrued_seconds).toBe(banked);
+  });
+
+  itStack('lists a setup with the lifecycle needed to read it without opening it', async () => {
+    // The setups list is the page a user lands on, so it has to answer "is this doing anything?"
+    // — a list of names alone cannot tell a running setup from a parked one.
+    await apiPost(`/api/blueprints/instances/${instanceId}/stop`, token, {});
+    let row = (await apiGet('/api/blueprints/instances', token)).find(
+      (r: any) => r.id === instanceId,
+    );
+    expect(row.lifecycle_state).toBe('stopped');
+    expect(row.has_phases).toBe(true);
+    expect(row.current_phase.key).toBe('steady'); // remembered while parked
+    expect(row.started_at).toBeNull(); // …with its clock stopped
+    expect(row.elapsed_seconds).toBe(row.accrued_seconds); // frozen at the bank
+
+    await apiPost(`/api/blueprints/instances/${instanceId}/start`, token, { timer: 'resume' });
+    row = (await apiGet('/api/blueprints/instances', token)).find((r: any) => r.id === instanceId);
+    expect(row.lifecycle_state).toBe('running');
+    expect(row.started_at).not.toBeNull();
+  });
+
+  itStack('refuses a phase change while the setup is not running', async () => {
+    await apiPost(`/api/blueprints/instances/${instanceId}/stop`, token, {});
+    const refused = await apiRaw('PUT', `/api/blueprints/instances/${instanceId}/phase`, token, {
+      phase_key: 'commissioning',
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toContain('not running');
+
+    // …and starting is the way in, taking the same phase and position arguments.
+    const started = await apiPost(`/api/blueprints/instances/${instanceId}/start`, token, {
+      phase_key: 'commissioning',
+      timer: 'at',
+      elapsed_seconds: 7200,
+    });
+    expect(started.current_phase.key).toBe('commissioning');
+    expect(started.phases.find((p: any) => p.key === 'commissioning').accrued_seconds).toBe(7200);
+  });
+
+  itStack('resets to never-started, discarding the banks but keeping the setup', async () => {
+    const reset = await apiPost(
+      `/api/blueprints/instances/${instanceId}/reset-lifecycle`,
+      token,
+      {},
+    );
+    expect(reset.lifecycle_state).toBe('not_started');
+    expect(reset.current_phase).toBeNull();
+    expect(reset.phase_started_at).toBeNull();
+    expect(reset.phases.every((p: any) => p.accrued_seconds === 0)).toBe(true);
+    // Destructive about time and nothing else — the devices and the derived automations remain.
+    expect(reset.bindings).toHaveLength(2);
+    expect(reset.entities.rules.length).toBeGreaterThan(0);
+
+    // Put the suite back on a running setup for everything that follows.
+    const started = await apiPost(`/api/blueprints/instances/${instanceId}/start`, token, {
+      phase_key: 'steady',
+    });
+    expect(started.current_phase.key).toBe('steady');
+  });
+
+  itStack('rejects a malformed or contradictory lifecycle request', async () => {
+    const already = await apiRaw(
+      'POST',
+      `/api/blueprints/instances/${instanceId}/start`,
+      token,
+      {},
+    );
+    expect(already.status).toBe(400);
+    expect(already.body.error).toContain('already running');
+
+    const badPhase = await apiRaw('POST', `/api/blueprints/instances/${instanceId}/start`, token, {
+      phase_key: 'harvest',
+    });
+    expect(badPhase.status).toBe(400);
+  });
+
+  itStack('leaves every automation row untouched by a timer change', async () => {
+    // The load-bearing invariant, restated for the timer paths: banks are their own rows.
+    const rule = (await apiGet('/api/rules', token)).find(
+      (r: any) => r.name === `Refill the tank ${SUFFIX}`,
+    );
+    expect(rule.conditions[0].threshold_value).toBe('@phase.level.min');
+  });
   // ── Reconcile (F10.6) ────────────────────────────────────────────────────
   //
   // The acceptance test for the whole redesign: a v2 must reach a live setup without touching
@@ -571,6 +818,85 @@ describe('blueprints e2e (F10)', () => {
 
     const drift = await apiGet(`/api/blueprints/instances/${instanceId}/drift`, token);
     expect(drift.entities).toHaveLength(0);
+  });
+
+  // ── Blueprints with no phases (F10.13) ───────────────────────────────────
+  //
+  // Plenty of blueprints are not time-dependent and some declare no phases at all. Such a setup has
+  // no lifecycle to position — but pausing still means "hold this setup's automations", so it must
+  // still pause and resume. Without the phase-less branch in start(), stop() would strand it:
+  // accepted on the way in, with no phase to enter on the way back.
+
+  itStack('derives a phase-less blueprint already running, and pauses/resumes it', async () => {
+    await releaseInstance(instanceId);
+    instanceId = undefined;
+
+    const doc = {
+      key: `${BLUEPRINT_KEY}_nophase`,
+      name: `E2E No Phases ${SUFFIX}`,
+      slots: [
+        { key: 'tank', label: 'Tank monitor', sealed_template: TANK_TEMPLATE },
+        { key: 'sockets', label: 'Socket board', sealed_template: SOCKET_TEMPLATE },
+      ],
+      params: [{ key: 'level.min', label: 'Refill below', default_value: '20', unit: '%' }],
+      phases: [],
+      scenes: [],
+      rules: [
+        {
+          key: 'refill',
+          name: `Always-on refill ${SUFFIX}`,
+          conditions: [
+            {
+              condition_type: 'threshold',
+              slot_key: 'tank',
+              action_name: 'water_level',
+              operator: '<',
+              // @param, not @phase: with no phases there is no phase layer to resolve against.
+              threshold_value: '@param.level.min',
+            },
+          ],
+          actions: [{ slot_key: 'sockets', action_name: 'i2c_socket_8', target_state: 'on' }],
+        },
+      ],
+      pipelines: [],
+    };
+    const imported = await apiPost('/api/admin/blueprints/import', token, doc);
+    noPhaseBlueprintId = imported.id;
+    await apiPost(`/api/admin/blueprints/${noPhaseBlueprintId}/publish`, token, {});
+
+    const derived = await apiPost(`/api/blueprints/${noPhaseBlueprintId}/derive`, token, {
+      name: `E2E No Phases Setup ${SUFFIX}`,
+      bindings: [
+        { slot_key: 'tank', user_device_id: tankDev.deviceId },
+        { slot_key: 'sockets', user_device_id: socketDev.deviceId },
+      ],
+    });
+    noPhaseInstanceId = derived.instance_id;
+    // Born running: there is no lifecycle to start, and holding it inert would make it useless.
+    expect(derived.lifecycle_state).toBe('running');
+    expect(derived.first_phase).toBeNull();
+
+    const row = (await apiGet('/api/blueprints/instances', token)).find(
+      (r: any) => r.id === noPhaseInstanceId,
+    );
+    expect(row.has_phases).toBe(false);
+    expect(row.current_phase).toBeNull();
+    expect(row.duration_seconds).toBeNull();
+
+    const paused = await apiPost(`/api/blueprints/instances/${noPhaseInstanceId}/stop`, token, {});
+    expect(paused.lifecycle_state).toBe('stopped');
+
+    // The trap this test exists for: resuming with no phase to enter must still work.
+    const resumed = await apiPost(
+      `/api/blueprints/instances/${noPhaseInstanceId}/start`,
+      token,
+      {},
+    );
+    expect(resumed.lifecycle_state).toBe('running');
+    expect(resumed.current_phase).toBeNull();
+
+    await releaseInstance(noPhaseInstanceId);
+    noPhaseInstanceId = undefined;
   });
 
   // ── Multi-device slots ─────────────────────────────────────────────────────
@@ -792,8 +1118,12 @@ describe('blueprints e2e (F10)', () => {
       ],
     });
     scopeInstanceId = result.instance_id;
-    // First phase is commissioning, so the commission-only rule is in scope from the start.
-    expect(result.current_phase).toBe('commissioning');
+    // Derive builds it; start puts it in commissioning, so the commission-only rule is in scope
+    // from there. The phase gate is only reachable once the lifecycle gate is open (F10.13).
+    expect(result.current_phase).toBeNull();
+    await apiPost(`/api/blueprints/instances/${scopeInstanceId}/start`, token, {
+      phase_key: 'commissioning',
+    });
 
     const rule = (await apiGet('/api/rules', token)).find(
       (r: any) => r.name === `Commission-only rule ${SUFFIX}`,

@@ -5,7 +5,7 @@
 // automation-worker (rules), digest-service (pipeline triggers) and api (scene execution) — three
 // callers that must agree, so the truth table is pinned here rather than in each service.
 
-import { isPhaseInScope } from '../../packages/params/src';
+import { isAutomationLive, isInstanceRunning, isPhaseInScope } from '../../packages/params/src';
 
 describe('isPhaseInScope (phase gate)', () => {
   describe('empty scope = active in every phase', () => {
@@ -36,5 +36,52 @@ describe('isPhaseInScope (phase gate)', () => {
       expect(isPhaseInScope(['commissioning'], null)).toBe(false);
       expect(isPhaseInScope(['commissioning'], undefined)).toBe(false);
     });
+  });
+});
+
+// ── The lifecycle gate (F10.13) ─────────────────────────────────────────────────────────────
+//
+// Coarser than phase scope and sits in front of it: a setup the user has not started, or has
+// stopped, does *nothing*. The same three callers apply it, so the truth table is pinned here too
+// — an automation that fires in one path and is held in another is the bug this prevents.
+
+describe('isInstanceRunning (lifecycle gate)', () => {
+  it('is running only in the running state', () => {
+    expect(isInstanceRunning('running')).toBe(true);
+    expect(isInstanceRunning('stopped')).toBe(false);
+    expect(isInstanceRunning('not_started')).toBe(false);
+  });
+
+  it('treats "no instance" as live — a hand-written rule is not gated by blueprints at all', () => {
+    expect(isInstanceRunning(null)).toBe(true);
+    expect(isInstanceRunning(undefined)).toBe(true);
+  });
+
+  it('refuses an unrecognised state rather than assuming it means running', () => {
+    // A state this build does not know about is not a licence to act.
+    expect(isInstanceRunning('paused_by_something_newer')).toBe(false);
+  });
+});
+
+describe('isAutomationLive (both gates)', () => {
+  it('needs the setup running AND the phase in scope', () => {
+    expect(isAutomationLive(['steady'], 'steady', 'running')).toBe(true);
+    expect(isAutomationLive(['steady'], 'commissioning', 'running')).toBe(false);
+  });
+
+  it('holds an unscoped automation too — stopping a setup stops all of it', () => {
+    // The load-bearing case: empty scope passes the phase gate, and must still be held.
+    expect(isAutomationLive([], 'steady', 'running')).toBe(true);
+    expect(isAutomationLive([], 'steady', 'stopped')).toBe(false);
+    expect(isAutomationLive([], null, 'not_started')).toBe(false);
+  });
+
+  it('leaves hand-written automations untouched', () => {
+    expect(isAutomationLive([], null, null)).toBe(true);
+  });
+
+  it('holds a scoped automation whose setup is stopped in one of its phases', () => {
+    // Both gates matter independently: being in scope is not enough.
+    expect(isAutomationLive(['steady'], 'steady', 'stopped')).toBe(false);
   });
 });
