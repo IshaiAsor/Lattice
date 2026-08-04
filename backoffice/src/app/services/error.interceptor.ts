@@ -66,9 +66,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
     catchError((error: HttpErrorResponse) => {
       if (error.status === 401) {
         if (PUBLIC_AUTH_PATHS.some((path) => req.url.includes(path))) {
-          if (req.url.includes('/api/auth/refresh-token')) {
-            authService.logout();
-          }
+          // A rejected refresh token is handled by whoever asked for the refresh: handleRefresh
+          // below logs out mid-session, and AuthService.restoreSession() owns it at bootstrap
+          // (where logging out here would race the router's initial navigation).
           return throwError(() => error);
         }
         return handleRefresh(req, next, authService);

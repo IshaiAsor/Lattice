@@ -1,8 +1,8 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
-import { Observable } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
 import { jwtDecode } from 'jwt-decode';
 import { apiUrl } from './api.config';
 
@@ -40,9 +40,13 @@ export class AuthService {
     if (token) {
       // Don't trust a stored-but-expired token: jwtDecode ignores `exp`, so priming currentUser
       // from an expired session would make getCurrentUser() truthy on the login page and fire
-      // authenticated requests (→ 403). Clear the stale tokens and stay logged out.
+      // authenticated requests (→ 403). Leave currentUser null — but an expired *access* token is
+      // not an expired session: the refresh token outlives it by weeks, so keep both around for
+      // restoreSession() to exchange. Only a session with nothing left to refresh is dropped here.
       if (this.isTokenExpired(token)) {
-        this.clearTokens();
+        if (!this.activeStorage().getItem(this.refreshTokenKey)) {
+          this.clearTokens();
+        }
         return;
       }
       try {
@@ -52,6 +56,27 @@ export class AuthService {
         this.clearTokens();
       }
     }
+  }
+
+  // Runs once at bootstrap (app initializer), before the router's first navigation. Without this
+  // the refresh token is dead weight: authGuard only sees the expired access token and redirects
+  // to /login, so the refresh endpoint is never reached and every visit past the access-token TTL
+  // becomes a fresh login. Resolves to whether a live session is in place.
+  restoreSession(): Promise<boolean> {
+    const token = this.getToken();
+    if (token && !this.isTokenExpired(token)) return Promise.resolve(true);
+    if (!this.activeStorage().getItem(this.refreshTokenKey)) return Promise.resolve(false);
+
+    return firstValueFrom(this.refreshAccessToken())
+      .then(() => true)
+      .catch((err: unknown) => {
+        // Only a rejected refresh token means the session is genuinely over. A network blip or a
+        // 5xx must not destroy a token that is still valid for weeks — keep it and retry next load.
+        if (err instanceof HttpErrorResponse && err.status === 401) {
+          this.clearTokens();
+        }
+        return false;
+      });
   }
 
   currentUser = signal<User | null>(null);
