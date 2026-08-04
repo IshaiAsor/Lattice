@@ -40,6 +40,15 @@ class JwtService
         else
         {
             time_t currentTime = time(nullptr);
+            // An unsynced clock reads as 1970. Judging expiry against it is meaningless and
+            // actively dangerous — it reaches the credential-clearing branch below and wipes
+            // provisioning over what is really just "NTP hasn't answered yet". Hold the
+            // current token; the next tick re-checks once the clock is real.
+            if (currentTime < MIN_VALID_EPOCH)
+            {
+                LOG_W("Jwt", "clock not synced — deferring expiry check, keeping current token");
+                return true;
+            }
             if (currentTime <= (time_t)tokenExp - JWT_REFRESH_POLICY)
             {
                 return true;
@@ -55,8 +64,17 @@ class JwtService
                 {
                     LOG_W("Jwt", "token expired");
                     u_int32_t refreshTokenExp = getExpFromToken(jwtData->refreshToken);
+                    if (refreshTokenExp == 0)
+                    {
+                        // No readable exp — a malformed or truncated read, not proof of
+                        // expiry. Clearing here would brick a device over a bad NVS read.
+                        LOG_E("Jwt", "refresh token has no readable exp — leaving credentials intact");
+                        return false;
+                    }
                     if (refreshTokenExp < (uint32_t)currentTime)
                     {
+                        // The one legitimate clear: a genuinely expired refresh token against
+                        // a synced clock cannot be recovered without re-provisioning.
                         LOG_E("Jwt", "refresh token expired — clearing credentials");
                         prefService.ClearCredentials();
                         return false;
@@ -116,7 +134,8 @@ class JwtService
         LOG_I("Jwt", "permanent MQTT token received (%u chars)", response.mqttToken.length());
 
         // Preserve existing service URLs if the refresh response omits them
-        jwtData = new JwtToken{
+        JwtToken* previous = jwtData;
+        jwtData            = new JwtToken{
             .token                   = response.mqttToken,
             .refreshToken            = response.refreshToken != "" ? response.refreshToken : jwtData->refreshToken,
             .refreshTokenCallbackUrl = response.refreshTokenCallbackUrl != "" ? response.refreshTokenCallbackUrl
@@ -126,6 +145,10 @@ class JwtService
             .wsStreamUrl     = response.wsStreamUrl != "" ? response.wsStreamUrl : jwtData->wsStreamUrl,
             .cameraHttpUrl   = response.cameraHttpUrl != "" ? response.cameraHttpUrl : jwtData->cameraHttpUrl,
         };
+
+        // The replacement copied everything it needed out of the old token above; release it
+        // so a device that refreshes for months on end doesn't leak one JwtToken per refresh.
+        delete previous;
 
         tokenExp = getExpFromToken(response.mqttToken);
 

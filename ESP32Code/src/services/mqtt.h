@@ -39,6 +39,13 @@ class MqttService
     std::string _ackBase;
     std::string _heartbeatTopic;
 
+    // Reconnect backoff. A router restart takes the broker out of reach for minutes, so
+    // attempts widen from MQTT_BACKOFF_MIN_MS to MQTT_BACKOFF_MAX_MS and simply keep going.
+    // This replaces the old "5 blocking attempts, then wipe the stored credentials" path —
+    // 25 s of unreachable broker used to cost the device its provisioning permanently.
+    unsigned long _nextAttemptMs = 0;
+    unsigned long _backoffMs     = MQTT_BACKOFF_MIN_MS;
+
     // Buffer size + keep-alive are identical config for the live and the probe client; the
     // #ifdef HAS_CAMERA buffer split lived in two places before.
     void tuneClient(PubSubClient& c, uint16_t keepAliveSec)
@@ -128,18 +135,20 @@ class MqttService
         return true;
     }
 
+    // A single connect attempt. Never blocks on retries and never touches stored
+    // credentials: failing here is the expected state during a network outage, and the
+    // caller schedules the next attempt.
     bool reconnectMqtt()
     {
         LOG_I("Mqtt", "attempting to reconnect to MQTT");
-        if (jwtData == nullptr)
+
+        // Re-fetch rather than cache: JwtService may replace the token object on refresh, so
+        // a pointer held across refreshes would dangle.
+        jwtData = jwtService.GetCurrentJwtToken();
+        if (!jwtData)
         {
-            LOG_D("Mqtt", "no cached JWT — loading from storage");
-            jwtData = jwtService.GetCurrentJwtToken();
-            if (!jwtData)
-            {
-                LOG_E("Mqtt", "no JWT token available — cannot connect");
-                return false;
-            }
+            LOG_W("Mqtt", "no usable JWT (storage empty or refresh unreachable) — will retry");
+            return false;
         }
         if (creds == nullptr)
         {
@@ -148,7 +157,7 @@ class MqttService
 
             if (!creds)
             {
-                LOG_E("Mqtt", "no MQTT credentials available — cannot connect");
+                LOG_E("Mqtt", "no MQTT credentials available — device needs provisioning");
                 return false;
             }
         }
@@ -158,81 +167,74 @@ class MqttService
         // in case credentials changed).
         static_cast<WiFiClientSecure&>(espClient).setCACert(root_ca);
 #endif
+        // Release the dead TLS session before opening a new one. On the no-PSRAM classic
+        // ESP32 boards mbedTLS's ~40 KB of record buffers come out of fragmented internal
+        // DRAM, and leaving the previous context allocated is by itself enough to make the
+        // next handshake fail with MBEDTLS_ERR_SSL_ALLOC_FAILED.
+        espClient.stop();
 
         client->setServer(creds->server.c_str(), creds->port);
         buildTopics();
 
-        int       attempt      = 0;
-        const int max_attempts = 5;
-
-        while (!client->connected() && attempt < max_attempts)
+        if (client->connect(creds->clientId.c_str(), creds->userId.c_str(), jwtData->token.c_str(),
+                            _statusTopic.c_str(), 0, true, "offline"))
         {
-            if (client->connect(creds->clientId.c_str(), creds->userId.c_str(), jwtData->token.c_str(),
-                                _statusTopic.c_str(), 0, true, "offline"))
-            {
-                client->publish(_statusTopic.c_str(), "online", true);
-                client->subscribe(_commandTopic.c_str());
-                client->subscribe(_otaTopic.c_str());
+            client->publish(_statusTopic.c_str(), "online", true);
+            client->subscribe(_commandTopic.c_str());
+            client->subscribe(_otaTopic.c_str());
 
-                LOG_I("Mqtt", "connected and subscribed to topics");
-            }
-            else
-            {
+            LOG_I("Mqtt", "connected and subscribed to topics");
+            return true;
+        }
+
 #ifndef ENV_TEST
-                char err_buf[100];
-                static_cast<WiFiClientSecure&>(espClient).lastError(err_buf, 100);
-                LOG_W("Mqtt", "connect failed, rc=%d | SSL error: %s — retry in 5s", client->state(), err_buf);
+        char err_buf[100];
+        static_cast<WiFiClientSecure&>(espClient).lastError(err_buf, 100);
+        LOG_W("Mqtt", "connect failed, rc=%d | SSL error: %s", client->state(), err_buf);
 #else
-                LOG_W("Mqtt", "connect failed, rc=%d — retry in 5s", client->state());
+        LOG_W("Mqtt", "connect failed, rc=%d", client->state());
 #endif
-                delay(5000);
-                attempt++;
-            }
-        }
-
-        if (!client->connected())
-        {
-            LOG_E("Mqtt", "max connection attempts reached");
-            return false;
-        }
-        return true;
+        return false;
     }
 
+    // Services the MQTT session. Returns whether the broker is connected *right now* — a
+    // false return is a status for the caller's LED, never a reason to reboot or to clear
+    // credentials. Transient failures are retried on a widening backoff, indefinitely.
     bool loopMqtt()
     {
-        if (client != nullptr && client->connected())
+        if (client == nullptr)
+            return false;
+
+        if (client->connected())
         {
-            if (jwtData == nullptr)
-            {
-                LOG_D("Mqtt", "no cached JWT — loading from storage");
-                jwtData = jwtService.GetCurrentJwtToken();
-                if (!jwtData)
-                {
-                    LOG_E("Mqtt", "cannot retrieve JWT for refresh — clearing credentials and restarting");
-                    prefService.ClearCredentials();
-                    ESP.restart();
-                }
-            }
+            _backoffMs     = MQTT_BACKOFF_MIN_MS;
+            _nextAttemptMs = 0;
+
+            // Best-effort. A failed refresh means the refresh endpoint is unreachable (WAN
+            // still down after a router restart) or the token is stale — neither invalidates
+            // the session already held, and the next tick tries again.
             if (!jwtService.RefreshJwtTokenIfNeeded())
-            {
-                LOG_E("Mqtt", "JWT refresh failed — clearing credentials and restarting");
-                prefService.ClearCredentials();
-                ESP.restart();
-            }
+                LOG_W("Mqtt", "JWT refresh failed — keeping current session, will retry");
+
             client->loop();
             return true;
         }
-        else
+
+        unsigned long now = millis();
+        if (_nextAttemptMs != 0 && (long)(now - _nextAttemptMs) < 0) // rollover-safe compare
+            return false;                                            // inside the backoff window
+
+        LOG_W("Mqtt", "client disconnected (state=%d) — attempting to reconnect", client->state());
+        if (reconnectMqtt())
         {
-            LOG_W("Mqtt", "client disconnected (state=%d) — attempting to reconnect", client->state());
-            if (!reconnectMqtt())
-            {
-                LOG_E("Mqtt", "failed to reconnect to MQTT");
-                prefService.ClearCredentials();
-                return false;
-            }
+            _backoffMs     = MQTT_BACKOFF_MIN_MS;
+            _nextAttemptMs = 0;
             return true;
         }
+
+        _nextAttemptMs = now + _backoffMs;
+        LOG_W("Mqtt", "reconnect failed — next attempt in %lu ms", _backoffMs);
+        _backoffMs = (_backoffMs > MQTT_BACKOFF_MAX_MS / 2) ? MQTT_BACKOFF_MAX_MS : _backoffMs * 2;
         return false;
     }
 

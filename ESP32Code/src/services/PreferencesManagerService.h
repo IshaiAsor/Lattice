@@ -45,8 +45,10 @@ class PreferencesManagerService
         if (!preferences.isKey("mqtt_server") || !preferences.isKey("mqtt_port") || !preferences.isKey("client_id") ||
             !preferences.isKey("user"))
         {
+            // Report the gap; do NOT clear. This is a read — wiping the namespace here also
+            // destroyed the JWT, the refresh token and every saved action state, turning one
+            // missing key into a full loss of provisioning.
             LOG_W("Prefs", "no MQTT credentials in storage");
-            preferences.clear();
             preferences.end();
             return nullptr;
         }

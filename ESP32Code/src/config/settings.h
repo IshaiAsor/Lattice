@@ -1,4 +1,5 @@
 #pragma once
+#include <time.h>
 #ifndef DEVICE_TYPE_STR
 #error "DEVICE_TYPE_STR must be defined in build_flags (e.g. -D DEVICE_TYPE_STR=\"ESP32S3_Mini\")"
 #endif
@@ -37,3 +38,21 @@ const bool PROVISION_ON_ERROR = false;
 const bool PROVISION_ON_ERROR = true;
 #endif
 const long WIFI_TIMEOUT = 1000 * 60 * 60; // 60 min
+
+// --- Clock validity -------------------------------------------------------------------
+// The ESP boots its RTC at epoch 0, so any time below this means NTP has never answered.
+// Nothing may judge a token's expiry (or trust a TLS notBefore/notAfter) under that clock:
+// doing so declares a healthy credential dead and used to wipe the device's provisioning.
+const time_t MIN_VALID_EPOCH = 24 * 3600;
+
+// --- Network resilience ---------------------------------------------------------------
+// A router reboot (a nightly event on many home networks) takes the LAN down for seconds
+// and the WAN for minutes. Every network dependency below therefore retries with backoff
+// and NEVER clears credentials or reboots — a transient outage must not cost provisioning.
+const unsigned long NTP_SYNC_TIMEOUT_MS    = 60UL * 1000;      // bounded first-sync wait at boot
+const unsigned long NTP_RETRY_INTERVAL_MS  = 5UL * 60 * 1000;  // background re-sync cadence
+const unsigned long WIFI_RETRY_INTERVAL_MS = 20UL * 1000;      // explicit re-associate nudge
+const unsigned long MQTT_BACKOFF_MIN_MS    = 5UL * 1000;       // first retry delay after a drop
+const unsigned long MQTT_BACKOFF_MAX_MS    = 5UL * 60 * 1000;  // backoff ceiling
+const unsigned long CONFIG_RETRY_MIN_MS    = 10UL * 1000;      // served-config fetch retry floor
+const unsigned long CONFIG_RETRY_MAX_MS    = 10UL * 60 * 1000; // served-config fetch ceiling

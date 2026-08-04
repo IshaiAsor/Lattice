@@ -45,6 +45,16 @@ bool isPressing = false;
 
 bool provisioningMode = false;
 
+// Set only when storage holds nothing to connect with — the one boot outcome that genuinely
+// needs a human. Everything else (no AP, no broker, no WAN) is retried indefinitely.
+bool needsProvisioning = false;
+
+// The served config arrives over the network, so it is retried rather than required at boot.
+bool          deviceConfigLoaded = false;
+unsigned long configRetryAt      = 0;
+unsigned long configRetryBackoff = CONFIG_RETRY_MIN_MS;
+unsigned long wifiRetryAt        = 0;
+
 QueueHandle_t provisioningQueue = NULL;
 QueueHandle_t bleResponseQueue  = NULL;
 
@@ -95,6 +105,9 @@ void handleReset();
 void performFactoryReset();
 void loopActions();
 void handleHeartbeat();
+bool ensureWifi();
+bool ensureDeviceConfig();
+void updateStatusLed(bool healthy);
 
 void setup()
 {
@@ -150,6 +163,10 @@ void setup()
     );
 
     WiFi.mode(WIFI_STA); // Initialize WiFi driver to properly read from NVS
+    // Let the driver re-associate on its own when the AP comes back (nightly router restart);
+    // ensureWifi() only nudges it if that stalls.
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
     String savedSSID = wm.getWiFiSSID();
 
     if (wm.getWiFiSSID() == "" || !wm.getWiFiIsSaved())
@@ -188,26 +205,19 @@ void setup()
         }
         else
         {
+            // Bounded — an unreachable NTP server (router LAN up, WAN not yet) must not hold
+            // boot hostage. Proceeds unsynced; DateTimeSyncService::loop() keeps retrying.
             dateTimeSyncService.syncTime();
 
-            JwtToken*        jwtData = jwtService.GetCurrentJwtToken();
+            // Read what storage actually holds. Only this decides "needs a human": it is a
+            // pure NVS read, unlike anything that can fail merely because the network is late.
             MqttCredentials* creds   = prefService.LoadMqttServerCredentials();
+            JwtToken*        jwtData = jwtService.GetCurrentJwtToken();
 
-            if (jwtData && jwtData->deviceConfigUrl.isEmpty())
+            if (!creds || (jwtData != nullptr && jwtData->deviceConfigUrl.isEmpty()))
             {
-                LOG_W("Boot", "device config URL missing — re-provisioning required");
-                if (PROVISION_ON_ERROR)
-                {
-                    setupBleProvisioning();
-                }
-                else
-                {
-                    onboardLed.execute("red");
-                }
-            }
-            else if (!creds || !jwtData || !mqttService.testMqtt(creds, jwtData))
-            {
-                LOG_W("Boot", "MQTT test failed after WiFi connected — entering provisioning mode");
+                LOG_W("Boot", "no usable stored provisioning — device must be re-provisioned");
+                needsProvisioning = true;
                 if (PROVISION_ON_ERROR)
                 {
                     setupBleProvisioning();
@@ -219,24 +229,16 @@ void setup()
             }
             else
             {
-                // Load device actions from server — no fallback; restart if unavailable
-                if (!deviceActionsService.loadFromServer(jwtData))
-                {
-                    LOG_E("Boot", "failed to load device configuration — restarting in 5s");
-                    onboardLed.execute("red");
-                    delay(5000);
-                    ESP.restart();
-                }
+                // Everything below depends on the network, so none of it is fatal at boot: a
+                // router that is still coming back up just means loop() retries on backoff.
+                // The device keeps its credentials and its relay state throughout.
+                if (!mqttService.loopMqtt())
+                    LOG_W("Boot", "broker not reachable yet — retrying in the background");
 
-                // Initialize pins then restore last saved state (loadState is a no-op for
-                // read-only actions, so the unified list is walked once).
-                for (size_t i = 0; i < deviceActionsService.getActionsCount(); i++)
-                {
-                    deviceActionsService.getActions()[i]->initPins();
-                    deviceActionsService.getActions()[i]->loadState();
-                }
+                if (!ensureDeviceConfig())
+                    LOG_W("Boot", "device config not loaded yet — retrying in the background");
 
-                onboardLed.execute("green");
+                updateStatusLed(deviceConfigLoaded && mqttService.connected());
             }
         }
     }
@@ -247,26 +249,106 @@ void loop()
     delay(100);
     handleReset();
     onboardLed.loop();
-    if (!provisioningMode)
-    {
-        if (!WiFi.isConnected())
-        {
-            LOG_W("Boot", "WiFi disconnected — restarting to re-enter provisioning mode");
-            ESP.restart();
-        }
-        else if (!mqttService.loopMqtt())
-        {
-            LOG_W("Boot", "MQTT connection lost — restarting to re-enter provisioning mode");
-            ESP.restart();
-        }
-        loopActions();
-        handleHeartbeat();
-    }
-    else
+    if (provisioningMode)
     {
         handleProvisioningQueue();
+        return;
     }
-    return;
+
+    // Nothing to retry until someone re-provisions; handleReset() above still serves the
+    // button, so a long press can start provisioning.
+    if (needsProvisioning)
+        return;
+
+    dateTimeSyncService.loop();
+
+    // A dropped AP or an unreachable broker are wait-and-retry conditions. They used to
+    // reboot the device — which, with the credential wipe that followed, turned a nightly
+    // router restart into permanent loss of provisioning.
+    if (!ensureWifi())
+    {
+        updateStatusLed(false);
+        return;
+    }
+
+    bool mqttUp = mqttService.loopMqtt();
+    bool cfgUp  = mqttUp ? ensureDeviceConfig() : deviceConfigLoaded;
+    updateStatusLed(mqttUp && cfgUp);
+
+    loopActions();
+    handleHeartbeat();
+}
+
+// Re-associate with backoff. The driver's own auto-reconnect handles the common case; this
+// nudges it when it stalls and keeps the rest of the loop from running against a dead link.
+bool ensureWifi()
+{
+    if (WiFi.isConnected())
+    {
+        if (wifiRetryAt != 0)
+        {
+            LOG_I("Wifi", "reconnected — IP %s", WiFi.localIP().toString().c_str());
+            wifiRetryAt = 0;
+        }
+        return true;
+    }
+
+    unsigned long now = millis();
+    if (wifiRetryAt != 0 && (long)(now - wifiRetryAt) < 0) // rollover-safe compare
+        return false;
+
+    LOG_W("Wifi", "disconnected — re-associating");
+    WiFi.reconnect();
+    wifiRetryAt = now + WIFI_RETRY_INTERVAL_MS;
+    return false;
+}
+
+// Fetch the served config once it's reachable. Retried on a widening backoff instead of
+// being a boot-time hard requirement: rebooting on a failed fetch only produces a reboot
+// loop for as long as the WAN is down.
+bool ensureDeviceConfig()
+{
+    if (deviceConfigLoaded)
+        return true;
+
+    unsigned long now = millis();
+    if (configRetryAt != 0 && (long)(now - configRetryAt) < 0) // rollover-safe compare
+        return false;
+
+    JwtToken* jwtData = jwtService.GetCurrentJwtToken();
+    if (jwtData != nullptr && deviceActionsService.loadFromServer(jwtData))
+    {
+        // Initialize pins then restore last saved state (loadState is a no-op for
+        // read-only actions, so the unified list is walked once).
+        for (size_t i = 0; i < deviceActionsService.getActionsCount(); i++)
+        {
+            deviceActionsService.getActions()[i]->initPins();
+            deviceActionsService.getActions()[i]->loadState();
+        }
+
+        deviceConfigLoaded = true;
+        configRetryAt      = 0;
+        configRetryBackoff = CONFIG_RETRY_MIN_MS;
+        LOG_I("Boot", "device configuration loaded (%u actions)",
+              static_cast<unsigned>(deviceActionsService.getActionsCount()));
+        return true;
+    }
+
+    configRetryAt = now + configRetryBackoff;
+    LOG_W("Boot", "failed to load device configuration — next attempt in %lu ms", configRetryBackoff);
+    configRetryBackoff = (configRetryBackoff > CONFIG_RETRY_MAX_MS / 2) ? CONFIG_RETRY_MAX_MS : configRetryBackoff * 2;
+    return false;
+}
+
+// Reflect connectivity without re-issuing the same LED command on every tick.
+void updateStatusLed(bool healthy)
+{
+    static int last = -1;
+    int        want = healthy ? 1 : 0;
+    if (want == last)
+        return;
+    last = want;
+    onboardLed.execute(healthy ? "green" : "orange");
 }
 
 // One pass over the unified action list each tick: telemetry actions do their interval reads
