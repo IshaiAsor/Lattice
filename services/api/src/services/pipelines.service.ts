@@ -74,7 +74,10 @@ function toPipelineWriteData(dto: CreatePipelineDto) {
         user_device_action_id: t.user_device_action_id ?? null,
         operator: t.operator ?? null,
         threshold_value: t.threshold_value ?? null,
-        schedule_cron: t.schedule_cron ?? null,
+        schedule_time: t.schedule_time ?? null,
+        schedule_until: t.schedule_until ?? null,
+        schedule_every_minutes: t.schedule_every_minutes ?? null,
+        schedule_days: t.schedule_days ?? [],
         min_interval_sec: t.min_interval_sec ?? null,
       })),
     },
@@ -197,7 +200,13 @@ class PipelinesService {
     const p = await db.pipeline.findUnique({ where: { id }, select: { user_id: true } });
     if (!p) throw err(404, 'Pipeline not found');
     if (p.user_id !== userId) throw err(403, 'Forbidden');
-    await db.pipeline.update({ where: { id }, data: { enabled, updated_at: new Date() } });
+    // Any hand toggle takes ownership of this row's enabled state: reconcile must not later
+    // "restore" something the user just set. Clearing the flag on an explicit disable is the
+    // point — it is what separates "I turned this off" from "reconcile turned this off".
+    await db.pipeline.update({
+      where: { id },
+      data: { enabled, disabled_by_reconcile: false, updated_at: new Date() },
+    });
   }
 
   async remove(userId: number, id: number): Promise<void> {

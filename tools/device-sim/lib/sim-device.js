@@ -162,6 +162,8 @@ class SimDevice extends EventEmitter {
     this._lastPub = new Map();
     this._lastState = new Map();
     this._durationTimers = new Map();
+    /** action → epoch seconds the hold ends. Persisted, unlike the timer above. */
+    this._deadlines = new Map();
     this._cameraConns = new Map();
     this._timers = [];
     this._refreshTimer = null;
@@ -521,19 +523,24 @@ class SimDevice extends EventEmitter {
     if (!ok) return; // firmware does not change state on an invalid payload
 
     this._lastState.set(action, value);
-    this._saveStateFile();
-
     // Duration auto-off (seconds; "*" = none), mirroring BaseCommandAction::loop.
     clearTimeout(this._durationTimers.get(action));
     this._durationTimers.delete(action);
+    this._deadlines.delete(action);
     const dur = cmd.duration;
     if (dur !== undefined && dur !== '*' && Number(dur) > 0) {
+      // Persisted as an absolute epoch beside the state, mirroring DurationState::encode: the
+      // firmware's countdown is millis()-based and so does not survive a reboot, which is exactly
+      // when the deadline matters. Saved BEFORE the state file is written, so both land together.
+      this._deadlines.set(action, Math.floor(Date.now() / 1000) + Number(dur));
       this._log(`  duration ${dur}s — will auto-off`);
+      this._saveStateFile();
       this._durationTimers.set(
         action,
         setTimeout(
           () => {
             this._durationTimers.delete(action);
+            this._deadlines.delete(action);
             this._lastState.set(action, 'off');
             this._saveStateFile();
             if (this.client && this.client.connected) {
@@ -544,6 +551,8 @@ class SimDevice extends EventEmitter {
           Number(dur) * 1000,
         ),
       );
+    } else {
+      this._saveStateFile();
     }
   }
 
@@ -961,9 +970,28 @@ class SimDevice extends EventEmitter {
     if (!this.opts.persist) return;
     try {
       const data = JSON.parse(fs.readFileSync(this._stateFile, 'utf8'));
-      for (const [k, v] of Object.entries(data)) this._lastState.set(k, v);
+      // Two shapes: the flat map written before deadlines existed, and { state, deadlines } after.
+      // Reading both means an upgrade needs no migration, same as the firmware's `state|deadline`.
+      const saved = data && data.state ? data.state : data;
+      for (const [k, v] of Object.entries(saved || {})) this._lastState.set(k, v);
+
+      // A hold that ended while the device was down must NOT come back on — the whole point of
+      // persisting the deadline. Mirrors DurationState::planRestore.
+      const now = Math.floor(Date.now() / 1000);
+      let expired = 0;
+      for (const [k, deadline] of Object.entries((data && data.deadlines) || {})) {
+        if (now >= Number(deadline)) {
+          this._lastState.set(k, 'off');
+          expired++;
+        } else {
+          this._deadlines.set(k, Number(deadline));
+        }
+      }
       if (this._lastState.size)
-        this._log(`[NVS] restored ${this._lastState.size} saved action state(s)`);
+        this._log(
+          `[NVS] restored ${this._lastState.size} saved action state(s)` +
+            (expired ? `, ${expired} timed hold(s) had expired -> off` : ''),
+        );
     } catch {
       /* no saved state */
     }
@@ -973,7 +1001,13 @@ class SimDevice extends EventEmitter {
     if (!this.opts.persist) return;
     try {
       fs.mkdirSync(path.dirname(this._stateFile), { recursive: true });
-      fs.writeFileSync(this._stateFile, JSON.stringify(Object.fromEntries(this._lastState)));
+      fs.writeFileSync(
+        this._stateFile,
+        JSON.stringify({
+          state: Object.fromEntries(this._lastState),
+          deadlines: Object.fromEntries(this._deadlines),
+        }),
+      );
     } catch {
       /* best effort */
     }

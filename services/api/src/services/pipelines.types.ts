@@ -38,7 +38,11 @@ export interface PipelineTriggerDto {
   user_device_action_id?: number | null;
   operator?: string | null;
   threshold_value?: string | null;
-  schedule_cron?: string | null;
+  /** HH:MM — fires once a day, or opens a window when the two below are set. */
+  schedule_time?: string | null;
+  schedule_until?: string | null;
+  schedule_every_minutes?: number | null;
+  schedule_days?: number[];
   min_interval_sec?: number | null;
 }
 

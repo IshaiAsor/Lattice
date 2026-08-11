@@ -1,5 +1,6 @@
 import { db } from '@lattice/prisma-client';
 import { deriveValidParameters, validateValue } from '@lattice/capability-validation';
+import { validateSchedule } from '@lattice/params';
 import { CreatePipelineDto, InferStageDto } from './pipelines.types';
 
 // DeviceCapability.implementation_type value that produces image/camera-frame telemetry
@@ -52,8 +53,16 @@ export function validate(dto: CreatePipelineDto): void {
         );
       }
     }
-    if (t.trigger_type === 'schedule' && !t.schedule_cron) {
-      throw err(400, 'schedule trigger requires schedule_cron');
+    if (t.trigger_type === 'schedule') {
+      // The same rules a rule condition and a blueprint template are held to — one validator, so a
+      // schedule that saves on one surface cannot be rejected on another.
+      const problem = validateSchedule({
+        time: t.schedule_time ?? null,
+        until: t.schedule_until,
+        everyMinutes: t.schedule_every_minutes,
+        days: t.schedule_days ?? [],
+      });
+      if (problem) throw err(400, `schedule trigger: ${problem}`);
     }
   }
 }

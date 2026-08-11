@@ -21,12 +21,28 @@ export interface ReconcileChange {
 export type ResolveAll = (slotKey: string, actionName: string) => number[] | null;
 
 // The bits of the instance a diff needs — its identity and where derived rows should land.
+//
+// One context per *entity*, not per instance (F11.2): a per-device template is reconciled once per
+// bound device, each pass carrying that binding's id, its own name suffix and a `resolveAll` scoped
+// to its own device. A combined template gets exactly one pass with `bindingId: null`, which is
+// what every pre-F11 derived row already has.
 export interface DiffContext {
   userId: number;
   areaId: number;
   instanceId: number;
   instanceName: string;
   resolveAll: ResolveAll;
+  /** The devices bound to a slot — what a device_status condition resolves against. */
+  devicesInSlot: (slotKey: string) => number[];
+  /** The binding this entity belongs to, or null when it belongs to the whole setup. */
+  bindingId: number | null;
+  /** Appended to the template's name for a per-device entity; null leaves the name alone. */
+  nameSuffix: string | null;
+}
+
+/** "Water low · Loop A" — kept in step with derive via @see blueprints.fanout. */
+function entityName(base: string, ctx: DiffContext): string {
+  return ctx.nameSuffix ? `${base} · ${ctx.nameSuffix}` : base;
 }
 
 type SceneTemplate = Prisma.BlueprintSceneTemplateGetPayload<{ include: { members: true } }>;
@@ -89,6 +105,7 @@ export async function reconcileSceneTemplate(
         target_state: m.target_state,
         sort_order: sortOrder++,
         delay_seconds: m.delay_seconds,
+        duration_seconds: m.duration_seconds,
       });
     }
   }
@@ -96,7 +113,7 @@ export async function reconcileSceneTemplate(
     return {
       kind: 'scene',
       blueprint_key: template.key,
-      name: template.name,
+      name: entityName(template.name, ctx),
       action: 'unresolvable',
       detail: `${unresolved} member reference(s) not present on the bound devices`,
     };
@@ -117,7 +134,7 @@ export async function reconcileSceneTemplate(
     return { kind: 'scene', blueprint_key: template.key, name: existing.name, action: 'updated' };
   }
 
-  const name = await freeSceneName(ctx.userId, template.name, ctx.instanceName);
+  const name = await freeSceneName(ctx.userId, entityName(template.name, ctx), ctx.instanceName);
   await db.scene.create({
     data: {
       user_id: ctx.userId,
@@ -125,6 +142,7 @@ export async function reconcileSceneTemplate(
       sort_order: template.sort_order,
       area_id: ctx.areaId,
       blueprint_instance_id: ctx.instanceId,
+      blueprint_binding_id: ctx.bindingId,
       blueprint_key: template.key,
       phase_scope: template.phase_scope,
       members: { create: memberData },
@@ -149,17 +167,42 @@ export async function reconcileRuleTemplate(
   let unresolved = 0;
   const conditionData: Prisma.UserRuleConditionUncheckedCreateWithoutRuleInput[] = [];
   for (const c of template.conditions) {
-    // Schedule/status conditions carry no device action — pass them through unchanged.
+    // Written once so the two branches below cannot drift apart — they did: the resolved branch
+    // was missing `schedule_until` / `schedule_every_minutes`, so reconciling a condition that
+    // carried both a device action and a window silently dropped the window.
+    const common = {
+      condition_type: c.condition_type,
+      operator: c.operator,
+      threshold_value: c.threshold_value,
+      status_value: c.status_value,
+      schedule_time: c.schedule_time,
+      schedule_until: c.schedule_until,
+      schedule_every_minutes: c.schedule_every_minutes,
+      schedule_days: c.schedule_days,
+    };
+
+    // A device_status condition is about the DEVICE — the engine reads `user_device_id` and
+    // ignores the action. Resolving it here is what makes it able to fire at all; derive does the
+    // same, and the two must agree or a reconcile would silently break a working rule.
+    if (c.condition_type === 'device_status' || c.condition_type === 'device_state') {
+      const deviceIds = c.slot_key ? ctx.devicesInSlot(c.slot_key) : [];
+      if (c.slot_key && deviceIds.length === 0) {
+        unresolved++;
+        continue;
+      }
+      if (deviceIds.length === 0) {
+        conditionData.push({ ...common, user_device_action_id: null, user_device_id: null });
+      } else {
+        for (const deviceId of deviceIds) {
+          conditionData.push({ ...common, user_device_action_id: null, user_device_id: deviceId });
+        }
+      }
+      continue;
+    }
+
+    // Schedule conditions carry no device action — pass them through unchanged.
     if (!(c.slot_key && c.action_name)) {
-      conditionData.push({
-        condition_type: c.condition_type,
-        user_device_action_id: null,
-        operator: c.operator,
-        threshold_value: c.threshold_value,
-        status_value: c.status_value,
-        schedule_time: c.schedule_time,
-        schedule_days: c.schedule_days,
-      });
+      conditionData.push({ ...common, user_device_action_id: null, user_device_id: null });
       continue;
     }
     const ids = ctx.resolveAll(c.slot_key, c.action_name);
@@ -168,15 +211,7 @@ export async function reconcileRuleTemplate(
       continue;
     }
     for (const id of ids) {
-      conditionData.push({
-        condition_type: c.condition_type,
-        user_device_action_id: id,
-        operator: c.operator,
-        threshold_value: c.threshold_value,
-        status_value: c.status_value,
-        schedule_time: c.schedule_time,
-        schedule_days: c.schedule_days,
-      });
+      conditionData.push({ ...common, user_device_action_id: id, user_device_id: null });
     }
   }
   const actionData: Prisma.UserRuleActionUncheckedCreateWithoutRuleInput[] = [];
@@ -191,6 +226,7 @@ export async function reconcileRuleTemplate(
         user_device_action_id: id,
         target_state: a.target_state,
         delay_seconds: a.delay_seconds,
+        duration_seconds: a.duration_seconds,
       });
     }
   }
@@ -198,7 +234,7 @@ export async function reconcileRuleTemplate(
     return {
       kind: 'rule',
       blueprint_key: template.key,
-      name: template.name,
+      name: entityName(template.name, ctx),
       action: 'unresolvable',
       detail: `${unresolved} referenced action(s) not present on the bound devices`,
     };
@@ -211,7 +247,13 @@ export async function reconcileRuleTemplate(
       await tx.userRule.update({
         where: { id: existing.id },
         data: {
-          name: template.name,
+          // Restore ONLY what reconcile itself switched off (a template that came back, a device
+          // that returned to the fan-out selection). A user's own disable is left alone, because
+          // toggling `enabled` is not drift and must not make the row abandoned either.
+          ...(existing.disabled_by_reconcile
+            ? { enabled: true, disabled_by_reconcile: false }
+            : {}),
+          name: entityName(template.name, ctx),
           is_emergency: template.is_emergency,
           condition_operator: template.condition_operator,
           cooldown_seconds: template.cooldown_seconds,
@@ -222,25 +264,36 @@ export async function reconcileRuleTemplate(
         },
       });
     });
-    return { kind: 'rule', blueprint_key: template.key, name: template.name, action: 'updated' };
+    return {
+      kind: 'rule',
+      blueprint_key: template.key,
+      name: entityName(template.name, ctx),
+      action: 'updated',
+    };
   }
 
   await db.userRule.create({
     data: {
       user_id: ctx.userId,
-      name: template.name,
+      name: entityName(template.name, ctx),
       is_emergency: template.is_emergency,
       condition_operator: template.condition_operator,
       cooldown_seconds: template.cooldown_seconds,
       phase_scope: template.phase_scope,
       area_id: ctx.areaId,
       blueprint_instance_id: ctx.instanceId,
+      blueprint_binding_id: ctx.bindingId,
       blueprint_key: template.key,
       conditions: { create: conditionData },
       actions: { create: actionData },
     },
   });
-  return { kind: 'rule', blueprint_key: template.key, name: template.name, action: 'created' };
+  return {
+    kind: 'rule',
+    blueprint_key: template.key,
+    name: entityName(template.name, ctx),
+    action: 'created',
+  };
 }
 
 export async function reconcilePipelineTemplate(
@@ -288,7 +341,10 @@ export async function reconcilePipelineTemplate(
         user_device_action_id: null,
         operator: t.operator,
         threshold_value: t.threshold_value,
-        schedule_cron: t.schedule_cron,
+        schedule_time: t.schedule_time,
+        schedule_until: t.schedule_until,
+        schedule_every_minutes: t.schedule_every_minutes,
+        schedule_days: t.schedule_days,
         min_interval_sec: t.min_interval_sec,
       });
       continue;
@@ -304,7 +360,10 @@ export async function reconcilePipelineTemplate(
         user_device_action_id: id,
         operator: t.operator,
         threshold_value: t.threshold_value,
-        schedule_cron: t.schedule_cron,
+        schedule_time: t.schedule_time,
+        schedule_until: t.schedule_until,
+        schedule_every_minutes: t.schedule_every_minutes,
+        schedule_days: t.schedule_days,
         min_interval_sec: t.min_interval_sec,
       });
     }
@@ -313,7 +372,7 @@ export async function reconcilePipelineTemplate(
     return {
       kind: 'pipeline',
       blueprint_key: template.key,
-      name: template.name,
+      name: entityName(template.name, ctx),
       action: 'unresolvable',
       detail: `${unresolved} referenced action(s) not present on the bound devices`,
     };
@@ -335,8 +394,15 @@ export async function reconcilePipelineTemplate(
       await tx.pipeline.update({
         where: { id: existing.id },
         data: {
-          name: template.name,
-          enabled: template.enabled,
+          name: entityName(template.name, ctx),
+          // A template that ships disabled is the author's statement and still wins. Otherwise
+          // reconcile restores only its own disable, exactly as for rules above — before this,
+          // `enabled: template.enabled` also silently re-enabled pipelines the user had turned off.
+          ...(template.enabled === false
+            ? { enabled: false }
+            : existing.disabled_by_reconcile
+              ? { enabled: true, disabled_by_reconcile: false }
+              : {}),
           phase_scope: template.phase_scope,
           updated_at: new Date(),
           sensors: { create: sensorData },
@@ -348,7 +414,7 @@ export async function reconcilePipelineTemplate(
     return {
       kind: 'pipeline',
       blueprint_key: template.key,
-      name: template.name,
+      name: entityName(template.name, ctx),
       action: 'updated',
     };
   }
@@ -356,16 +422,22 @@ export async function reconcilePipelineTemplate(
   await db.pipeline.create({
     data: {
       user_id: ctx.userId,
-      name: template.name,
+      name: entityName(template.name, ctx),
       enabled: template.enabled,
       phase_scope: template.phase_scope,
       area_id: ctx.areaId,
       blueprint_instance_id: ctx.instanceId,
+      blueprint_binding_id: ctx.bindingId,
       blueprint_key: template.key,
       sensors: { create: sensorData },
       stages: { create: stageData },
       triggers: { create: triggerData },
     },
   });
-  return { kind: 'pipeline', blueprint_key: template.key, name: template.name, action: 'created' };
+  return {
+    kind: 'pipeline',
+    blueprint_key: template.key,
+    name: entityName(template.name, ctx),
+    action: 'created',
+  };
 }

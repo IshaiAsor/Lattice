@@ -1,0 +1,46 @@
+<h2 mat-dialog-title>Timezone</h2>
+
+<mat-dialog-content>
+  <p class="hint">
+    Rules and AI pipelines run on your clock. “06:00” means six in the morning here, wherever the
+    server happens to be.
+  </p>
+
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Search</mat-label>
+    <input matInput [formControl]="filter" placeholder="Jerusalem, London, UTC…" cdkFocusInitial />
+    <mat-icon matSuffix>search</mat-icon>
+  </mat-form-field>
+
+  <mat-selection-list [multiple]="false" class="zone-list">
+    @for (z of filteredZones(); track z) {
+      <mat-list-option
+        [value]="z"
+        [selected]="z === selected()"
+        (click)="selected.set(z)"
+        [class.is-detected]="z === detected"
+      >
+        {{ z }}
+        @if (z === detected) {
+          <span class="detected-tag">this device</span>
+        }
+      </mat-list-option>
+    }
+    @if (filteredZones().length === 0) {
+      <div class="empty">No zone matches that.</div>
+    }
+  </mat-selection-list>
+
+  <div class="current">
+    <span class="current-zone">{{ selected() }}</span>
+    <span class="current-time">{{ nowThere() }}</span>
+    @if (selected() !== detected) {
+      <button mat-button type="button" (click)="useDetected()">Use {{ detected }}</button>
+    }
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="ref.close()">Cancel</button>
+  <button mat-raised-button color="primary" [disabled]="saving()" (click)="save()">Save</button>
+</mat-dialog-actions>

@@ -1,0 +1,222 @@
+<div
+    class="setup-tile"
+    [class.idle]="!isRunning()"
+    [class.attention]="dueCount() > 0"
+    [class.is-expanded]="expanded()">
+
+    <!-- Everything above the footer toggles the panel. The panel itself deliberately sits outside
+         this zone: it holds real controls, and a stray tap on a dial must not collapse the card
+         out from under the finger that is dragging it. -->
+    <div
+        class="tile-open-zone"
+        [class.interactive]="hasLive()"
+        (click)="onCardActivate()"
+        (keydown.enter)="onCardActivate()"
+        (keydown.space)="$event.preventDefault(); onCardActivate()"
+        [attr.tabindex]="hasLive() ? 0 : null"
+        [attr.role]="hasLive() ? 'button' : null"
+        [attr.aria-expanded]="hasLive() ? expanded() : null"
+        [attr.aria-label]="cardActionLabel()">
+        <div class="tile-header">
+            <mat-icon class="tile-icon">hub</mat-icon>
+            <!-- Setup names are the user's own and routinely outrun the tile, so the full one has
+                 to stay reachable once the tile ellipsises it. -->
+            <span class="tile-name" [title]="setup().name">{{ setup().name }}</span>
+            <span class="header-spacer"></span>
+            <button mat-icon-button [matMenuTriggerFor]="setupMenu" class="card-menu-btn"
+                (click)="$event.stopPropagation()" aria-label="Setup actions">
+                <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #setupMenu="matMenu">
+                <!-- Pause and continue live here rather than on the face of the tile: a mis-tap on a
+                     dashboard must not hold every automation a setup owns. -->
+                @if (isRunning()) {
+                <button mat-menu-item (click)="pauseSetup.emit()">
+                    <mat-icon>pause</mat-icon>
+                    <span>Pause</span>
+                </button>
+                } @else {
+                <button mat-menu-item (click)="resumeSetup.emit()">
+                    <mat-icon>play_arrow</mat-icon>
+                    <span>{{ isStopped() ? 'Continue' : 'Start' }}</span>
+                </button>
+                }
+                @if (canReset()) {
+                <button mat-menu-item (click)="resetSetup.emit()">
+                    <mat-icon>restart_alt</mat-icon>
+                    <span>Reset lifecycle</span>
+                </button>
+                }
+                <!-- The way off this page since the card's own body took the tap: phases,
+                     parameters and bindings are all edited on the setup page. -->
+                <button mat-menu-item (click)="openSetup.emit()">
+                    <mat-icon>edit</mat-icon>
+                    <span>Edit setup</span>
+                </button>
+            </mat-menu>
+        </div>
+
+        <div class="tile-body">
+            <div class="tile-lifecycle">
+                <div class="tile-lead">
+                    @if (hasTrack()) {
+                    <span class="tile-ring" [style.--pct]="percent()">
+                        <b>{{ position() }}</b>
+                    </span>
+                    }
+                    <span class="tile-meta">
+                        <span class="tile-phase" [title]="phaseName()">{{ phaseName() }}</span>
+                        @if (timer()) {
+                        <span class="tile-timer">{{ timer() }}</span>
+                        }
+                    </span>
+                </div>
+
+                @if (tracks().length > 0) {
+                <div class="tile-rails">
+                    @for (track of tracks(); track track.key) {
+                    <div class="tile-rail-row" [class.dim]="track.state !== 'running'">
+                        <span class="rail-dot" [class]="track.state"></span>
+                        @if (perDevice()) {
+                        <span class="rail-label" [title]="track.label">{{ track.label }}</span>
+                        }
+                        <span class="phase-rail" role="img" [attr.aria-label]="railLabel(track)">
+                            <!-- A rail is the only place the phases a setup is *not* in are shown,
+                                 and it shows them as unlabelled bars. The tooltip is what turns a
+                                 segment back into a name without spending width the tile has not
+                                 got. -->
+                            @for (phase of track.phases; track phase.key) {
+                            <span class="rail-seg" [class.spent]="fillOf(track, phase) >= 100"
+                                [style.flex-grow]="weightOf(track, phase)"
+                                [matTooltip]="phase.name" matTooltipPosition="above">
+                                <i [style.width.%]="fillOf(track, phase)"></i>
+                            </span>
+                            }
+                        </span>
+                    </div>
+                    }
+                    @if (hiddenCount() > 0) {
+                    <span class="rail-more">+{{ hiddenCount() }} more</span>
+                    }
+                </div>
+                }
+            </div>
+
+            <!-- The live strip. Collapsed only: expanded, the panel below shows every one
+                 of these in full, and a card that showed both would say everything twice. -->
+            @if (!expanded() && hasLive()) {
+            <div class="tile-live">
+                <!-- How much the setup holds beats when it last changed: the strip shows only what
+                     fits, and the total is the part a person cannot infer from what they can see.
+                     Freshness is still on every card in the expanded panel. -->
+                <div class="live-head">
+                    <span class="live-label">Live</span>
+                    @if (liveSummary()) {
+                    <span class="live-ago">{{ liveSummary() }}</span>
+                    }
+                </div>
+
+                @if (visiblePills().length > 0) {
+                <div class="live-pills">
+                    @for (pill of visiblePills(); track pill.action.id) {
+                    <span class="live-pill" [class.stale]="!pill.action.online" [title]="pill.label">
+                        <mat-icon class="pill-icon">{{ iconForAction(pill.action) }}</mat-icon>
+                        <span class="pill-text">
+                            <span class="pill-value">
+                                @if (!pill.action.online) {
+                                —
+                                } @else if (pill.reading && pill.reading.value !== null) {
+                                {{ pill.reading.value | number: pill.reading.digits }}<u>{{ pill.reading.unit }}</u>
+                                } @else {
+                                —
+                                }
+                            </span>
+                            <span class="pill-key">{{ pill.label }}</span>
+                        </span>
+                    </span>
+                    }
+                </div>
+                }
+
+                @if (visibleChips().length > 0) {
+                <div class="live-chips">
+                    @for (control of visibleChips(); track control.id) {
+                    <span class="live-chip" [class.on]="control.online && isActiveState(control)"
+                        [class.stale]="!control.online" [title]="labelFor(control)">
+                        <mat-icon class="chip-icon">{{ iconForAction(control) }}</mat-icon>
+                        <span class="chip-name">{{ labelFor(control) }}</span>
+                        @if (control.online && controlStateLabel(control)) {
+                        <span class="chip-state">{{ controlStateLabel(control) }}</span>
+                        }
+                    </span>
+                    }
+                </div>
+                }
+            </div>
+            }
+        </div>
+    </div>
+
+    <!-- Expanded: the setup's own actions, as the very cards the dashboard grid no longer shows
+         for them. Reused rather than re-drawn so a dial, a camera frame or a pending ack behaves
+         here exactly as it does anywhere else. -->
+    @if (expanded()) {
+    <div class="tile-panel">
+        @if (readings().length > 0) {
+        <div class="panel-group">
+            <span class="group-title">Readings</span>
+            <span class="group-count">{{ readings().length }}</span>
+            <span class="group-line"></span>
+            @if (freshest()) {
+            <span class="group-note">{{ freshest() }}</span>
+            }
+        </div>
+        <div class="panel-grid">
+            @for (pill of readings(); track pill.action.id) {
+            <div class="panel-slot">
+                <app-action-card [action]="pill.action" (rename)="renameAction.emit($event)"></app-action-card>
+            </div>
+            }
+        </div>
+        }
+
+        @if (controls().length > 0) {
+        <div class="panel-group">
+            <span class="group-title">Controls</span>
+            <span class="group-count">{{ controls().length }}</span>
+            <span class="group-line"></span>
+        </div>
+        <div class="panel-grid">
+            @for (control of controls(); track control.id) {
+            <div class="panel-slot">
+                <app-action-card [action]="control" (rename)="renameAction.emit($event)"></app-action-card>
+            </div>
+            }
+        </div>
+        }
+
+        @if (!hasLive()) {
+        <p class="panel-empty">
+            No devices are bound to this setup yet — open it to bind one.
+        </p>
+        }
+    </div>
+    }
+
+    <div class="tile-footer">
+        @if (dueCount() > 0) {
+        <span class="due">{{ dueCount() }} due to advance</span>
+        } @else if (offlineCount() > 0) {
+        <span class="stale-note">{{ offlineCount() }} offline</span>
+        } @else {
+        <span class="footer-text">{{ footer() }}</span>
+        }
+        @if (hasLive()) {
+        <button type="button" class="expand-btn" (click)="toggleExpand.emit()"
+            [attr.aria-expanded]="expanded()">
+            {{ expanded() ? 'Collapse' : 'Expand' }}
+            <mat-icon>{{ expanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </button>
+        }
+    </div>
+</div>

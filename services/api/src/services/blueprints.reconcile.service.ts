@@ -3,7 +3,8 @@ import { publish, RK } from '@lattice/queue';
 import type { NotificationSendPayload } from '@lattice/queue';
 import { getChannel } from '../queue';
 import { createLogger } from '@lattice/logger';
-import { buildSlotActionResolver } from './blueprints.addressing';
+import { buildSlotActionResolver, type SlotActionResolver } from './blueprints.addressing';
+import { fanTargets } from './blueprints.fanout';
 import {
   reconcileSceneTemplate,
   reconcileRuleTemplate,
@@ -21,8 +22,10 @@ const log = createLogger('api:blueprints-reconcile');
 // A blueprint is *desired state*, not a one-time stamp. Publishing v2 should reach live setups,
 // but a user who tuned a derived rule must not lose that. The three rules that make both true:
 //
-//   1. Match by `blueprint_key`, never by row id. The key is the reconcile identity — it survives
-//      a template being rewritten, and it is how "this rule came from that template" is known.
+//   1. Match by `(blueprint_key, blueprint_binding_id)`, never by row id. That pair is the
+//      reconcile identity — it survives a template being rewritten, and it is how "this rule came
+//      from that template, for that device" is known. The binding half is null for everything a
+//      combined template produces, which is every derived row that predates F11.2.
 //   2. Skip anything `user_modified`. That flag is set by the ordinary update paths, so an edited
 //      entity is left exactly as the user left it and reported as drift instead.
 //   3. Never delete. An entity dropped from the template is *disabled* (scenes, which have no
@@ -35,6 +38,21 @@ const log = createLogger('api:blueprints-reconcile');
 
 function notFound(message = 'Setup not found'): Error {
   return Object.assign(new Error(message), { statusCode: 404 });
+}
+
+/**
+ * Every `(blueprint_key, blueprint_binding_id)` a blueprint's templates still produce — the set a
+ * derived row must be in to be considered still wanted (F11.2).
+ */
+function identitySet<T extends { key: string; fan_out: string; fan_out_slot_key: string | null }>(
+  templates: T[],
+  contextsFor: (t: T) => { bindingId: number | null }[],
+): Set<string> {
+  const out = new Set<string>();
+  for (const t of templates) {
+    for (const { bindingId } of contextsFor(t)) out.add(`${t.key}::${bindingId ?? ''}`);
+  }
+  return out;
 }
 
 const instanceInclude = {
@@ -95,8 +113,19 @@ class BlueprintsReconcileService {
     const bp = instance.blueprint;
     // Re-resolve slot actions each pass: a v2 template may reference actions the first derive never
     // touched, or the user may have added/removed a device in a multi-device slot.
-    const resolver = await buildSlotActionResolver(instance.bindings);
+    const fullResolver = await buildSlotActionResolver(instance.bindings);
     const changes: ReconcileChange[] = [];
+    const deviceNames = new Map(
+      (
+        await db.userDevice.findMany({
+          where: { id: { in: instance.bindings.map((b) => b.user_device_id) } },
+          select: { id: true, name: true },
+        })
+      ).map((d) => [d.id, d.name] as const),
+    );
+    const bindingIdByDevice = new Map(
+      instance.bindings.map((b) => [`${b.slot_key}::${b.user_device_id}`, b.id] as const),
+    );
 
     log.debug(
       {
@@ -124,51 +153,100 @@ class BlueprintsReconcileService {
     // Returns null when the reference is not fully resolvable — the slot is unbound, or its action
     // is missing on at least one bound device — in which case the whole entity is left as-is and
     // reported, never written half-wired.
-    const resolveAll = (slotKey: string, actionName: string): number[] | null => {
-      const n = resolver.deviceCount(slotKey);
-      const ids = resolver.actionIds(slotKey, actionName);
-      return n > 0 && ids.length === n ? ids : null;
-    };
+    const resolveAllWith =
+      (resolver: SlotActionResolver) =>
+      (slotKey: string, actionName: string): number[] | null => {
+        const n = resolver.deviceCount(slotKey);
+        const ids = resolver.actionIds(slotKey, actionName);
+        return n > 0 && ids.length === n ? ids : null;
+      };
 
-    // Per-entity diff lives in blueprints.reconcile.diff; each call reconciles one template
-    // against its derived counterpart (matched by blueprint_key) and returns what it did.
-    const diffCtx: DiffContext = {
-      userId: instance.user_id,
-      areaId: instance.area_id,
-      instanceId: instance.id,
-      instanceName: instance.name,
-      resolveAll,
-    };
+    // One diff context per entity a template produces (F11.2). For a combined template that is a
+    // single pass identical to pre-F11; for a per_device one it is a pass per bound device, each
+    // resolving the fan-out slot to its own device.
+    const contextsFor = (template: {
+      fan_out: string;
+      fan_out_slot_key: string | null;
+      fan_out_profiles: string[];
+    }): { ctx: DiffContext; bindingId: number | null }[] =>
+      fanTargets(template, instance.bindings, deviceNames).map((target) => {
+        const bindingId =
+          target.deviceId !== null && template.fan_out_slot_key
+            ? (bindingIdByDevice.get(`${template.fan_out_slot_key}::${target.deviceId}`) ?? null)
+            : null;
+        const resolver =
+          target.deviceIds && template.fan_out_slot_key
+            ? fullResolver.scopedTo(template.fan_out_slot_key, target.deviceIds)
+            : fullResolver;
+        return {
+          bindingId,
+          ctx: {
+            userId: instance.user_id,
+            areaId: instance.area_id,
+            instanceId: instance.id,
+            instanceName: instance.name,
+            resolveAll: resolveAllWith(resolver),
+            // A device_status condition needs the devices themselves, not their actions.
+            devicesInSlot: (slotKey: string) => resolver.devicesInSlot(slotKey),
+            bindingId,
+            nameSuffix: target.suffix,
+          },
+        };
+      });
 
     // ─── Scenes ──────────────────────────────────────────────────────────────
     for (const template of bp.scenes) {
-      const existing = instance.scenes.find((s) => s.blueprint_key === template.key);
-      changes.push(await reconcileSceneTemplate(template, existing, diffCtx));
+      for (const { ctx, bindingId } of contextsFor(template)) {
+        const existing = instance.scenes.find(
+          (s) => s.blueprint_key === template.key && s.blueprint_binding_id === bindingId,
+        );
+        changes.push(await reconcileSceneTemplate(template, existing, ctx));
+      }
     }
 
     // ─── Rules ───────────────────────────────────────────────────────────────
     for (const template of bp.rules) {
-      const existing = instance.rules.find((r) => r.blueprint_key === template.key);
-      changes.push(await reconcileRuleTemplate(template, existing, diffCtx));
+      for (const { ctx, bindingId } of contextsFor(template)) {
+        const existing = instance.rules.find(
+          (r) => r.blueprint_key === template.key && r.blueprint_binding_id === bindingId,
+        );
+        changes.push(await reconcileRuleTemplate(template, existing, ctx));
+      }
     }
 
     // ─── Pipelines ───────────────────────────────────────────────────────────
     for (const template of bp.pipelines) {
-      const existing = instance.pipelines.find((p) => p.blueprint_key === template.key);
-      changes.push(await reconcilePipelineTemplate(template, existing, diffCtx));
+      for (const { ctx, bindingId } of contextsFor(template)) {
+        const existing = instance.pipelines.find(
+          (p) => p.blueprint_key === template.key && p.blueprint_binding_id === bindingId,
+        );
+        changes.push(await reconcilePipelineTemplate(template, existing, ctx));
+      }
     }
 
-    // ─── Removed from the template — disable, never delete ───────────────────
-    const liveKeys = {
-      scene: new Set(bp.scenes.map((s) => s.key)),
-      rule: new Set(bp.rules.map((r) => r.key)),
-      pipeline: new Set(bp.pipelines.map((p) => p.key)),
+    // ─── No longer produced by the blueprint — disable, never delete ─────────
+    //
+    // The identity is the PAIR (F11.2), so this covers two cases with one test: a template dropped
+    // from the blueprint, and a device removed from a multi-device slot — the automations that
+    // belonged to that one device stop, and the others carry on untouched.
+    const liveIdentities = {
+      scene: identitySet(bp.scenes, contextsFor),
+      rule: identitySet(bp.rules, contextsFor),
+      pipeline: identitySet(bp.pipelines, contextsFor),
     };
+    const identityOf = (row: {
+      blueprint_key: string | null;
+      blueprint_binding_id: number | null;
+    }) => `${row.blueprint_key}::${row.blueprint_binding_id ?? ''}`;
+
     for (const rule of instance.rules) {
-      if (rule.blueprint_key && !liveKeys.rule.has(rule.blueprint_key) && rule.enabled) {
+      if (rule.blueprint_key && !liveIdentities.rule.has(identityOf(rule)) && rule.enabled) {
         await db.userRule.update({
           where: { id: rule.id },
-          data: { enabled: false, updated_at: new Date() },
+          // Recording the author of the disable is what lets the update path above restore it if
+          // the blueprint starts producing this identity again — a device reprofiled back onto a
+          // lifecycle the template selects, most often. A user's own disable never sets this.
+          data: { enabled: false, disabled_by_reconcile: true, updated_at: new Date() },
         });
         changes.push({
           kind: 'rule',
@@ -182,12 +260,12 @@ class BlueprintsReconcileService {
     for (const pipeline of instance.pipelines) {
       if (
         pipeline.blueprint_key &&
-        !liveKeys.pipeline.has(pipeline.blueprint_key) &&
+        !liveIdentities.pipeline.has(identityOf(pipeline)) &&
         pipeline.enabled
       ) {
         await db.pipeline.update({
           where: { id: pipeline.id },
-          data: { enabled: false, updated_at: new Date() },
+          data: { enabled: false, disabled_by_reconcile: true, updated_at: new Date() },
         });
         changes.push({
           kind: 'pipeline',
@@ -201,7 +279,7 @@ class BlueprintsReconcileService {
     // Scenes have no `enabled` column — a scene only ever runs when a user presses it, so an
     // orphaned one is harmless. Reported, not touched.
     for (const scene of instance.scenes) {
-      if (scene.blueprint_key && !liveKeys.scene.has(scene.blueprint_key)) {
+      if (scene.blueprint_key && !liveIdentities.scene.has(identityOf(scene))) {
         changes.push({
           kind: 'scene',
           blueprint_key: scene.blueprint_key,

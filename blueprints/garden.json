@@ -1,0 +1,860 @@
+{
+  "key": "garden_pots",
+  "name": "Garden — pots on their own schedules",
+  "description": "One shared reservoir plus up to six pots. Each pot is asked what is growing in it, and that answer puts it on its own schedule — so pots can sit at different stages at once, each with its own watering and light thresholds. Authored as the worked example that exercises every blueprint capability: four lifecycles, all five question types, all four ways a phase can end, both fan-out modes with lifecycle selectors and phase gates, and a two-stage pipeline that decides and then acts.",
+  "context_notes": "A garden of individually planted pots fed from one reservoir. Pots do not share a stage: read each pot's own phase and its own expected ranges before deciding anything. The reservoir is shared, so watering several pots at once drains it faster than watering one.",
+  "is_static": false,
+  "slots": [
+    {
+      "key": "reservoir",
+      "label": "Reservoir",
+      "sealed_template": "Tank Monitor Board",
+      "required": true,
+      "min_count": 1,
+      "max_count": 1,
+      "profiled": false,
+      "sort_order": 1
+    },
+    {
+      "key": "pots",
+      "label": "Pots",
+      "sealed_template": "Socket Board 2ch",
+      "required": true,
+      "min_count": 1,
+      "max_count": 6,
+      "profiled": true,
+      "sort_order": 2
+    }
+  ],
+  "fields": [
+    {
+      "key": "season",
+      "label": "Which season is this garden running in?",
+      "help_text": "Asked once for the whole setup. The model reads it when it weighs one pot against another.",
+      "input_type": "select",
+      "scope": "setup",
+      "required": true,
+      "default_value": "Summer",
+      "sort_order": 1,
+      "options": [
+        { "value": "Spring", "label": "Spring", "sort_order": 1 },
+        { "value": "Summer", "label": "Summer", "sort_order": 2 },
+        { "value": "Autumn", "label": "Autumn", "sort_order": 3 },
+        { "value": "Winter", "label": "Winter", "sort_order": 4 }
+      ]
+    },
+    {
+      "key": "plant",
+      "label": "What is growing in this pot?",
+      "help_text": "Picks the schedule this pot follows. You can change it later by resetting the pot.",
+      "input_type": "select",
+      "scope": "binding",
+      "slot_key": "pots",
+      "required": true,
+      "sort_order": 2,
+      "options": [
+        {
+          "value": "Leafy greens",
+          "label": "Leafy greens",
+          "profile_key": "leafy",
+          "sort_order": 1
+        },
+        { "value": "Fruiting", "label": "Fruiting", "profile_key": "fruiting", "sort_order": 2 },
+        { "value": "Herbs", "label": "Herbs", "profile_key": "herbs", "sort_order": 3 },
+        {
+          "value": "Demo (fast cycle)",
+          "label": "Demo (fast cycle)",
+          "profile_key": "demo",
+          "sort_order": 4
+        }
+      ]
+    },
+    {
+      "key": "variety",
+      "label": "Which variety?",
+      "help_text": "Free text — it reaches the model verbatim, so \"Cherokee Purple\" reads better than \"tomato\".",
+      "input_type": "text",
+      "scope": "binding",
+      "slot_key": "pots",
+      "required": false,
+      "default_value": "",
+      "sort_order": 3
+    },
+    {
+      "key": "pot_litres",
+      "label": "Pot size",
+      "help_text": "Litres of growing medium — how long this pot holds water between runs.",
+      "input_type": "number",
+      "scope": "binding",
+      "slot_key": "pots",
+      "required": false,
+      "default_value": "5",
+      "sort_order": 4
+    },
+    {
+      "key": "planted_on",
+      "label": "Planted on",
+      "input_type": "date",
+      "scope": "binding",
+      "slot_key": "pots",
+      "required": false,
+      "sort_order": 5
+    },
+    {
+      "key": "has_dome",
+      "label": "Is it under a humidity dome?",
+      "input_type": "boolean",
+      "scope": "binding",
+      "slot_key": "pots",
+      "required": false,
+      "default_value": "false",
+      "sort_order": 6
+    },
+    {
+      "key": "hardening_days",
+      "label": "Days to harden off before growing",
+      "help_text": "This pot's own answer sets how long its hardening stage lasts — the same phase runs for a different length in each pot.",
+      "input_type": "number",
+      "scope": "binding",
+      "slot_key": "pots",
+      "required": false,
+      "default_value": "4",
+      "sort_order": 7
+    }
+  ],
+  "params": [
+    {
+      "key": "reservoir.min",
+      "label": "Hold watering below reservoir level",
+      "default_value": "20",
+      "unit": "%",
+      "user_tunable": true,
+      "sort_order": 1
+    },
+    {
+      "key": "reservoir.critical",
+      "label": "Emergency cut-off level",
+      "default_value": "8",
+      "unit": "%",
+      "user_tunable": false,
+      "sort_order": 2
+    },
+    {
+      "key": "water.state",
+      "label": "Water this pot on the daily run",
+      "default_value": "off",
+      "user_tunable": true,
+      "sort_order": 3
+    },
+    {
+      "key": "water.time",
+      "label": "When the daily watering runs",
+      "default_value": "07:00",
+      "user_tunable": true,
+      "sort_order": 4
+    },
+    {
+      "key": "water.seconds",
+      "label": "How long a watering run holds the valve open",
+      "default_value": "60",
+      "unit": "seconds",
+      "user_tunable": true,
+      "sort_order": 5
+    },
+    {
+      "key": "water.stagger_seconds",
+      "label": "Wait before opening, so pots do not all draw at once",
+      "default_value": "5",
+      "unit": "seconds",
+      "user_tunable": true,
+      "sort_order": 6
+    },
+    {
+      "key": "light.state",
+      "label": "Grow light during this stage",
+      "default_value": "off",
+      "user_tunable": true,
+      "sort_order": 7
+    },
+    {
+      "key": "light.on_time",
+      "label": "Lights on (weekdays)",
+      "default_value": "06:00",
+      "user_tunable": true,
+      "sort_order": 8
+    },
+    {
+      "key": "light.weekend_on_time",
+      "label": "Lights on (weekends)",
+      "default_value": "08:00",
+      "user_tunable": true,
+      "sort_order": 9
+    },
+    {
+      "key": "light.off_time",
+      "label": "Lights off",
+      "default_value": "20:00",
+      "user_tunable": true,
+      "sort_order": 10
+    },
+    {
+      "key": "check.time",
+      "label": "When the readiness check runs",
+      "default_value": "08:00",
+      "user_tunable": true,
+      "sort_order": 11
+    },
+    {
+      "key": "leafy.seedling_days",
+      "label": "Days a leafy pot spends rooting before it starts growing",
+      "default_value": "5",
+      "unit": "days",
+      "user_tunable": true,
+      "sort_order": 12
+    },
+    {
+      "key": "fruiting.seedling_days",
+      "label": "Days a fruiting pot spends rooting",
+      "default_value": "10",
+      "unit": "days",
+      "user_tunable": true,
+      "sort_order": 13
+    },
+    {
+      "key": "herbs.establish_days",
+      "label": "Days a herb pot spends establishing",
+      "default_value": "14",
+      "unit": "days",
+      "user_tunable": true,
+      "sort_order": 14
+    },
+    {
+      "key": "demo.minutes",
+      "label": "Length of the demo lifecycle's middle stage",
+      "default_value": "2",
+      "unit": "minutes",
+      "user_tunable": true,
+      "sort_order": 15
+    }
+  ],
+  "profiles": [
+    {
+      "key": "leafy",
+      "label": "Leafy greens",
+      "sort_order": 1,
+      "phases": [
+        {
+          "key": "seedling",
+          "name": "Seedling",
+          "ordinal": 1,
+          "duration_value": "@param.leafy.seedling_days",
+          "duration_unit": "days",
+          "advance_mode": "schedule",
+          "context_notes": "Just sown — little and often, and do not let the reservoir fall under @param.reservoir.min.",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "30" },
+            { "param_key": "light.state", "value": "on" },
+            { "param_key": "light.off_time", "value": "20:00" },
+            { "param_key": "reservoir.min", "value": "30" }
+          ]
+        },
+        {
+          "key": "hardening",
+          "name": "Hardening off",
+          "ordinal": 2,
+          "duration_value": "@field.hardening_days",
+          "duration_unit": "days",
+          "advance_mode": "schedule",
+          "context_notes": "Length comes from this pot's own answer, so two pots on this same lifecycle harden for different lengths.",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "45" },
+            { "param_key": "light.state", "value": "off" },
+            { "param_key": "light.off_time", "value": "17:00" },
+            { "param_key": "reservoir.min", "value": "25" }
+          ]
+        },
+        {
+          "key": "growth",
+          "name": "Growth",
+          "ordinal": 3,
+          "advance_mode": "pipeline",
+          "advance_ref_key": "readiness",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "90" },
+            { "param_key": "light.state", "value": "on" },
+            { "param_key": "light.off_time", "value": "20:00" },
+            { "param_key": "reservoir.min", "value": "25" }
+          ]
+        },
+        {
+          "key": "harvest",
+          "name": "Harvest",
+          "ordinal": 4,
+          "advance_mode": "rule",
+          "advance_ref_key": "replant_on_refill",
+          "advance_to_key": "seedling",
+          "context_notes": "Ready to cut. Refilling the reservoir past 90% replants this pot back to Seedling.",
+          "targets": [
+            { "param_key": "water.state", "value": "off" },
+            { "param_key": "light.state", "value": "off" },
+            { "param_key": "reservoir.min", "value": "20" }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "fruiting",
+      "label": "Fruiting",
+      "sort_order": 2,
+      "phases": [
+        {
+          "key": "seedling",
+          "name": "Seedling",
+          "ordinal": 1,
+          "duration_value": "@param.fruiting.seedling_days",
+          "duration_unit": "days",
+          "advance_mode": "schedule",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "40" },
+            { "param_key": "light.state", "value": "on" },
+            { "param_key": "light.off_time", "value": "22:00" },
+            { "param_key": "reservoir.min", "value": "30" }
+          ]
+        },
+        {
+          "key": "vegetative",
+          "name": "Vegetative",
+          "ordinal": 2,
+          "duration_value": 4,
+          "duration_unit": "weeks",
+          "advance_mode": "schedule",
+          "context_notes": "A literal duration in weeks — the same phase for every fruiting pot.",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "120" },
+            { "param_key": "light.state", "value": "on" },
+            { "param_key": "light.off_time", "value": "22:00" },
+            { "param_key": "reservoir.min", "value": "25" }
+          ]
+        },
+        {
+          "key": "flowering",
+          "name": "Flowering",
+          "ordinal": 3,
+          "advance_mode": "pipeline",
+          "advance_ref_key": "readiness",
+          "context_notes": "Thirstiest stage — this is where the shared reservoir gets contended.",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "180" },
+            { "param_key": "water.time", "value": "06:30" },
+            { "param_key": "light.state", "value": "on" },
+            { "param_key": "light.off_time", "value": "22:00" },
+            { "param_key": "reservoir.min", "value": "35" }
+          ]
+        },
+        {
+          "key": "harvest",
+          "name": "Harvest",
+          "ordinal": 4,
+          "advance_mode": "manual",
+          "context_notes": "Picked over several days, so this one waits for the gardener rather than a clock.",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "120" },
+            { "param_key": "light.state", "value": "off" },
+            { "param_key": "reservoir.min", "value": "40" }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "herbs",
+      "label": "Herbs",
+      "sort_order": 3,
+      "phases": [
+        {
+          "key": "establish",
+          "name": "Establish",
+          "ordinal": 1,
+          "duration_value": "@param.herbs.establish_days",
+          "duration_unit": "days",
+          "advance_mode": "schedule",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "45" },
+            { "param_key": "light.state", "value": "on" },
+            { "param_key": "light.off_time", "value": "18:00" },
+            { "param_key": "reservoir.min", "value": "30" }
+          ]
+        },
+        {
+          "key": "steady",
+          "name": "Steady",
+          "ordinal": 2,
+          "advance_mode": "manual",
+          "advance_to_key": "cutback",
+          "context_notes": "Perennial — it stays here until you cut it back.",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "60" },
+            { "param_key": "light.state", "value": "on" },
+            { "param_key": "light.off_time", "value": "18:00" },
+            { "param_key": "reservoir.min", "value": "20" }
+          ]
+        },
+        {
+          "key": "cutback",
+          "name": "Cut back",
+          "ordinal": 3,
+          "duration_value": 36,
+          "duration_unit": "hours",
+          "advance_mode": "schedule",
+          "advance_to_key": "steady",
+          "context_notes": "Rests dry for a day and a half after cutting, then goes back to Steady — a lifecycle that loops instead of ending.",
+          "targets": [
+            { "param_key": "water.state", "value": "off" },
+            { "param_key": "light.state", "value": "off" },
+            { "param_key": "reservoir.min", "value": "20" }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "demo",
+      "label": "Demo — fast cycle",
+      "sort_order": 4,
+      "phases": [
+        {
+          "key": "sprout",
+          "name": "Sprout",
+          "ordinal": 1,
+          "duration_value": 60,
+          "duration_unit": "seconds",
+          "advance_mode": "schedule",
+          "context_notes": "Not a real growth stage. This lifecycle runs in seconds and minutes so an advance can be watched happening.",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "10" },
+            { "param_key": "light.state", "value": "on" },
+            { "param_key": "reservoir.min", "value": "30" }
+          ]
+        },
+        {
+          "key": "swell",
+          "name": "Swell",
+          "ordinal": 2,
+          "duration_value": "@param.demo.minutes",
+          "duration_unit": "minutes",
+          "advance_mode": "schedule",
+          "context_notes": "Waters for twice as long as Sprout — the same rule, a different number, because the number lives here.",
+          "targets": [
+            { "param_key": "water.state", "value": "on" },
+            { "param_key": "water.seconds", "value": "20" },
+            { "param_key": "light.state", "value": "off" },
+            { "param_key": "reservoir.min", "value": "25" }
+          ]
+        },
+        {
+          "key": "rest",
+          "name": "Rest",
+          "ordinal": 3,
+          "duration_value": 90,
+          "duration_unit": "seconds",
+          "advance_mode": "schedule",
+          "advance_to_key": "sprout",
+          "context_notes": "Loops back to Sprout, so the demo pot cycles forever without anyone touching it.",
+          "targets": [
+            { "param_key": "water.state", "value": "off" },
+            { "param_key": "light.state", "value": "off" },
+            { "param_key": "reservoir.min", "value": "20" }
+          ]
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "key": "reservoir_guard",
+      "name": "Reservoir low — close every valve",
+      "is_emergency": true,
+      "cooldown_seconds": 300,
+      "fan_out": "combined",
+      "condition_operator": "OR",
+      "conditions": [
+        {
+          "condition_type": "threshold",
+          "slot_key": "reservoir",
+          "action_name": "water_level",
+          "operator": "<",
+          "threshold_value": "@param.reservoir.min"
+        },
+        {
+          "condition_type": "threshold",
+          "slot_key": "reservoir",
+          "action_name": "water_level",
+          "operator": "<=",
+          "threshold_value": "@param.reservoir.critical"
+        }
+      ],
+      "actions": [{ "slot_key": "pots", "action_name": "i2c_socket_8", "target_state": "off" }]
+    },
+    {
+      "key": "reservoir_offline_guard",
+      "name": "Reservoir board offline — hold watering",
+      "is_emergency": true,
+      "cooldown_seconds": 600,
+      "fan_out": "combined",
+      "conditions": [
+        {
+          "condition_type": "device_status",
+          "slot_key": "reservoir",
+          "status_value": "offline"
+        }
+      ],
+      "actions": [{ "slot_key": "pots", "action_name": "i2c_socket_8", "target_state": "off" }]
+    },
+    {
+      "key": "daily_water",
+      "name": "Daily watering",
+      "cooldown_seconds": 3600,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "conditions": [
+        {
+          "condition_type": "schedule",
+          "schedule_time": "@phase.water.time",
+          "schedule_days": []
+        }
+      ],
+      "actions": [
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8",
+          "target_state": "@phase.water.state",
+          "delay_seconds": "@param.water.stagger_seconds",
+          "duration_seconds": "@phase.water.seconds"
+        }
+      ]
+    },
+    {
+      "key": "lights_on_weekday",
+      "name": "Lights on — weekdays",
+      "cooldown_seconds": 3600,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "conditions": [
+        {
+          "condition_type": "schedule",
+          "schedule_time": "@phase.light.on_time",
+          "schedule_days": [1, 2, 3, 4, 5]
+        }
+      ],
+      "actions": [
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8_2",
+          "target_state": "@phase.light.state"
+        }
+      ]
+    },
+    {
+      "key": "lights_on_weekend",
+      "name": "Lights on — weekends (later)",
+      "cooldown_seconds": 3600,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "conditions": [
+        {
+          "condition_type": "schedule",
+          "schedule_time": "@phase.light.weekend_on_time",
+          "schedule_days": [0, 6]
+        }
+      ],
+      "actions": [
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8_2",
+          "target_state": "@phase.light.state"
+        }
+      ]
+    },
+    {
+      "key": "lights_off",
+      "name": "Lights off",
+      "cooldown_seconds": 3600,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "conditions": [
+        {
+          "condition_type": "schedule",
+          "schedule_time": "@phase.light.off_time",
+          "schedule_days": []
+        }
+      ],
+      "actions": [{ "slot_key": "pots", "action_name": "i2c_socket_8_2", "target_state": "off" }]
+    },
+    {
+      "key": "replant_on_refill",
+      "name": "Refilled — replant the harvested pots",
+      "cooldown_seconds": 600,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "fan_out_profiles": ["leafy"],
+      "phase_scope": ["harvest"],
+      "conditions": [
+        {
+          "condition_type": "threshold",
+          "slot_key": "reservoir",
+          "action_name": "water_level",
+          "operator": ">",
+          "threshold_value": "90"
+        }
+      ],
+      "actions": [{ "slot_key": "pots", "action_name": "i2c_socket_8", "target_state": "off" }]
+    },
+    {
+      "key": "dry_daytime_boost",
+      "name": "Daytime top-up while there is water",
+      "cooldown_seconds": 1800,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "phase_scope": ["growth", "vegetative", "flowering", "swell"],
+      "condition_operator": "AND",
+      "conditions": [
+        {
+          "condition_type": "schedule",
+          "schedule_time": "09:00",
+          "schedule_until": "16:00",
+          "schedule_every_minutes": 30,
+          "schedule_days": []
+        },
+        {
+          "condition_type": "threshold",
+          "slot_key": "reservoir",
+          "action_name": "water_level",
+          "operator": ">=",
+          "threshold_value": "@param.reservoir.min"
+        }
+      ],
+      "actions": [
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8",
+          "target_state": "@phase.water.state",
+          "delay_seconds": "@param.water.stagger_seconds",
+          "duration_seconds": "@phase.water.seconds"
+        }
+      ]
+    },
+    {
+      "key": "midday_sip",
+      "name": "Midday sip",
+      "cooldown_seconds": 540,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "conditions": [
+        {
+          "condition_type": "schedule",
+          "schedule_time": "11:00",
+          "schedule_until": "17:30",
+          "schedule_every_minutes": 10,
+          "schedule_days": []
+        }
+      ],
+      "actions": [
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8",
+          "target_state": "@phase.water.state",
+          "duration_seconds": "@phase.water.seconds"
+        }
+      ]
+    },
+    {
+      "key": "valves_closed_overnight",
+      "name": "Close every valve overnight",
+      "cooldown_seconds": 3600,
+      "fan_out": "combined",
+      "conditions": [
+        { "condition_type": "schedule", "schedule_time": "23:55", "schedule_days": [] }
+      ],
+      "actions": [{ "slot_key": "pots", "action_name": "i2c_socket_8", "target_state": "off" }]
+    }
+  ],
+  "scenes": [
+    {
+      "key": "away",
+      "name": "Away — everything off",
+      "sort_order": 1,
+      "fan_out": "combined",
+      "members": [
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8",
+          "target_state": "off",
+          "sort_order": 1
+        },
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8_2",
+          "target_state": "off",
+          "sort_order": 2
+        }
+      ]
+    },
+    {
+      "key": "soak",
+      "name": "Soak this pot",
+      "sort_order": 2,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "phase_scope": ["seedling", "establish", "sprout"],
+      "members": [
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8_2",
+          "target_state": "off",
+          "sort_order": 1
+        },
+        {
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8",
+          "target_state": "on",
+          "sort_order": 2,
+          "delay_seconds": "@param.water.stagger_seconds",
+          "duration_seconds": "@phase.water.seconds"
+        }
+      ]
+    },
+    {
+      "key": "herbs_lights_out",
+      "name": "Herb lights out",
+      "sort_order": 3,
+      "fan_out": "combined",
+      "fan_out_slot_key": "pots",
+      "fan_out_profiles": ["herbs"],
+      "members": [{ "slot_key": "pots", "action_name": "i2c_socket_8_2", "target_state": "off" }]
+    }
+  ],
+  "pipelines": [
+    {
+      "key": "readiness",
+      "name": "Is this pot ready?",
+      "enabled": true,
+      "fan_out": "per_device",
+      "fan_out_slot_key": "pots",
+      "phase_scope": ["growth", "flowering"],
+      "sensors": [
+        {
+          "group_name": "pot",
+          "description": "valve state — how much this pot has been drinking",
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8",
+          "inject_as_sensor": true,
+          "compression": "last_n",
+          "n": 8,
+          "window_minutes": 1440
+        },
+        {
+          "group_name": "reservoir",
+          "description": "reservoir level over the last day",
+          "slot_key": "reservoir",
+          "action_name": "water_level",
+          "inject_as_sensor": true,
+          "min_value": "@param.reservoir.min",
+          "max_value": "100",
+          "compression": "min_max_avg",
+          "window_minutes": 1440
+        }
+      ],
+      "stages": [
+        {
+          "ordinal": 1,
+          "kind": "infer",
+          "ml_model": { "kind": "llm", "name": "gemini", "version": "v1" },
+          "prompt_template": "This pot is growing @field.plant (@field.variety) in @field.pot_litres litres, planted @field.planted_on, and the garden is in @field.season. It is in its @phase.name stage, watered for @phase.water.seconds seconds a run. @phase.context_notes\nDecide only whether this stage is finished and the pot should move on. It is not a threshold — say no unless the readings and the time in stage together make it clear."
+        },
+        {
+          "ordinal": 2,
+          "kind": "command_exec",
+          "notify": "socket",
+          "execute_condition": "on_positive"
+        }
+      ],
+      "triggers": [
+        {
+          "trigger_type": "schedule",
+          "schedule_time": "@param.check.time",
+          "schedule_days": [],
+          "min_interval_sec": 43200
+        },
+        { "trigger_type": "manual" }
+      ]
+    },
+    {
+      "key": "water_budget",
+      "name": "Share the reservoir",
+      "enabled": true,
+      "fan_out": "combined",
+      "sensors": [
+        {
+          "group_name": "reservoir",
+          "description": "how much water is left",
+          "slot_key": "reservoir",
+          "action_name": "water_level",
+          "inject_as_sensor": true,
+          "min_value": "@param.reservoir.min",
+          "compression": "average",
+          "window_minutes": 60
+        },
+        {
+          "group_name": "pot",
+          "description": "each pot's valve — readable, and openable by the decision",
+          "slot_key": "pots",
+          "action_name": "i2c_socket_8",
+          "inject_as_sensor": true,
+          "inject_as_action": true,
+          "compression": "time_series",
+          "window_minutes": 60
+        }
+      ],
+      "stages": [
+        {
+          "ordinal": 1,
+          "kind": "infer",
+          "ml_model": { "kind": "llm", "name": "gemini", "version": "v1" },
+          "prompt_template": "The reservoir is shared by every pot below, and each pot is at its own stage with its own expected range. Water is short — hold anything under @param.reservoir.min in reserve. Decide which pots to open now and which can wait until the next run; open nothing you cannot justify from the stage and the readings. Prefer the stage that suffers most from a missed watering."
+        },
+        {
+          "ordinal": 2,
+          "kind": "command_exec",
+          "notify": "push",
+          "execute_condition": "always"
+        }
+      ],
+      "triggers": [
+        {
+          "trigger_type": "sensor_threshold",
+          "slot_key": "reservoir",
+          "action_name": "water_level",
+          "operator": "<",
+          "threshold_value": "@param.reservoir.min",
+          "min_interval_sec": 1800
+        },
+        {
+          "trigger_type": "schedule",
+          "schedule_time": "06:30",
+          "schedule_until": "19:30",
+          "schedule_every_minutes": 180,
+          "schedule_days": [1, 2, 3, 4, 5, 6, 0],
+          "min_interval_sec": 3600
+        }
+      ]
+    }
+  ]
+}

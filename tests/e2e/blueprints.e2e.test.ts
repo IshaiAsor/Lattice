@@ -70,11 +70,11 @@ function blueprintDoc() {
         ordinal: 1,
         duration_value: 2,
         duration_unit: 'days',
-        auto_advance: true,
+        advance_mode: 'schedule',
         targets: [{ param_key: 'level.min', value: '40' }],
       },
       // No target for level.min ⇒ it must fall through to the blueprint default (20).
-      { key: 'steady', name: 'Steady state', ordinal: 2, auto_advance: false },
+      { key: 'steady', name: 'Steady state', ordinal: 2, advance_mode: 'manual' },
     ],
     scenes: [
       {
@@ -670,6 +670,13 @@ describe('blueprints e2e (F10)', () => {
     expect(row.started_at).toBeNull(); // …with its clock stopped
     expect(row.elapsed_seconds).toBe(row.accrued_seconds); // frozen at the bank
 
+    // The whole track rides along, so the card can show how far through the lifecycle this is
+    // rather than only how far through one phase (F11.4).
+    expect(row.phases.map((p: any) => p.key)).toEqual(['commissioning', 'steady']);
+    expect(row.phases.find((p: any) => p.is_current).key).toBe('steady');
+    // A parked track does not move: elapsed is the bank, in every phase.
+    expect(row.phases.every((p: any) => p.elapsed_seconds === p.accrued_seconds)).toBe(true);
+
     await apiPost(`/api/blueprints/instances/${instanceId}/start`, token, { timer: 'resume' });
     row = (await apiGet('/api/blueprints/instances', token)).find((r: any) => r.id === instanceId);
     expect(row.lifecycle_state).toBe('running');
@@ -726,7 +733,7 @@ describe('blueprints e2e (F10)', () => {
     expect(already.body.error).toContain('already running');
 
     const badPhase = await apiRaw('POST', `/api/blueprints/instances/${instanceId}/start`, token, {
-      phase_key: 'harvest',
+      phase_key: 'winddown',
     });
     expect(badPhase.status).toBe(400);
   });
@@ -820,20 +827,24 @@ describe('blueprints e2e (F10)', () => {
     expect(drift.entities).toHaveLength(0);
   });
 
-  // ── Blueprints with no phases (F10.13) ───────────────────────────────────
+  // ── Static setups: no slot has phases (F10.13 / F11.8) ───────────────────
   //
-  // Plenty of blueprints are not time-dependent and some declare no phases at all. Such a setup has
+  // Plenty of blueprints are not time-dependent, and some schedule nothing at all. Such a setup has
   // no lifecycle to position — but pausing still means "hold this setup's automations", so it must
   // still pause and resume. Without the phase-less branch in start(), stop() would strand it:
   // accepted on the way in, with no phase to enter on the way back.
+  //
+  // Since F11.8 that is *declared* (`is_static`) rather than inferred, so a draft whose author has
+  // not written the phases yet is not mistaken for a setup that deliberately has none.
 
-  itStack('derives a phase-less blueprint already running, and pauses/resumes it', async () => {
+  itStack('derives a static blueprint already running, and pauses/resumes it', async () => {
     await releaseInstance(instanceId);
     instanceId = undefined;
 
     const doc = {
       key: `${BLUEPRINT_KEY}_nophase`,
       name: `E2E No Phases ${SUFFIX}`,
+      is_static: true,
       slots: [
         { key: 'tank', label: 'Tank monitor', sealed_template: TANK_TEMPLATE },
         { key: 'sockets', label: 'Socket board', sealed_template: SOCKET_TEMPLATE },
@@ -899,6 +910,54 @@ describe('blueprints e2e (F10)', () => {
     noPhaseInstanceId = undefined;
   });
 
+  // The flag and the content must agree, both ways — a blueprint that says one thing and does
+  // another would either show a phase track it denies having, or silently publish an unfinished
+  // draft as though the omission were deliberate.
+
+  itStack('refuses to publish a static blueprint that still declares phases', async () => {
+    const bad = {
+      key: `${BLUEPRINT_KEY}_static_bad`,
+      name: `E2E Static Contradiction ${SUFFIX}`,
+      is_static: true,
+      slots: [{ key: 'tank', label: 'Tank monitor', sealed_template: TANK_TEMPLATE }],
+      phases: [{ key: 'run', name: 'Run', ordinal: 1, advance_mode: 'manual' }],
+      scenes: [],
+      rules: [],
+      pipelines: [],
+    };
+    const imported = await apiPost('/api/admin/blueprints/import', token, bad);
+    const { status, body } = await apiRaw(
+      'POST',
+      `/api/admin/blueprints/${imported.id}/publish`,
+      token,
+    );
+    expect(status).toBe(400);
+    expect(body.details.join('\n')).toContain('marked static');
+    await apiDelete(`/api/admin/blueprints/${imported.id}`, token);
+  });
+
+  itStack('refuses to publish a blueprint with no phases that is not marked static', async () => {
+    // The case the flag exists for: indistinguishable from an unfinished draft without it.
+    const bad = {
+      key: `${BLUEPRINT_KEY}_static_missing`,
+      name: `E2E Static Undeclared ${SUFFIX}`,
+      slots: [{ key: 'tank', label: 'Tank monitor', sealed_template: TANK_TEMPLATE }],
+      phases: [],
+      scenes: [],
+      rules: [],
+      pipelines: [],
+    };
+    const imported = await apiPost('/api/admin/blueprints/import', token, bad);
+    const { status, body } = await apiRaw(
+      'POST',
+      `/api/admin/blueprints/${imported.id}/publish`,
+      token,
+    );
+    expect(status).toBe(400);
+    expect(body.details.join('\n')).toContain('mark it static');
+    await apiDelete(`/api/admin/blueprints/${imported.id}`, token);
+  });
+
   // ── Multi-device slots ─────────────────────────────────────────────────────
   //
   // A slot with max_count > 1 binds several devices, and every template leaf that names it fans
@@ -920,6 +979,8 @@ describe('blueprints e2e (F10)', () => {
     return {
       key: `${BLUEPRINT_KEY}_multi`,
       name: `E2E Multi Sockets ${SUFFIX}`,
+      // Nothing here is scheduled — the point of this fixture is fan-out, not phases (F11.8).
+      is_static: true,
       slots: [
         {
           key: 'sockets',
@@ -1048,8 +1109,8 @@ describe('blueprints e2e (F10)', () => {
         { key: 'sockets', label: 'Socket board', sealed_template: SOCKET_TEMPLATE },
       ],
       phases: [
-        { key: 'commissioning', name: 'Commissioning', ordinal: 1, auto_advance: false },
-        { key: 'steady', name: 'Steady state', ordinal: 2, auto_advance: false },
+        { key: 'commissioning', name: 'Commissioning', ordinal: 1, advance_mode: 'manual' },
+        { key: 'steady', name: 'Steady state', ordinal: 2, advance_mode: 'manual' },
       ],
       scenes: [
         {
@@ -1089,7 +1150,7 @@ describe('blueprints e2e (F10)', () => {
     const bad = scopeDoc();
     bad.key = `${BLUEPRINT_KEY}_scope_bad`;
     bad.name = `${bad.name} (bad)`;
-    bad.rules[0]!.phase_scope = ['harvest']; // no such phase
+    bad.rules[0]!.phase_scope = ['winddown']; // no such phase
     const imported = await apiPost('/api/admin/blueprints/import', token, bad);
     const { status, body } = await apiRaw(
       'POST',
@@ -1163,5 +1224,525 @@ describe('blueprints e2e (F10)', () => {
     expect(scoped.in_phase).toBe(true);
     const allowed = await apiRaw('POST', `/api/scenes/${sceneId}/execute`, token, {});
     expect(allowed.status).toBe(202);
+  });
+
+  // ── Per-device lifecycles and fan-out (F11) ────────────────────────────────
+  //
+  // One setup, several devices, each on its own schedule. Everything below turns on one idea: a
+  // binding of a *profiled* slot is the thing that has a lifecycle, not the setup — so two devices
+  // in the same setup are legitimately in different phases at the same moment, and an automation
+  // that reads `@phase.` has to belong to one of them.
+  //
+  // The blueprint asks which schedule through its own form (F11.6): a select option names a
+  // profile, so answering "what is this handling?" both records the answer and puts the device on
+  // the matching lifecycle. That is the shape a real blueprint uses, and it is what is exercised
+  // here rather than passing profile_key by hand.
+
+  let deviceBlueprintId: number | undefined;
+  let deviceInstanceId: number | undefined;
+
+  function perDeviceDoc() {
+    return {
+      key: `${BLUEPRINT_KEY}_devices`,
+      name: `E2E Per-device ${SUFFIX}`,
+      slots: [
+        { key: 'tank', label: 'Tank monitor', sealed_template: TANK_TEMPLATE },
+        {
+          key: 'loops',
+          label: 'Loops',
+          sealed_template: SOCKET_TEMPLATE,
+          min_count: 1,
+          max_count: 4,
+          // The load-bearing flag: each bound device follows its own profile.
+          profiled: true,
+        },
+      ],
+      params: [{ key: 'level.min', label: 'Level floor', default_value: '10' }],
+      fields: [
+        {
+          key: 'duty',
+          label: 'What is this loop handling?',
+          input_type: 'select',
+          scope: 'binding',
+          slot_key: 'loops',
+          required: true,
+          options: [
+            { value: 'quick_run', label: 'Quick run', profile_key: 'fast_cycle' },
+            { value: 'long_soak', label: 'Long soak', profile_key: 'slow_cycle' },
+          ],
+        },
+      ],
+      profiles: [
+        {
+          key: 'fast_cycle',
+          label: 'Fast cycle',
+          phases: [
+            {
+              key: 'fill',
+              name: 'Fill',
+              ordinal: 1,
+              advance_mode: 'manual',
+              targets: [{ param_key: 'level.min', value: '40' }],
+            },
+            {
+              key: 'hold',
+              name: 'Hold',
+              ordinal: 2,
+              advance_mode: 'manual',
+              targets: [{ param_key: 'level.min', value: '20' }],
+            },
+          ],
+        },
+        {
+          key: 'slow_cycle',
+          label: 'Slow cycle',
+          phases: [
+            {
+              key: 'fill',
+              name: 'Fill',
+              ordinal: 1,
+              advance_mode: 'manual',
+              targets: [{ param_key: 'level.min', value: '70' }],
+            },
+            {
+              key: 'flush',
+              name: 'Flush',
+              ordinal: 2,
+              advance_mode: 'manual',
+              targets: [{ param_key: 'level.min', value: '5' }],
+            },
+          ],
+        },
+      ],
+      rules: [
+        {
+          key: 'per_loop',
+          name: `Loop low ${SUFFIX}`,
+          cooldown_seconds: 60,
+          // One rule per bound device, each resolving @phase against its OWN device's phase.
+          fan_out: 'per_device',
+          fan_out_slot_key: 'loops',
+          conditions: [
+            {
+              condition_type: 'threshold',
+              slot_key: 'loops',
+              action_name: 'i2c_socket_8',
+              operator: '<',
+              threshold_value: '@phase.level.min',
+            },
+          ],
+          actions: [{ slot_key: 'loops', action_name: 'i2c_socket_8', target_state: 'ON' }],
+        },
+        {
+          key: 'fast_only',
+          name: `Fast loop top-up ${SUFFIX}`,
+          cooldown_seconds: 60,
+          // "One each, but only for some" (F11.9): one rule per device on the fast lifecycle, and
+          // none at all on the others — where before F11.9 this had to be a rule on every device
+          // gated by phase, leaving a permanently inert copy on the slow ones.
+          fan_out: 'per_device',
+          fan_out_slot_key: 'loops',
+          fan_out_profiles: ['fast_cycle'],
+          conditions: [
+            {
+              condition_type: 'threshold',
+              slot_key: 'loops',
+              action_name: 'i2c_socket_8',
+              operator: '<',
+              threshold_value: '@phase.level.min',
+            },
+          ],
+          actions: [{ slot_key: 'loops', action_name: 'i2c_socket_8', target_state: 'ON' }],
+        },
+      ],
+      scenes: [
+        {
+          key: 'slow_group',
+          name: `Slow loops off ${SUFFIX}`,
+          // "Some, together": ONE scene, but covering only the devices on the slow lifecycle.
+          // No `@phase.` anywhere in it — a combined entity still has a single context, and the
+          // selector narrows which devices it acts on, not how many phases it can read.
+          fan_out: 'combined',
+          fan_out_slot_key: 'loops',
+          fan_out_profiles: ['slow_cycle'],
+          members: [{ slot_key: 'loops', action_name: 'i2c_socket_8', target_state: 'OFF' }],
+        },
+      ],
+    };
+  }
+
+  itStack(
+    'refuses to publish a combined template that reads @phase over a profiled slot',
+    async () => {
+      // The case that genuinely cannot resolve: one entity, one context, several devices each in
+      // their own phase. Caught at publish because at evaluation time it would just pick one.
+      const bad = perDeviceDoc();
+      bad.key = `${BLUEPRINT_KEY}_devices_bad`;
+      bad.name = `${bad.name} (bad)`;
+      bad.rules[0]!.fan_out = 'combined';
+      delete (bad.rules[0] as { fan_out_slot_key?: string }).fan_out_slot_key;
+      const imported = await apiPost('/api/admin/blueprints/import', token, bad);
+      const { status, body } = await apiRaw(
+        'POST',
+        `/api/admin/blueprints/${imported.id}/publish`,
+        token,
+      );
+      expect(status).toBe(400);
+      expect(body.details.join('\n')).toContain('each bound device is in its own phase');
+      await apiDelete(`/api/admin/blueprints/${imported.id}`, token);
+    },
+  );
+
+  itStack('derives a setup whose devices follow the lifecycle their answer chose', async () => {
+    await releaseInstance(scopeInstanceId);
+    scopeInstanceId = undefined;
+
+    const imported = await apiPost('/api/admin/blueprints/import', token, perDeviceDoc());
+    deviceBlueprintId = imported.id;
+    await apiPost(`/api/admin/blueprints/${deviceBlueprintId}/publish`, token, {});
+
+    // The wizard reads the form off the preview rather than knowing the blueprint.
+    const preview = await apiGet(`/api/blueprints/${deviceBlueprintId}/preview`, token);
+    expect(preview.profiles.map((p: any) => p.key)).toEqual(['fast_cycle', 'slow_cycle']);
+    expect(preview.fields).toHaveLength(1);
+    expect(preview.fields[0].scope).toBe('binding');
+
+    const result = await apiPost(`/api/blueprints/${deviceBlueprintId}/derive`, token, {
+      name: `E2E Per-device Loop ${SUFFIX}`,
+      bindings: [
+        { slot_key: 'tank', user_device_id: tankDev.deviceId },
+        {
+          slot_key: 'loops',
+          user_device_id: socketDev.deviceId,
+          label: 'Loop A',
+          // No profile_key: the ANSWER picks it. That is the whole point of the option's profile.
+          field_values: [{ field_key: 'duty', value: 'quick_run' }],
+        },
+        {
+          slot_key: 'loops',
+          user_device_id: socketDev2.deviceId,
+          label: 'Loop B',
+          field_values: [{ field_key: 'duty', value: 'long_soak' }],
+        },
+      ],
+    });
+    deviceInstanceId = result.instance_id;
+
+    const loops = result.bindings.filter((b: any) => b.slot_key === 'loops');
+    expect(loops.map((b: any) => b.profile_key).sort()).toEqual(['fast_cycle', 'slow_cycle']);
+    // The shared device has no lifecycle of its own.
+    expect(result.bindings.find((b: any) => b.slot_key === 'tank').profile_key).toBeNull();
+    // A setup whose devices own the schedule has no phase to start into, so it is born running.
+    expect(result.lifecycle_state).toBe('running');
+    expect(result.first_phase).toBeNull();
+  });
+
+  itStack('refuses a device on a profiled slot with no way to know its lifecycle', async () => {
+    const { status, body } = await apiRaw(
+      'POST',
+      `/api/blueprints/${deviceBlueprintId}/derive`,
+      token,
+      {
+        name: `E2E Per-device Unanswered ${SUFFIX}`,
+        bindings: [{ slot_key: 'loops', user_device_id: socketDev.deviceId }],
+      },
+    );
+    expect(status).toBe(400);
+    // Required-field first: the answer is what would have chosen the profile.
+    expect(body.error).toContain('required');
+  });
+
+  itStack('materialises one rule per bound device, each wired to only that device', async () => {
+    const rules = (await apiGet('/api/rules', token)).filter((r: any) =>
+      r.name.startsWith(`Loop low ${SUFFIX}`),
+    );
+    expect(rules).toHaveLength(2);
+    // Named after the device they belong to, so two copies are tellable apart.
+    expect(rules.map((r: any) => r.name).sort()).toEqual([
+      `Loop low ${SUFFIX} · Loop A`,
+      `Loop low ${SUFFIX} · Loop B`,
+    ]);
+    // One condition and one action each — NOT one per bound device. The whole difference from a
+    // combined template: this rule watches its own device only.
+    for (const rule of rules) {
+      expect(rule.conditions).toHaveLength(1);
+      expect(rule.actions).toHaveLength(1);
+    }
+    // And they are wired to different devices.
+    const actionIds = rules.map((r: any) => r.actions[0].user_device_action_id);
+    expect(new Set(actionIds).size).toBe(2);
+  });
+
+  // ── The device selector (F11.9) ────────────────────────────────────────────
+  //
+  // `fan_out` says how many automations; `fan_out_profiles` says which devices they cover. The two
+  // together are one / some / all, and "some" is the shape that had no expression before: an
+  // automation for two of three devices previously had to exist on all three and be gated shut on
+  // the third, which is a live row that can never fire.
+
+  itStack('materialises a per-device rule on only the selected lifecycle', async () => {
+    const rules = (await apiGet('/api/rules', token)).filter((r: any) =>
+      r.name.startsWith(`Fast loop top-up ${SUFFIX}`),
+    );
+    // Loop A answered "quick run" → fast_cycle; Loop B answered "long soak". One rule, not two.
+    expect(rules).toHaveLength(1);
+    expect(rules[0].name).toBe(`Fast loop top-up ${SUFFIX} · Loop A`);
+  });
+
+  itStack('materialises one combined scene covering only the selected devices', async () => {
+    const scene = (await apiGet('/api/scenes', token)).find(
+      (sc: any) => sc.name === `Slow loops off ${SUFFIX}`,
+    );
+    // One entity, so the author's name stands unsuffixed — there is nothing to tell apart.
+    expect(scene).toBeDefined();
+    // Two devices are bound to the slot; only the slow one is in the scene.
+    expect(scene.members).toHaveLength(1);
+
+    // And it is genuinely the slow device: the per-device rule named after Loop B is wired to the
+    // same action, which is the only cross-check that distinguishes "one member" from "the right
+    // member".
+    const loopB = (await apiGet('/api/rules', token)).find(
+      (r: any) => r.name === `Loop low ${SUFFIX} · Loop B`,
+    );
+    expect(scene.members[0].user_device_action_id).toBe(loopB.actions[0].user_device_action_id);
+  });
+
+  // The three ways a selector can be written so that it selects nobody. Each would otherwise
+  // publish cleanly and produce an automation that silently covers no device at all.
+
+  async function expectSelectorRejected(
+    mutate: (doc: ReturnType<typeof perDeviceDoc>) => void,
+    expected: string,
+  ): Promise<void> {
+    const bad = perDeviceDoc();
+    bad.key = `${BLUEPRINT_KEY}_sel_${Math.random().toString(36).slice(2, 8)}`;
+    bad.name = `${bad.name} (sel)`;
+    mutate(bad);
+    const imported = await apiPost('/api/admin/blueprints/import', token, bad);
+    const { status, body } = await apiRaw(
+      'POST',
+      `/api/admin/blueprints/${imported.id}/publish`,
+      token,
+    );
+    expect(status).toBe(400);
+    expect(body.details.join('\n')).toContain(expected);
+    await apiDelete(`/api/admin/blueprints/${imported.id}`, token);
+  }
+
+  // Reconcile disables an automation whose device left the selection. It must also bring it back —
+  // and must NOT resurrect one the *user* switched off, which is why the author of the disable is
+  // recorded rather than inferred. Toggling `enabled` is deliberately not drift, so without that
+  // record the two cases are indistinguishable and one of them is always wrong.
+
+  itStack(
+    're-enables an automation it disabled once its device returns to the selection',
+    async () => {
+      const bindings = await apiGet(
+        `/api/blueprints/instances/${deviceInstanceId}/bindings`,
+        token,
+      );
+      const loopA = bindings.find((b: any) => b.label === 'Loop A');
+      const ruleNamed = async () =>
+        (await apiGet('/api/rules', token)).find(
+          (r: any) => r.name === `Fast loop top-up ${SUFFIX} · Loop A`,
+        );
+
+      expect((await ruleNamed()).enabled).toBe(true);
+
+      // Off the selected lifecycle → its per-device rule is no longer produced.
+      await apiPost(`/api/blueprints/bindings/${loopA.binding_id}/reset`, token, {
+        profile_key: 'slow_cycle',
+      });
+      await apiPost(`/api/blueprints/instances/${deviceInstanceId}/reconcile`, token, {});
+      expect((await ruleNamed()).enabled).toBe(false);
+
+      // …and back again.
+      await apiPost(`/api/blueprints/bindings/${loopA.binding_id}/reset`, token, {
+        profile_key: 'fast_cycle',
+      });
+      await apiPost(`/api/blueprints/instances/${deviceInstanceId}/reconcile`, token, {});
+      expect((await ruleNamed()).enabled).toBe(true);
+    },
+  );
+
+  itStack('leaves an automation the user disabled switched off across a reconcile', async () => {
+    const rule = (await apiGet('/api/rules', token)).find(
+      (r: any) => r.name === `Fast loop top-up ${SUFFIX} · Loop A`,
+    );
+    await apiPatch(`/api/rules/${rule.id}/toggle`, token, { enabled: false });
+
+    await apiPost(`/api/blueprints/instances/${deviceInstanceId}/reconcile`, token, {});
+
+    const after = (await apiGet('/api/rules', token)).find((r: any) => r.id === rule.id);
+    expect(after.enabled).toBe(false);
+    // Restore, so the rest of the suite sees the setup as the blueprint describes it.
+    await apiPatch(`/api/rules/${rule.id}/toggle`, token, { enabled: true });
+  });
+
+  itStack(
+    'refuses to publish more than one lifecycle when no slot chooses between them',
+    async () => {
+      // Nothing picks a lifecycle unless a slot is profiled, so the second one is dead weight: derive
+      // and the setup page both silently take the first. Publishing that hides an authoring mistake.
+      const bad = perDeviceDoc();
+      bad.key = `${BLUEPRINT_KEY}_unchosen`;
+      bad.name = `${bad.name} (unchosen)`;
+      bad.slots[1]!.profiled = false;
+      // Drop everything that depends on the slot being profiled, so this is the only problem left.
+      bad.fields = [];
+      bad.rules = [];
+      bad.scenes = [];
+      const imported = await apiPost('/api/admin/blueprints/import', token, bad);
+      const { status, body } = await apiRaw(
+        'POST',
+        `/api/admin/blueprints/${imported.id}/publish`,
+        token,
+      );
+      expect(status).toBe(400);
+      expect(body.details.join('\n')).toContain('no slot whose devices choose between them');
+      await apiDelete(`/api/admin/blueprints/${imported.id}`, token);
+    },
+  );
+
+  itStack('refuses to publish a selector naming an undeclared lifecycle', async () => {
+    await expectSelectorRejected((doc) => {
+      doc.rules[1]!.fan_out_profiles = ['no_such_cycle'];
+    }, 'is not a declared lifecycle');
+  });
+
+  itStack('refuses to publish a selector over a slot whose devices share the setup', async () => {
+    // The tank is unprofiled: its device has no lifecycle, so there is nothing to select it by.
+    await expectSelectorRejected((doc) => {
+      doc.rules[1]!.fan_out_slot_key = 'tank';
+    }, 'do not each follow one');
+  });
+
+  itStack('refuses to publish a selector over a slot the template never addresses', async () => {
+    // Narrowing a slot nothing reads changes nothing — the automation would still act on whatever
+    // it does address, for every device, while claiming to be limited.
+    await expectSelectorRejected((doc) => {
+      doc.scenes[0]!.members[0]!.slot_key = 'tank';
+      doc.scenes[0]!.members[0]!.action_name = 'water_level';
+    }, 'would change nothing');
+  });
+
+  itStack('starts one device without touching the other', async () => {
+    const before = await apiGet(`/api/blueprints/instances/${deviceInstanceId}/bindings`, token);
+    expect(before).toHaveLength(2);
+    expect(before.every((b: any) => b.lifecycle_state === 'not_started')).toBe(true);
+
+    const loopA = before.find((b: any) => b.label === 'Loop A');
+    const started = await apiPost(`/api/blueprints/bindings/${loopA.binding_id}/start`, token, {
+      phase_key: 'fill',
+    });
+    expect(started.lifecycle_state).toBe('running');
+    expect(started.current_phase.key).toBe('fill');
+
+    const after = await apiGet(`/api/blueprints/instances/${deviceInstanceId}/bindings`, token);
+    expect(after.find((b: any) => b.label === 'Loop B').lifecycle_state).toBe('not_started');
+  });
+
+  itStack('advances one device, leaving the other where it was', async () => {
+    const bindings = await apiGet(`/api/blueprints/instances/${deviceInstanceId}/bindings`, token);
+    const loopA = bindings.find((b: any) => b.label === 'Loop A');
+    const loopB = bindings.find((b: any) => b.label === 'Loop B');
+
+    await apiPost(`/api/blueprints/bindings/${loopB.binding_id}/start`, token, {
+      phase_key: 'fill',
+    });
+    const moved = await apiPut(`/api/blueprints/bindings/${loopA.binding_id}/phase`, token, {
+      phase_key: 'hold',
+      timer: 'reset',
+    });
+    expect(moved.current_phase.key).toBe('hold');
+
+    const after = await apiGet(`/api/blueprints/instances/${deviceInstanceId}/bindings`, token);
+    expect(after.find((b: any) => b.label === 'Loop B').current_phase.key).toBe('fill');
+    // Two devices, two different phases, at the same instant — impossible before F11.
+    expect(new Set(after.map((b: any) => b.current_phase.key)).size).toBe(2);
+  });
+
+  itStack('refuses a phase that belongs to the other device lifecycle', async () => {
+    // "flush" is a phase of slow_cycle; Loop A follows fast_cycle and must not be able to enter it.
+    const bindings = await apiGet(`/api/blueprints/instances/${deviceInstanceId}/bindings`, token);
+    const loopA = bindings.find((b: any) => b.label === 'Loop A');
+    const { status, body } = await apiRaw(
+      'PUT',
+      `/api/blueprints/bindings/${loopA.binding_id}/phase`,
+      token,
+      { phase_key: 'flush' },
+    );
+    expect(status).toBe(400);
+    expect(body.error).toContain('is not a phase of profile "fast_cycle"');
+  });
+
+  itStack('holds every device once the setup is stopped', async () => {
+    await apiPost(`/api/blueprints/instances/${deviceInstanceId}/stop`, token, {});
+    const held = await apiGet(`/api/blueprints/instances/${deviceInstanceId}/bindings`, token);
+    // Each device still says what IT is; the effective state is what any gate reads.
+    expect(held.every((b: any) => b.lifecycle_state === 'running')).toBe(true);
+    expect(held.every((b: any) => b.effective_state === 'stopped')).toBe(true);
+    await apiPost(`/api/blueprints/instances/${deviceInstanceId}/start`, token, {});
+  });
+
+  itStack(
+    'summarises the devices on the setups list rather than a phase it does not have',
+    async () => {
+      const row = (await apiGet('/api/blueprints/instances', token)).find(
+        (i: any) => i.id === deviceInstanceId,
+      );
+      expect(row.has_phases).toBe(false); // the devices own the lifecycle, not the setup
+      expect(row.devices).toEqual({ total: 2, running: 2 });
+      // …and no track of its own, because drawing one beside the devices' would show the same
+      // time twice.
+      expect(row.phases).toEqual([]);
+    },
+  );
+
+  itStack('carries a whole track per device on the setups list (F11.4)', async () => {
+    // The list card draws a rail per device, so it needs every phase — not just the current one —
+    // and each device's own position in its own lifecycle.
+    const row = (await apiGet('/api/blueprints/instances', token)).find(
+      (i: any) => i.id === deviceInstanceId,
+    );
+    expect(row.device_tracks).toHaveLength(2);
+
+    const loopA = row.device_tracks.find((d: any) => d.label === 'Loop A');
+    const loopB = row.device_tracks.find((d: any) => d.label === 'Loop B');
+    expect(loopA.effective_state).toBe('running');
+    expect(loopA.phases.length).toBeGreaterThan(1);
+    // Exactly one phase is current, and it is the one the binding reports.
+    expect(loopA.phases.filter((p: any) => p.is_current)).toHaveLength(1);
+    expect(loopA.phases.find((p: any) => p.is_current).key).toBe(loopA.current_phase.key);
+
+    // Two devices on different lifecycles, so the tracks are genuinely different — the whole
+    // reason a single setup-level bar could not describe this setup.
+    expect(loopA.current_phase.key).not.toBe(loopB.current_phase.key);
+
+    // Every phase carries what a bar needs: a length to size the segment and a spend to fill it.
+    for (const phase of loopA.phases) {
+      expect(typeof phase.name).toBe('string');
+      expect(typeof phase.ordinal).toBe('number');
+      expect(phase.elapsed_seconds).toBeGreaterThanOrEqual(phase.accrued_seconds);
+    }
+  });
+
+  itStack('puts a device on another lifecycle when it is reset', async () => {
+    const bindings = await apiGet(`/api/blueprints/instances/${deviceInstanceId}/bindings`, token);
+    const loopA = bindings.find((b: any) => b.label === 'Loop A');
+    const reset = await apiPost(`/api/blueprints/bindings/${loopA.binding_id}/reset`, token, {
+      profile_key: 'slow_cycle',
+    });
+    expect(reset.profile_key).toBe('slow_cycle');
+    expect(reset.lifecycle_state).toBe('not_started');
+    expect(reset.accrued_seconds).toBe(0);
+    // It now walks the other lifecycle's phases.
+    expect(reset.phases.map((p: any) => p.key)).toEqual(['fill', 'flush']);
+  });
+
+  itStack('refuses a lifecycle action on a device the setup shares', async () => {
+    const instance = await apiGet(`/api/blueprints/instances/${deviceInstanceId}`, token);
+    const tank = instance.bindings.find((b: any) => b.slot_key === 'tank');
+    expect(tank.binding_id).toBeNull(); // no lifecycle of its own, so nothing to start
   });
 });

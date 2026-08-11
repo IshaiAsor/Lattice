@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { forkJoin, Observable } from 'rxjs';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import {
+  BindingView,
   BlueprintsService,
   DerivePreview,
   InstanceSummary,
@@ -14,7 +15,42 @@ import {
 } from 'src/app/services/blueprints.service';
 import { BlueprintDeriveDialogComponent } from '../blueprint-derive-dialog/blueprint-derive-dialog.component';
 import { SetupLifecycleService } from '../blueprint-instance/setup-lifecycle.service';
-import { currentPhaseTimerLabel, progressPercent } from '../blueprint-instance/phase-timer.util';
+import { BindingLifecycleService } from '../blueprint-instance/binding-lifecycle.service';
+import { currentPhaseTimerLabel, formatDuration } from '../blueprint-instance/phase-timer.util';
+import {
+  currentPhase,
+  leadTrack,
+  overallPercent,
+  phaseFillPercent,
+  phaseWeight,
+  positionLabel,
+} from 'src/app/utils/phase-track.util';
+import { DeviceTrack, PhaseTrackItem } from 'src/app/services/blueprints.service';
+
+/**
+ * One lifecycle inside a setup card — the setup's own, or one bound device's (F11.4).
+ *
+ * Built once per load rather than derived in the template: the shape does not change between
+ * ticks, only the numbers do, and rebuilding a row array on every change detection is how a list
+ * of five setups starts dropping frames.
+ */
+interface TrackRow {
+  key: string;
+  label: string;
+  /** Null for the setup's own lifecycle — there is no device to act on. */
+  bindingId: number | null;
+  phases: PhaseTrackItem[];
+  phaseName: string | null;
+  durationSeconds: number | null;
+  elapsedSeconds: number;
+  /** What any gate reads: running only while this owner *and* its setup are. */
+  state: string;
+  /** This owner's own state, which is what its button acts on. */
+  ownState: string;
+}
+
+/** Devices past this many get a "+n more" line: a panel must not become a page. */
+const MAX_DEVICE_ROWS = 4;
 
 // The blueprints page (F10.8): what you can set up, and what you already have set up.
 //
@@ -24,8 +60,14 @@ import { currentPhaseTimerLabel, progressPercent } from '../blueprint-instance/p
 //
 // "Your setups" carries the lifecycle (F10.13) rather than just names: a list of setups that all
 // look alike cannot tell a running one from a parked one, and "is this actually doing anything?"
-// is the question a user opens this page with. Each row shows the state, the phase, that phase's
-// progress, and the three actions — so the common case never needs the detail page at all.
+// is the question a user opens this page with.
+//
+// Each setup is a small panel (F11.4): a header with the setup's state, its actions and a ring for
+// how far through the whole lifecycle it is, then one row per lifecycle beneath — the setup's own,
+// or one per bound device that carries its own. The rows exist because "3 devices · 1 running" is
+// an answer the user then has to go and decode: which one is running, where is each, and how long
+// until something happens. Per-device pause lives on the row for the same reason — it was the most
+// common reason to open the detail page.
 @Component({
   selector: 'app-blueprints',
   imports: [SHARED_MATERIAL],
@@ -38,12 +80,16 @@ export class BlueprintsComponent implements OnInit, OnDestroy {
   private snackBar = inject(MatSnackBar);
   private router = inject(Router);
   private lifecycle = inject(SetupLifecycleService);
+  private bindingLifecycle = inject(BindingLifecycleService);
 
   available: DerivePreview[] = [];
   setups: InstanceSummary[] = [];
   loading = true;
   /** Id of the setup whose lifecycle action is in flight — disables that row only. */
   busyId: number | null = null;
+
+  /** Body rows per setup, rebuilt on load. Structure is stable between ticks; only numbers move. */
+  private rows = new Map<number, TrackRow[]>();
 
   /** Seconds since the response was rendered; only the running phases tick. */
   private tickOffset = 0;
@@ -72,6 +118,7 @@ export class BlueprintsComponent implements OnInit, OnDestroy {
       next: ({ available, setups }) => {
         this.available = available;
         this.setups = setups;
+        this.rows = new Map(setups.map((s) => [s.id, this.buildRows(s)]));
         this.loadedAt = Date.now();
         this.tickOffset = 0;
         this.loading = false;
@@ -116,21 +163,139 @@ export class BlueprintsComponent implements OnInit, OnDestroy {
     return this.isStopped(s) ? 'pause_circle' : 'schedule';
   }
 
+  /** Reset discards banked time, so it needs time to have been banked somewhere. */
+  canReset(s: InstanceSummary): boolean {
+    if (s.lifecycle_state === 'not_started') return false;
+    return s.has_phases || s.device_tracks.length > 0;
+  }
+
   /** Elapsed in the current phase, ticked forward locally rather than re-fetched. */
   elapsedSeconds(s: InstanceSummary): number {
     return s.elapsed_seconds + (this.isRunning(s) ? this.tickOffset : 0);
   }
 
-  progress(s: InstanceSummary): number {
-    return progressPercent(this.elapsedSeconds(s), s.duration_seconds);
+  // ── The panel body (F11.4) ───────────────────────────────────────────
+  //
+  // One row per lifecycle: the setup's own, or one per bound device that carries one. A setup with
+  // neither — a static blueprint — has no body at all and stays the single row it always was.
+
+  private buildRows(s: InstanceSummary): TrackRow[] {
+    if (s.device_tracks.length > 0) {
+      return s.device_tracks.slice(0, MAX_DEVICE_ROWS).map((d) => this.deviceRow(d));
+    }
+    if (s.phases.length === 0) return [];
+    return [
+      {
+        key: `setup-${s.id}`,
+        label: 'Whole setup',
+        bindingId: null,
+        phases: s.phases,
+        phaseName: s.current_phase?.name ?? null,
+        durationSeconds: s.duration_seconds,
+        elapsedSeconds: s.elapsed_seconds,
+        state: s.lifecycle_state,
+        ownState: s.lifecycle_state,
+      },
+    ];
   }
 
-  showProgressBar(s: InstanceSummary): boolean {
-    return s.current_phase !== null && s.duration_seconds !== null;
+  private deviceRow(d: DeviceTrack): TrackRow {
+    return {
+      key: `binding-${d.binding_id}`,
+      label: d.label,
+      bindingId: d.binding_id,
+      phases: d.phases,
+      phaseName: d.current_phase?.name ?? null,
+      durationSeconds: d.duration_seconds,
+      elapsedSeconds: d.elapsed_seconds,
+      state: d.effective_state,
+      ownState: d.lifecycle_state,
+    };
+  }
+
+  rowsFor(s: InstanceSummary): TrackRow[] {
+    return this.rows.get(s.id) ?? [];
+  }
+
+  hiddenDeviceCount(s: InstanceSummary): number {
+    return Math.max(0, s.device_tracks.length - MAX_DEVICE_ROWS);
+  }
+
+  /**
+   * The track the header's ring describes: the setup's own, else the device that will need you
+   * first. The same rule the dashboard tile uses, so one setup cannot be summarised two ways.
+   */
+  headTrack(s: InstanceSummary): PhaseTrackItem[] {
+    if (s.phases.length > 0) return s.phases;
+    return leadTrack(s.device_tracks, this.tickOffset)?.phases ?? [];
+  }
+
+  overallPercent(s: InstanceSummary): number {
+    return overallPercent(this.headTrack(s), this.tickOffset, this.isRunning(s));
+  }
+
+  positionLabel(s: InstanceSummary): string {
+    return positionLabel(this.headTrack(s));
+  }
+
+  ringTooltip(s: InstanceSummary): string {
+    const track = this.headTrack(s);
+    const phase = currentPhase(track);
+    const pct = Math.round(this.overallPercent(s));
+    if (!phase) return `${track.length} phases — not started`;
+    return `${phase.name} — ${pct}% through the whole lifecycle`;
+  }
+
+  // ── One row's track ──────────────────────────────────────────────────
+
+  private tickFor(row: TrackRow): number {
+    return row.state === 'running' ? this.tickOffset : 0;
+  }
+
+  weightOf(row: TrackRow, phase: PhaseTrackItem): number {
+    return phaseWeight(phase, row.phases);
+  }
+
+  fillOf(row: TrackRow, phase: PhaseTrackItem): number {
+    return phaseFillPercent(phase, row.phases, this.tickFor(row), row.state === 'running');
+  }
+
+  railLabel(row: TrackRow): string {
+    const index = row.phases.findIndex((p) => p.is_current);
+    if (index === -1) return `${row.label}: not started, ${row.phases.length} phases`;
+    return `${row.label}: phase ${index + 1} of ${row.phases.length}, ${row.phases[index]!.name}`;
+  }
+
+  /** The lengths behind the bar, so a segment nobody can hit is still readable. */
+  railTooltip(row: TrackRow): string {
+    return row.phases
+      .map(
+        (p) =>
+          `${p.name} · ${p.duration_seconds ? formatDuration(p.duration_seconds) : 'no limit'}`,
+      )
+      .join('\n');
+  }
+
+  /** "1d 4h left", or what a parked clock honestly reads. */
+  timerOf(row: TrackRow): string {
+    if (row.ownState === 'not_started') return 'not started';
+    if (!row.phaseName) return 'no phase yet';
+    return currentPhaseTimerLabel(
+      row.elapsedSeconds + this.tickFor(row),
+      row.durationSeconds,
+      row.state === 'running',
+    );
   }
 
   /** "Commissioning · 1d left", or — with no lifecycle to describe — where the setup came from. */
   phaseLine(s: InstanceSummary): string {
+    // A setup whose bound devices each run their own schedule has no single phase to name, so the
+    // row says how many of them are actually running instead (F11.4) — the honest summary when the
+    // answer is not one thing.
+    if (s.devices.total > 0) {
+      const suffix = s.lifecycle_state === 'running' ? '' : ' · setup paused';
+      return `${s.devices.total} device${s.devices.total === 1 ? '' : 's'} · ${s.devices.running} running${suffix}`;
+    }
     if (!s.has_phases) return `from ${s.blueprint_key}`;
     if (!s.current_phase) return 'No phase yet — start it to choose one';
     const timer = currentPhaseTimerLabel(
@@ -162,6 +327,67 @@ export class BlueprintsComponent implements OnInit, OnDestroy {
     this.act(s, event, this.lifecycle.reset(s.id), 'Lifecycle reset', 'Could not reset');
   }
 
+  // ── Per-device lifecycle (F11.4) ─────────────────────────────────────
+  //
+  // Both go through BindingLifecycleService, so pausing one device from here asks the same question
+  // in the same words as pausing it from the detail page.
+
+  /**
+   * Starting asks which phase and how far into it, which needs the device's whole track in the
+   * shape the dialog takes — so the bindings are fetched on the click rather than carried by every
+   * list render. The same trade SetupLifecycleService.start already makes.
+   */
+  startDevice(s: InstanceSummary, row: TrackRow, event: Event): void {
+    event.stopPropagation();
+    if (this.busyId !== null || row.bindingId === null) return;
+    const bindingId = row.bindingId;
+    this.busyId = s.id;
+    this.blueprints.listBindings(s.id).subscribe({
+      next: (bindings) => {
+        const binding = bindings.find((b) => b.binding_id === bindingId);
+        this.busyId = null;
+        if (!binding) {
+          this.snackBar.open('That device is no longer part of this setup', 'Close', {
+            duration: 3500,
+          });
+          this.load();
+          return;
+        }
+        this.actOnDevice(
+          s,
+          this.bindingLifecycle.start(binding),
+          `Started: ${row.label}`,
+          'Could not start this device',
+        );
+      },
+      error: () => {
+        this.busyId = null;
+        this.snackBar.open('Could not read this setup’s devices', 'Close', { duration: 3500 });
+      },
+    });
+  }
+
+  stopDevice(s: InstanceSummary, row: TrackRow, event: Event): void {
+    event.stopPropagation();
+    if (this.busyId !== null || row.bindingId === null) return;
+    this.actOnDevice(
+      s,
+      this.bindingLifecycle.stop({ binding_id: row.bindingId, label: row.label }),
+      `Paused: ${row.label}`,
+      'Could not pause this device',
+    );
+  }
+
+  /**
+   * A device may be started while its setup is parked — the API allows it and the state is real —
+   * but nothing it owns will act until the setup is continued, so the button says so up front.
+   */
+  deviceStartTooltip(s: InstanceSummary, row: TrackRow): string {
+    const verb = row.ownState === 'stopped' ? 'Continue' : 'Start';
+    if (!this.isRunning(s)) return `${verb} ${row.label} — held until the setup is continued`;
+    return `${verb} ${row.label}`;
+  }
+
   /**
    * Every action sits inside a row that is itself a button to open the setup, so each one has to
    * stop the click travelling — otherwise confirming a stop also navigates away from the list that
@@ -183,6 +409,28 @@ export class BlueprintsComponent implements OnInit, OnDestroy {
         if (!updated) return; // backed out of the confirm — not an error
         this.load();
         this.snackBar.open(`${done}: ${setup.name}`, 'Close', { duration: 2500 });
+      },
+      error: (err) => {
+        this.busyId = null;
+        this.snackBar.open(err?.error?.error ?? failed, 'Close', { duration: 3500 });
+      },
+    });
+  }
+
+  /** The same, for an action that resolves to a binding rather than the setup. */
+  private actOnDevice(
+    setup: InstanceSummary,
+    action: Observable<BindingView | null>,
+    done: string,
+    failed: string,
+  ): void {
+    this.busyId = setup.id;
+    action.subscribe({
+      next: (updated) => {
+        this.busyId = null;
+        if (!updated) return; // backed out of the confirm — not an error
+        this.load();
+        this.snackBar.open(done, 'Close', { duration: 2500 });
       },
       error: (err) => {
         this.busyId = null;

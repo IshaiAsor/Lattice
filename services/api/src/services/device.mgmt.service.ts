@@ -300,6 +300,9 @@ class DeviceMgmtService {
       actionName,
       command: '',
       firmwareVersion: device.device.version,
+      // A device-level command from the management UI — no UserDeviceAction behind it, so the
+      // history row records the device and the verb (F11.12).
+      source: { kind: 'manual', label: `device ${actionName}` },
     };
     const ch = await getChannel();
     publish(ch, RK.ACTION_DISPATCH, payload);

@@ -6,6 +6,7 @@ Detailed references (read when relevant, not upfront):
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — service inventory, event flow, data layer
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md) — logging, error handling, service structure, shared packages
 - [docs/TESTING.md](docs/TESTING.md) — test layout, stack-aware e2e harness, when new code needs tests
+- [docs/BLUEPRINTS.md](docs/BLUEPRINTS.md) — blueprints/setups: lifecycles, fan-out, references, gating, reconcile
 - [prisma/SCHEMA.md](prisma/SCHEMA.md) — database ERD + per-table examples
 - [SYSTEM-DESIGN-ROADMAP.md](SYSTEM-DESIGN-ROADMAP.md) — living planning doc (feature groups, session log)
 

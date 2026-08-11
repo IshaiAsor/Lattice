@@ -31,17 +31,8 @@ export function isCooldownExpired(
   return elapsed >= cooldownSeconds;
 }
 
-// Schedule condition: HH:MM equality on the current minute; empty `days` = every day
-// (days use JS getDay() numbering, 0 = Sunday).
-export function matchesScheduleAt(
-  time: string | null,
-  days: number[],
-  now: Date = new Date(),
-): boolean {
-  if (!time) return false;
-  const hh = now.getHours().toString().padStart(2, '0');
-  const mm = now.getMinutes().toString().padStart(2, '0');
-  if (`${hh}:${mm}` !== time) return false;
-  if (!days || days.length === 0) return true;
-  return days.includes(now.getDay());
-}
+// The schedule matcher used to live here. It moved to `@lattice/params` (schedule.ts) when the
+// window shape landed, because the pipeline-trigger scan needs exactly the same evaluator and the
+// API needs exactly the same validator — one definition of what a schedule is, or they drift.
+export { matchesSchedule } from '@lattice/params';
+export type { ScheduleSpec } from '@lattice/params';

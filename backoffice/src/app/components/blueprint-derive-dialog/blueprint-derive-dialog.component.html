@@ -7,6 +7,50 @@
     <mat-hint>Its devices are grouped into an area with this name.</mat-hint>
   </mat-form-field>
 
+  <!-- Questions the blueprint author declared for the setup as a whole (F11.6). -->
+  @if (setupFields().length > 0) {
+    <h3 class="slots-title">About this setup</h3>
+    @for (field of setupFields(); track field.key) {
+      <!-- A yes/no answer is a toggle, not a text box. It cannot live inside mat-form-field (that
+           wants a matInput), so it is its own row — and the stored value stays the string "true" /
+           "false", because every field answer is text on the wire. -->
+      @if (field.input_type === 'boolean') {
+        <div class="field-toggle">
+          <mat-slide-toggle
+            [checked]="setupAnswers[field.key] === 'true'"
+            (change)="setupAnswers[field.key] = $event.checked ? 'true' : 'false'"
+          >
+            {{ field.label }}
+          </mat-slide-toggle>
+          @if (field.help_text) {
+            <p class="field-toggle-hint">{{ field.help_text }}</p>
+          }
+        </div>
+      } @else {
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>{{ field.label }}</mat-label>
+          @if (field.input_type === 'select') {
+            <mat-select [(ngModel)]="setupAnswers[field.key]">
+              @for (option of field.options; track option.value) {
+                <mat-option [value]="option.value">{{ option.label }}</mat-option>
+              }
+            </mat-select>
+          } @else {
+            <input
+              matInput
+              [type]="field.input_type === 'number' ? 'number' : field.input_type === 'date' ? 'date' : 'text'"
+              [(ngModel)]="setupAnswers[field.key]"
+              [required]="field.required"
+            />
+          }
+          @if (field.help_text) {
+            <mat-hint>{{ field.help_text }}</mat-hint>
+          }
+        </mat-form-field>
+      }
+    }
+  }
+
   <h3 class="slots-title">Devices</h3>
 
   <div class="slot-list">
@@ -98,6 +142,99 @@
             <mat-icon>remove</mat-icon>
             <span>No matching device — this part will be skipped</span>
           </div>
+        }
+
+        <!--
+          Asked per DEVICE, not per slot (F11): each device bound here runs its own schedule and
+          carries its own answers. The profile picker is skipped when a form answer already decides
+          it — asking the same thing twice is worse than not asking at all.
+        -->
+        @if (needsPerDevice(slot)) {
+          @for (device of pickedDevices(slot); track device.user_device_id) {
+            <div class="device-block">
+              <div class="device-block-head">
+                <mat-icon>developer_board</mat-icon>
+                <span>{{ device.name }}</span>
+                @if (needsMac(slot, device)) {
+                  <span class="device-mac">{{ device.mac_id }}</span>
+                }
+              </div>
+
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Name this one</mat-label>
+                <input
+                  matInput
+                  [(ngModel)]="labelByDevice[deviceKey(slot, device.user_device_id)]"
+                  maxlength="120"
+                  [placeholder]="device.name"
+                />
+              </mat-form-field>
+
+              @for (field of fieldsForSlot(slot); track field.key) {
+                <!-- Same as the setup-scope questions above: a yes/no is a toggle on its own row. -->
+                @if (field.input_type === 'boolean') {
+                  <div class="field-toggle">
+                    <mat-slide-toggle
+                      [checked]="answersFor(slot, device.user_device_id)[field.key] === 'true'"
+                      (change)="
+                        answerDeviceField(
+                          slot,
+                          device.user_device_id,
+                          field,
+                          $event.checked ? 'true' : 'false'
+                        )
+                      "
+                    >
+                      {{ field.label }}
+                    </mat-slide-toggle>
+                    @if (field.help_text) {
+                      <p class="field-toggle-hint">{{ field.help_text }}</p>
+                    }
+                  </div>
+                } @else {
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>{{ field.label }}</mat-label>
+                    @if (field.input_type === 'select') {
+                      <mat-select
+                        [ngModel]="answersFor(slot, device.user_device_id)[field.key]"
+                        (ngModelChange)="answerDeviceField(slot, device.user_device_id, field, $event)"
+                      >
+                        @for (option of field.options; track option.value) {
+                          <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                        }
+                      </mat-select>
+                    } @else {
+                      <input
+                        matInput
+                        [type]="field.input_type === 'number' ? 'number' : field.input_type === 'date' ? 'date' : 'text'"
+                        [ngModel]="answersFor(slot, device.user_device_id)[field.key]"
+                        (ngModelChange)="answerDeviceField(slot, device.user_device_id, field, $event)"
+                        [required]="field.required"
+                      />
+                    }
+                    @if (field.help_text) {
+                      <mat-hint>{{ field.help_text }}</mat-hint>
+                    }
+                  </mat-form-field>
+                }
+              }
+
+              @if (slot.profiled && !profileComesFromForm(slot) && preview.profiles.length > 1) {
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Schedule</mat-label>
+                  <mat-select
+                    [ngModel]="profileFor(slot, device.user_device_id)"
+                    (ngModelChange)="setProfile(slot, device.user_device_id, $event)"
+                  >
+                    @for (profile of preview.profiles; track profile.key) {
+                      <mat-option [value]="profile.key">{{ profile.label }}</mat-option>
+                    }
+                  </mat-select>
+                  <mat-hint>This device walks these phases on its own clock.</mat-hint>
+                </mat-form-field>
+              }
+            </div>
+          }
         }
       </div>
     }

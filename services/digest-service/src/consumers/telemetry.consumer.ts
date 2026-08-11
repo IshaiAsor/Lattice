@@ -9,6 +9,7 @@ import { asString } from '../util';
 import { socket } from '../socket/emitter';
 import { writeScalarState } from '../state-write';
 import { takePendingPicture } from '../cache/pending';
+import { recordCaptureArrived } from '../command-history';
 import * as timeout from '../pending-timeout';
 import { isErrorReading, type ErrorReading } from '@lattice/params';
 
@@ -83,21 +84,26 @@ async function handleImage(
     log.error({ err, userActionId }, 'socket image frame emit failed');
   }
 
-  // 4. If this frame answers an in-flight on-demand capture (pipeline enrich stage),
-  // resolve it. takePendingPicture is the arbiter against the request's own timeout —
-  // whichever fires first wins, so this is a no-op if the timeout already resolved it.
+  // 4. If this frame answers an in-flight on-demand capture (a pipeline enrich stage, or a user
+  // asking from the camera card), resolve it. takePendingPicture is the arbiter against the
+  // request's own timeout — whichever fires first wins, so this is a no-op if the timeout already
+  // resolved it, and the history row keeps the timeout verdict a late frame does not undo.
   if (commandId) {
     timeout.clear(commandId);
     try {
       const pending = await takePendingPicture(commandId);
       if (pending !== null) {
-        const result: PictureResultPayload = {
-          commandId,
-          status: 'ok',
-          image: frame,
-          capturedAt: timestamp,
-        };
-        publish(ch, RK.PICTURE_RESULT, result);
+        // Settled by size, never by value — the frame is a base64 JPEG and the column is 255 chars.
+        await recordCaptureArrived(commandId, Buffer.byteLength(frame, 'base64'));
+        if (pending.deliverResult ?? true) {
+          const result: PictureResultPayload = {
+            commandId,
+            status: 'ok',
+            image: frame,
+            capturedAt: timestamp,
+          };
+          publish(ch, RK.PICTURE_RESULT, result);
+        }
       }
     } catch (err) {
       log.error({ err, commandId }, 'picture request resolution failed');

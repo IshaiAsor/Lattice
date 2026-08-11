@@ -1,4 +1,4 @@
-# Manual test plan — F10 Blueprints
+# Manual test plan — F10/F11 Blueprints
 
 A walkthrough of the whole feature against the dev stack. Roughly 30–40 minutes end to end.
 Automated coverage lives in `tests/unit/blueprints.*` and `tests/e2e/blueprints.e2e.test.ts`; this
@@ -149,6 +149,45 @@ then observable in a couple of minutes instead of a fortnight.
 
 `api` logs carry `mode`, `banked` and `entering` on every change; `automation-worker` logs
 `accrued` in `phase cron: evaluated`, which is the number that makes a resumed phase fire early.
+
+---
+
+## 2c · What ends a phase (F11.x — advance triggers)
+
+A phase declares its own exit. In the builder, open a phase and use **Advances when**:
+
+| Option                     | What ends the phase                                                    |
+| -------------------------- | ---------------------------------------------------------------------- |
+| **A person moves it on**   | nothing automatic — the user's Start / phase-change (the default)      |
+| **The duration elapses**   | the schedule cron (this is the old "auto-advance"; §2b)                |
+| **A rule fires**           | the derived rule you pick — when it fires, its owner advances          |
+| **An AI pipeline decides** | the derived pipeline you pick — when its model returns `advance: true` |
+
+**Advance to** is **Next phase** by default, or a specific phase of the same profile (a jump or a
+rewind). The rule/pipeline picker only lists automations at the phase's **level**, and each offers
+**Create** — an inline rule/pipeline pre-scoped to this phase, which you then finish in its own
+section.
+
+**The level rule (the load-bearing check).** Whether an advance moves the _setup_ or _one pot_ is
+forced by the blueprint's shape, not chosen:
+
+- **Plain setup** (no profiled slot): only `combined` automations are offered, and advancing steps
+  the **whole setup**. _Test:_ author a rule (e.g. tank stable) as a `commissioning` phase's
+  decider; start the setup; drive the rule's condition → the **setup** steps to the next phase and a
+  second evaluation does **not** advance again (`automation-worker` logs `setup phase advanced`).
+- **Garden with a profiled slot** (many pots): only `per_device` automations are offered, and
+  advancing steps **just that pot**. _Test:_ give a profile's `seeding` phase a per-device pipeline
+  decider; start the setup with several pots; feed **one** pot's telemetry so its model returns
+  `advance: true` → **only that pot** moves (`pot phase advanced`, notification `Setup · Pot`),
+  its siblings stay put.
+
+**Lifecycle still gates it.** Pause the setup (or the pot) and repeat: **nothing advances** — the
+rule/pipeline is held by `isAutomationLive` before it can decide. Automated advances always **reset**
+the entered phase's clock (only a person resumes a bank).
+
+**Validation.** Publishing a phase whose decider is the wrong level is refused, e.g. _"phase 'seeding'
+is a per-device lifecycle, so the pipeline that advances it must be per-device"_ — try it once by
+pointing a profiled-slot phase at a combined automation.
 
 ---
 
@@ -358,6 +397,117 @@ phase"_ while in `commissioning`, and pressing it does nothing; the API refuses 
 _"not available in the current phase"_). Advance to `steady` → the tile lights up and runs.
 
 ---
+
+## 10a · One setup, devices on their own schedules (F11)
+
+Until F11 a setup was in exactly ONE phase, so every device bound to a multi-device slot shared it.
+A **profiled** slot changes that: each device bound there follows its own _profile_ (a named
+lifecycle) and walks it on its own clock. The setup itself then has no phase — it only starts and
+stops, and stopping it holds every device.
+
+Author a blueprint with:
+
+- a normal slot (the shared board) and a **profiled** multi-device slot;
+- **two lifecycles** — in the builder's Phases section use the **Lifecycle** chips to add a second
+  one, and give the two different phase durations (seconds, so you can watch one advance);
+- a **question** in _Questions for the user_, asked **once per device** of the profiled slot, of
+  type `select`, with each option naming a lifecycle;
+- a rule whose _One per device?_ control is set to **One per device** over the profiled slot, with a
+  `@phase.` threshold.
+
+**Expected**
+
+1. **Publish refuses** the rule if you set it back to _One for the setup_ while it reads `@phase.` —
+   the message says each bound device is in its own phase. That combination genuinely cannot
+   resolve, so it is rejected rather than silently resolving to one device's number.
+2. **The wizard asks your question once per chosen device**, with the name box beside it, and does
+   **not** also ask for the schedule — the answer picks it.
+3. **The setups list** shows `N devices · M running` instead of a phase, because the setup has none.
+4. **The setup page** splits into _Shared devices_ and _On their own schedule_, one card per device
+   with its lifecycle, its phase, its timer and its own Start/Pause plus a menu holding its phases
+   and _Reset / change schedule_.
+5. **Start one device**: the other stays _Not started_. Move one to another phase: the other does
+   not move. The short-duration one **auto-advances on its own** while the long one does not.
+6. **Pause the setup**: every card dims and its buttons disable, while each card still reports what
+   it individually is. Only the setup's own Continue brings them back.
+7. **Reset a device** and pick the other lifecycle: it returns to _Not started_ and its phase track
+   becomes the other lifecycle's. Its device and tuning are kept.
+8. **Rules**: one derived rule per device, named `<rule> · <device>`, each with a single condition
+   and a single action — not one condition per device. Check on the Rules page.
+
+**What would be wrong**
+
+- One rule with N conditions when the template says _One per device_ (that is the `combined` shape).
+- A device showing a phase while its setup is paused, or a paused setup letting a device act.
+- The wizard asking both the question and a separate "Schedule" for the same device.
+- Both devices moving when you advance one.
+
+## 10b · One automation for some of the devices (F11.9)
+
+A template says how many automations it becomes (**One for the setup** / **One per device**) and,
+separately, **which devices** they cover. The second control only appears once a multi-device slot
+has per-device lifecycles to select by — there is otherwise no handle to select with.
+
+Using the blueprint from 10a, add to it:
+
+- a rule set to **One per device** over the profiled slot, with _Which devices_ narrowed to the
+  **first** lifecycle only;
+- a scene set to **One for the setup**, with _Which devices_ narrowed to the **second** lifecycle
+  (leave `@phase.` out of it — see below).
+
+**Expected**
+
+1. Deriving with two devices on two different lifecycles produces **one** copy of the rule, named
+   after the device on the selected lifecycle, and none for the other.
+2. The scene is a **single** scene, keeping the name you gave it (nothing to tell apart), whose
+   members cover only the device on the second lifecycle.
+3. **Reset** the second device onto the first lifecycle, then publish a new version of the
+   blueprint. Reconcile moves it: it gains the per-device rule and leaves the scene. The selection
+   follows the device — this is why it is written as a lifecycle rather than a device list.
+4. **Publish refuses** each selector that can never select anyone, with a message naming the cause:
+   an undeclared lifecycle; a slot whose devices are shared rather than each on their own
+   lifecycle; a slot the template never addresses.
+5. Adding `@phase.` to the **combined** scene is still refused even though it is narrowed to one
+   lifecycle — two devices on the same lifecycle still walk it on their own clocks.
+
+**What would be wrong**
+
+- Two copies of a rule restricted to one lifecycle, one of which can never fire.
+- A narrowed combined scene acting on every device of the slot.
+- The _Which devices_ control appearing for a setup whose devices are all shared.
+- A device that changed lifecycle keeping its old automations after a reconcile.
+
+## 10c · One lifecycle, devices whose phases run for different lengths (F11.13)
+
+The case this exists for: two devices on the **same** lifecycle where one's first phase should be
+shorter. Before, the duration lived on the phase and the phase belongs to the lifecycle, so the only
+way to change one number was to duplicate the whole lifecycle.
+
+In the builder, on a phase whose trigger is **schedule**, the _After_ box now takes a number **or**
+a `@param.` chip. Author one that references a param, publish, derive with two devices on that same
+lifecycle.
+
+**Expected**
+
+1. Each pot's card shows a **Just this one** section. Setting the referenced param there gives that
+   pot a different phase length; the other pot keeps the blueprint's. The phase track on each card
+   shows its **own** resolved duration, not the stored `@param.…` text.
+2. **Applies to** on the same section writes a phase-scoped pin — "shorten this pot's seedling only"
+   — and a phase belonging to a different lifecycle is refused by name.
+3. The pinned pot advances first, on the same phase row, while its sibling is still in the phase.
+4. **Publish refuses** a duration that is neither a positive number nor a declared param; a
+   `@phase.` reference; and a param that this same phase's own targets set (the loop — the phase
+   would change its own length the moment it began).
+5. As an **admin**, a param the blueprint marks fixed is editable on a setup you own, tagged
+   `admin`. As a plain user it stays read-only. Neither role can touch a setup belonging to someone
+   else — that is still a 403.
+
+**What would be wrong**
+
+- Both pots advancing together despite one being pinned.
+- A card showing `@param.seedling.days` where a duration should be.
+- A user editing a fixed param, or an admin reaching another account's setup.
+- A duration that fails to resolve advancing the phase anyway (it must hold instead).
 
 ## 11 · Pipeline trigger cooldown survives a restart (F10 durable cooldown)
 

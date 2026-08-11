@@ -88,13 +88,16 @@ class ActionGroupsService {
       throw Object.assign(new Error('actionIds must be a non-empty array'), { statusCode: 400 });
     }
     const trimmed = name.trim();
+    // Compare against the *distinct* ids (as areasService.assignDevices does): a repeated id is a
+    // redundant request, not an ownership failure, and must not be rejected as Forbidden.
+    const ids = [...new Set(actionIds)];
 
     // Verify all actions belong to this user.
     const owned = await db.userDeviceAction.findMany({
-      where: { id: { in: actionIds }, user_device: { user_id: userId } },
+      where: { id: { in: ids }, user_device: { user_id: userId } },
       select: { id: true },
     });
-    if (owned.length !== actionIds.length) {
+    if (owned.length !== ids.length) {
       throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
     }
 
@@ -107,7 +110,7 @@ class ActionGroupsService {
       }));
 
     await db.userDeviceAction.updateMany({
-      where: { id: { in: actionIds } },
+      where: { id: { in: ids } },
       data: { group_id: group.id, updated_at: new Date() },
     });
 

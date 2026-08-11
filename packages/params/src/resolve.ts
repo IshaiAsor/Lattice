@@ -11,7 +11,7 @@
 // Pure — no I/O. The caller loads the context once per entity and passes it in, so resolution
 // itself is synchronous and unit-testable without a database.
 
-export type ParamRefKind = 'param' | 'phase';
+export type ParamRefKind = 'param' | 'phase' | 'field';
 
 export interface ParamRef {
   kind: ParamRefKind;
@@ -34,6 +34,14 @@ export interface PhaseMeta {
  */
 export interface ParamContext {
   /**
+   * `blueprint_binding_param_overrides` scoped to this binding's *current* phase (F11.3). Present
+   * only on a context built for one binding; the most specific layer there is — "this one device,
+   * in this phase, wants a different number".
+   */
+  bindingPhaseOverrides?: Record<string, string>;
+  /** `blueprint_binding_param_overrides` the user set on this binding for every phase. */
+  bindingOverrides?: Record<string, string>;
+  /**
    * `blueprint_param_overrides` rows scoped to the instance's *current* phase. The most specific
    * layer there is: "in this phase, for this setup, use this".
    */
@@ -52,6 +60,17 @@ export interface ParamContext {
    * instance", which is always live.
    */
   lifecycle?: string | null;
+  /**
+   * The binding's own lifecycle (F11.3), on a context built for one binding. Null/absent means the
+   * automation is not per-binding, so only the setup's gate applies.
+   */
+  bindingLifecycle?: string | null;
+  /**
+   * What the user answered to this blueprint's declared fields (F11.6), already collapsed in
+   * precedence order — this binding's answer, else the setup's, else the field's default. Facts, not
+   * tunable values: no phase retunes them, which is why they are one map rather than layers.
+   */
+  fields?: Record<string, string>;
 }
 
 /**
@@ -62,7 +81,7 @@ export const RESERVED_PHASE_KEYS = ['key', 'name', 'context_notes'] as const;
 
 // Dots separate key segments (`humidity.min`) but may not trail, so `"…@phase.name."` at the end
 // of a prompt sentence yields the key `name` and leaves the full stop as prose.
-const REF_SOURCE = '@(param|phase)\\.([a-zA-Z0-9_]+(?:\\.[a-zA-Z0-9_]+)*)';
+const REF_SOURCE = '@(param|phase|field)\\.([a-zA-Z0-9_]+(?:\\.[a-zA-Z0-9_]+)*)';
 const WHOLE_REF = new RegExp(`^${REF_SOURCE}$`);
 const ANY_REF = new RegExp(REF_SOURCE, 'g');
 
@@ -89,7 +108,13 @@ export function findParamRefs(text: string | null | undefined): ParamRef[] {
 }
 
 /** Which layer supplied a resolved value. */
-export type ParamSource = 'phase_override' | 'override' | 'phase' | 'default';
+export type ParamSource =
+  | 'binding_phase_override'
+  | 'binding_override'
+  | 'phase_override'
+  | 'override'
+  | 'phase'
+  | 'default';
 
 export interface ResolvedWithSource {
   value: string | null;
@@ -104,8 +129,19 @@ export interface ResolvedWithSource {
  * `phaseScoped` layers are skipped for `@param.`, which addresses the blueprint's own value for the
  * settings a phase is not allowed to retune: neither the phase's target nor a phase-scoped
  * override may leak into it.
+ *
+ * The two binding layers sit on top (F11.3): one device's tuning is more specific than the whole
+ * setup's, and both are more specific than the profile's schedule. On a context that describes no
+ * binding they are simply absent, so a setup whose slots are unprofiled resolves through exactly
+ * the four layers it always did.
  */
 const PARAM_LAYERS = [
+  {
+    source: 'binding_phase_override',
+    phaseScoped: true,
+    pick: (c: ParamContext) => c.bindingPhaseOverrides,
+  },
+  { source: 'binding_override', phaseScoped: false, pick: (c: ParamContext) => c.bindingOverrides },
   { source: 'phase_override', phaseScoped: true, pick: (c: ParamContext) => c.phaseOverrides },
   { source: 'override', phaseScoped: false, pick: (c: ParamContext) => c.overrides },
   { source: 'phase', phaseScoped: true, pick: (c: ParamContext) => c.phaseTargets },
@@ -113,7 +149,7 @@ const PARAM_LAYERS = [
 ] as const satisfies readonly {
   source: ParamSource;
   phaseScoped: boolean;
-  pick: (c: ParamContext) => Record<string, string>;
+  pick: (c: ParamContext) => Record<string, string> | undefined;
 }[];
 
 function walkLayers(
@@ -142,6 +178,10 @@ export function resolveParamWithSource(key: string, ctx: ParamContext): Resolved
 }
 
 function resolveRef(ref: ParamRef, ctx: ParamContext): string | null {
+  // A field is a stated fact, not a tuned value — it does not walk the param layers at all. An
+  // unanswered field resolves to null (fail closed), exactly like an undeclared param.
+  if (ref.kind === 'field') return ctx.fields?.[ref.key] ?? null;
+
   if (ref.kind === 'phase') {
     // Phase metadata is addressed directly and is not overridable — it describes the phase,
     // it isn't a value the user tunes.
@@ -214,10 +254,20 @@ export function resolveText(text: string | null | undefined, ctx: ParamContext):
 export function validateParamRefs(
   value: string | null | undefined,
   declaredKeys: Iterable<string>,
+  declaredFieldKeys: Iterable<string> = [],
 ): string[] {
   const declared = new Set(declaredKeys);
+  const fields = new Set(declaredFieldKeys);
   const errors: string[] = [];
   for (const ref of findParamRefs(value)) {
+    if (ref.kind === 'field') {
+      // Same reasoning one table over: at derive time an undeclared `@field.x` is
+      // indistinguishable from a field the author renamed, and both just resolve to nothing.
+      if (!fields.has(ref.key)) {
+        errors.push(`${ref.raw} references an undeclared field "${ref.key}"`);
+      }
+      continue;
+    }
     if (ref.kind === 'phase' && (RESERVED_PHASE_KEYS as readonly string[]).includes(ref.key)) {
       continue;
     }

@@ -210,6 +210,14 @@
   justify-content: center;
 }
 
+/* The bar shows below 600px, and the shell already reserves it — the 96px above would stack on
+   top of that as dead space. Breathing room only here. */
+@media (max-width: 599px) {
+  .notif-shell {
+    padding-bottom: 24px;
+  }
+}
+
 @media (max-width: 560px) {
   .prefs-row {
     grid-template-columns: minmax(90px, 1fr) repeat(4, 48px);

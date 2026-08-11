@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   inject,
@@ -9,8 +10,12 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { filter, take, timeout } from 'rxjs';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { DeviceActionView } from 'src/app/services/device.mgmt.service';
 import { UserActionsService } from 'src/app/services/user.actions.service';
+import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ReceivedBadgeComponent } from '../received-badge/received-badge.component';
@@ -189,6 +194,12 @@ export class CameraDisplayComponent implements OnInit {
 
   private dialog = inject(MatDialog);
   private userActionsService = inject(UserActionsService);
+  private socketService = inject(DeviceSocketService);
+  private snackBar = inject(MatSnackBar);
+  private destroyRef = inject(DestroyRef);
+
+  // A capture is in flight: the request was accepted and we are waiting for the frame.
+  protected readonly capturing = signal(false);
 
   ngOnInit(): void {
     // Backfill the last stored frame so the card isn't blank on load (F6.7). Skip if a live
@@ -208,5 +219,44 @@ export class CameraDisplayComponent implements OnInit {
       maxHeight: '95vh',
       panelClass: 'camera-dialog-panel',
     });
+  }
+
+  // Ask the device for a frame now, rather than waiting for its next scheduled one.
+  protected captureNow(event: Event): void {
+    event.stopPropagation(); // the whole card is a button that opens fullscreen
+    if (this.capturing()) return;
+
+    this.capturing.set(true);
+    this.userActionsService.captureNow(this.action().id).subscribe({
+      next: ({ timeoutMs }) => this.awaitFrame(timeoutMs),
+      error: (err: { error?: { error?: string } }) => {
+        this.capturing.set(false);
+        // The api's own words where it has them — "Device is offline" beats a generic failure.
+        this.snackBar.open(err.error?.error ?? 'Could not request a capture', 'Dismiss', {
+          duration: 4000,
+        });
+      },
+    });
+  }
+
+  // The frame arrives as an ordinary state update, so that is what we wait on. The grace period
+  // past the server's own timeout keeps the spinner from giving up on a frame that is still
+  // being written and relayed — the platform is the one that decides the capture failed.
+  private awaitFrame(timeoutMs: number): void {
+    const actionId = this.action().id;
+    this.socketService.actionStateUpdate$
+      .pipe(
+        filter((update) => update.actionId === actionId),
+        take(1),
+        timeout({ first: timeoutMs + 2000 }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: () => this.capturing.set(false),
+        error: () => {
+          this.capturing.set(false);
+          this.snackBar.open('The camera did not send a frame', 'Dismiss', { duration: 4000 });
+        },
+      });
   }
 }

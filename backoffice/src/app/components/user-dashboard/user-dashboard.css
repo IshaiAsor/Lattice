@@ -136,6 +136,85 @@
   text-overflow: ellipsis;
 }
 
+/* ── Setups strip (F11.4) ────────────────────────────────────────── */
+/* Same geometry as the scenes strip below it — two strips of different card sizes read as two
+   different pages stacked. Outside .card-grid for the same reason scenes are. */
+.setups-section {
+  padding: 8px 24px 0;
+}
+
+.setups-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.setups-header-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
+}
+
+.setups-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The aggregate the strip is for: the section answers itself before any tile is read. */
+.setups-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.setups-header .header-spacer {
+  flex: 1;
+}
+
+.setups-row {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* Taller than a scene tile since it gained the live surface: the tile carries the setup's live
+   readings and controls below its rails, which is the whole reason a setup no longer scatters its
+   devices through the grid below. Deliberately no longer the same square as the scenes strip —
+   the two strips stopped doing the same job when this one started showing live values. */
+.setup-card-wrapper {
+  position: relative;
+  display: flex;
+  border-radius: var(--radius-card);
+  margin: 10px 10px 10px 0;
+  width: 250px;
+  /* Sized to what the strip actually needs: header, lead, three rails, one row of readings and
+     two of controls, and the footer — measured, not guessed. */
+  height: 324px;
+}
+
+/* Expanded, one setup owns the row and sizes to its own content (the action cards it holds). */
+.setup-card-wrapper.expanded {
+  width: 100%;
+  height: auto;
+  margin-right: 0;
+}
+
+@media (max-width: 1024px) {
+  .setups-section { padding: 8px 16px 0; }
+  .setup-card-wrapper { width: 224px; height: 308px; margin: 8px 8px 8px 0; }
+}
+
+@media (max-width: 599px) {
+  .setups-section { padding: 8px 12px 0; }
+  /* Two per row. Tall enough for the ring line, two rails and the two readings the strip keeps at
+     this width — the tile drops its device labels and the rest of the strip rather than scrolling. */
+  .setup-card-wrapper { width: calc(50% - 6px); height: 246px; margin: 6px 6px 6px 0; }
+}
+
 /* ── Scenes strip (F10.5) ────────────────────────────────────────── */
 /* Deliberately outside .card-grid — that grid's drag-drop persists action order and uses
    cards as grouping drop targets, neither of which applies to a scene. */

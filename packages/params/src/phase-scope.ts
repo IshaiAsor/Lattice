@@ -51,11 +51,33 @@ export function isInstanceRunning(state: string | null | undefined): boolean {
  *
  * Note that a stopped setup holds *everything*, emergency rules included. Stopping is meant to be
  * "this setup is off", not "this setup is off except the parts that matter".
+ *
+ * `bindingLifecycleState` is one binding's own gate (F11.3), passed only by a per-binding
+ * automation. Omitting it is "this automation belongs to the setup, not to one bound device", which
+ * is why every pre-F11 call site keeps its exact meaning with three arguments.
  */
 export function isAutomationLive(
   scope: readonly string[] | null | undefined,
   currentPhaseKey: string | null | undefined,
   lifecycleState: string | null | undefined,
+  bindingLifecycleState?: string | null,
 ): boolean {
-  return isInstanceRunning(lifecycleState) && isPhaseInScope(scope, currentPhaseKey);
+  return (
+    isInstanceRunning(lifecycleState) &&
+    isInstanceRunning(bindingLifecycleState) &&
+    isPhaseInScope(scope, currentPhaseKey)
+  );
+}
+
+/**
+ * A binding is live only while its setup is (F11.3). One value rather than two so no caller can
+ * check the binding and forget the setup — the setup's state wins whenever it is not running, which
+ * is what makes stopping the whole setup hold every binding at once.
+ */
+export function effectiveLifecycle(
+  bindingState: string | null | undefined,
+  instanceState: string | null | undefined,
+): string {
+  if (!isInstanceRunning(instanceState)) return instanceState ?? 'stopped';
+  return bindingState ?? 'running';
 }

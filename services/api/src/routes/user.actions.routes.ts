@@ -43,6 +43,18 @@ userActionsRouter.get('/:id/last-frame', async (req, res, next) => {
   }
 });
 
+// Ask a camera for a frame now: 202 {commandId, timeoutMs}. The frame itself arrives over the
+// socket like any other, so there is nothing to return but what to wait for and for how long.
+userActionsRouter.post('/:id/capture', async (req, res, next) => {
+  try {
+    res
+      .status(202)
+      .json(await userActionsService.requestCapture(req.user!.id, Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+
 userActionsRouter.patch('/:id', async (req, res, next) => {
   try {
     const { name, group_id, telemetry_interval_ms, default_trait_id } = req.body ?? {};

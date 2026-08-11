@@ -199,7 +199,8 @@
 @media (max-width: 599px) {
   .rules-page {
     padding: 12px;
-    padding-bottom: calc(var(--bottom-bar-height) + 16px);
+    /* Breathing room only — the shell (.app-main) already reserves the bottom bar. */
+    padding-bottom: 16px;
   }
 
   .page-header h2 {

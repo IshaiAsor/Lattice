@@ -92,7 +92,13 @@ export class RulesComponent implements OnInit {
 
   conditionSummary(rule: UserRuleView): string {
     return rule.conditions.map((c) => {
-      if (c.condition_type === 'schedule') return `At ${c.schedule_time}`;
+      if (c.condition_type === 'schedule') {
+        // A window makes this a loop, and a list that still said "At 06:00" for one would be
+        // describing something the rule does not do.
+        return c.schedule_until && c.schedule_every_minutes
+          ? `${c.schedule_time}–${c.schedule_until} every ${c.schedule_every_minutes} min`
+          : `At ${c.schedule_time}`;
+      }
       if (c.condition_type === 'device_state' || c.condition_type === 'device_status') {
         const device = this.userDevices.find((d) => d.id === c.user_device_id);
         const name = device?.deviceName ?? `Device #${c.user_device_id}`;

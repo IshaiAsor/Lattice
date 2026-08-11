@@ -163,3 +163,65 @@ export function iconForAction(action: DeviceActionView): string {
 export function implTypeOf(action: DeviceActionView): string | null {
   return action.googleTraits.length === 0 ? (action.implementation_type ?? null) : null;
 }
+
+// ── Compact summaries ───────────────────────────────────────────────────────
+// The action card renders a reading as a big number with its unit; a summary strip has room for
+// neither the widget nor the trait switcher, so these give the same value in one line. Kept here
+// beside SENSOR_TRAIT_VALUES so a new sensor trait is declared once, not in two places that drift.
+
+const SENSOR_TRAIT_UNITS: Record<string, { unit: string; digits: string }> = {
+  'action.devices.traits.TemperatureSetting': { unit: '°C', digits: '1.0-1' },
+  'action.devices.traits.HumiditySetting':    { unit: '%',  digits: '1.0-0' },
+  'action.devices.traits.WaterLevel':         { unit: '%',  digits: '1.0-1' },
+  'action.devices.traits.PhLevel':            { unit: 'pH', digits: '1.0-2' },
+  'action.devices.traits.TdsLevel':           { unit: 'ppm', digits: '1.0-1' },
+  'action.devices.traits.CO2Level':           { unit: 'ppm', digits: '1.0-0' },
+};
+
+export interface SensorReading {
+  /** Trait-appropriate unit, e.g. '°C'. Empty for a sensor whose value is not a quantity. */
+  unit: string;
+  /** DecimalPipe format matching what the action card shows, so both surfaces round alike. */
+  digits: string;
+  /** Null when the device has not reported since load — the strip shows a dash, never a stale 0. */
+  value: number | null;
+}
+
+/** The first sensor trait's current reading, or null for an action that reads nothing. */
+export function sensorReadingOf(action: DeviceActionView): SensorReading | null {
+  const trait = action.googleTraits.find(t => SENSOR_TRAIT_VALUES.has(t.value));
+  if (!trait) return null;
+  const spec = SENSOR_TRAIT_UNITS[trait.value] ?? { unit: '', digits: '1.0-1' };
+  const raw = typeof action.state === 'number' ? action.state : Number(action.state);
+  return { unit: spec.unit, digits: spec.digits, value: Number.isFinite(raw) ? raw : null };
+}
+
+/** True when the action's active control is in its "on" position — drives the chip's lit state. */
+export function isActiveState(action: DeviceActionView): boolean {
+  switch (activeTraitValue(action)) {
+    case TRAIT_ONOFF:                           return action.state === 'on';
+    case 'action.devices.traits.LockUnlock':    return action.state === 'lock';
+    case 'action.devices.traits.OpenClose':     return action.state === 'on';
+    case 'action.devices.traits.StartStop':     return action.state === 'on';
+    case 'action.devices.traits.ArmDisarm':     return action.state === 'arm';
+    case TRAIT_BRIGHTNESS:
+    case TRAIT_FANSPEED:                        return Number(action.state) > 0;
+    default:                                    return false;
+  }
+}
+
+/** One-word state for a control chip: "On", "Locked", "45%". Empty when there is nothing to say. */
+export function controlStateLabel(action: DeviceActionView): string {
+  const on = isActiveState(action);
+  switch (activeTraitValue(action)) {
+    case TRAIT_ONOFF:                           return on ? 'On' : 'Off';
+    case 'action.devices.traits.LockUnlock':    return on ? 'Locked' : 'Unlocked';
+    case 'action.devices.traits.OpenClose':     return on ? 'Open' : 'Closed';
+    case 'action.devices.traits.StartStop':     return on ? 'Running' : 'Stopped';
+    case 'action.devices.traits.ArmDisarm':     return on ? 'Armed' : 'Disarmed';
+    case TRAIT_BRIGHTNESS:
+    case TRAIT_FANSPEED:                        return `${Number(action.state) || 0}%`;
+    case 'action.devices.traits.ColorSetting':  return typeof action.state === 'string' ? action.state : '';
+    default:                                    return '';
+  }
+}

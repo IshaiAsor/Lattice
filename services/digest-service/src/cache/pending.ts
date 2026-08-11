@@ -40,6 +40,12 @@ export async function takePending(commandId: string): Promise<PendingCommand | n
 export interface PendingPicture {
   userId: string;
   actionId: number;
+  /**
+   * Whether to publish PICTURE_RESULT once this settles — carried here, not just in the request
+   * closure, because the frame path settles it from a different message entirely and has only the
+   * commandId to go on. Absent means deliver (pre-existing requests, and ml-router's).
+   */
+  deliverResult?: boolean;
 }
 
 export async function setPendingPicture(

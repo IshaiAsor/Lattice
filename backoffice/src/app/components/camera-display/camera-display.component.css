@@ -17,6 +17,45 @@
   display: block;
 }
 
+/* Sits on the frame rather than beside it — the card gives the camera its whole area, and a
+   translucent scrim keeps it legible over any scene. Top-right for two reasons: it is where the
+   fullscreen viewer puts its actions, and the bottom strip is where cameras burn their timestamp. */
+.capture-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.4);
+  /* Shrink through the tokens, not `width`/`height`: the button derives its padding from
+     (state-layer-size - icon-size) / 2, so overriding the box alone keeps the 40px default's
+     8px padding and leaves an 18px glyph in a 16px content box — it spills off-centre. */
+  --mat-icon-button-state-layer-size: 32px;
+  --mat-icon-button-icon-size: 18px;
+}
+
+/* The font ligature still takes its size from the icon element, not the button token. */
+.capture-btn .mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+}
+
+.capture-btn[disabled] {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.capture-btn .spinning {
+  animation: capture-spin 1s linear infinite;
+}
+
+@keyframes capture-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .camera-placeholder {
   display: flex;
   flex-direction: column;

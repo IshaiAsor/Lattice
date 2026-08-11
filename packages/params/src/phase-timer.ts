@@ -15,6 +15,8 @@
 //
 // `now` is injected everywhere so time-dependent behaviour stays deterministic under test.
 
+import { isParamRef, resolveParam, type ParamContext } from './resolve';
+
 export type PhaseDurationUnit = 'seconds' | 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
 
 const MINUTE = 60;
@@ -39,14 +41,46 @@ export type PhaseTimerMode = 'reset' | 'resume' | 'at';
 /** Postgres INTEGER ceiling — the cap on any stored or requested second count. */
 export const MAX_ACCRUED_SECONDS = 2147483647;
 
-/** Seconds a phase lasts, or null when it has no (valid) duration — i.e. it never elapses. */
+/**
+ * Seconds a phase lasts, or null when it has no (valid) duration — i.e. it never elapses.
+ *
+ * Takes a number or the text a resolved duration arrives as: since F11.13 the column holds a
+ * literal *or* a reference, and `resolvePhaseDuration` below turns the reference into text before
+ * this sees it. A value that is not a positive number is "no duration" rather than an error — the
+ * fail-closed reading, and the same answer a phase with no duration at all gives.
+ */
 export function phaseDurationSeconds(
-  value: number | null | undefined,
+  value: number | string | null | undefined,
   unit: string | null | undefined,
 ): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  const n = typeof value === 'string' ? Number(value.trim()) : value;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return null;
   const seconds = UNIT_SECONDS[unit as PhaseDurationUnit];
-  return seconds === undefined ? null : value * seconds;
+  return seconds === undefined ? null : n * seconds;
+}
+
+/**
+ * A stored duration as the number it means *for this owner* (F11.13).
+ *
+ * The column holds a literal ("7") or a reference (`@param.seedling.days`). A reference is what
+ * lets one lifecycle serve devices whose phases run for different lengths: the phase says "as long
+ * as `seedling.days` says", and a per-binding override of that param answers differently for one
+ * device without touching the lifecycle or the others.
+ *
+ * Resolved against the owner's own context — a binding's for a per-device lifecycle, the setup's
+ * otherwise — so the same phase row legitimately yields different answers at the same moment.
+ *
+ * Fails **closed**: an unresolvable reference returns null, which reads as "no duration", so the
+ * phase simply does not advance on its clock. Advancing on a number nobody wrote would be worse
+ * than not advancing — a phase that overstays is visible, a phase that ends early is not.
+ */
+export function resolvePhaseDuration(
+  value: string | number | null | undefined,
+  ctx: ParamContext | null | undefined,
+): string | number | null {
+  if (typeof value !== 'string' || !isParamRef(value)) return value ?? null;
+  if (!ctx) return null;
+  return resolveParam(value, ctx);
 }
 
 /**
@@ -93,8 +127,10 @@ export function accruedOnEnter(
 }
 
 export interface PhaseAdvanceInput {
-  auto_advance: boolean;
-  duration_value: number | null;
+  /** True only for a phase whose `advance_mode` is `schedule` — the duration cron's opt-in. */
+  is_scheduled: boolean;
+  /** Already resolved for this owner — pass `resolvePhaseDuration(phase.duration_value, ctx)`. */
+  duration_value: number | string | null;
   duration_unit: string | null;
   /** When the instance entered its current phase. Null ⇒ never stamped, so nothing has elapsed. */
   phase_started_at: Date | null;
@@ -107,16 +143,16 @@ export interface PhaseAdvanceInput {
 /**
  * Whether an instance's current phase is due to roll over.
  *
- * Deliberately conservative: a phase advances only when it opted in (`auto_advance`), has a real
+ * Deliberately conservative: a phase advances only when it opted in (`is_scheduled`), has a real
  * duration, has actually been entered, and something follows it. A blueprint whose last phase
- * auto-advances is not an error — it just stays there, which is what "steady state" means.
+ * is scheduled is not an error — it just stays there, which is what "steady state" means.
  *
  * Banked time counts, so resuming a phase 3 days in makes an 11-day remainder, not a fresh 14. A
  * user who resumes *past* the duration is warned by the UI and then taken at their word here: the
  * phase is due immediately and the next tick moves it on.
  */
 export function isPhaseDue(input: PhaseAdvanceInput, now: Date = new Date()): boolean {
-  if (!input.auto_advance || !input.hasNextPhase || !input.phase_started_at) return false;
+  if (!input.is_scheduled || !input.hasNextPhase || !input.phase_started_at) return false;
   const durationSeconds = phaseDurationSeconds(input.duration_value, input.duration_unit);
   if (durationSeconds === null) return false;
   return phaseElapsedSeconds(input.accrued_seconds, input.phase_started_at, now) >= durationSeconds;

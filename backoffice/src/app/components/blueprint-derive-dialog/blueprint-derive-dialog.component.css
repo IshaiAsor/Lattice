@@ -6,6 +6,18 @@
   width: 100%;
 }
 
+/* A boolean question sits outside mat-form-field, so it has to carry its own vertical rhythm to
+   line up with the outlined fields above and below it. */
+.field-toggle {
+  padding: 6px 0 14px;
+}
+
+.field-toggle-hint {
+  margin: 4px 0 0 52px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .slots-title {
   font-size: 13px;
   font-weight: 600;
@@ -123,4 +135,27 @@
   background: rgba(239, 83, 80, 0.12);
   color: var(--offline, #ef5350);
   font-size: 13px;
+}
+
+/* One block per device bound to a slot that asks per-device questions (F11) — indented under its
+   slot so it reads as "and about this one", not as a second slot. */
+.device-block {
+  margin: 8px 0 0 12px;
+  padding: 10px 12px 2px;
+  border-left: 2px solid var(--border);
+}
+
+.device-block-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.device-block-head mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
 }

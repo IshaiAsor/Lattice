@@ -41,22 +41,161 @@
   text-transform: uppercase;
 }
 
-/* ── Update notice ───────────────────────────────────────────────────── */
+/* ── "Newer version available" ───────────────────────────────────────────
+   A line, not the old full-width banner with its own Update button: the action lives on the
+   Blueprint tab now, and two Update buttons on one screen invited the question of whether they
+   did the same thing. Clicking anywhere on it goes to that tab. */
 
-.notice {
+.version-flag {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
-  border-left: 4px solid var(--primary);
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 12px;
+  font: inherit;
   font-size: 13px;
+  text-align: left;
+  color: var(--text);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border: 0;
+  border-left: 3px solid var(--primary);
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+  transition: background 140ms ease;
 }
-.notice mat-icon {
+
+.version-flag:hover {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.version-flag:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.version-flag-icon {
+  color: var(--primary);
+  flex: 0 0 auto;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.version-flag-text {
+  min-width: 0;
+}
+
+.version-flag-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--primary);
 }
-.notice button {
+
+.version-flag-go mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 560px) {
+  /* The pointer is enough once the row is tight; the sentence is what carries the meaning. */
+  .version-flag-go {
+    font-size: 0;
+    gap: 0;
+  }
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────
+   One tab per concern. The setup's state and its Pause stay above the group because they apply
+   whichever tab is open; everything below the bar belongs to exactly one of them. */
+
+.instance-tabs {
+  margin-top: 16px;
+}
+
+::ng-deep .instance-tabs .mat-mdc-tab-body-content {
+  /* The panes hold cards with their own shadows — give them room to breathe and to not clip. */
+  padding: 4px 2px 8px;
+  overflow-x: hidden;
+}
+
+.tab-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* Moving the blueprint controls off the working tabs must not hide a waiting update. */
+.tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin-left: 6px;
+  flex: 0 0 auto;
+}
+
+/* A tab's first heading sits right under the bar, so it does not need the stacked-section gap. */
+.instance-tabs .section-title:first-child {
+  margin-top: 8px;
+}
+
+/* ── Blueprint tab ───────────────────────────────────────────────────── */
+
+.blueprint-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bp-origin {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-top: 8px;
+}
+
+.bp-origin-icon {
+  color: var(--primary);
+  flex: 0 0 auto;
+}
+
+.bp-origin-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bp-origin-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bp-origin-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.bp-origin button {
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.bp-note {
+  margin: 4px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 /* ── Phase timeline ──────────────────────────────────────────────────── */
@@ -213,86 +352,28 @@
   color: var(--primary);
 }
 
-/* ── Parameters ──────────────────────────────────────────────────────── */
+/* ── Settings ─────────────────────────────────────────────────────────
+   The pane holds no card of its own: the list below draws its own frame, and a card around it was
+   a second border around the same rectangle. */
 
-.param-list {
+.settings-pane {
   display: flex;
   flex-direction: column;
-  padding: 4px 0;
 }
 
-.param-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
-}
-.param-row:last-child {
-  border-bottom: none;
-}
-.param-row.overridden {
-  border-left: 3px solid var(--primary);
-  padding-left: 11px;
-}
+/* The list, the summary, the phase filter and the row editor are all the `tune-*` blocks the
+   device cards use — one design for "a value, where it came from, and what it applies to",
+   wherever it is being read. Only the pieces this list needs on top live here. */
 
-.param-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex: 1;
-}
-
-.param-label {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.param-source {
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.param-input {
-  width: 110px;
-  flex-shrink: 0;
-}
-
-.param-fixed {
-  font-size: 13px;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
-
-.reset-param,
-.expand-param {
-  flex-shrink: 0;
-}
-
-/* ── Per-phase parameter breakdown ───────────────────────────────────── */
-
-/* Indented and tinted so the phase rows read as belonging to the param above them rather than as
-   more params. The left rule carries the eye down the group. */
-.phase-params {
-  display: flex;
-  flex-direction: column;
-  margin: 0 14px 8px 24px;
-  border-left: 2px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2, transparent) 60%, transparent);
-  border-radius: 0 6px 6px 0;
-}
-
-.phase-param-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-}
-
-.phase-param-row.current {
-  border-left: 3px solid var(--primary);
-  margin-left: -2px;
-  padding-left: 11px;
+.tune-empty {
+  margin: 12px 0 0;
+  padding: 12px 13px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 11px;
 }
 
 .now-chip,
@@ -430,7 +511,610 @@
   .phase-step {
     min-width: 120px;
   }
-  .param-input {
-    width: 90px;
+}
+
+/* ── Devices on their own schedule (F11.4) ─────────────────────────────────────
+   One card per bound device that runs its own lifecycle. A grid rather than the flat rows the
+   shared devices use, because each of these carries a phase, a timer and its own controls — the
+   same information density as the setup's own lifecycle card, repeated. */
+.section-note {
+  margin-left: 8px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-dim);
+}
+
+/* One card per row, full width. The tuning list inside is a two-column layout of its own — a
+   sentence-length param label plus its value rail needs the whole width to stay on one line, and
+   side-by-side cards were what squeezed it into the wrap that made the panel unreadable. */
+.device-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.device-card {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Not running — dimmed rather than hidden, so a paused device still reads as part of the setup. */
+.device-idle {
+  opacity: 0.72;
+}
+
+.device-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.device-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.device-profile {
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.device-phase {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.device-phase-name {
+  font-size: 13px;
+}
+
+.device-timer {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.device-bar {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.device-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+
+.device-idle-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.device-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/* ── Tuning one device (F11.3/F11.13) ──────────────────────────────────
+   Collapsed by default: most devices agree with their lifecycle, and the exception is what needs
+   the space. `details` rather than a dialog so the values stay beside the phase they change. */
+.device-tuning {
+  margin: 12px 0 4px;
+  border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+  padding-top: 10px;
+}
+
+.device-tuning > summary {
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.device-tuning > summary::-webkit-details-marker {
+  display: none;
+}
+
+.device-tuning > summary::before {
+  content: 'tune';
+  font-family: 'Material Icons';
+  font-size: 16px;
+}
+
+.device-tuning-count {
+  background: var(--accent-soft, rgba(103, 80, 164, 0.14));
+  border-radius: 10px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* How much of this device is still the blueprint's — answered before anything is opened. */
+.tune-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tune-summary.clean {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
+
+.tune-summary b {
+  font-weight: 650;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tune-clear {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.tune-clear:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A filter over the list, not a mode. The pip marks a phase this device pins something in. */
+.tune-phases {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-top: 12px;
+  padding-bottom: 2px;
+}
+
+.tune-phases::-webkit-scrollbar {
+  display: none;
+}
+
+.tune-ph {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tune-ph[aria-pressed='true'] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg-solid);
+  font-weight: 620;
+}
+
+.tune-pip {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex: 0 0 auto;
+}
+
+.tune-ph[aria-pressed='true'] .tune-pip {
+  background: var(--bg-solid);
+}
+
+.tune-now {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--online);
+}
+
+.tune-ph[aria-pressed='true'] .tune-now {
+  color: var(--bg-solid);
+  opacity: 0.75;
+}
+
+.tune-scoped {
+  margin: 10px 0 0;
+  padding: 8px 11px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border-left: 2px solid var(--primary);
+  border-radius: 0 7px 7px 0;
+}
+
+/* ── The list ──────────────────────────────────────────────────────────
+   One row per param. The label owns a wrapping column and the value keeps its own rail, so a
+   sentence-length label can never reach the unit — the collision is gone by construction. */
+.tune-list {
+  display: grid;
+  gap: 1px;
+  margin-top: 12px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.tune-row {
+  background: var(--surface);
+}
+
+.tune-row-btn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 14px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-left: 3px solid transparent;
+  padding: 12px 13px;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.tune-row-btn:hover {
+  background: var(--surface-alt);
+}
+
+.tune-row.is-set .tune-row-btn {
+  border-left-color: var(--primary);
+}
+
+.tune-row.is-locked .tune-row-btn {
+  border-left-color: var(--warn-soft, rgba(186, 26, 26, 0.12));
+}
+
+/* A row the viewer may not write. Same shape as the rest — the value and its origin are still
+   worth reading — minus every affordance that would offer an edit the API would refuse. */
+.tune-row-static {
+  cursor: default;
+}
+
+.tune-row-static:hover {
+  background: none;
+}
+
+.tune-lock {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+}
+
+.tune-lab {
+  font-size: 14px;
+  line-height: 1.34;
+  overflow-wrap: break-word;
+}
+
+.tune-clock {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 3px;
+  color: var(--primary);
+}
+
+/* The diff: what the device would have inherited, struck, then what it does instead. */
+.tune-val {
+  justify-self: end;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tune-was {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  opacity: 0.7;
+}
+
+.tune-arrow {
+  font-size: 11px;
+  color: var(--primary);
+  opacity: 0.65;
+}
+
+.tune-cur {
+  font-size: 16px;
+  font-weight: 620;
+  color: var(--text-muted);
+}
+
+.tune-row.is-set .tune-cur {
+  color: var(--primary);
+}
+
+.tune-unit {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.tune-src {
+  grid-column: 1;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.tune-row.is-set .tune-src {
+  color: var(--primary);
+}
+
+.tune-meta {
+  grid-column: 2;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tune-undo {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  color: var(--primary);
+}
+
+/* ── The editor, only while a row is open ─────────────────────────────── */
+.tune-edit {
+  padding: 2px 13px 14px;
+  background: var(--surface-alt);
+  border-left: 3px solid var(--primary);
+}
+
+.tune-hint {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.tune-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tune-num {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.15;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tune-num .u {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.tune-free {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.tune-scope-lab {
+  margin: 0 0 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tune-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tune-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.tune-chip[aria-pressed='true'] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg-solid);
+  font-weight: 620;
+}
+
+/* Each scope carries its own value, so choosing where a change lands never means first opening
+   the phase to find out what is there. Tabular so a column of chips lines up. */
+.tune-chip-val {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.tune-chip[aria-pressed='true'] .tune-chip-val {
+  color: var(--bg-solid);
+  opacity: 0.85;
+}
+
+.tune-chip[aria-pressed='true'] .tune-pip {
+  background: var(--bg-solid);
+}
+
+/* On/off is two answers, not a word to type. Segmented so the pair reads as one control. */
+.tune-toggle {
+  display: inline-flex;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.tune-opt {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 0;
+  padding: 7px 16px;
+  min-width: 74px;
+  cursor: pointer;
+}
+
+.tune-opt[aria-pressed='true'] {
+  background: var(--primary);
+  color: var(--bg-solid);
+  font-weight: 640;
+}
+
+.tune-opt:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A clock, for the values that are one. The native control brings its own picker; it only needs
+   the page's colours — and `color-scheme` so the popup follows the theme rather than the OS. */
+.tune-time {
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+:host-context(.dark-theme) .tune-time {
+  color-scheme: dark;
+}
+
+.tune-time:disabled {
+  opacity: 0.5;
+}
+
+.tune-revert {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--primary);
+  background: none;
+  border: 0;
+  padding: 3px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.tune-revert:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tune-row-btn:focus-visible,
+.tune-ph:focus-visible,
+.tune-chip:focus-visible,
+.tune-opt:focus-visible,
+.tune-time:focus-visible,
+.tune-clear:focus-visible,
+.tune-revert:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tune-row-btn {
+    transition: none;
   }
+}
+
+/* An admin is seeing a control the owner does not get; say so rather than letting it look like
+   an ordinary field they could have edited all along. */
+.param-admin-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--warn-soft, rgba(186, 26, 26, 0.12));
+  color: var(--warn-color, #ba1a1a);
+  flex: 0 0 auto;
 }

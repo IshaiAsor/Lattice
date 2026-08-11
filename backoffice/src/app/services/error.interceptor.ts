@@ -1,4 +1,4 @@
-import { HttpErrorResponse, HttpEvent, HttpInterceptorFn, HttpRequest, HttpHandlerFn } from '@angular/common/http';
+import { HttpContextToken, HttpErrorResponse, HttpEvent, HttpInterceptorFn, HttpRequest, HttpHandlerFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { BehaviorSubject, Observable, throwError } from 'rxjs';
 import { catchError, filter, switchMap, take } from 'rxjs/operators';
@@ -58,6 +58,15 @@ const PUBLIC_AUTH_PATHS = [
   '/api/auth/refresh-token',
 ];
 
+/**
+ * Suppress the generic error toast for this request.
+ *
+ * For calls the user did not make — a background sync, a preference this component adopts on its
+ * own — and for calls whose caller shows a better message itself. An `HttpContext` token rather
+ * than a header, so nothing new goes on the wire and CORS is untouched.
+ */
+export const SILENT_ERRORS = new HttpContextToken<boolean>(() => false);
+
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
   const snackBar = inject(MatSnackBar);
@@ -73,7 +82,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         }
         return handleRefresh(req, next, authService);
       }
-      snackBar.open(`Error occured , error code : ${error.status}, error message : ${error.message}`, 'close', { duration: 2000 });
+      if (!req.context.get(SILENT_ERRORS)) {
+        snackBar.open(`Error occured , error code : ${error.status}, error message : ${error.message}`, 'close', { duration: 2000 });
+      }
       return throwError(() => error);
     }),
   );

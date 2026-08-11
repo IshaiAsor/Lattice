@@ -265,6 +265,11 @@
     <span>Ask AI</span>
   </button>
   <mat-divider></mat-divider>
+  <button mat-menu-item (click)="openTimezone()">
+    <mat-icon>schedule</mat-icon>
+    <span>Timezone</span>
+    <span class="menu-hint">{{ prefs.timezone() ?? 'server' }}</span>
+  </button>
   <button mat-menu-item (click)="themeService.toggle()">
     <mat-icon>{{ themeService.theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
     <span>{{ themeService.theme() === 'dark' ? 'Light mode' : 'Dark mode' }}</span>

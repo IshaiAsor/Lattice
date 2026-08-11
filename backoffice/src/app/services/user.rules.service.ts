@@ -13,6 +13,9 @@ export interface RuleConditionDto {
   user_device_id?: number | null;
   status_value?: string | null;
   schedule_time?: string | null;
+  /** With `schedule_every_minutes`, repeats from schedule_time through this each day. */
+  schedule_until?: string | null;
+  schedule_every_minutes?: number | null;
   schedule_days?: number[];
 }
 

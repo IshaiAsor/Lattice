@@ -1,5 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { deriveValidParameters } from '@lattice/capability-validation';
+import { publish, RK, type PictureRequestedPayload } from '@lattice/queue';
 import { db } from '../db';
+import { getChannel } from '../queue';
+import { env } from '../config/env.config';
 import { ensureNotSealed } from './sealed-templates.service';
 
 // User action management (F2.6). Action *instances* are created by the provisioning /
@@ -54,6 +58,12 @@ export interface ActionView {
 export interface LastFrameView {
   frame: string; // base64 JPEG
   capturedAt: Date;
+}
+
+export interface CaptureRequestView {
+  commandId: string;
+  /** How long the platform will wait for the frame — the client's cue to stop waiting too. */
+  timeoutMs: number;
 }
 
 class UserActionsService {
@@ -314,6 +324,51 @@ class UserActionsService {
     });
     if (!latest?.value) return null;
     return { frame: latest.value, capturedAt: latest.recorded_at };
+  }
+
+  /**
+   * Ask a camera for a frame right now.
+   *
+   * Nothing is returned but the correlation id: the frame comes back the way every frame does —
+   * stored to history, then pushed to the browser as an `action_state_update` — so the camera card
+   * needs no special delivery path, only something to stop waiting on. `timeoutMs` is that
+   * something, handed back so the client gives up at the same moment the server does.
+   *
+   * Offline is rejected here rather than dispatched: the request would be guaranteed to time out,
+   * and "the device is offline" is a better answer than fifteen seconds of spinner.
+   */
+  async requestCapture(userId: number, actionId: number): Promise<CaptureRequestView> {
+    const action = await db.userDeviceAction.findUnique({
+      where: { id: actionId },
+      select: {
+        capability: { select: { implementation_type: true } },
+        user_device: { select: { user_id: true, online: true } },
+      },
+    });
+    if (!action) throw Object.assign(new Error('Action not found'), { statusCode: 404 });
+    if (action.user_device.user_id !== userId)
+      throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
+    if (!IMAGE_IMPL_TYPES.has(action.capability.implementation_type))
+      throw Object.assign(new Error('Action is not a camera action'), { statusCode: 400 });
+    if (!action.user_device.online)
+      throw Object.assign(new Error('Device is offline'), { statusCode: 409 });
+
+    const commandId = randomUUID();
+    const timeoutMs = env.pictureAckTimeoutMs;
+    const payload: PictureRequestedPayload = {
+      userId: String(userId),
+      actionId,
+      commandId,
+      timeoutMs,
+      // A person pressed the button — the same source a dashboard command carries.
+      source: { kind: 'manual' },
+      // The frame's only consumer is this user's browser, and it is already on its way there over
+      // the socket. Publishing it as PICTURE_RESULT too would push a few hundred KB of base64
+      // through the broker for ml-router to look up, not recognise, and drop.
+      deliverResult: false,
+    };
+    publish(await getChannel(), RK.PICTURE_REQUESTED, payload);
+    return { commandId, timeoutMs };
   }
 
   private async ensureOwned(userId: number, actionId: number) {

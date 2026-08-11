@@ -128,4 +128,14 @@ export class UserActionsService {
       `${this.apiUrl}/api/actions/${actionId}/last-frame`,
     );
   }
+
+  // Asks the camera for a frame right now. The frame comes back the way every frame does — over
+  // the socket as an action_state_update — so the response carries no image, only the correlation
+  // id and how long the platform will wait before it records the capture as timed out.
+  captureNow(actionId: number): Observable<{ commandId: string; timeoutMs: number }> {
+    return this.http.post<{ commandId: string; timeoutMs: number }>(
+      `${this.apiUrl}/api/actions/${actionId}/capture`,
+      {},
+    );
+  }
 }

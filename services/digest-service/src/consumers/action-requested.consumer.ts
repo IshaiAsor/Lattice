@@ -9,6 +9,7 @@ import { asString } from '../util';
 import { socket } from '../socket/emitter';
 import { env } from '../config/env.config';
 import { setPending, takePending } from '../cache/pending';
+import { recordTimeout } from '../command-history';
 import * as timeout from '../pending-timeout';
 
 const log = createLogger('digest-service:action-requested');
@@ -22,7 +23,10 @@ const log = createLogger('digest-service:action-requested');
 export function actionRequestedConsumer(ch: Channel) {
   return async (payload: ActionRequestedPayload): Promise<void> => {
     const { userId, actionId, value, duration } = payload;
-    log.info({ userId, actionId, value, duration }, 'action.requested received');
+    log.info(
+      { userId, actionId, value, duration, source: payload.source?.kind },
+      'action.requested received',
+    );
 
     const row = await db.userDeviceAction.findUnique({
       where: { id: actionId },
@@ -90,6 +94,10 @@ export function actionRequestedConsumer(ch: Channel) {
       command: { value: stateValue, duration: duration ?? '*', commandId },
       commandId,
       firmwareVersion: row.user_device.device.version,
+      // Carried through for the command history: who asked for this, and which action it is. A
+      // request with no source is a manual one — the dashboard is the only path that omits it.
+      source: payload.source ?? { kind: 'manual' },
+      actionId,
     };
     try {
       publish(ch, RK.ACTION_DISPATCH, dispatch);
@@ -102,7 +110,7 @@ export function actionRequestedConsumer(ch: Channel) {
     //    command, the record is gone and we do nothing; otherwise we mark it failed.
     timeout.arm(commandId, env.actionAckTimeoutMs, () => {
       takePending(commandId)
-        .then((pending) => {
+        .then(async (pending) => {
           if (pending === null) return; // already acked
           log.warn({ actionId, commandId }, 'command timed out with no device ack → failed');
           socket.emitActionStateFailed(
@@ -111,6 +119,9 @@ export function actionRequestedConsumer(ch: Channel) {
             commandId,
             row.current_state,
           );
+          // Same verdict, made durable — otherwise the row would sit "sent" forever and read as
+          // "no ack seen yet" long after we stopped waiting for one.
+          await recordTimeout(commandId);
         })
         .catch((err) => log.error({ err, commandId }, 'pending timeout resolution failed'));
     });

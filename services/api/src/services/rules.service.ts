@@ -1,3 +1,4 @@
+import { positionalText, validateSchedule } from '@lattice/params';
 import { db } from '../db';
 
 // User automation rules (F6.3) — unified with emergencies via `is_emergency` (F9 folds in
@@ -12,13 +13,23 @@ export interface RuleConditionDto {
   user_device_id?: number | null;
   status_value?: string | null;
   schedule_time?: string | null;
+  /** With `schedule_every_minutes`, repeats from schedule_time through this each day (F11.11). */
+  schedule_until?: string | null;
+  schedule_every_minutes?: number | null;
   schedule_days?: number[];
 }
 
 export interface RuleActionDto {
   user_device_action_id: number;
   target_state: string;
-  delay_seconds: number;
+  /**
+   * Both accept a number from the editor or a reference string (F11.14). The UI only ever sends
+   * numbers today; the wider type is what lets a blueprint-derived rule round-trip through this
+   * service without its `@phase.` references being flattened to null.
+   */
+  delay_seconds?: number | string | null;
+  /** Seconds the DEVICE holds this state before releasing it; null/0 = hold indefinitely. */
+  duration_seconds?: number | string | null;
 }
 
 export interface CreateRuleDto {
@@ -60,6 +71,19 @@ function validate(dto: CreateRuleDto): void {
   if (!Array.isArray(dto.actions) || dto.actions.length === 0) {
     throw Object.assign(new Error('at least one action is required'), { statusCode: 400 });
   }
+  // Schedules were the one condition type nothing checked: "7:5" or "25:00" saved happily and then
+  // simply never matched, which reads to a user as a broken rule rather than a bad value. Same
+  // validator the pipelines API and blueprint publish use.
+  for (const c of dto.conditions) {
+    if (c.condition_type !== 'schedule') continue;
+    const problem = validateSchedule({
+      time: c.schedule_time ?? null,
+      until: c.schedule_until,
+      everyMinutes: c.schedule_every_minutes,
+      days: c.schedule_days ?? [],
+    });
+    if (problem) throw Object.assign(new Error(problem), { statusCode: 400 });
+  }
 }
 
 function conditionCreateData(c: RuleConditionDto) {
@@ -71,6 +95,10 @@ function conditionCreateData(c: RuleConditionDto) {
     user_device_id: c.user_device_id ?? null,
     status_value: c.status_value ?? null,
     schedule_time: c.schedule_time ?? null,
+    // A window makes the schedule repeat inside its hours (F11.11); both null is the single-time
+    // shape every schedule had before.
+    schedule_until: c.schedule_until ?? null,
+    schedule_every_minutes: c.schedule_every_minutes ?? null,
     schedule_days: c.schedule_days ?? [],
   };
 }
@@ -99,7 +127,8 @@ class RulesService {
           create: dto.actions.map((a) => ({
             user_device_action_id: a.user_device_action_id,
             target_state: a.target_state,
-            delay_seconds: a.delay_seconds ?? 0,
+            delay_seconds: positionalText(a.delay_seconds),
+            duration_seconds: positionalText(a.duration_seconds),
           })),
         },
       },
@@ -133,7 +162,8 @@ class RulesService {
             create: dto.actions.map((a) => ({
               user_device_action_id: a.user_device_action_id,
               target_state: a.target_state,
-              delay_seconds: a.delay_seconds ?? 0,
+              delay_seconds: positionalText(a.delay_seconds),
+              duration_seconds: positionalText(a.duration_seconds),
             })),
           },
         },
@@ -161,7 +191,13 @@ class RulesService {
 
   async setEnabled(userId: number, id: number, enabled: boolean): Promise<void> {
     await this.ensureOwned(userId, id);
-    await db.userRule.update({ where: { id }, data: { enabled, updated_at: new Date() } });
+    // Any hand toggle takes ownership of this row's enabled state: reconcile must not later
+    // "restore" something the user just set. Clearing the flag on an explicit disable is the
+    // point — it is what separates "I turned this off" from "reconcile turned this off".
+    await db.userRule.update({
+      where: { id },
+      data: { enabled, disabled_by_reconcile: false, updated_at: new Date() },
+    });
   }
 
   async remove(userId: number, id: number): Promise<void> {
@@ -200,13 +236,16 @@ class RulesService {
       user_device_id: number | null;
       status_value: string | null;
       schedule_time: string | null;
+      schedule_until: string | null;
+      schedule_every_minutes: number | null;
       schedule_days: number[];
     }[];
     actions: {
       id: number;
       user_device_action_id: number;
       target_state: string;
-      delay_seconds: number;
+      delay_seconds: string | null;
+      duration_seconds: string | null;
     }[];
   }): RuleView {
     return {
@@ -227,6 +266,8 @@ class RulesService {
         user_device_id: c.user_device_id,
         status_value: c.status_value,
         schedule_time: c.schedule_time,
+        schedule_until: c.schedule_until,
+        schedule_every_minutes: c.schedule_every_minutes,
         schedule_days: c.schedule_days,
       })),
       actions: r.actions.map((a) => ({
@@ -234,6 +275,7 @@ class RulesService {
         user_device_action_id: a.user_device_action_id,
         target_state: a.target_state,
         delay_seconds: a.delay_seconds,
+        duration_seconds: a.duration_seconds,
       })),
     };
   }

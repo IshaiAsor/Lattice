@@ -1,18 +1,18 @@
 # Lattice v2.2 — Database Schema Review
 
 Single source of truth is `prisma/schema.prisma`. **Keep this file in sync with every schema
-change** (mermaid ERD + per-table examples). 47 tables, ordered by dependency tier 0 → 7.
+change** (mermaid ERD + per-table examples). 54 tables, ordered by dependency tier 0 → 7.
 
-| Tier | Theme                                                                                | Tables                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ---- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | External catalog                                                                     | `google_action_types`, `google_device_traits`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 1    | Device & ML catalog                                                                  | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models`                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 2    | Identity                                                                             | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| 6    | Telemetry                                                                            | `sensor_history`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 7    | Blueprints (F10 — admin definition + user instance)                                  | `blueprints`, `blueprint_slots`, `blueprint_params`, `blueprint_phases`, `blueprint_phase_targets`, `blueprint_scene_templates`, `blueprint_scene_template_members`, `blueprint_rule_templates`, `blueprint_rule_template_conditions`, `blueprint_rule_template_actions`, `blueprint_pipeline_templates`, `blueprint_pipeline_template_sensors`, `blueprint_pipeline_template_stages`, `blueprint_pipeline_template_triggers`, `blueprint_instances`, `blueprint_slot_bindings`, `blueprint_param_overrides`, `blueprint_instance_phase_state` |
+| Tier | Theme                                                                                | Tables                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | External catalog                                                                     | `google_action_types`, `google_device_traits`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 1    | Device & ML catalog                                                                  | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 2    | Identity                                                                             | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 7    | Blueprints (F10 — admin definition + user instance)                                  | `blueprints`, `blueprint_slots`, `blueprint_params`, `blueprint_profiles`, `blueprint_phases`, `blueprint_phase_targets`, `blueprint_scene_templates`, `blueprint_scene_template_members`, `blueprint_rule_templates`, `blueprint_rule_template_conditions`, `blueprint_rule_template_actions`, `blueprint_pipeline_templates`, `blueprint_pipeline_template_sensors`, `blueprint_pipeline_template_stages`, `blueprint_pipeline_template_triggers`, `blueprint_instances`, `blueprint_slot_bindings`, `blueprint_param_overrides`, `blueprint_instance_phase_state`, `blueprint_binding_phase_state`, `blueprint_binding_param_overrides` |
 
 ---
 
@@ -240,7 +240,7 @@ erDiagram
     string threshold_value "threshold"
     int user_device_id FK "device_status, nullable"
     string status_value "online/offline"
-    string schedule_time "HH:MM"
+    string schedule_time "HH:MM or a reference"
     int_array schedule_days "0=Sun..6=Sat"
   }
   UserRuleAction {
@@ -248,7 +248,8 @@ erDiagram
     int rule_id FK
     int user_device_action_id FK
     string target_state
-    int delay_seconds
+    string delay_seconds "literal or reference"
+    string duration_seconds "device holds it this long; literal or reference"
   }
   UserRuleEvent {
     int id PK
@@ -273,7 +274,8 @@ erDiagram
     int user_device_action_id FK
     string target_state
     int sort_order
-    int delay_seconds "stagger"
+    string delay_seconds "stagger; literal or reference"
+    string duration_seconds "device holds it this long; literal or reference"
   }
 
   %% ── Tier 5: pipelines ──
@@ -353,6 +355,24 @@ erDiagram
     datetime recorded_at
   }
 
+  DeviceCommand {
+    int id PK
+    int user_id FK
+    int user_device_id FK "nullable"
+    int user_device_action_id FK "nullable"
+    string action_name
+    string target_state
+    int duration_seconds "device-held hold, null = indefinite"
+    string source "manual|rule|scene|pipeline|phase|device|system"
+    int source_ref_id "the rule/scene/pipeline row"
+    string source_label "its name at dispatch time"
+    string status "sent|ok|error|timeout"
+    string command_id "unique; echoed by the device on its ack"
+    string result_value "what the device reported back"
+    datetime dispatched_at
+    datetime settled_at "when the ack (or timeout) landed"
+  }
+
   %% ── Tier 7: blueprints (F10) ──
   Blueprint {
     int id PK
@@ -386,15 +406,54 @@ erDiagram
     boolean user_tunable "false = phase-driven only"
     int sort_order
   }
-  BlueprintPhase {
+  BlueprintField {
     int id PK
     int blueprint_id FK
+    string key "what @field.key resolves against"
+    string label "the question"
+    string input_type "text|number|select|date|boolean"
+    string scope "setup | binding"
+    string slot_key "nullable; scope=binding: whose devices"
+    boolean required
+    string default_value "nullable"
+  }
+  BlueprintFieldOption {
+    int id PK
+    int field_id FK
+    string value "what @field.key resolves to"
+    string label
+    string profile_key "nullable; picking this sets the lifecycle"
+  }
+  BlueprintInstanceFieldValue {
+    int id PK
+    int instance_id FK
+    string field_key
+    string value "the user's answer for the setup"
+  }
+  BlueprintBindingFieldValue {
+    int id PK
+    int binding_id FK
+    string field_key
+    string value "the user's answer for ONE device"
+  }
+  BlueprintProfile {
+    int id PK
+    int blueprint_id FK
+    string key "lifecycle a binding follows"
+    string label
+    int sort_order
+  }
+  BlueprintPhase {
+    int id PK
+    int profile_id FK "phases belong to a PROFILE, not the blueprint"
     string key
     string name
     int ordinal
-    int duration_value "nullable"
+    string duration_value "literal or @param. reference (F11.13); nullable"
     string duration_unit "seconds | minutes | hours | days | weeks | months"
-    boolean auto_advance
+    string advance_mode "manual | schedule | rule | pipeline"
+    string advance_ref_key "nullable; rule/pipeline template key for rule|pipeline"
+    string advance_to_key "nullable; target phase key in this profile; null = next"
     string context_notes "nullable; @phase.context_notes"
   }
   BlueprintPhaseTarget {
@@ -418,7 +477,8 @@ erDiagram
     string action_name "sealed template entry mqtt_action_name"
     string target_state "literal OR @param./@phase. ref"
     int sort_order
-    int delay_seconds
+    string delay_seconds "literal OR ref"
+    string duration_seconds "device holds it this long; literal OR ref"
   }
   BlueprintRuleTemplate {
     int id PK
@@ -439,7 +499,7 @@ erDiagram
     string operator "nullable"
     string threshold_value "literal OR @phase. ref"
     string status_value "nullable"
-    string schedule_time "nullable"
+    string schedule_time "nullable; HH:MM OR @phase. ref"
     int_array schedule_days
   }
   BlueprintRuleTemplateAction {
@@ -448,7 +508,8 @@ erDiagram
     string slot_key
     string action_name
     string target_state "literal OR @param. ref"
-    int delay_seconds
+    string delay_seconds "literal OR ref"
+    string duration_seconds "device holds it this long; literal OR ref"
   }
   BlueprintPipelineTemplate {
     int id PK
@@ -513,6 +574,25 @@ erDiagram
     string slot_key "plain string, survives template edits"
     int user_device_id FK
     boolean auto_bound "bound with no user input"
+    string label "nullable; what the user calls this one"
+    string profile_key "nullable; null = shared device, no lifecycle"
+    string lifecycle_state "per-binding; live only if the setup is too"
+    int current_phase_id FK "nullable"
+    datetime phase_started_at "nullable; start of THIS binding's run"
+  }
+  BlueprintBindingPhaseState {
+    int id PK
+    int binding_id FK
+    string phase_key
+    int accrued_seconds "banked per binding, per phase"
+    datetime last_exited_at "nullable"
+  }
+  BlueprintBindingParamOverride {
+    int id PK
+    int binding_id FK
+    string param_key
+    string phase_key "empty = every phase"
+    string value "beats the setup-wide override"
   }
   BlueprintParamOverride {
     int id PK
@@ -587,10 +667,14 @@ erDiagram
   UserDeviceAction      |o--o{ PipelineTrigger        : "triggers"
 
   UserDeviceAction      ||--o{ SensorHistory          : "readings"
+  UserDeviceAction      |o--o{ DeviceCommand          : "commanded by"
+  UserDevice            |o--o{ DeviceCommand          : "commands sent to"
+  User                  ||--o{ DeviceCommand          : "issued"
 
   Blueprint             ||--o{ BlueprintSlot          : "requires devices"
   Blueprint             ||--o{ BlueprintParam         : "declares tuning surface"
-  Blueprint             ||--o{ BlueprintPhase         : "lifecycle"
+  Blueprint             ||--o{ BlueprintProfile       : "lifecycles offered"
+  BlueprintProfile      ||--o{ BlueprintPhase         : "lifecycle"
   Blueprint             ||--o{ BlueprintSceneTemplate : "scene templates"
   Blueprint             ||--o{ BlueprintRuleTemplate  : "rule templates"
   Blueprint             ||--o{ BlueprintPipelineTemplate : "pipeline templates"
@@ -612,6 +696,16 @@ erDiagram
   BlueprintInstance     ||--o{ BlueprintParamOverride : "user tuning"
   BlueprintInstance     ||--o{ BlueprintInstancePhaseState : "banked phase time"
   UserDevice            ||--o{ BlueprintSlotBinding   : "bound to slot"
+  Blueprint             ||--o{ BlueprintField        : "asks"
+  BlueprintField        ||--o{ BlueprintFieldOption   : "offers"
+  BlueprintInstance     ||--o{ BlueprintInstanceFieldValue : "answered"
+  BlueprintSlotBinding  ||--o{ BlueprintBindingFieldValue  : "answered per device"
+  BlueprintSlotBinding  |o--o{ Scene                  : "per_device scene"
+  BlueprintSlotBinding  |o--o{ UserRule               : "per_device rule"
+  BlueprintSlotBinding  |o--o{ Pipeline               : "per_device pipeline"
+  BlueprintPhase        |o--o{ BlueprintSlotBinding   : "current phase of binding"
+  BlueprintSlotBinding  ||--o{ BlueprintBindingPhaseState : "banked binding time"
+  BlueprintSlotBinding  ||--o{ BlueprintBindingParamOverride : "per-binding tuning"
   BlueprintInstance     |o--o{ Scene                  : "derived"
   BlueprintInstance     |o--o{ UserRule               : "derived"
   BlueprintInstance     |o--o{ Pipeline               : "derived"
@@ -729,13 +823,13 @@ erDiagram
 
 ### Tier 2 — Identity
 
-#### `users` (`User`) — `email_verified` gates credential login (F15.8); Google accounts are created verified. `email_verification_token` holds the pending single-use verify token (NULL once used).
+#### `users` (`User`) — `email_verified` gates credential login (F15.8); Google accounts are created verified. `email_verification_token` holds the pending single-use verify token (NULL once used). `timezone` is the IANA zone every schedule this user writes is read against (F11.11) — NULL means the evaluating process's own zone, which is UTC in a container; the client sets it from the browser on first sign-in.
 
-| id  | email             | user_role | google_id | email_verified | email_verification_token |
-| --- | ----------------- | --------- | --------- | -------------- | ------------------------ |
-| 1   | owner@example.com | admin     | NULL      | true           | NULL                     |
-| 2   | alice@example.com | user      | 11522…    | true           | NULL                     |
-| 3   | bob@example.com   | user      | NULL      | false          | 7c3f…                    |
+| id  | email             | user_role | google_id | email_verified | email_verification_token | timezone       |
+| --- | ----------------- | --------- | --------- | -------------- | ------------------------ | -------------- |
+| 1   | owner@example.com | admin     | NULL      | true           | NULL                     | Asia/Jerusalem |
+| 2   | alice@example.com | user      | 11522…    | true           | NULL                     | Europe/London  |
+| 3   | bob@example.com   | user      | NULL      | false          | 7c3f…                    | NULL           |
 
 #### `notification_preferences` (`NotificationPreference`) — per-user opt-in matrix. Unique `(user_id, channel, event_type)`. A missing row = service default; `enabled=false` is an explicit opt-out.
 
@@ -830,19 +924,28 @@ gates on-demand execution/visibility; a pipeline gates its triggers).
 
 #### `user_rule_conditions` (`UserRuleCondition`) — typed columns per `condition_type` (no JSON)
 
-| id  | rule_id | condition_type | user_device_action_id | operator | threshold_value | user_device_id | status_value | schedule_time | schedule_days |
-| --- | ------- | -------------- | --------------------- | -------- | --------------- | -------------- | ------------ | ------------- | ------------- |
-| 80  | 50      | threshold      | 100                   | >        | 30              | NULL           | NULL         | NULL          | `{}`          |
-| 81  | 50      | schedule       | NULL                  | NULL     | NULL            | NULL           | NULL         | 08:00         | `{1,2,3,4,5}` |
-| 82  | 51      | threshold      | 100                   | >        | 45              | NULL           | NULL         | NULL          | `{}`          |
-| 83  | 50      | device_status  | NULL                  | NULL     | NULL            | 7              | online       | NULL          | `{}`          |
+| id  | rule_id | condition_type | user_device_action_id | operator | threshold_value | user_device_id | status_value | schedule_time       | schedule_days |
+| --- | ------- | -------------- | --------------------- | -------- | --------------- | -------------- | ------------ | ------------------- | ------------- |
+| 80  | 50      | threshold      | 100                   | >        | 30              | NULL           | NULL         | NULL                | `{}`          |
+| 81  | 50      | schedule       | NULL                  | NULL     | NULL            | NULL           | NULL         | 08:00               | `{1,2,3,4,5}` |
+| 82  | 51      | threshold      | 100                   | >        | 45              | NULL           | NULL         | NULL                | `{}`          |
+| 83  | 50      | device_status  | NULL                  | NULL     | NULL            | 7              | online       | NULL                | `{}`          |
+| 84  | 52      | schedule       | NULL                  | NULL     | NULL            | NULL           | NULL         | `@phase.water.time` | `{}`          |
 
 #### `user_rule_actions` (`UserRuleAction`) — the "then"
 
-| id  | rule_id | user_device_action_id | target_state | delay_seconds |
-| --- | ------- | --------------------- | ------------ | ------------- |
-| 90  | 50      | 101                   | ON           | 0             |
-| 91  | 51      | 101                   | OFF          | 0             |
+`delay_seconds` and `duration_seconds` are **text**, not integers (F11.14): each holds a literal or a
+reference, resolved per entity at dispatch time by `resolveSeconds`. `schedule_time` /
+`schedule_until` on the condition above are the same. That is what lets one rule serve several
+lifecycles — row 92 is the garden's single watering rule, whose period and hour both come from
+whichever phase the pot it fans out to is in. Unresolvable ⇒ hold indefinitely (duration) or send
+now (delay), never a guessed number.
+
+| id  | rule_id | user_device_action_id | target_state         | delay_seconds                  | duration_seconds       |
+| --- | ------- | --------------------- | -------------------- | ------------------------------ | ---------------------- |
+| 90  | 50      | 101                   | ON                   | NULL                           | NULL                   |
+| 91  | 51      | 101                   | OFF                  | NULL                           | 120                    |
+| 92  | 52      | 101                   | `@phase.water.state` | `@param.water.stagger_seconds` | `@phase.water.seconds` |
 
 #### `user_rule_events` (`UserRuleEvent`) — fire audit (replaces the old `emergency_events`; works for any rule). Index `(rule_id, fired_at)`.
 
@@ -864,13 +967,24 @@ per action, and `scene_members` being a join table means one action can sit in m
 
 #### `scene_members` (`SceneMember`) — the action list. Unique `(scene_id, user_device_action_id)`.
 
-`delay_seconds > 0` staggers a member (published after the delay); `0` fires immediately.
+A delay staggers a member (published after it); null or `0` fires immediately.
 
-| id  | scene_id | user_device_action_id | target_state | sort_order | delay_seconds |
-| --- | -------- | --------------------- | ------------ | ---------- | ------------- |
-| 30  | 10       | 101                   | OFF          | 0          | 0             |
-| 31  | 10       | 104                   | ON           | 1          | 0             |
-| 32  | 11       | 101                   | OFF          | 0          | 30            |
+`duration_seconds` is different in kind: it is passed **to the device**, whose firmware arms its own
+timer and returns the pin to rest when it elapses (`BaseCommandAction`'s duration auto-off). Null =
+hold until something else changes it. Saying "on for two minutes" this way rather than as a second
+delayed OFF row matters because the delayed row's timer lives in a service's memory — a restart
+inside the window loses the close and leaves the actuator on.
+
+Both are text and may hold a reference (F11.14), resolved once when the scene is pressed so a
+delayed member cannot silently act on a phase that advanced while it waited. Row 33 is the garden's
+"Soak this pot", which holds the valve for as long as the pot's current stage says.
+
+| id  | scene_id | user_device_action_id | target_state | sort_order | delay_seconds                  | duration_seconds       |
+| --- | -------- | --------------------- | ------------ | ---------- | ------------------------------ | ---------------------- |
+| 30  | 10       | 101                   | OFF          | 0          | NULL                           | NULL                   |
+| 31  | 10       | 104                   | ON           | 1          | NULL                           | NULL                   |
+| 32  | 11       | 101                   | OFF          | 0          | 30                             | NULL                   |
+| 33  | 12       | 101                   | ON           | 1          | `@param.water.stagger_seconds` | `@phase.water.seconds` |
 
 ### Tier 5 — Pipelines (ML execution: trigger → sensors → stages → decision)
 
@@ -882,11 +996,11 @@ per action, and `scene_members` being a join table means one action can sit in m
 
 #### `pipeline_sensors` (`PipelineSensor`) — unified per-item list: every device action the pipeline cares about (sensor reading and/or LLM-invocable action), one row each. `inject_as_sensor` includes the item in the current-state + historic-digest blobs the enrich stage builds; `inject_as_action` includes it in the LLM's derived `available_actions` list. Telemetry and image/camera capability types force `inject_as_sensor=true` (can't be turned off) and `inject_as_action=false` (can't be commanded) — enforced both in the UI and server-side in `pipelines.service.ts`. Unique `(pipeline_id, user_device_action_id)`.
 
-| id  | pipeline_id | group_name | description           | user_device_action_id | inject_as_sensor | inject_as_action | min_value | max_value | compression | window_minutes | n    |
-| --- | ----------- | ---------- | --------------------- | --------------------- | ---------------- | ---------------- | --------- | --------- | ----------- | -------------- | ---- |
-| 1   | 40          | climate    | Air temp in grow tent | 100                   | true             | false            | 18        | 27        | average     | 60             | NULL |
-| 2   | 40          | vision     | Door camera frame     | 102                   | true             | false            | NULL      | NULL      | last_n      | 5              | 5    |
-| 3   | 40          | access     | Door relay            | 101                   | true             | true             | NULL      | NULL      | average     | 60             | NULL |
+| id  | pipeline_id | group_name | description        | user_device_action_id | inject_as_sensor | inject_as_action | min_value | max_value | compression | window_minutes | n    |
+| --- | ----------- | ---------- | ------------------ | --------------------- | ---------------- | ---------------- | --------- | --------- | ----------- | -------------- | ---- |
+| 1   | 40          | climate    | Enclosure air temp | 100                   | true             | false            | 18        | 27        | average     | 60             | NULL |
+| 2   | 40          | vision     | Door camera frame  | 102                   | true             | false            | NULL      | NULL      | last_n      | 5              | 5    |
+| 3   | 40          | access     | Door relay         | 101                   | true             | true             | NULL      | NULL      | average     | 60             | NULL |
 
 #### `pipeline_stages` (`PipelineStage`) — ordered steps. Kinds: `enrich` (builds current-state/historic-digest/available-actions from `pipeline_sensors`, no config needed); `infer` (ML model via `ml_model_id`); `command_exec` (executes LLM-recommended action). The editor now constructs `enrich → infer/llm → [command_exec]`; a camera item's frame is captured in enrich and attached to the multimodal LLM directly. The `[infer/vlm]` step (a preceding local YOLO/VLM stage) is still supported by the engine but is parked — the editor no longer builds one. The engine stays generic over ordinal/kind. Unique `(pipeline_id, ordinal)`.
 
@@ -929,6 +1043,15 @@ per action, and `scene_members` being a join table means one action can sit in m
 | 9002 | 102                   | "/9j/4AAQSk…" (jpeg) | false    | NULL          | 2026-06-26T14:32:00Z |
 | 9003 | 100                   | NULL                 | true     | "read_failed" | 2026-06-26T14:33:00Z |
 
+#### `device_commands` (`DeviceCommand`) — the write side's twin of `sensor_history` (F11.12): one row per command sent to a device, settled in place by the device's ack. Written by digest-service from `action.dispatch`, which every command passes through whoever raised it. `status` starts at `sent` — a row still `sent` means no ack was ever seen, which only the paths with a timeout (those routed through digest's pending tracking) convert to `timeout`. `source='device'` rows are acks with no command behind them: a duration auto-off releasing, or a boot restore. Indexes `(user_id, dispatched_at)` and `(user_device_action_id, dispatched_at)`.
+
+| id  | user_device_action_id | action_name | target_state | duration_seconds | source   | source_label    | status  | result_value | dispatched_at        | settled_at           |
+| --- | --------------------- | ----------- | ------------ | ---------------- | -------- | --------------- | ------- | ------------ | -------------------- | -------------------- |
+| 501 | 100                   | socket      | "on"         | 30               | rule     | "Midday sip"    | ok      | "on"         | 2026-08-06T09:10:00Z | 2026-08-06T09:10:01Z |
+| 502 | 100                   | socket      | "off"        | NULL             | device   | NULL            | ok      | "off"        | 2026-08-06T09:10:30Z | 2026-08-06T09:10:30Z |
+| 503 | 104                   | valve       | "on"         | NULL             | manual   | NULL            | timeout | NULL         | 2026-08-06T09:12:00Z | 2026-08-06T09:12:10Z |
+| 504 | 108                   | light       | "on"         | NULL             | pipeline | "Light decider" | error   | NULL         | 2026-08-06T09:15:00Z | 2026-08-06T09:15:01Z |
+
 ### Tier 7 — Blueprints (F10)
 
 Admin-authored setups and the user instances derived from them. The worked example below is one
@@ -938,16 +1061,29 @@ content**, never code or seed constants.
 
 #### `blueprints` (`Blueprint`) — unique `key`. `version` bumps on **publish**, not on edit; only `published` blueprints can be derived. `context_notes` is free text handed to the LLM.
 
-| id  | key             | name            | version | status    | context_notes                         |
-| --- | --------------- | --------------- | ------- | --------- | ------------------------------------- |
-| 3   | reservoir_setup | Reservoir Setup | 1       | published | "Closed-loop tank with a top-up pump" |
+| id  | key             | name            | version | status    | is_static | context_notes                         |
+| --- | --------------- | --------------- | ------- | --------- | --------- | ------------------------------------- |
+| 3   | reservoir_setup | Reservoir Setup | 1       | published | false     | "Closed-loop tank with a top-up pump" |
+
+`is_static = true` (F11.8) means **no slot in this setup has phases** — nothing in it is scheduled
+at all. Declared rather than inferred: a draft part-way through being written also has no phases
+yet, and the two must not look alike. Publish enforces the agreement in **both** directions (static
+with phases, and non-static without), so the flag can never disagree with the content.
+
+It is _not_ the same as a setup whose devices own the schedules — that is a **profiled slot**, where
+the phases exist and belong to the bound devices. A static setup still starts and stops (pausing
+holds its automations); it simply has no phase track and no timers.
 
 #### `blueprint_slots` (`BlueprintSlot`) — one device requirement each, qualified by a **released** `sealed_template` (RESTRICT: a template with live slots cannot be deleted). Unique `(blueprint_id, key)`.
 
-| id  | blueprint_id | key  | label        | required | min_count | max_count | sealed_template_id |
-| --- | ------------ | ---- | ------------ | -------- | --------- | --------- | ------------------ |
-| 10  | 3            | tank | Tank monitor | true     | 1         | 1         | 2                  |
-| 11  | 3            | pump | Top-up pump  | true     | 1         | 1         | 5                  |
+| id  | blueprint_id | key   | label        | required | min_count | max_count | profiled | sealed_template_id |
+| --- | ------------ | ----- | ------------ | -------- | --------- | --------- | -------- | ------------------ |
+| 10  | 3            | tank  | Tank monitor | true     | 1         | 1         | false    | 2                  |
+| 11  | 3            | pump  | Top-up pump  | true     | 1         | 1         | false    | 5                  |
+| 12  | 3            | loops | Loops        | false    | 1         | 6         | true     | 5                  |
+
+`profiled=true` (F11) means every device bound here runs a lifecycle of its own — the user picks a
+`blueprint_profile` per binding. The unprofiled slots are shared by the whole setup.
 
 #### `blueprint_params` (`BlueprintParam`) — the declared tuning surface. Every `@param.x` / `@phase.x` reference must name a key here. `user_tunable=false` ⇒ phase-driven only, no override UI. Unique `(blueprint_id, key)`.
 
@@ -957,12 +1093,45 @@ content**, never code or seed constants.
 | 21  | 3            | humidity.max   | Humidity ceiling  | 70            | %    | true         |
 | 22  | 3            | tank.min_level | Tank refill level | 20            | %    | true         |
 
-#### `blueprint_phases` (`BlueprintPhase`) — ordered lifecycle. `auto_advance` + duration lets the `automation-worker` cron move the instance on. `context_notes` resolves via `@phase.context_notes`. Unique `(blueprint_id, key)`.
+#### `blueprint_fields` (`BlueprintField`) — a question the blueprint asks the user at setup time (F11.6). Params are values the _system_ tunes across phases; a field is a fact the **user states**, so it is a separate declaration with its own reference kind. `@field.x` resolves **device answer → setup answer → default → null** and does _not_ walk the param precedence — no phase retunes a fact. `scope='binding'` asks once per bound device of `slot_key`. Unique `(blueprint_id, key)`.
 
-| id  | blueprint_id | key      | name     | ordinal | duration_value | duration_unit | auto_advance |
-| --- | ------------ | -------- | -------- | ------- | -------------- | ------------- | ------------ |
-| 30  | 3            | seedling | Seedling | 1       | 2              | weeks         | true         |
-| 31  | 3            | mature   | Mature   | 2       | NULL           | NULL          | false        |
+| id  | blueprint_id | key     | label                  | input_type | scope   | slot_key | required |
+| --- | ------------ | ------- | ---------------------- | ---------- | ------- | -------- | -------- |
+| 60  | 3            | site    | Where is this?         | text       | setup   | NULL     | false    |
+| 61  | 3            | variant | What is this handling? | select     | binding | loops    | true     |
+
+#### `blueprint_field_options` (`BlueprintFieldOption`) — one choice of a `select` field. **`profile_key` is the load-bearing column**: picking an option stores the descriptive answer _and_ puts that binding on the named lifecycle, so one question sets both facts — and two devices can share a profile while still carrying different answers. Unique `(field_id, value)`.
+
+| id  | field_id | value     | label     | profile_key |
+| --- | -------- | --------- | --------- | ----------- |
+| 70  | 61       | quick_run | Quick run | fast_cycle  |
+| 71  | 61       | long_soak | Long soak | slow_cycle  |
+
+Publish validation refuses an option whose `profile_key` names no declared profile, and refuses
+profile-selecting options on a field that is not asked per device of a **profiled** slot — the two
+cases where the column would silently do nothing.
+
+#### `blueprint_instance_field_values` (`BlueprintInstanceFieldValue`) / `blueprint_binding_field_values` (`BlueprintBindingFieldValue`) — the answers. Keyed by field **key**, like every other user-owned blueprint table, so a v2 publish that recreates the field rows keeps them. A required field added in a v2 leaves live instances unanswered: the reference fails closed (null) rather than breaking automations. Unique `(instance_id, field_key)` / `(binding_id, field_key)`.
+
+#### `blueprint_profiles` (`BlueprintProfile`) — a named lifecycle a bound device can follow (F11). What a device is handling decides its schedule, so a blueprint declares one profile per schedule and each binding of a profiled slot picks one. Runtime content like a phase name: the engine never knows what a profile _means_, only that it has these phases in this order. **Every blueprint with a lifecycle has at least one** — the single-lifecycle (F10) shape is simply the one-profile case, which is why phases hang off a profile rather than the blueprint. Unique `(blueprint_id, key)`.
+
+| id  | blueprint_id | key        | label      | sort_order |
+| --- | ------------ | ---------- | ---------- | ---------- |
+| 5   | 3            | fast_cycle | Fast cycle | 0          |
+| 6   | 3            | slow_cycle | Slow cycle | 1          |
+
+#### `blueprint_phases` (`BlueprintPhase`) — ordered lifecycle **within a profile**. `duration_value` is TEXT: a literal (`"7"`) **or** an `@param.` reference resolved against the owner's context at evaluation time (F11.13), which is how two devices on ONE lifecycle run the same phase for different lengths — each pins that param for itself. Publish refuses `@phase.` there, a reference to an undeclared param, and a param this same phase's targets set (the loop). `advance_mode` decides what ends the phase — `schedule` uses the duration + `automation-worker` cron; `rule`/`pipeline` name a template in `advance_ref_key` whose derived automation decides; `manual` waits for a person. `advance_to_key` is the target phase **in this profile** (null = next by ordinal). `context_notes` resolves via `@phase.context_notes`. Unique `(profile_id, key)` — keys and ordinals are unique per profile, **not** per blueprint: two profiles legitimately declare the same key at the same ordinal, and a `phase_scope` naming it matches whichever profile the binding follows.
+
+| id  | profile_id     | key   | name  | ordinal | duration_value     | duration_unit | advance_mode | advance_ref_key | advance_to_key |
+| --- | -------------- | ----- | ----- | ------- | ------------------ | ------------- | ------------ | --------------- | -------------- |
+| 30  | 5 (fast_cycle) | fill  | Fill  | 1       | "1"                | days          | schedule     | NULL            | NULL           |
+| 31  | 5 (fast_cycle) | hold  | Hold  | 2       | NULL               | NULL          | manual       | NULL            | NULL           |
+| 32  | 6 (slow_cycle) | fill  | Fill  | 1       | "@param.fill_days" | days          | schedule     | NULL            | NULL           |
+| 33  | 6 (slow_cycle) | flush | Flush | 2       | "1"                | weeks         | schedule     | NULL            | NULL           |
+
+Row 32 is the F11.13 case: every device on `slow_cycle` reads its own `fill_days`, so a
+`blueprint_binding_param_overrides` row pinning `fill_days = 1` for one device gives that device a
+one-day fill while its siblings keep the blueprint's default — one lifecycle, different lengths.
 
 #### `blueprint_phase_targets` (`BlueprintPhaseTarget`) — what a phase sets a param to. **No row ⇒ the param's own default applies in that phase.** Unique `(phase_id, param_key)`.
 
@@ -970,6 +1139,45 @@ content**, never code or seed constants.
 | --- | -------- | ------------ | ----- |
 | 40  | 30       | humidity.min | 60    |
 | 41  | 30       | humidity.max | 80    |
+
+#### Template fan-out (`fan_out`, `fan_out_slot_key`, `fan_out_profiles` on all three `*_templates`) — how ONE template becomes one automation or several, and over which devices (F11.2, F11.9).
+
+Two independent questions. **How many** entities:
+
+| `fan_out`              | meaning                                                                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `combined` _(default)_ | One entity naming every bound device — "if **any** of them reports X". Every pre-F11 template, unchanged.                              |
+| `per_device`           | One entity **per bound device** of `fan_out_slot_key`, each carrying `blueprint_binding_id` and resolving that slot to its own device. |
+
+…and **which** devices take part — `fan_out_profiles`, a list of lifecycle keys, empty for all of
+them. The two combine into the three shapes an author actually reaches for:
+
+| shape              | `fan_out`    | `fan_out_profiles`                                  | reads as                                      |
+| ------------------ | ------------ | --------------------------------------------------- | --------------------------------------------- |
+| **all**, together  | `combined`   | `[]`                                                | "if any device reports X"                     |
+| **all**, one each  | `per_device` | `[]`                                                | "each device watches itself"                  |
+| **some**, together | `combined`   | `[a, b]`                                            | "if any device on lifecycle a or b reports X" |
+| **some**, one each | `per_device` | `[a, b]`                                            | "each device on a or b watches itself"        |
+| **one**            | `per_device` | a single-device lifecycle, or a `max_count: 1` slot |
+
+Selection is by **lifecycle, not device id**: the author writes the template long before the user
+owns anything, and a device moved onto another lifecycle then joins and leaves the right automations
+by itself, where a stored device list would quietly go stale. Publish rejects a selector that can
+never select anybody — no slot to select from, a slot whose devices have no lifecycle, an undeclared
+lifecycle, or a slot the template never addresses.
+
+`per_device` is not a preference — it is required the moment an automation over a **profiled** slot
+holds a `@phase.` reference. Those devices are each in their own phase, and one entity has one
+resolution context, so a single reference cannot mean two numbers at once. Publish rejects that
+combination (and a `phase_scope` on a combined template over a profiled slot) rather than letting it
+resolve to whichever device happened to be first. Narrowing to one lifecycle does **not** lift that:
+two devices on the same lifecycle still walk it on their own clocks.
+
+`blueprint_binding_id` on `scenes` / `user_rules` / `pipelines` records which device an entity
+belongs to; it is NULL for everything a combined template produces — including a combined template
+restricted to some devices, which covers several and so belongs to none. **Reconcile identity is the
+pair `(blueprint_key, blueprint_binding_id)`** — which is what makes adding a device create its
+automations and removing one disable exactly its own, with the others untouched.
 
 #### `blueprint_rule_templates` (`BlueprintRuleTemplate`) + `_conditions` / `_actions` — mirror `user_rules`, addressing devices as `(slot_key, action_name)` instead of `user_device_action_id`. `key` is the **reconcile identity**. Value columns hold a literal **or** a reference resolved at evaluation time.
 
@@ -1014,12 +1222,29 @@ The gate on _acting_ is `isAutomationLive` in `@lattice/params`, applied by the 
 pipeline triggers and scene execution alike — **including emergency rules**, because stopping a
 setup is meant to mean the setup is off, not off except the parts that matter.
 
-#### `blueprint_slot_bindings` (`BlueprintSlotBinding`) — slot → real device. `slot_key` is a plain string, not an FK, so the binding survives the slot row being edited in a later version. `auto_bound=true` means exactly one candidate matched and the user confirmed nothing. Unique `(instance_id, slot_key, user_device_id)`.
+#### `blueprint_slot_bindings` (`BlueprintSlotBinding`) — slot → real device, **with a lifecycle of its own** when its slot is profiled (F11). `slot_key` is a plain string, not an FK, so the binding survives the slot row being edited in a later version. `auto_bound=true` means exactly one candidate matched and the user confirmed nothing. Unique `(instance_id, slot_key, user_device_id)`.
 
-| id  | instance_id | slot_key | user_device_id | auto_bound |
-| --- | ----------- | -------- | -------------- | ---------- |
-| 80  | 12          | tank     | 44             | true       |
-| 81  | 12          | pump     | 45             | false      |
+A binding of a **profiled** slot carries the same lifecycle columns the instance does — profile, state, current phase, clock — one level down. That is what lets ONE setup hold devices on independent schedules: a shared controller (unprofiled, no lifecycle of its own) alongside a binding per device, each walking its own profile's phases.
+
+| id  | instance_id | slot_key | user_device_id | label  | profile_key | lifecycle_state | current_phase_id | phase_started_at     |
+| --- | ----------- | -------- | -------------- | ------ | ----------- | --------------- | ---------------- | -------------------- |
+| 80  | 12          | tank     | 44             | NULL   | NULL        | not_started     | NULL             | NULL                 |
+| 81  | 12          | loops    | 45             | Loop A | fast_cycle  | running         | 31 (Hold)        | 2026-08-02T09:00:00Z |
+| 82  | 12          | loops    | 46             | Loop B | slow_cycle  | running         | 33 (Flush)       | 2026-07-28T09:00:00Z |
+
+**A binding acts only while it _and_ its setup are running.** The two states collapse into one
+`effective_state` (`effectiveLifecycle` in `@lattice/params`, beside `isAutomationLive`), so stopping
+the setup holds every binding regardless of what the bindings themselves say.
+
+#### `blueprint_binding_phase_state` (`BlueprintBindingPhaseState`) — the per-binding twin of `blueprint_instance_phase_state`: seconds banked per phase for one binding, written when it leaves. Unique `(binding_id, phase_key)`.
+
+#### `blueprint_binding_param_overrides` (`BlueprintBindingParamOverride`) — the user's tuning for one binding ("this device wants a different number"). Beats the setup-wide override, which beats the profile's phase target, which beats the blueprint default. Unique `(binding_id, param_key, phase_key)`.
+
+The **four** per-binding tables (phase state, param overrides, field values, and the automations
+themselves) are siblings rather than a nullable `binding_id` on the instance-level ones: Postgres
+treats NULLs as distinct in a unique index, so a NULL component would admit duplicate rows, and
+Prisma's `upsert` needs a compound unique it can name — the same reasoning that gave
+`blueprint_param_overrides.phase_key` its empty-string sentinel.
 
 #### `blueprint_param_overrides` (`BlueprintParamOverride`) — the user's own tuning, always **per instance**, so two instances of one blueprint tune independently and neither can write the shared template. `phase_key` scopes the row: `''` = every phase, a phase key = that phase alone. Reconcile never touches this table, which is what makes a v2 release non-destructive to user intent. Unique `(instance_id, param_key, phase_key)`.
 

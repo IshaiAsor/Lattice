@@ -120,8 +120,18 @@
           @if (cond.get('condition_type')?.value === 'schedule') {
             <div class="schedule-fields">
               <mat-form-field appearance="outline" class="time-field">
-                <mat-label>Time</mat-label>
+                <mat-label>{{ cond.get('until')?.value ? 'From' : 'At' }}</mat-label>
                 <input matInput type="time" formControlName="time">
+              </mat-form-field>
+              <!-- Leave these blank for a single firing. Filled, they repeat it through the day —
+                   how long the device then stays on is the action's own hold, not this. -->
+              <mat-form-field appearance="outline" class="time-field">
+                <mat-label>Until</mat-label>
+                <input matInput type="time" formControlName="until">
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="time-field">
+                <mat-label>Every (min)</mat-label>
+                <input matInput type="number" min="1" placeholder="once" formControlName="everyMinutes">
               </mat-form-field>
               <div class="days-group" [formArrayName]="'days'">
                 @for (label of dayLabels; track $index; let d = $index) {

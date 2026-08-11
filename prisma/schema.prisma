@@ -258,6 +258,11 @@ model User {
   password_reset_token     String?   @unique @db.VarChar(255)
   password_reset_expires   DateTime? @db.Timestamptz(6)
   terms_accepted_at        DateTime? @db.Timestamptz(6)
+  // IANA zone name ("Asia/Jerusalem") — the clock every schedule this user writes is read against.
+  // Null means the evaluating process's own zone, which is UTC in a container: that was the only
+  // behaviour before, and it fired a 06:00 rule at 09:00 local. The client sets this from the
+  // browser on first sign-in, so "local" is the default without anyone choosing it.
+  timezone                 String?   @db.VarChar(64)
   created_at               DateTime? @default(now()) @db.Timestamptz(6)
   updated_at               DateTime? @default(now()) @db.Timestamptz(6)
 
@@ -272,6 +277,7 @@ model User {
   notification_history NotificationHistory[]
   push_subscriptions   PushSubscription[]
   blueprint_instances  BlueprintInstance[]
+  device_commands      DeviceCommand[]
 
   @@map("users")
 }
@@ -380,6 +386,7 @@ model UserDevice {
   user_device_actions UserDeviceAction[]
   rule_conditions     UserRuleCondition[]
   blueprint_bindings  BlueprintSlotBinding[]
+  commands            DeviceCommand[]
 
   @@index([area_id])
   @@map("user_devices")
@@ -455,6 +462,7 @@ model UserDeviceAction {
   sensor_history    SensorHistory[]
   pipeline_sensors  PipelineSensor[]
   pipeline_triggers PipelineTrigger[]         @relation("PipelineTrig")
+  commands          DeviceCommand[]
 
   @@index([user_device_id, mqtt_action_name])
   @@map("user_device_actions")
@@ -513,17 +521,28 @@ model UserRule {
   // whenever the row belongs to an instance, and makes reconcile skip it and surface it as drift.
   blueprint_instance_id Int?
   blueprint_key         String?   @db.VarChar(64)
+  // Set when this row came from a per_device template — which *binding* it belongs to (F11).
+  // Reconcile identity is the pair (blueprint_key, blueprint_binding_id): several rows now share a
+  // template key, one per bound device, and only the pair tells them apart.
+  blueprint_binding_id  Int?
   // Phases this rule is active in (F10). Empty = every phase (the default); a non-empty set makes
   // the rule inert unless the instance's current phase key is in it. Gated at evaluation time, so
   // a phase change never rewrites the rule — same principle as @phase parameterization.
   phase_scope           String[]  @default([])
   user_modified         Boolean   @default(false)
+  // Set when RECONCILE disabled this row (its template left the blueprint, or its device left the
+  // fan-out selection), cleared when reconcile brings it back or the user toggles it by hand.
+  // Without it reconcile cannot tell its own disable from the user's — and since toggling `enabled`
+  // is deliberately NOT drift, a device that left a lifecycle and came back would stay dead while
+  // reconcile happily reported "updated".
+  disabled_by_reconcile Boolean   @default(false)
   created_at            DateTime  @default(now()) @db.Timestamp(6)
   updated_at            DateTime  @default(now()) @db.Timestamp(6)
 
-  user               User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  area               Area?               @relation(fields: [area_id], references: [id], onDelete: SetNull)
-  blueprint_instance BlueprintInstance?  @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  user               User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area               Area?                 @relation(fields: [area_id], references: [id], onDelete: SetNull)
+  blueprint_instance BlueprintInstance?    @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  blueprint_binding  BlueprintSlotBinding? @relation(fields: [blueprint_binding_id], references: [id], onDelete: SetNull)
   conditions         UserRuleCondition[]
   actions            UserRuleAction[]
   events             UserRuleEvent[]
@@ -548,8 +567,18 @@ model UserRuleCondition {
   status_value   String? @db.VarChar(20)
 
   // schedule: time-of-day + days-of-week (0=Sun … 6=Sat)
-  schedule_time String? @db.VarChar(5)
+  // HH:MM literal OR a reference (`@phase.light.on_time`) — see user_rule_actions.duration_seconds
+  // for why these widened from VarChar(5) in F11.14. Resolved by `resolveClock` at match time.
+  schedule_time String? @db.VarChar(100)
   schedule_days Int[]   @default([])
+  // A schedule is one minute a day unless a WINDOW is given, in which case it repeats:
+  // `schedule_time` opens it, `schedule_until` closes it (inclusive) and `schedule_every_minutes`
+  // is the step — "06:00 to 17:30, every 10 minutes". Both window columns null = the single-time
+  // shape every schedule had before, unchanged. How long the device then holds the state is the
+  // action's own duration_seconds, not this: this says WHEN, that says HOW LONG.
+  schedule_until  String? @db.VarChar(100)
+  schedule_every_minutes Int?
+
 
   rule               UserRule          @relation(fields: [rule_id], references: [id], onDelete: Cascade)
   user_device_action UserDeviceAction? @relation(fields: [user_device_action_id], references: [id], onDelete: SetNull)
@@ -562,8 +591,22 @@ model UserRuleAction {
   id                    Int    @id @default(autoincrement())
   rule_id               Int
   user_device_action_id Int
-  target_state          String @db.VarChar(255)
-  delay_seconds         Int    @default(0)
+  target_state          String  @db.VarChar(255)
+  // Seconds to wait before publishing. Literal OR reference; null/absent = publish now.
+  delay_seconds         String? @db.VarChar(100)
+  // How long the device should hold this state before returning itself to its resting one — passed
+  // straight through to the firmware, which owns the timer (BaseCommandAction's duration auto-off).
+  // Null = hold indefinitely, which is every action written before this existed.
+  //
+  // The platform used to express "on for a while" as a second action with a delay, but that timer
+  // lived in automation-worker's memory: a restart inside the window lost the close and left the
+  // valve open. The device's own timer cannot be lost that way, so the duration belongs there.
+  //
+  // Text since F11.14, holding a literal ("90") OR a reference ("@phase.water.seconds"). How long
+  // to water is a property of the growth stage, not of the rule — while this was an integer the
+  // only way to vary it per lifecycle was to duplicate the whole rule once per lifecycle.
+  // `resolveSeconds` turns it into the number at dispatch time; unresolvable ⇒ hold indefinitely.
+  duration_seconds      String? @db.VarChar(100)
 
   rule               UserRule         @relation(fields: [rule_id], references: [id], onDelete: Cascade)
   user_device_action UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
@@ -597,6 +640,10 @@ model Scene {
   // Blueprint provenance (F10) — see UserRule.
   blueprint_instance_id Int?
   blueprint_key         String?  @db.VarChar(64)
+  // Set when this row came from a per_device template — which *binding* it belongs to (F11).
+  // Reconcile identity is the pair (blueprint_key, blueprint_binding_id): several rows now share a
+  // template key, one per bound device, and only the pair tells them apart.
+  blueprint_binding_id  Int?
   // Phases this scene is offered in (F10). Empty = every phase. A scene is on-demand, so this
   // gates manual execution and dashboard visibility rather than automatic firing.
   phase_scope           String[] @default([])
@@ -604,9 +651,10 @@ model Scene {
   created_at            DateTime @default(now()) @db.Timestamp(6)
   updated_at            DateTime @default(now()) @db.Timestamp(6)
 
-  user               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  area               Area?              @relation(fields: [area_id], references: [id], onDelete: SetNull)
-  blueprint_instance BlueprintInstance? @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  user               User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area               Area?                 @relation(fields: [area_id], references: [id], onDelete: SetNull)
+  blueprint_instance BlueprintInstance?    @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  blueprint_binding  BlueprintSlotBinding? @relation(fields: [blueprint_binding_id], references: [id], onDelete: SetNull)
   members            SceneMember[]
 
   @@unique([user_id, name])
@@ -620,10 +668,12 @@ model SceneMember {
   id                    Int    @id @default(autoincrement())
   scene_id              Int
   user_device_action_id Int
-  target_state          String @db.VarChar(255)
-  sort_order            Int    @default(0)
-  // Staggered execution: members with delay_seconds > 0 are published after the delay.
-  delay_seconds         Int    @default(0)
+  target_state          String  @db.VarChar(255)
+  sort_order            Int     @default(0)
+  // Staggered execution: members with a delay are published after it. Literal OR reference (F11.14).
+  delay_seconds         String? @db.VarChar(100)
+  // Held for this long by the DEVICE itself, then released — see user_rule_actions.duration_seconds.
+  duration_seconds      String? @db.VarChar(100)
 
   scene              Scene            @relation(fields: [scene_id], references: [id], onDelete: Cascade)
   user_device_action UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
@@ -643,16 +693,25 @@ model Pipeline {
   // Blueprint provenance (F10) — see UserRule.
   blueprint_instance_id Int?
   blueprint_key         String?  @db.VarChar(64)
+  // Set when this row came from a per_device template — which *binding* it belongs to (F11).
+  // Reconcile identity is the pair (blueprint_key, blueprint_binding_id): several rows now share a
+  // template key, one per bound device, and only the pair tells them apart.
+  blueprint_binding_id  Int?
   // Phases this pipeline's triggers are live in (F10). Empty = every phase; otherwise a trigger
   // only fires while the instance's current phase key is in the set. Gated at evaluation time.
   phase_scope           String[] @default([])
   user_modified         Boolean  @default(false)
+  // See the note on user_rules.disabled_by_reconcile — same contract, same reason. Scenes need no
+  // such column: they have no `enabled` at all, because a scene only ever runs when a user presses
+  // it, so an orphaned one is inert by construction.
+  disabled_by_reconcile Boolean  @default(false)
   created_at            DateTime @default(now()) @db.Timestamp(6)
   updated_at            DateTime @default(now()) @db.Timestamp(6)
 
-  user               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  area               Area?              @relation(fields: [area_id], references: [id], onDelete: SetNull)
-  blueprint_instance BlueprintInstance? @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  user               User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area               Area?                 @relation(fields: [area_id], references: [id], onDelete: SetNull)
+  blueprint_instance BlueprintInstance?    @relation(fields: [blueprint_instance_id], references: [id], onDelete: SetNull)
+  blueprint_binding  BlueprintSlotBinding? @relation(fields: [blueprint_binding_id], references: [id], onDelete: SetNull)
   sensors            PipelineSensor[]
   stages             PipelineStage[]
   triggers           PipelineTrigger[]
@@ -686,11 +745,11 @@ model PipelineSensor {
 }
 
 model PipelineStage {
-  id          Int    @id @default(autoincrement())
-  pipeline_id Int
-  ordinal     Int
-  kind        String @db.VarChar(20)
-  ml_model_id Int?
+  id                Int     @id @default(autoincrement())
+  pipeline_id       Int
+  ordinal           Int
+  kind              String  @db.VarChar(20)
+  ml_model_id       Int?
   // Typed columns per `kind`, not a JSON `config` blob — same treatment as user_rule_conditions.
   // JSON here is reserved for ML audit blobs and model/Google metadata.
   //   infer        → prompt_template (may embed @phase./@param., resolved by ml-router per run)
@@ -708,13 +767,20 @@ model PipelineStage {
 }
 
 model PipelineTrigger {
-  id                    Int     @id @default(autoincrement())
+  id                    Int       @id @default(autoincrement())
   pipeline_id           Int
-  trigger_type          String  @db.VarChar(20)
+  trigger_type          String    @db.VarChar(20)
   user_device_action_id Int?
   operator              String?   @db.VarChar(5)
   threshold_value       String?   @db.VarChar(100)
-  schedule_cron         String?   @db.VarChar(100)
+  // A schedule trigger, in the same shape a rule condition uses (see user_rule_conditions).
+  // Replaces `schedule_cron`, which was stored, validated and NEVER evaluated — a pipeline with a
+  // schedule trigger simply never ran. One shape for both, so there is one thing to learn and one
+  // evaluator to keep correct. HH:MM literal OR a reference, resolved per run (F11.14).
+  schedule_time         String? @db.VarChar(100)
+  schedule_until         String? @db.VarChar(100)
+  schedule_every_minutes Int?
+  schedule_days          Int[]   @default([])
   min_interval_sec      Int?
   // Last time this trigger fired, used by automation-worker to enforce min_interval_sec.
   // Persisted here (not in Valkey) so cooldowns survive a restart and cannot double-fire.
@@ -777,6 +843,57 @@ model SensorHistory {
   @@map("sensor_history")
 }
 
+// Every command the platform sends to a device — the write side's twin of sensor_history (F11.12).
+//
+// Until this existed a command left no trace: the in-flight record lived in Valkey under a TTL and
+// the only durable evidence was `current_state`, which is the *last* value and says nothing about
+// who set it, when, or whether it worked. "Why did the pump run at 3am" was unanswerable, and a
+// command that was never acked was indistinguishable from one that was never sent.
+//
+// Written once, at dispatch — the single point every command passes through, whoever raised it —
+// and settled in place when the device acks or the ack times out. `command_id` is the correlation
+// key the device echoes back.
+//
+// A row that stays `sent` means no ack was ever seen. That is a real state, not a bug: only
+// commands routed through digest's pending tracking are armed with a timeout, so a rule-issued
+// command whose device is offline settles nowhere. Read it as "sent, unconfirmed".
+model DeviceCommand {
+  id                    Int      @id @default(autoincrement())
+  user_id               Int
+  // Resolved where known. A dispatch addresses a device + mqtt action name, and the id behind that
+  // pair is looked up at write time; both are nullable so an unresolvable command is still recorded
+  // rather than lost — that is exactly the case worth having history for.
+  user_device_id        Int?
+  user_device_action_id Int?
+  action_name           String   @db.VarChar(64)
+  target_state          String   @db.VarChar(255)
+  // Seconds the DEVICE was told to hold the state before releasing it itself. Null = indefinitely.
+  duration_seconds      Int?
+  // Who raised it: manual | rule | scene | pipeline | phase | system. `source_ref_id` is that
+  // thing's row id and `source_label` its name at dispatch time — kept as text on purpose, so the
+  // history still reads correctly after the rule is renamed or deleted.
+  source                String   @default("system") @db.VarChar(20)
+  source_ref_id         Int?
+  source_label          String?  @db.VarChar(255)
+  // sent → ok | error | timeout. Never starts at "pending": by the time this row is written the
+  // command is on its way to the broker.
+  status                String   @default("sent") @db.VarChar(20)
+  command_id            String?  @unique @db.VarChar(64)
+  // The state the device reported back, which is not always the state it was asked for.
+  result_value          String?  @db.VarChar(255)
+  dispatched_at         DateTime @default(now()) @db.Timestamptz(6)
+  settled_at            DateTime? @db.Timestamptz(6)
+
+  user               User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_device        UserDevice?       @relation(fields: [user_device_id], references: [id], onDelete: SetNull)
+  user_device_action UserDeviceAction? @relation(fields: [user_device_action_id], references: [id], onDelete: SetNull)
+
+  // The two questions the history page asks: "what happened here" and "what happened to this".
+  @@index([user_id, dispatched_at])
+  @@index([user_device_action_id, dispatched_at])
+  @@map("device_commands")
+}
+
 // ═══ Tier 7 — Blueprints (F10) ══════════════════════════════════════════════════
 //
 // A blueprint is an admin-authored description of a whole working multi-device setup; a user
@@ -812,13 +929,23 @@ model Blueprint {
   // and reconcile is what moves them forward.
   version       Int      @default(1)
   status        String   @default("draft") @db.VarChar(20) // draft | published (only published derives)
+  // A **static** setup is one where no slot has phases — nothing in it is scheduled, anywhere.
+  // Declared rather than inferred, because "this thing has no lifecycle" is an authoring decision:
+  // a blueprint part-way through being written also has no phases yet, and the two must not look
+  // alike. Publish enforces the agreement (static ⇒ no profiles, and vice versa), so the flag can
+  // never disagree with the content.
+  //
+  // NOT the same as a blueprint whose *devices* own the schedules: a profiled slot means the phases
+  // exist and belong to the bound devices, which is `BlueprintSlot.profiled`, not this.
+  is_static     Boolean  @default(false)
   context_notes String? // free text handed to the LLM as setup context (F11)
   created_at    DateTime @default(now()) @db.Timestamp(6)
   updated_at    DateTime @default(now()) @db.Timestamp(6)
 
   slots     BlueprintSlot[]
   params    BlueprintParam[]
-  phases    BlueprintPhase[]
+  fields    BlueprintField[]
+  profiles  BlueprintProfile[]
   scenes    BlueprintSceneTemplate[]
   rules     BlueprintRuleTemplate[]
   pipelines BlueprintPipelineTemplate[]
@@ -838,6 +965,10 @@ model BlueprintSlot {
   required           Boolean @default(true)
   min_count          Int     @default(1)
   max_count          Int     @default(1)
+  // A profiled slot's bindings each choose a BlueprintProfile, so every device bound here walks
+  // its own lifecycle (F11) — one setup holding several devices on independent schedules. An
+  // unprofiled slot — a shared controller, say — has no lifecycle of its own and follows the setup.
+  profiled           Boolean @default(false)
   sealed_template_id Int
   sort_order         Int     @default(0)
 
@@ -867,25 +998,118 @@ model BlueprintParam {
   @@map("blueprint_params")
 }
 
-// An ordered lifecycle step. Advancing writes one column on the instance and retunes every
-// @phase reference at once — no rule, scene or pipeline row is rewritten.
+// A question the blueprint asks the user at derive time (F11.6) — what this device is handling,
+// when its process started, which variant it is. Params are values the *system* tunes; a field is a
+// fact the user states, so it is a separate declaration with its own reference kind (`@field.x`).
+//
+// A field resolves to one stated string. It deliberately does NOT go through the param precedence:
+// no phase retunes a fact, so the only order is binding value → setup value → default → null.
+model BlueprintField {
+  id            Int     @id @default(autoincrement())
+  blueprint_id  Int
+  key           String  @db.VarChar(64) // "variant" — what @field.variant resolves against
+  label         String  @db.VarChar(255) // the question as the user reads it
+  help_text     String?
+  input_type    String  @default("text") @db.VarChar(20) // text | number | select | date | boolean
+  // setup   asked once for the whole setup
+  // binding asked once per bound device of `slot_key`
+  scope         String  @default("setup") @db.VarChar(20)
+  slot_key      String? @db.VarChar(64) // scope=binding: whose bindings are asked
+  required      Boolean @default(false)
+  default_value String? @db.VarChar(500)
+  sort_order    Int     @default(0)
+
+  blueprint Blueprint              @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  options   BlueprintFieldOption[]
+
+  @@unique([blueprint_id, key])
+  @@map("blueprint_fields")
+}
+
+// One choice of a `select` field. `profile_key` is the load-bearing bit: picking an option stores
+// the descriptive answer AND puts that binding on the named lifecycle, so one question sets both
+// facts — and two bindings can share a profile while still carrying different answers.
+model BlueprintFieldOption {
+  id          Int     @id @default(autoincrement())
+  field_id    Int
+  value       String  @db.VarChar(255) // what @field.x resolves to
+  label       String  @db.VarChar(255)
+  profile_key String? @db.VarChar(64) // choosing this option puts the binding on this profile
+  sort_order  Int     @default(0)
+
+  field BlueprintField @relation(fields: [field_id], references: [id], onDelete: Cascade)
+
+  @@unique([field_id, value])
+  @@map("blueprint_field_options")
+}
+
+// A named lifecycle a bound device can follow — what it is handling decides its schedule (F11).
+//
+// Runtime content exactly like a phase name: the engine never knows what a profile *means*, only
+// that it has these phases in this order. A blueprint declares the profiles it supports; the user
+// picks one per binding of a profiled slot.
+//
+// Every blueprint has at least one profile. A blueprint that is a single lifecycle (the F10 shape)
+// simply has one, which is why phases hang off a profile rather than off the blueprint: one code
+// path serves both instead of two that must agree.
+model BlueprintProfile {
+  id           Int    @id @default(autoincrement())
+  blueprint_id Int
+  key          String @db.VarChar(64) // reconcile identity, referenced by a binding
+  label        String @db.VarChar(255)
+  sort_order   Int    @default(0)
+
+  blueprint Blueprint        @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  phases    BlueprintPhase[]
+
+  @@unique([blueprint_id, key])
+  @@map("blueprint_profiles")
+}
+
+// An ordered lifecycle step within a profile. Advancing writes the phase columns of whatever owns
+// the lifecycle — the instance, or one binding — and retunes every @phase reference at once; no
+// rule, scene or pipeline row is rewritten.
+//
+// Phase keys are unique per *profile*, not per blueprint: one key may mean a different length and
+// different targets in two profiles, and a phase_scope naming it matches whichever profile the
+// binding follows.
 model BlueprintPhase {
   id             Int     @id @default(autoincrement())
-  blueprint_id   Int
+  profile_id     Int
   key            String  @db.VarChar(64)
   name           String  @db.VarChar(255)
   ordinal        Int
-  duration_value Int?
+  // A literal ("7") OR a reference resolved against the owner's context — `@param.seedling.days`,
+  // `@field.x` (F11.13). A reference is what lets ONE lifecycle hold devices whose phases run for
+  // different lengths: two pots follow the same three phases, and the pot that needs a shorter
+  // seedling overrides that param for itself. Before this, a duration lived on the phase, the phase
+  // belongs to the lifecycle, and the only way to change one number was to duplicate the lifecycle.
+  //
+  // Text rather than Int for the same reason every other value position is text: the reference must
+  // survive to evaluation time, because that is the only moment the answer is known.
+  duration_value String? @db.VarChar(100)
   duration_unit  String? @db.VarChar(10) // seconds | minutes | hours | days | weeks | months
-  auto_advance   Boolean @default(false) // elapsed duration advances it automatically
+  // What ends this phase (F11.x). One trigger per phase; the phase owns the target, the referenced
+  // automation only supplies the *decision*.
+  //   manual    only a person advances it (start / setPhase).
+  //   schedule  the elapsed-duration cron — the old `auto_advance`. Needs duration_value/unit.
+  //   rule      the derived UserRule of `advance_ref_key` firing advances the phase.
+  //   pipeline  the derived Pipeline of `advance_ref_key` returning phase_transition.advance=true.
+  // The decider must match the lifecycle level: a phase in a profiled slot's profile is advanced by
+  // a per_device automation over that slot (⇒ that pot); a plain setup's phase by a combined one
+  // (⇒ the instance). Enforced at publish, not here.
+  advance_mode    String  @default("manual") @db.VarChar(20)
+  advance_ref_key String? @db.VarChar(64) // rule/pipeline template key, for modes rule|pipeline
+  advance_to_key  String? @db.VarChar(64) // target phase key in THIS profile; null = next by ordinal
   context_notes  String? // resolved by @phase.context_notes, e.g. into an LLM prompt
 
-  blueprint Blueprint              @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  profile   BlueprintProfile       @relation(fields: [profile_id], references: [id], onDelete: Cascade)
   targets   BlueprintPhaseTarget[]
   instances BlueprintInstance[]
+  bindings  BlueprintSlotBinding[]
 
-  @@unique([blueprint_id, key])
-  @@index([blueprint_id, ordinal])
+  @@unique([profile_id, key])
+  @@index([profile_id, ordinal])
   @@map("blueprint_phases")
 }
 
@@ -905,12 +1129,24 @@ model BlueprintPhaseTarget {
 // ─── Template entities — mirror their concrete counterparts, addressed by slot ──────────────
 
 model BlueprintSceneTemplate {
-  id           Int      @id @default(autoincrement())
-  blueprint_id Int
-  key          String   @db.VarChar(64) // reconcile identity
-  name         String   @db.VarChar(255)
-  sort_order   Int      @default(0)
-  phase_scope  String[] @default([]) // phase keys this scene is offered in; empty = all phases
+  id               Int      @id @default(autoincrement())
+  blueprint_id     Int
+  key              String   @db.VarChar(64) // reconcile identity
+  name             String   @db.VarChar(255)
+  sort_order       Int      @default(0)
+  phase_scope      String[] @default([]) // phase keys this scene is offered in; empty = all phases
+  // How this template materialises over a multi-device slot (F11):
+  //   combined   (default) one entity naming every bound device — "if any of them reports X".
+  //   per_device one entity PER bound device, each carrying blueprint_binding_id and resolving
+  //              against that binding's own phase — the only shape that can hold @phase. once the
+  //              bound devices disagree about which phase they are in.
+  // `fan_out_slot_key` names the slot driving the split; required for per_device.
+  // `fan_out_profiles` narrows WHICH of that slot's devices take part (F11.9); empty = all of
+  // them. Together the two answer "one / some / all": per_device is one automation per device,
+  // combined is one over the group, and a non-empty profile list makes either cover a subset.
+  fan_out          String   @default("combined") @db.VarChar(20)
+  fan_out_slot_key String?  @db.VarChar(64)
+  fan_out_profiles String[] @default([])
 
   blueprint Blueprint                      @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
   members   BlueprintSceneTemplateMember[]
@@ -920,13 +1156,15 @@ model BlueprintSceneTemplate {
 }
 
 model BlueprintSceneTemplateMember {
-  id             Int    @id @default(autoincrement())
-  template_id    Int
+  id            Int    @id @default(autoincrement())
+  template_id   Int
   slot_key      String @db.VarChar(64) // ← together these replace user_device_action_id
   action_name   String @db.VarChar(64) // ← the slot's sealed template entry mqtt_action_name
-  target_state  String @db.VarChar(255) // literal OR "@param.pump_speed"
-  sort_order    Int    @default(0)
-  delay_seconds Int    @default(0)
+  target_state  String  @db.VarChar(255) // literal OR "@param.pump_speed"
+  sort_order    Int     @default(0)
+  delay_seconds String? @db.VarChar(100) // literal OR a reference (F11.14)
+  // Held for this long by the DEVICE itself, then released — see user_rule_actions.duration_seconds.
+  duration_seconds String? @db.VarChar(100) // literal OR "@phase.water.seconds"
 
   template BlueprintSceneTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
 
@@ -935,7 +1173,7 @@ model BlueprintSceneTemplateMember {
 }
 
 model BlueprintRuleTemplate {
-  id                 Int     @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   blueprint_id       Int
   key                String   @db.VarChar(64) // reconcile identity
   name               String   @db.VarChar(255)
@@ -943,6 +1181,18 @@ model BlueprintRuleTemplate {
   condition_operator String   @default("AND") @db.VarChar(3)
   cooldown_seconds   Int      @default(60)
   phase_scope        String[] @default([]) // phase keys this rule is active in; empty = all phases
+  // How this template materialises over a multi-device slot (F11):
+  //   combined   (default) one entity naming every bound device — "if any of them reports X".
+  //   per_device one entity PER bound device, each carrying blueprint_binding_id and resolving
+  //              against that binding's own phase — the only shape that can hold @phase. once the
+  //              bound devices disagree about which phase they are in.
+  // `fan_out_slot_key` names the slot driving the split; required for per_device.
+  // `fan_out_profiles` narrows WHICH of that slot's devices take part (F11.9); empty = all of
+  // them. Together the two answer "one / some / all": per_device is one automation per device,
+  // combined is one over the group, and a non-empty profile list makes either cover a subset.
+  fan_out            String   @default("combined") @db.VarChar(20)
+  fan_out_slot_key   String?  @db.VarChar(64)
+  fan_out_profiles   String[] @default([])
 
   blueprint  Blueprint                        @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
   conditions BlueprintRuleTemplateCondition[]
@@ -961,8 +1211,16 @@ model BlueprintRuleTemplateCondition {
   operator        String? @db.VarChar(5)
   threshold_value String? @db.VarChar(100) // literal OR "@phase.humidity.min"
   status_value    String? @db.VarChar(20)
-  schedule_time   String? @db.VarChar(5)
+  schedule_time   String? @db.VarChar(100) // HH:MM literal OR "@phase.light.on_time" (F11.14)
   schedule_days   Int[]   @default([])
+  // A schedule is one minute a day unless a WINDOW is given, in which case it repeats:
+  // `schedule_time` opens it, `schedule_until` closes it (inclusive) and `schedule_every_minutes`
+  // is the step — "06:00 to 17:30, every 10 minutes". Both window columns null = the single-time
+  // shape every schedule had before, unchanged. How long the device then holds the state is the
+  // action's own duration_seconds, not this: this says WHEN, that says HOW LONG.
+  schedule_until    String? @db.VarChar(100)
+  schedule_every_minutes   Int?
+
 
   template BlueprintRuleTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
 
@@ -974,8 +1232,10 @@ model BlueprintRuleTemplateAction {
   template_id   Int
   slot_key      String @db.VarChar(64)
   action_name   String @db.VarChar(64)
-  target_state  String @db.VarChar(255) // literal OR "@param.pump_speed"
-  delay_seconds Int    @default(0)
+  target_state  String  @db.VarChar(255) // literal OR "@param.pump_speed"
+  delay_seconds String? @db.VarChar(100) // literal OR a reference (F11.14)
+  // Held for this long by the DEVICE itself, then released — see user_rule_actions.duration_seconds.
+  duration_seconds String? @db.VarChar(100) // literal OR "@phase.water.seconds"
 
   template BlueprintRuleTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
 
@@ -983,12 +1243,24 @@ model BlueprintRuleTemplateAction {
 }
 
 model BlueprintPipelineTemplate {
-  id           Int      @id @default(autoincrement())
-  blueprint_id Int
-  key          String   @db.VarChar(64) // reconcile identity
-  name         String   @db.VarChar(255)
-  enabled      Boolean  @default(true)
-  phase_scope  String[] @default([]) // phase keys this pipeline's triggers are live in; empty = all
+  id               Int      @id @default(autoincrement())
+  blueprint_id     Int
+  key              String   @db.VarChar(64) // reconcile identity
+  name             String   @db.VarChar(255)
+  enabled          Boolean  @default(true)
+  phase_scope      String[] @default([]) // phase keys this pipeline's triggers are live in; empty = all
+  // How this template materialises over a multi-device slot (F11):
+  //   combined   (default) one entity naming every bound device — "if any of them reports X".
+  //   per_device one entity PER bound device, each carrying blueprint_binding_id and resolving
+  //              against that binding's own phase — the only shape that can hold @phase. once the
+  //              bound devices disagree about which phase they are in.
+  // `fan_out_slot_key` names the slot driving the split; required for per_device.
+  // `fan_out_profiles` narrows WHICH of that slot's devices take part (F11.9); empty = all of
+  // them. Together the two answer "one / some / all": per_device is one automation per device,
+  // combined is one over the group, and a non-empty profile list makes either cover a subset.
+  fan_out          String   @default("combined") @db.VarChar(20)
+  fan_out_slot_key String?  @db.VarChar(64)
+  fan_out_profiles String[] @default([])
 
   blueprint Blueprint                          @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
   sensors   BlueprintPipelineTemplateSensor[]
@@ -1022,11 +1294,11 @@ model BlueprintPipelineTemplateSensor {
 }
 
 model BlueprintPipelineTemplateStage {
-  id          Int    @id @default(autoincrement())
-  template_id Int
-  ordinal     Int
-  kind        String @db.VarChar(20)
-  ml_model_id Int?
+  id                Int     @id @default(autoincrement())
+  template_id       Int
+  ordinal           Int
+  kind              String  @db.VarChar(20)
+  ml_model_id       Int?
   // Mirrors PipelineStage's typed stage columns, for the same reason.
   prompt_template   String? @db.Text
   notify            String? @db.VarChar(20)
@@ -1047,7 +1319,14 @@ model BlueprintPipelineTemplateTrigger {
   action_name      String? @db.VarChar(64)
   operator         String? @db.VarChar(5)
   threshold_value  String? @db.VarChar(100) // literal OR a reference
-  schedule_cron    String? @db.VarChar(100)
+  // A schedule trigger, in the same shape a rule condition uses (see user_rule_conditions).
+  // Replaces `schedule_cron`, which was stored, validated and NEVER evaluated — a pipeline with a
+  // schedule trigger simply never ran. One shape for both, so there is one thing to learn and one
+  // evaluator to keep correct. HH:MM literal OR a reference, resolved per run (F11.14).
+  schedule_time    String? @db.VarChar(100)
+  schedule_until    String? @db.VarChar(100)
+  schedule_every_minutes Int?
+  schedule_days     Int[]   @default([])
   min_interval_sec Int?
 
   template BlueprintPipelineTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
@@ -1083,14 +1362,15 @@ model BlueprintInstance {
   created_at        DateTime  @default(now()) @db.Timestamp(6)
   updated_at        DateTime  @default(now()) @db.Timestamp(6)
 
-  user          User                     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user          User                          @relation(fields: [user_id], references: [id], onDelete: Cascade)
   // Restrict: a blueprint with live instances must not be deletable out from under them.
-  blueprint     Blueprint                @relation(fields: [blueprint_id], references: [id], onDelete: Restrict)
-  area          Area                     @relation(fields: [area_id], references: [id], onDelete: Cascade)
-  current_phase BlueprintPhase?          @relation(fields: [current_phase_id], references: [id], onDelete: SetNull)
+  blueprint     Blueprint                     @relation(fields: [blueprint_id], references: [id], onDelete: Restrict)
+  area          Area                          @relation(fields: [area_id], references: [id], onDelete: Cascade)
+  current_phase BlueprintPhase?               @relation(fields: [current_phase_id], references: [id], onDelete: SetNull)
   bindings      BlueprintSlotBinding[]
   overrides     BlueprintParamOverride[]
   phase_state   BlueprintInstancePhaseState[]
+  field_values  BlueprintInstanceFieldValue[]
   scenes        Scene[]
   rules         UserRule[]
   pipelines     Pipeline[]
@@ -1100,20 +1380,116 @@ model BlueprintInstance {
   @@map("blueprint_instances")
 }
 
+// One device in a setup — and, when its slot is profiled, a thing with its own name, its own
+// profile, and its own place in that profile's lifecycle (F11).
+//
+// That is what lets ONE setup hold devices on independent schedules: a shared controller
+// (unprofiled, no lifecycle of its own) alongside a binding per device that walks its own phases.
+// The phase columns mirror BlueprintInstance's exactly, because they mean the same thing one level
+// down and the same timer helpers serve both.
 model BlueprintSlotBinding {
-  id             Int     @id @default(autoincrement())
-  instance_id    Int
+  id               Int       @id @default(autoincrement())
+  instance_id      Int
   // Plain string, not an FK: the binding survives the slot row being edited or replaced by a
   // later blueprint version, which is the whole point of key-based reconcile identity.
-  slot_key       String  @db.VarChar(64)
-  user_device_id Int
-  auto_bound     Boolean @default(false) // bound with no user input (exactly one candidate)
+  slot_key         String    @db.VarChar(64)
+  user_device_id   Int
+  auto_bound       Boolean   @default(false) // bound with no user input (exactly one candidate)
+  // What the user calls this one. Null falls back to the device's own name.
+  label            String?   @db.VarChar(255)
+  // Which BlueprintProfile this binding follows. Null on an unprofiled slot — a shared device has
+  // no lifecycle of its own. A key, not an FK, for the same reason slot_key is one.
+  profile_key      String?   @db.VarChar(64)
+  // Per-binding lifecycle, meaning what it means on the instance: not_started | running | stopped.
+  // A binding is live only while its setup is too, so both gates are read at evaluation time.
+  lifecycle_state  String    @default("not_started") @db.VarChar(20)
+  current_phase_id Int?
+  phase_started_at DateTime? @db.Timestamp(6)
 
-  instance    BlueprintInstance @relation(fields: [instance_id], references: [id], onDelete: Cascade)
-  user_device UserDevice        @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+  instance      BlueprintInstance               @relation(fields: [instance_id], references: [id], onDelete: Cascade)
+  user_device   UserDevice                      @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+  current_phase BlueprintPhase?                 @relation(fields: [current_phase_id], references: [id], onDelete: SetNull)
+  phase_state   BlueprintBindingPhaseState[]
+  overrides     BlueprintBindingParamOverride[]
+  field_values  BlueprintBindingFieldValue[]
+  // What a per_device template materialised for THIS device (F11.2).
+  scenes        Scene[]
+  rules         UserRule[]
+  pipelines     Pipeline[]
 
+  // A device belongs to at most ONE setup, and fills at most one slot of it. Derive checks this
+  // before it writes, but that read happens outside the transaction and nothing backed it, so two
+  // concurrent derives could bind the same board twice and leave two setups both commanding it.
+  // The constraint is the invariant; the check is only there to produce a friendly message first.
+  @@unique([user_device_id])
   @@unique([instance_id, slot_key, user_device_id])
   @@map("blueprint_slot_bindings")
+}
+
+// Time banked per phase for ONE binding — the per-binding twin of blueprint_instance_phase_state,
+// the same contract: written when the binding leaves a phase, and the live run is never in here.
+//
+// A sibling table rather than a nullable binding_id on the instance-level one: Postgres treats
+// NULLs as distinct in a unique index, so (instance_id, NULL, phase_key) would admit duplicates,
+// and Prisma's upsert needs a compound unique it can name. The same reasoning gave
+// BlueprintParamOverride.phase_key its empty-string sentinel.
+model BlueprintBindingPhaseState {
+  id              Int       @id @default(autoincrement())
+  binding_id      Int
+  phase_key       String    @db.VarChar(64)
+  accrued_seconds Int       @default(0)
+  last_exited_at  DateTime? @db.Timestamp(6)
+  updated_at      DateTime  @default(now()) @db.Timestamp(6)
+
+  binding BlueprintSlotBinding @relation(fields: [binding_id], references: [id], onDelete: Cascade)
+
+  @@unique([binding_id, phase_key])
+  @@map("blueprint_binding_phase_state")
+}
+
+// The user's tuning for ONE binding — "this device wants a different number". Beats the setup-wide
+// override, which beats the profile's phase target, which beats the blueprint default. Same shape
+// and same empty-string phase scoping as BlueprintParamOverride, one level down.
+model BlueprintBindingParamOverride {
+  id         Int    @id @default(autoincrement())
+  binding_id Int
+  param_key  String @db.VarChar(64)
+  phase_key  String @default("") @db.VarChar(64)
+  value      String @db.VarChar(100)
+
+  binding BlueprintSlotBinding @relation(fields: [binding_id], references: [id], onDelete: Cascade)
+
+  @@unique([binding_id, param_key, phase_key])
+  @@map("blueprint_binding_param_overrides")
+}
+
+// What the user answered to a setup-scoped BlueprintField (F11.6). Keyed by field *key*, like every
+// other user-owned blueprint table, so a v2 publish that recreates the field rows does not discard
+// the answer.
+model BlueprintInstanceFieldValue {
+  id          Int    @id @default(autoincrement())
+  instance_id Int
+  field_key   String @db.VarChar(64)
+  value       String @db.VarChar(500)
+
+  instance BlueprintInstance @relation(fields: [instance_id], references: [id], onDelete: Cascade)
+
+  @@unique([instance_id, field_key])
+  @@map("blueprint_instance_field_values")
+}
+
+// The same, one level down: what the user answered about ONE binding. Sibling table rather than a
+// nullable binding_id, for the reason given on BlueprintBindingPhaseState.
+model BlueprintBindingFieldValue {
+  id         Int    @id @default(autoincrement())
+  binding_id Int
+  field_key  String @db.VarChar(64)
+  value      String @db.VarChar(500)
+
+  binding BlueprintSlotBinding @relation(fields: [binding_id], references: [id], onDelete: Cascade)
+
+  @@unique([binding_id, field_key])
+  @@map("blueprint_binding_field_values")
 }
 
 // The user's own tuning. Beats the phase target and the blueprint default. Reconcile never

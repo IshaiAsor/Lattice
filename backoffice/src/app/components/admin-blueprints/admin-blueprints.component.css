@@ -423,9 +423,11 @@
      one beside it and the two boxes stop lining up. */
   align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  /* Row gap, not 0: a wrapping mat-hint sits below the box while the next field's floating
-     label rides up into its border, so merely-touching rows still read as collided text. */
-  gap: 10px 10px;
+  /* Row gap has to clear a floating label, which overhangs its field's top border by ~19px — the
+     other half of the rhythm rule above, for when a grid WRAPS and the collision is inside one
+     block rather than between two. 10px looked like a gap and still overlapped by 9. Columns stay
+     tight: side by side there is nothing to collide with. */
+  gap: 20px 10px;
 }
 .field-grid.four {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -436,14 +438,26 @@
   grid-template-columns: 2fr 1fr;
 }
 
-/* Same reason: a field following a hinted grid needs clearance — the grid's mat-hint sits below
-   its box while the next field's floating label rides up into its own border, so the two meet in
-   the gap. Measured overlap without this is 6px. Both orders need it. */
-.field-grid + .full,
-.field-grid + .field-grid,
-.full + .field-grid,
-.full + .full {
-  margin-top: 14px;
+/* Vertical rhythm between stacked blocks inside a card. Stated once, keyed on adjacency.
+ *
+ * Angular Material draws a field's floating label straddling its TOP border and its hint below the
+ * BOTTOM one, and `subscriptSizing="dynamic"` — which this form uses nearly everywhere, to stop
+ * hintless fields reserving empty subscript space — reserves room for neither. So a block that
+ * follows another block collides with it: the follower's label rides up (measured 19px) or the
+ * leader's hint hangs down (4px).
+ *
+ * This was previously a list of class pairs, and that list was wrong three times in a row — each
+ * fix added the pair that had just been noticed and missed the next one (`.mode-row`, `.ref-chips`,
+ * and every combination involving them). Keying on "something follows one of these blocks" instead
+ * of on which two, so a new block type is covered the moment it is added. Adjacent margins collapse,
+ * so a follower with its own margin is unaffected. Audited with a full-DOM overlap sweep over an
+ * everything-expanded builder: 8 collisions before, 0 after. */
+.field-grid + *,
+.inline-row + *,
+.full + *,
+.mode-row + *,
+.ref-chips + * {
+  margin-top: 20px;
 }
 
 .full {
@@ -543,6 +557,8 @@
 }
 .inline-row.wrap {
   flex-wrap: wrap;
+  /* Same reason as the grid's row gap: once it wraps, the next line's labels need the room. */
+  row-gap: 20px;
 }
 .inline-row .grow {
   flex: 1 1 160px;
@@ -555,6 +571,12 @@
 }
 .inline-row .tiny {
   flex: 0 1 100px;
+}
+
+/* A reference in place of a number needs room for "@phase.water.seconds" — wider than the numeric
+   field it replaces, but still narrow enough that the action row stays on one line. */
+.inline-row .small {
+  flex: 0 1 210px;
 }
 
 .checks {
@@ -627,6 +649,12 @@
   line-height: 1.6;
   min-width: 0;
   padding: 0 8px;
+}
+/* An answer reads differently from a tuned value: it is a fact the user stated about this device,
+   and no phase retunes it. Tinting the chip keeps the two kinds apart in a row of a dozen. */
+.ref-chip.field {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  color: var(--primary);
 }
 
 .dim {
@@ -753,4 +781,88 @@ mat-option .dim,
     position: static;
     max-height: none;
   }
+}
+
+/* ── Lifecycles (F11.5) ───────────────────────────────────────────────────────
+   The phases section edits ONE lifecycle at a time; this bar is how the author moves between
+   them. Chips rather than a select because the count per lifecycle is part of the answer. */
+.profile-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.profile-bar-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.profile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.profile-chip.active {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.profile-chip-count {
+  font-size: 11px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-add {
+  margin-left: auto;
+}
+
+.profile-head {
+  margin-bottom: 8px;
+}
+
+.profile-remove {
+  display: flex;
+  align-items: center;
+}
+
+.fan-out-choices {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Options of a select field — indented under the question they belong to. */
+.sub-block {
+  margin: 8px 0 0 12px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
+.sub-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sub-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }

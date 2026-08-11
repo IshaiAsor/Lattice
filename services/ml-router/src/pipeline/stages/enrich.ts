@@ -36,14 +36,9 @@ export async function runEnrich(
     for (const sensor of run.plan.sensors) {
       if (sensor.is_image) continue;
       const value = run.sensorOverrides[String(sensor.user_device_action_id)] ?? null;
-      if (!currentState[sensor.group_name]) currentState[sensor.group_name] = {};
-      currentState[sensor.group_name]![sensor.action_name] = value;
+      place(currentState, run.plan, sensor, value);
       if (sensor.inject_as_sensor) {
-        if (!sensorDigest[sensor.group_name]) sensorDigest[sensor.group_name] = {};
-        sensorDigest[sensor.group_name]![sensor.action_name] = {
-          value,
-          description: sensor.description,
-        };
+        place(sensorDigest, run.plan, sensor, { value, description: sensor.description });
       }
     }
     log.info({ runId: run.runId }, '[dry-run] using simulated sensor values');
@@ -60,18 +55,37 @@ export async function runEnrich(
     );
   }
 
+  // Enriched once and shared: `available_actions` keeps its flat shape (existing prompts read it),
+  // and the per-device block below partitions the same rows so a setup-wide decision can name which
+  // device's actuator it means.
+  const availableActions = await enrichActions(
+    run.plan.sensors
+      .filter((s) => s.inject_as_action)
+      .map((s) => ({
+        user_device_action_id: s.user_device_action_id,
+        description: s.description,
+        user_device_id: s.user_device_id,
+      })),
+  );
+  const devices = buildDevicesBlock(run.plan, availableActions);
+  // What the user told this setup — the blueprint's own questions (F11.6), already collapsed in
+  // precedence order. The per-device block carries each device's answers; this is the setup's, so a
+  // COMBINED pipeline (which belongs to no device) can still read what the whole setup is for.
+  const answers = run.plan.params?.fields ?? {};
   const enrichOutput: Record<string, unknown> = {
     current_state: currentState,
     sensors: sensorDigest,
+    ...(Object.keys(answers).length > 0 ? { answers } : {}),
     ...(Object.keys(expectedRanges).length > 0 ? { expected_ranges: expectedRanges } : {}),
-    available_actions: await enrichActions(
-      run.plan.sensors
-        .filter((s) => s.inject_as_action)
-        .map((s) => ({
-          user_device_action_id: s.user_device_action_id,
-          description: s.description,
-        })),
-    ),
+    // One decision for the whole setup needs the whole setup in view (F11.7).
+    ...(devices.length > 0 ? { devices } : {}),
+    available_actions: availableActions,
+    // When this pipeline is what ends its current phase (F11.x), tell the model it may do so — the
+    // prompt turns this into an optional phase_transition output, command_exec turns a yes into a
+    // BLUEPRINT_PHASE_ADVANCE. Absent for every other pipeline, so the option never appears.
+    ...(run.plan.phaseAdvance
+      ? { phase_advance: { current_phase: run.plan.phaseAdvance.currentPhaseName } }
+      : {}),
     ...(await buildImageContext(channel, run)),
   };
 
@@ -96,6 +110,40 @@ export async function runEnrich(
   log.info({ runId: run.runId, stageId: stage.dbId }, 'enrich stage complete');
 }
 
+// ─── Where a reading lands in the context (F11.7) ────────────────────────────────────────────
+//
+// Context used to be keyed `group_name → action_name → value`. That is lossy the moment a sensor
+// group covers several devices: they share both keys, so each one overwrote the last and the model
+// was shown ONE device's readings presented as the whole group — silently, with no error and no
+// log. A pipeline over six devices really did tell the model about one of them.
+//
+// The fix keeps the single-device shape byte-for-byte (every existing prompt keeps working) and
+// nests by device label only where there is more than one device to tell apart.
+
+/** True when this sensor's group covers more than one device, so its keys alone are ambiguous. */
+function groupIsMultiDevice(plan: PipelinePlan, groupName: string): boolean {
+  const devices = new Set(
+    plan.sensors.filter((s) => s.group_name === groupName).map((s) => s.user_device_id),
+  );
+  return devices.size > 1;
+}
+
+/** Write one reading into a context blob, nesting by device only when the group needs it. */
+function place(
+  target: Record<string, Record<string, unknown>>,
+  plan: PipelinePlan,
+  sensor: PipelineSensorPlan,
+  value: unknown,
+): void {
+  const group = (target[sensor.group_name] ??= {});
+  if (!groupIsMultiDevice(plan, sensor.group_name)) {
+    group[sensor.action_name] = value;
+    return;
+  }
+  const perDevice = (group[sensor.device_label] ??= {}) as Record<string, unknown>;
+  perDevice[sensor.action_name] = value;
+}
+
 // What "normal" is for each sensor, per group. Bounds have been configurable on a pipeline sensor
 // since F5 but were loaded and never used — nothing reached the model. They matter now because a
 // blueprint stores them as `@phase.level.min`, so the band the LLM judges against is exactly what
@@ -107,16 +155,84 @@ function buildExpectedRanges(plan: PipelinePlan): Record<string, Record<string, 
   const ranges: Record<string, Record<string, unknown>> = {};
   for (const sensor of plan.sensors) {
     if (sensor.is_image) continue;
-    const min = resolveBound(sensor.min_value, plan.params);
-    const max = resolveBound(sensor.max_value, plan.params);
+    // Each device's band comes from ITS OWN phase (F11.7). Two devices on different profiles are
+    // legitimately judged against different numbers at the same instant, and a shared context
+    // would quietly give both the first one's band — the exact mistake the flat keying made with
+    // the readings themselves.
+    const ctx = contextFor(plan, sensor);
+    const min = resolveBound(sensor.min_value, ctx);
+    const max = resolveBound(sensor.max_value, ctx);
     if (min === null && max === null) continue;
-    if (!ranges[sensor.group_name]) ranges[sensor.group_name] = {};
-    ranges[sensor.group_name]![sensor.action_name] = {
+    const band = {
       ...(min !== null ? { min } : {}),
       ...(max !== null ? { max } : {}),
     };
+    place(ranges, plan, sensor, band);
   }
   return ranges;
+}
+
+/** The resolution context for one sensor: its own device's, when that device has one of its own. */
+function contextFor(plan: PipelinePlan, sensor: PipelineSensorPlan): ParamContext {
+  return (
+    plan.devices.find((d) => d.user_device_id === sensor.user_device_id)?.params ?? plan.params
+  );
+}
+
+/**
+ * The bound devices, each described in its own right (F11.7).
+ *
+ * This is what lets a model make ONE decision for a whole setup instead of one per device: it sees
+ * every device, what each is doing, where each is in its own schedule, and the band each is judged
+ * against. Emitted only when the setup actually has devices on their own lifecycles — otherwise the
+ * flat context already says everything there is to say.
+ */
+function buildDevicesBlock(
+  plan: PipelinePlan,
+  availableActions: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return plan.devices.map((device) => {
+    const sensors: Record<string, unknown> = {};
+    const expected: Record<string, unknown> = {};
+    for (const sensor of plan.sensors) {
+      if (sensor.user_device_id !== device.user_device_id || sensor.is_image) continue;
+      const min = resolveBound(sensor.min_value, device.params);
+      const max = resolveBound(sensor.max_value, device.params);
+      if (min !== null || max !== null) {
+        expected[sensor.action_name] = {
+          ...(min !== null ? { min } : {}),
+          ...(max !== null ? { max } : {}),
+        };
+      }
+      sensors[sensor.action_name] = sensor.description;
+    }
+    // command_exec already addresses actions by user_device_action_id and re-checks ownership, so
+    // naming this device's own actions here is enough for a setup-wide decision to target it.
+    const actions = availableActions.filter((a) => a.user_device_id === device.user_device_id);
+    return {
+      binding_id: device.binding_id,
+      label: device.label,
+      profile: device.profile_label ?? device.profile_key,
+      state: device.effective_state,
+      ...(device.phase
+        ? {
+            phase: {
+              key: device.phase.key,
+              name: device.phase.name,
+              elapsed_seconds: device.phase.elapsed_seconds,
+              duration_seconds: device.phase.duration_seconds,
+            },
+          }
+        : {}),
+      // The user's stated facts about this one — what the blueprint's form asked (F11.6).
+      ...(Object.keys(device.params.fields ?? {}).length > 0
+        ? { answers: device.params.fields }
+        : {}),
+      ...(Object.keys(sensors).length > 0 ? { sensors } : {}),
+      ...(Object.keys(expected).length > 0 ? { expected_ranges: expected } : {}),
+      ...(actions.length > 0 ? { actions } : {}),
+    };
+  });
 }
 
 function resolveBound(value: string | null, params: ParamContext): string | null {
@@ -134,7 +250,7 @@ function resolveBound(value: string | null, params: ParamContext): string | null
 // is a trait/protocol property (OnOff is always on/off, Brightness is always 0-100), not a
 // capability one, so it's derived as the union of every trait the capability declares.
 async function enrichActions(
-  actions: { user_device_action_id: number; description: string }[],
+  actions: { user_device_action_id: number; description: string; user_device_id: number }[],
 ): Promise<Record<string, unknown>[]> {
   log.trace(
     { actionCount: actions.length },
@@ -185,9 +301,7 @@ async function buildCurrentState(
 
   const state: Record<string, Record<string, unknown>> = {};
   for (const sensor of plan.sensors) {
-    if (!state[sensor.group_name]) state[sensor.group_name] = {};
-    state[sensor.group_name]![sensor.action_name] =
-      stateById.get(sensor.user_device_action_id) ?? null;
+    place(state, plan, sensor, stateById.get(sensor.user_device_action_id) ?? null);
   }
   return state;
 }
@@ -212,6 +326,7 @@ async function buildImageContext(channel: Channel, run: Run): Promise<Record<str
     run.userId,
     imageSensor.user_device_action_id,
     env.pictureRequestTimeoutMs,
+    { kind: 'pipeline', refId: run.pipelineId, label: run.plan.name },
   );
   if (result.status === 'ok' && result.image) {
     log.info(
@@ -285,8 +400,7 @@ async function buildSensorDigest(
       },
       'sensor readings compressed',
     );
-    if (!digest[sensor.group_name]) digest[sensor.group_name] = {};
-    digest[sensor.group_name]![sensor.action_name] = compressed;
+    place(digest, plan, sensor, compressed);
   }
   return digest;
 }

@@ -20,6 +20,46 @@ export interface SlotActionResolver {
    * device order. A length below `deviceCount(slotKey)` means some bound device lacks the action.
    */
   actionIds(slotKey: string, actionName: string): number[];
+  /**
+   * The same resolver with `slotKey` narrowed to `deviceIds` — fan-out (F11.2/F11.9). One device
+   * for a per-device entity; the chosen few for a combined entity restricted to some lifecycles.
+   *
+   * Every other slot still resolves to all of its devices, which is exactly what a per-device rule
+   * needs: *this* device's own sensor, but the setup's shared actuator. Derived by re-keying the
+   * in-memory map, so fanning one template over six devices costs no extra queries.
+   *
+   * The narrowed list keeps binding order rather than the caller's, so `actionIds` stays aligned
+   * with `devicesInSlot` and a subset resolves in the same order the whole slot would.
+   */
+  scopedTo(slotKey: string, deviceIds: number[]): SlotActionResolver;
+}
+
+/**
+ * The pure half: everything above, over maps the caller already holds.
+ *
+ * Exported so the narrowing rule can be unit-tested without a database — `scopedTo` is the piece a
+ * per-device automation's whole correctness rests on, and it is not obvious from an integration
+ * test whether a device got its own action or the whole slot's.
+ */
+export function buildResolverFrom(
+  deviceIdsBySlot: Map<string, number[]>,
+  /** `${user_device_id}:${mqtt_action_name}` → user_device_action.id */
+  actionIdByDevice: Map<string, number>,
+): SlotActionResolver {
+  const devicesInSlot = (slotKey: string): number[] => deviceIdsBySlot.get(slotKey) ?? [];
+  return {
+    deviceCount: (slotKey) => devicesInSlot(slotKey).length,
+    devicesInSlot,
+    actionIds: (slotKey, actionName) =>
+      devicesInSlot(slotKey)
+        .map((deviceId) => actionIdByDevice.get(`${deviceId}:${actionName}`))
+        .filter((id): id is number => id !== undefined),
+    scopedTo: (slotKey, deviceIds) => {
+      const keep = new Set(deviceIds);
+      const narrowed = devicesInSlot(slotKey).filter((id) => keep.has(id));
+      return buildResolverFrom(new Map(deviceIdsBySlot).set(slotKey, narrowed), actionIdByDevice);
+    },
+  };
 }
 
 export async function buildSlotActionResolver(
@@ -40,25 +80,14 @@ export async function buildSlotActionResolver(
       })
     : [];
 
-  // Keyed by slot, not device: two slots may legitimately bind the same device (one controller
-  // running two halves of a setup), so each slot gets its own entry. Built in slot-device order so
-  // the fanned-out ids are stable.
-  const byKey = new Map<string, number[]>();
-  for (const [slotKey, deviceIds] of deviceIdsBySlot) {
-    for (const deviceId of deviceIds) {
-      for (const action of actions) {
-        if (action.user_device_id !== deviceId) continue;
-        const key = `${slotKey}:${action.mqtt_action_name}`;
-        const arr = byKey.get(key) ?? [];
-        arr.push(action.id);
-        byKey.set(key, arr);
-      }
-    }
+  // Keyed by (device, action) rather than (slot, action): the slot→devices map is the only thing
+  // narrowing changes, so scoping a slot to one device is a re-key of a small map instead of a
+  // second pass over the actions. Two slots binding the same device (one controller running two
+  // halves of a setup) still resolve independently, because each asks for its own device list.
+  const actionIdByDevice = new Map<string, number>();
+  for (const action of actions) {
+    actionIdByDevice.set(`${action.user_device_id}:${action.mqtt_action_name}`, action.id);
   }
 
-  return {
-    deviceCount: (slotKey) => deviceIdsBySlot.get(slotKey)?.length ?? 0,
-    devicesInSlot: (slotKey) => deviceIdsBySlot.get(slotKey) ?? [],
-    actionIds: (slotKey, actionName) => byKey.get(`${slotKey}:${actionName}`) ?? [],
-  };
+  return buildResolverFrom(deviceIdsBySlot, actionIdByDevice);
 }

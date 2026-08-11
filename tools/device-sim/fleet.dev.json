@@ -1,6 +1,6 @@
 {
   "//": "Fleet for the compose.dev.yaml device-sim service — a small mixed fleet to click around against in the backoffice. Committed (unlike the gitignored fleet.json); edit here to change what dev:up brings online.",
-  "//sealed": "The four sealed devices are the F10 blueprint fixture: two pairs, so the 'Monitored Tank Loop' blueprint can be derived twice AND its slots are genuinely ambiguous (2 candidates each) — which is what exercises the wizard's device picker. Sealed types take their config from the admin's released Sealed Template, so `capabilities`/`activateAll` are ignored for them.",
+  "//sealed": "The sealed devices are the F10/F11 blueprint fixture. Two tank managers and THREE socket boards: the pairs keep every slot genuinely ambiguous (2+ candidates), which is what exercises the wizard's device picker, and the third socket board is what lets a multi-device slot bind three devices on three different lifecycles (F11) rather than the two a pair allows. Sealed types take their config from the admin's released Sealed Template, so `capabilities`/`activateAll` are ignored for them.",
   "defaults": { "activateAll": false },
   "devices": [
     {
@@ -29,6 +29,7 @@
       "mac": "SIM-BP-TANK-B",
       "telemetryMs": 5000
     },
-    { "type": "MULTI_SOCKET_8_CH", "count": 1, "mac": "SIM-BP-SOCKETS-B" }
+    { "type": "MULTI_SOCKET_8_CH", "count": 1, "mac": "SIM-BP-SOCKETS-B" },
+    { "type": "MULTI_SOCKET_8_CH", "count": 1, "mac": "SIM-BP-SOCKETS-C" }
   ]
 }

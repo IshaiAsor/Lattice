@@ -30,23 +30,71 @@ export interface ParamContextSource {
    * read of the same row, which is what stops them drifting apart.
    */
   lifecycle?: string | null;
+  /**
+   * The binding this context describes (F11.3), when it describes one. A per-binding automation
+   * resolves against that binding's own overrides and its own place in its own profile's lifecycle —
+   * so the binding, not the instance, supplies `currentPhase` in that case.
+   */
+  binding?: {
+    /** `blueprint_binding_param_overrides` for this binding — both scopes, split here as above. */
+    overrides: { param_key: string; phase_key: string; value: string }[];
+    /** `blueprint_slot_bindings.lifecycle_state`. */
+    lifecycle?: string | null;
+  } | null;
+  /**
+   * Answers to the blueprint's declared fields (F11.6), most specific first. `binding` is what the
+   * user said about this binding, `instance` what they said about the setup, `defaults` what the field
+   * declares. Collapsed here so read-time resolution is one map lookup.
+   */
+  fields?: {
+    binding?: { field_key: string; value: string }[];
+    instance?: { field_key: string; value: string }[];
+    defaults?: { key: string; default_value: string | null }[];
+  } | null;
 }
 
 /** `phase_key` on an override row: the empty string means "in every phase". */
 export const ALL_PHASES = '';
 
+/** Split an override list into (this phase, every phase), the shape both levels need. */
+function splitOverrides(
+  rows: { param_key: string; phase_key: string; value: string }[],
+  currentKey: string | null,
+): { phaseScoped: Record<string, string>; allPhases: Record<string, string> } {
+  return {
+    // A row scoped to a phase the setup is not in contributes nothing to *this* context. It stays
+    // in the table — the user set it for later, and advancing is what brings it into effect.
+    phaseScoped: Object.fromEntries(
+      rows
+        .filter((o) => o.phase_key !== ALL_PHASES && o.phase_key === currentKey)
+        .map((o) => [o.param_key, o.value]),
+    ),
+    allPhases: Object.fromEntries(
+      rows.filter((o) => o.phase_key === ALL_PHASES).map((o) => [o.param_key, o.value]),
+    ),
+  };
+}
+
 export function buildParamContext(src: ParamContextSource): ParamContext {
   const currentKey = src.currentPhase?.key ?? null;
-  // A row scoped to a phase the instance is not in contributes nothing to *this* context. It stays
-  // in the table — the user set it for later, and advancing is what brings it into effect.
-  const scoped = src.overrides.filter((o) => o.phase_key !== ALL_PHASES);
+  const instance = splitOverrides(src.overrides, currentKey);
+  const binding = src.binding ? splitOverrides(src.binding.overrides, currentKey) : null;
+
+  // Fields collapse to one map: this binding's answer, else the setup's, else the field's default. A
+  // field with no answer anywhere is absent, so `@field.x` resolves to null rather than "".
+  const fields: Record<string, string> = {};
+  for (const d of src.fields?.defaults ?? []) {
+    if (d.default_value != null && d.default_value !== '') fields[d.key] = d.default_value;
+  }
+  for (const v of src.fields?.instance ?? []) fields[v.field_key] = v.value;
+  for (const v of src.fields?.binding ?? []) fields[v.field_key] = v.value;
+
   return {
-    phaseOverrides: Object.fromEntries(
-      scoped.filter((o) => o.phase_key === currentKey).map((o) => [o.param_key, o.value]),
-    ),
-    overrides: Object.fromEntries(
-      src.overrides.filter((o) => o.phase_key === ALL_PHASES).map((o) => [o.param_key, o.value]),
-    ),
+    ...(binding
+      ? { bindingPhaseOverrides: binding.phaseScoped, bindingOverrides: binding.allPhases }
+      : {}),
+    phaseOverrides: instance.phaseScoped,
+    overrides: instance.allPhases,
     phaseTargets: Object.fromEntries(
       (src.currentPhase?.targets ?? []).map((t) => [t.param_key, t.value]),
     ),
@@ -59,6 +107,8 @@ export function buildParamContext(src: ParamContextSource): ParamContext {
         }
       : null,
     lifecycle: src.lifecycle ?? null,
+    bindingLifecycle: src.binding ? (src.binding.lifecycle ?? null) : null,
+    fields,
   };
 }
 
@@ -75,4 +125,6 @@ export const EMPTY_PARAM_CONTEXT: ParamContext = Object.freeze({
   phase: null,
   // Not from a setup, so no setup can hold it: a hand-written rule is unaffected by F10.13.
   lifecycle: null,
+  bindingLifecycle: null,
+  fields: {},
 });

@@ -14,7 +14,17 @@ export const deriveInclude = {
     orderBy: { sort_order: 'asc' },
   },
   params: true,
-  phases: { include: { targets: true }, orderBy: { ordinal: 'asc' } },
+  // The dynamic form (F11.6) — the questions the wizard asks and, on a select, which profile each
+  // answer implies.
+  fields: {
+    orderBy: { sort_order: 'asc' },
+    include: { options: { orderBy: { sort_order: 'asc' } } },
+  },
+  // Phases hang off a profile (F11); derive needs every profile so a binding can be put on one.
+  profiles: {
+    orderBy: { sort_order: 'asc' },
+    include: { phases: { include: { targets: true }, orderBy: { ordinal: 'asc' } } },
+  },
   scenes: { include: { members: { orderBy: { sort_order: 'asc' } } } },
   rules: { include: { conditions: true, actions: true } },
   pipelines: {
@@ -46,6 +56,8 @@ export interface SlotMatch {
   required: boolean;
   min_count: number;
   max_count: number;
+  /** Each device bound here runs its own lifecycle, so the wizard must ask which profile. */
+  profiled: boolean;
   sealed_template: string;
   candidates: SlotCandidate[];
   // The devices derive would bind with no user input. Populated when the candidate set is
@@ -55,14 +67,63 @@ export interface SlotMatch {
   auto_bind: number[];
 }
 
+/** A lifecycle a profiled slot's device can be put on — what the wizard offers per device (F11). */
+export interface ProfileOption {
+  key: string;
+  label: string;
+}
+
+/**
+ * One question the wizard asks (F11.6). `scope: 'binding'` is asked once per bound device of
+ * `slot_key`; `setup` once for the whole setup.
+ *
+ * An option's `profile_key` is what lets a single question do two jobs — record what the user said
+ * *and* put that device on the matching lifecycle — so the wizard never has to ask "and which
+ * profile?" separately.
+ */
+export interface FieldPrompt {
+  key: string;
+  label: string;
+  help_text: string | null;
+  input_type: string;
+  scope: string;
+  slot_key: string | null;
+  required: boolean;
+  default_value: string | null;
+  options: { value: string; label: string; profile_key: string | null }[];
+}
+
 export interface DerivePreview {
   blueprint_id: number;
   key: string;
   name: string;
   version: number;
   slots: SlotMatch[];
+  /** The lifecycles a profiled slot's devices can be put on. Empty when the blueprint has none. */
+  profiles: ProfileOption[];
+  /** The form to render before deriving. Empty when the blueprint asks nothing. */
+  fields: FieldPrompt[];
   // Empty ⇒ every required slot can be satisfied without the user choosing anything.
   unmet: string[];
+}
+
+/** The declared form, in the shape the wizard renders. */
+export function fieldPrompts(bp: DerivableBlueprint): FieldPrompt[] {
+  return bp.fields.map((f) => ({
+    key: f.key,
+    label: f.label,
+    help_text: f.help_text,
+    input_type: f.input_type,
+    scope: f.scope,
+    slot_key: f.slot_key,
+    required: f.required,
+    default_value: f.default_value,
+    options: f.options.map((o) => ({
+      value: o.value,
+      label: o.label,
+      profile_key: o.profile_key,
+    })),
+  }));
 }
 
 // The user's sealed devices whose (type, version) each slot's sealed template covers — the same
@@ -113,6 +174,7 @@ export async function matchSlots(userId: number, bp: DerivableBlueprint): Promis
       required: slot.required,
       min_count: slot.min_count,
       max_count: slot.max_count,
+      profiled: slot.profiled,
       sealed_template: slot.sealed_template.name,
       candidates,
       auto_bind,

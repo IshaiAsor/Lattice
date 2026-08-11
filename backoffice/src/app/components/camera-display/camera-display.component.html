@@ -7,4 +7,17 @@
     <span>No image yet</span>
   </div>
   }
+  <button
+    mat-icon-button
+    class="capture-btn"
+    [disabled]="capturing() || !action().online"
+    (click)="captureNow($event)"
+    (keydown.enter)="$event.stopPropagation()"
+    [matTooltip]="action().online ? 'Capture now' : 'Device is offline'"
+    aria-label="Capture now"
+  >
+    <!-- `autorenew`, not Material Symbols' `progress_activity`: mat-icon renders the classic
+         Material Icons font, where that newer glyph does not exist and shows as an empty circle. -->
+    <mat-icon [class.spinning]="capturing()">{{ capturing() ? 'autorenew' : 'add_a_photo' }}</mat-icon>
+  </button>
 </div>

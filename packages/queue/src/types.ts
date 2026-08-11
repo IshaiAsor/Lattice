@@ -69,11 +69,26 @@ export interface DeviceHeartbeatPayload {
 // A UI client's request to change an action's state, addressed by UserDeviceAction id
 // (the only handle the UI has). digest resolves it to a device/action/version and a
 // concrete ActionDispatchPayload.
+/**
+ * Who raised a command, recorded with it in `device_commands`.
+ *
+ * `refId` is the rule/scene/pipeline row id and `label` its name at the time — the label is stored
+ * as text on purpose, so the history still reads correctly after that automation is renamed or
+ * deleted. `device` is the device acting on its own (a duration auto-off releasing, a boot restore),
+ * which is an ack with no command behind it.
+ */
+export interface CommandSource {
+  kind: 'manual' | 'rule' | 'scene' | 'pipeline' | 'phase' | 'device' | 'system';
+  refId?: number;
+  label?: string;
+}
+
 export interface ActionRequestedPayload {
   userId: string;
   actionId: number;
   value: unknown; // desired state value (e.g. "on", "23.5")
   duration?: string; // command duration hint passed through to the device
+  source?: CommandSource;
 }
 
 export interface ActionDispatchPayload {
@@ -83,6 +98,9 @@ export interface ActionDispatchPayload {
   command: unknown;
   commandId?: string; // correlates the device's ack back to the in-flight request
   firmwareVersion?: string;
+  source?: CommandSource;
+  /** The UserDeviceAction this addresses, when the publisher already knows it. */
+  actionId?: number;
 }
 
 // A device's acknowledgement that it executed (or rejected) a command. Published by the
@@ -100,15 +118,25 @@ export interface ActionResultPayload {
   timestamp: string;
 }
 
-// ml-router's request for a fresh camera frame for a pipeline's enrich stage — published
-// when the plan includes an image-flagged PipelineSensor. digest-service resolves actionId
-// to a device (same as ActionRequestedPayload), dispatches the take_picture MQTT command,
-// and arms a timeout.
+// A request for a fresh camera frame — raised by ml-router for a pipeline's enrich stage, or by
+// the api when a user asks for one from the camera card. digest-service resolves actionId to a
+// device (same as ActionRequestedPayload), dispatches the take_picture MQTT command, and arms a
+// timeout.
 export interface PictureRequestedPayload {
   userId: string;
   actionId: number;
   commandId: string;
   timeoutMs: number;
+  /** Who asked for the frame, recorded on the capture's command-history row (F18.6). */
+  source?: CommandSource;
+  /**
+   * Whether the outcome should be published as PICTURE_RESULT. The pipeline needs the frame back
+   * on the bus to enrich its context; a user-initiated capture does not — its frame reaches the
+   * browser over the socket like any other. Defaults to true, so an omitted field means "deliver".
+   * Manual captures set it false rather than pushing a few hundred KB of base64 through the
+   * broker for a consumer that will only drop it.
+   */
+  deliverResult?: boolean;
 }
 
 // digest-service's correlated response — either the captured frame (resolved via the same
@@ -196,4 +224,21 @@ export interface NotificationSendPayload {
   dedupeKey?: string;
   channels?: string[];
   context?: { area_id: number; area_name: string };
+}
+
+// A blueprint pipeline decided the current phase is complete (F11.x). Published by ml-router,
+// consumed by automation-worker — the single writer of phase columns. It advances exactly ONE
+// owner: the setup when `bindingId` is null, otherwise the one pot with that binding id. The target
+// phase is not carried — the worker reads the current phase's `advance_to_key` (null ⇒ next).
+export interface BlueprintPhaseAdvancePayload {
+  userId: string;
+  instanceId: number;
+  bindingId: number | null;
+  source: string;
+  /**
+   * The pipeline template key that decided this. The consumer re-checks that the owner's phase
+   * still names it, exactly as the rule path does — without it the decision cannot be validated on
+   * arrival, and an LLM call is long enough for the phase to have moved on in the meantime.
+   */
+  refKey: string;
 }

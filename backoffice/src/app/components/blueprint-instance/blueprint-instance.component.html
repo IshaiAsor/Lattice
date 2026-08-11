@@ -21,17 +21,6 @@
       </div>
     </div>
 
-    <!-- ── A newer blueprint version exists ────────────────────────────── -->
-    @if (instance.blueprint_version_behind) {
-      <div class="notice lattice-card">
-        <mat-icon>system_update_alt</mat-icon>
-        <span>A newer version of this blueprint is available. Your own edits are kept.</span>
-        <button mat-flat-button color="primary" (click)="reconcile()" [disabled]="busy">
-          Update
-        </button>
-      </div>
-    }
-
     <!-- ── Lifecycle ───────────────────────────────────────────────────────
          Deriving builds a setup; the user starts it, saying where in the lifecycle the real
          process already is. Until then nothing it derived acts, so the page leads with that
@@ -57,7 +46,14 @@
         <span class="lifecycle-hint">
           @if (!hasPhases) {
             @if (running) {
-              This setup has no phases — its automations are simply live.
+              <!-- Two different reasons for no phase track, and calling one the other misleads:
+                   a static setup schedules nothing, while a setup whose devices each own a
+                   schedule has plenty of phases — just none that belong to the setup itself. -->
+              @if (phaselessReason === 'devices') {
+                Each device below runs its own schedule. Pausing here holds all of them at once.
+              } @else {
+                This setup has no phases — its automations are simply live.
+              }
             } @else {
               Held. Nothing in this setup is running — including anything marked as an emergency.
             }
@@ -93,202 +89,813 @@
       </div>
     </div>
 
-    <!-- ── Phase timeline ──────────────────────────────────────────────── -->
-    @if (instance.phases.length > 0) {
-      <h2 class="section-title">Phase</h2>
-      <div class="phase-track" [class.inert]="!running">
-        @for (phase of instance.phases; track phase.id) {
-          <!-- The current step is clickable too: that is how its timer is restarted or moved. -->
-          <button
-            class="phase-step"
-            [class.current]="phase.is_current"
-            [disabled]="busy || !running"
-            (click)="setPhase(phase)"
-            [matTooltip]="
-              !running
-                ? 'Start this setup to choose a phase'
-                : phase.is_current
-                  ? 'Restart or move this phase’s timer'
-                  : 'Move to this phase'
-            "
-          >
-            <span class="phase-head">
-              <span class="phase-dot"></span>
-              <span class="phase-name">{{ phase.name }}</span>
-              @if (phase.is_current) {
-                <span class="now-chip">now</span>
-              }
-            </span>
-            <span class="phase-duration">{{ phaseDuration(phase) }}</span>
-
-            @if (showProgressBar(phase)) {
-              <span class="phase-progress">
-                <span class="phase-progress-fill" [style.width.%]="phaseProgress(phase)"></span>
-              </span>
-              <span class="phase-elapsed">{{ phaseProgressLabel(phase) }}</span>
-            }
-            @if (phaseTimerLabel(phase)) {
-              <span class="phase-timer">{{ phaseTimerLabel(phase) }}</span>
-            }
-          </button>
-        }
-      </div>
+    <!--
+      A waiting update is the one thing on the Blueprint tab worth saying before you open it, so it
+      also gets a line above the bar. It is a shortcut, not a dead end: the Update itself lives on
+      that tab, and a label announcing something you then have to hunt for is worse than no label.
+    -->
+    @if (instance.blueprint_version_behind) {
+      <button type="button" class="version-flag" (click)="activeTab = blueprintTabIndex">
+        <mat-icon class="version-flag-icon">system_update_alt</mat-icon>
+        <span class="version-flag-text">A newer version of this blueprint is available.</span>
+        <span class="version-flag-go">
+          Blueprint
+          <mat-icon>chevron_right</mat-icon>
+        </span>
+      </button>
     }
 
-    <!-- ── Parameters ──────────────────────────────────────────────────── -->
-    @if (instance.params.length > 0) {
-      <h2 class="section-title">Settings</h2>
-      <div class="param-list lattice-card">
-        @for (param of instance.params; track param.key) {
-          <div class="param-row" [class.overridden]="param.source.endsWith('override')">
-            <div class="param-text">
-              <span class="param-label">{{ param.label }}</span>
-              <span class="param-source">{{ sourceLabel(param.source) }}</span>
+    <!--
+      Tabs (2026-08-11). The page had grown four stacked sections, and the device cards — the
+      reason to open it — sat between a timeline and a settings list they had no direct relation
+      to. Each concern owns a tab now. What stays above them is what applies whichever tab you are
+      on: the setup's own state and the Pause that holds all of it.
+
+      A tab renders only when it has something in it, so a phase-less blueprint shows no Phase tab
+      and an untouched setup shows no Your edits tab, rather than an empty pane.
+    -->
+    <mat-tab-group
+      class="instance-tabs"
+      animationDuration="200ms"
+      [selectedIndex]="activeTab"
+      (selectedIndexChange)="activeTab = $event"
+    >
+      @if (hasDeviceLifecycles || sharedBindings().length > 0) {
+        <mat-tab>
+          <ng-template mat-tab-label>
+            <mat-icon class="tab-icon">developer_board</mat-icon>
+            Devices
+          </ng-template>
+
+          <!-- ── Per-device lifecycles (F11.4) ───────────────────────────── -->
+          <!--
+            The devices that run a schedule of their own. Each card carries its own phase and its
+            own tuning, so this tab needs nothing from the others: the phase chips inside a card's
+            settings panel keep a value next to the phase it applies in, which is the job the
+            old top-of-page phase track was doing for it.
+          -->
+          @if (hasDeviceLifecycles) {
+      <h2 class="section-title">
+        On their own schedule
+        <span class="section-note">{{ deviceSummary() }}</span>
+      </h2>
+      <div class="device-grid">
+        @for (device of bindings; track device.binding_id) {
+          <div class="lattice-card device-card" [class.device-idle]="device.effective_state !== 'running'">
+            <div class="device-head">
+              <span class="device-name">{{ device.label }}</span>
+              @if (device.profile_label) {
+                <span class="device-profile">{{ device.profile_label }}</span>
+              }
             </div>
 
-            @if (param.user_tunable) {
-              <mat-form-field appearance="outline" class="param-input" subscriptSizing="dynamic">
-                <input
-                  matInput
-                  [(ngModel)]="drafts[draftKey(param, null)]"
-                  (blur)="commitParam(param)"
-                  (keyup.enter)="commitParam(param)"
-                  [disabled]="busy"
-                  matTooltip="Sets this for every phase"
-                />
-                @if (param.unit) {
-                  <span matTextSuffix>{{ param.unit }}</span>
-                }
-              </mat-form-field>
-
-              <button
-                mat-icon-button
-                class="reset-param"
-                [disabled]="busy || !isPinned(param, null)"
-                (click)="clearParam(param)"
-                matTooltip="Use the blueprint's value again"
-              >
-                <mat-icon>settings_backup_restore</mat-icon>
-              </button>
-            } @else {
-              <span class="param-fixed">{{ param.value }}{{ param.unit }}</span>
-            }
-
-            <!-- Per-phase breakdown. Collapsed by default: the common case is one value for the
-                 whole lifecycle, and the grid is only interesting when it isn't. -->
-            @if (param.phases.length > 0) {
-              <button
-                mat-icon-button
-                class="expand-param"
-                (click)="toggleExpanded(param)"
-                [matTooltip]="isExpanded(param) ? 'Hide phases' : 'Set a different value per phase'"
-              >
-                <mat-icon>{{ isExpanded(param) ? 'expand_less' : 'expand_more' }}</mat-icon>
-              </button>
-              @if (!isExpanded(param) && tunedPhaseCount(param) > 0) {
-                <span
-                  class="tuned-chip"
-                  matTooltip="You set a value for {{ tunedPhaseCount(param) }} phase(s)"
-                >
-                  {{ tunedPhaseCount(param) }} tuned
-                </span>
+            @if (device.current_phase) {
+              <div class="device-phase">
+                <span class="device-phase-name">{{ device.current_phase.name }}</span>
+                <span class="device-timer">{{ bindingTimerLabel(device) }}</span>
+              </div>
+              @if (device.duration_seconds) {
+                <div class="device-bar"><span [style.width.%]="bindingProgress(device)"></span></div>
               }
+            } @else {
+              <p class="device-idle-note">
+                @if (device.effective_state === 'stopped' && device.lifecycle_state === 'running') {
+                  Held because the setup is paused.
+                } @else {
+                  Not started — say where in its schedule it is.
+                }
+              </p>
             }
-          </div>
 
-          @if (isExpanded(param)) {
-            <div class="phase-params">
-              @for (cell of param.phases; track cell.phase_key) {
-                <div class="phase-param-row" [class.current]="cell.is_current">
-                  <div class="param-text">
-                    <span class="param-label">
-                      {{ cell.phase_name }}
-                      @if (cell.is_current) {
-                        <span class="now-chip">now</span>
-                      }
+            <!--
+              A device inside a paused setup shows what IT is (running / paused), but every control
+              is disabled: resuming it would be a lie, since the setup's gate holds it either way.
+
+              Above the settings, not below them: running or paused is what you come to the card to
+              change, and the tuning list is long enough that leaving the control under it put the
+              primary action off the bottom of a phone screen.
+            -->
+            <div class="device-actions">
+              @if (device.lifecycle_state === 'running') {
+                <button
+                  mat-stroked-button
+                  [disabled]="bindingBusy !== null || instance.lifecycle_state !== 'running'"
+                  (click)="stopBinding(device)"
+                >
+                  <mat-icon>pause</mat-icon> Pause
+                </button>
+              } @else {
+                <button
+                  mat-flat-button
+                  color="primary"
+                  [disabled]="bindingBusy !== null || instance.lifecycle_state !== 'running'"
+                  (click)="startBinding(device)"
+                >
+                  <mat-icon>play_arrow</mat-icon>
+                  {{ device.lifecycle_state === 'stopped' ? 'Continue' : 'Start' }}
+                </button>
+              }
+              <button
+                mat-icon-button
+                [matMenuTriggerFor]="deviceMenu"
+                [disabled]="bindingBusy !== null || instance.lifecycle_state !== 'running'"
+                matTooltip="More"
+              >
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #deviceMenu="matMenu">
+                @for (phase of device.phases; track phase.key) {
+                  <button
+                    mat-menu-item
+                    [disabled]="device.lifecycle_state !== 'running'"
+                    (click)="setBindingPhase(device, phase.key)"
+                  >
+                    <mat-icon>{{ phase.is_current ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
+                    {{ phase.name }}
+                  </button>
+                }
+                <button mat-menu-item (click)="resetBinding(device)">
+                  <mat-icon>restart_alt</mat-icon> Reset / change schedule
+                </button>
+              </mat-menu>
+            </div>
+
+            <!--
+              What this device disagrees with the rest about (F11.3/F11.13).
+
+              The list is the resting state, not a form: every row states its value and where that
+              value came from, and only becomes an editor when you pick it. An override renders as
+              the exception it is — "35 → 28", the shared value struck through — so a pinned number
+              never has to be judged against a baseline you are expected to remember. Nothing here
+              is a `mat-form-field` until a row is open, which is why a sentence-length param label
+              can no longer collide with its unit.
+            -->
+            @if (deviceParams(device).length) {
+              <details class="device-tuning">
+                <summary>
+                  Just this one
+                  @if (overriddenParamCount(device)) {
+                    <span class="device-tuning-count">{{ overriddenParamCount(device) }}</span>
+                  }
+                </summary>
+
+                <!-- The panel's own answer before anything is opened. A bare count said something
+                     had changed but never how much of the device was still the blueprint's. -->
+                <div class="tune-summary" [class.clean]="!overriddenParamCount(device)">
+                  @if (overriddenParamCount(device)) {
+                    <span>
+                      Differs from the shared lifecycle in
+                      <b>{{ overriddenParamCount(device) }} of {{ deviceParams(device).length }}</b>
+                      settings.
                     </span>
-                    <span class="param-source">{{ sourceLabel(cell.source) }}</span>
-                  </div>
-
-                  @if (param.user_tunable) {
-                    <mat-form-field
-                      appearance="outline"
-                      class="param-input"
-                      subscriptSizing="dynamic"
-                    >
-                      <input
-                        matInput
-                        [(ngModel)]="drafts[draftKey(param, cell)]"
-                        (blur)="commitParam(param, cell)"
-                        (keyup.enter)="commitParam(param, cell)"
-                        [disabled]="busy"
-                      />
-                      @if (param.unit) {
-                        <span matTextSuffix>{{ param.unit }}</span>
-                      }
-                    </mat-form-field>
-
                     <button
-                      mat-icon-button
-                      class="reset-param"
-                      [disabled]="busy || !isPinned(param, cell)"
-                      (click)="clearParam(param, cell)"
-                      matTooltip="Use the blueprint's value for this phase again"
+                      type="button"
+                      class="tune-clear"
+                      [disabled]="bindingBusy !== null"
+                      (click)="clearAllOverrides(device)"
                     >
-                      <mat-icon>settings_backup_restore</mat-icon>
+                      Clear all
                     </button>
                   } @else {
-                    <span class="param-fixed">{{ cell.value }}{{ param.unit }}</span>
+                    <span>Matches the shared lifecycle exactly.</span>
+                  }
+                </div>
+
+                <!-- Phases narrow the list; they are not a mode a write lands in. The dot says this
+                     device pins something in that phase — which the old "Applies to" select could
+                     not show without being flipped to each phase in turn. -->
+                @if (device.phases.length) {
+                  <div class="tune-phases" role="group" aria-label="Filter by phase">
+                    <button
+                      type="button"
+                      class="tune-ph"
+                      [attr.aria-pressed]="!phaseFilter(device)"
+                      (click)="setPhaseFilter(device, '')"
+                    >
+                      All phases
+                    </button>
+                    @for (phase of device.phases; track phase.key) {
+                      <button
+                        type="button"
+                        class="tune-ph"
+                        [attr.aria-pressed]="phaseFilter(device) === phase.key"
+                        (click)="setPhaseFilter(device, phase.key)"
+                      >
+                        @if (hasOverridesIn(device, phase.key)) {
+                          <span class="tune-pip"></span>
+                        }
+                        {{ phase.name }}
+                        @if (phase.key === device.current_phase?.key) {
+                          <span class="tune-now">now</span>
+                        }
+                      </button>
+                    }
+                  </div>
+                }
+
+                @if (phaseFilter(device)) {
+                  <p class="tune-scoped">
+                    Showing what <b>{{ phaseName(device, phaseFilter(device)) }}</b> touches,
+                    resolved for that phase.
+                  </p>
+                }
+
+                <div class="tune-list">
+                  @for (param of visibleDeviceParams(device); track param.key) {
+                    <div
+                      class="tune-row"
+                      [class.is-set]="isOverridden(device, param)"
+                      [class.is-locked]="!param.user_tunable"
+                      [class.open]="isTuneParamOpen(device, param)"
+                    >
+                      <button
+                        type="button"
+                        class="tune-row-btn"
+                        [attr.aria-expanded]="isTuneParamOpen(device, param)"
+                        (click)="toggleTuneParam(device, param)"
+                      >
+                        <span class="tune-lab">
+                          @if (isDurationParam(device, param)) {
+                            <mat-icon class="tune-clock">schedule</mat-icon>
+                          }
+                          {{ param.label || param.key }}
+                        </span>
+                        <span class="tune-val">
+                          @if (showsDiff(device, param)) {
+                            <span class="tune-was">{{ baselineValue(device, param) }}</span>
+                            <span class="tune-arrow">&rarr;</span>
+                          }
+                          <span class="tune-cur">{{ resolvedValue(device, param) }}</span>
+                          @if (param.unit) {
+                            <span class="tune-unit">{{ param.unit }}</span>
+                          }
+                        </span>
+                        <span class="tune-src">{{ rowSource(device, param) }}</span>
+                        <span class="tune-meta">
+                          @if (!param.user_tunable) {
+                            <span
+                              class="param-admin-tag"
+                              matTooltip="Fixed by the blueprint — you can change it because you are an admin"
+                              >admin</span
+                            >
+                          }
+                          @if (isOverridden(device, param)) {
+                            <mat-icon class="tune-undo">settings_backup_restore</mat-icon>
+                          }
+                        </span>
+                      </button>
+
+                      @if (isTuneParamOpen(device, param)) {
+                        <div class="tune-edit">
+                          @if (!param.user_tunable) {
+                            <p class="tune-hint">
+                              The blueprint drives this. You can change it for this device because
+                              you are an admin — the owner sees it read-only.
+                            </p>
+                          }
+                          @if (isDurationParam(device, param)) {
+                            <p class="tune-hint">
+                              This is the clock for {{ durationPhaseName(device, param) }} —
+                              changing it moves when the next phase begins.
+                            </p>
+                          }
+
+                          @if (isNumericParam(device, param)) {
+                            <div class="tune-stepper">
+                              <button
+                                mat-icon-button
+                                [disabled]="bindingBusy !== null"
+                                (click)="stepParam(device, param, -1)"
+                                aria-label="Decrease"
+                              >
+                                <mat-icon>remove</mat-icon>
+                              </button>
+                              <span class="tune-num">
+                                {{ resolvedValue(device, param) }}
+                                @if (param.unit) {
+                                  <span class="u">{{ param.unit }}</span>
+                                }
+                              </span>
+                              <button
+                                mat-icon-button
+                                [disabled]="bindingBusy !== null"
+                                (click)="stepParam(device, param, 1)"
+                                aria-label="Increase"
+                              >
+                                <mat-icon>add</mat-icon>
+                              </button>
+                            </div>
+                          } @else {
+                            <!-- No param kind on the blueprint yet, so a non-numeric value still
+                                 gets a box. The label is floated and short, so nothing collides. -->
+                            <mat-form-field
+                              appearance="outline"
+                              class="tune-free"
+                              subscriptSizing="dynamic"
+                              floatLabel="always"
+                            >
+                              <mat-label>Value</mat-label>
+                              <input
+                                matInput
+                                [value]="resolvedValue(device, param)"
+                                [disabled]="bindingBusy !== null"
+                                (change)="
+                                  setDeviceOverride(
+                                    device,
+                                    param.key,
+                                    $any($event.target).value,
+                                    rowScope(device, param)
+                                  )
+                                "
+                              />
+                              @if (param.unit) {
+                                <span matTextSuffix>{{ param.unit }}</span>
+                              }
+                            </mat-form-field>
+                          }
+
+                          <p class="tune-scope-lab">Applies to</p>
+                          <div class="tune-chips">
+                            <button
+                              type="button"
+                              class="tune-chip"
+                              [attr.aria-pressed]="rowScope(device, param) === ''"
+                              (click)="setRowScope(device, param, '')"
+                            >
+                              Every phase
+                            </button>
+                            @for (phase of device.phases; track phase.key) {
+                              <button
+                                type="button"
+                                class="tune-chip"
+                                [attr.aria-pressed]="rowScope(device, param) === phase.key"
+                                (click)="setRowScope(device, param, phase.key)"
+                              >
+                                {{ phase.name }}
+                              </button>
+                            }
+                          </div>
+
+                          @if (isOverridden(device, param)) {
+                            <button
+                              type="button"
+                              class="tune-revert"
+                              [disabled]="bindingBusy !== null"
+                              (click)="revertParam(device, param)"
+                            >
+                              Go back to inheriting
+                              {{ withUnit(baselineValue(device, param), param.unit) }}
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </details>
+            }
+          </div>
+        }
+      </div>
+          }
+
+          <!-- ── Shared devices ────────────────────────────────────────────── -->
+          <!--
+            Two lists, because they are two different things. These belong to the setup and have
+            nothing of their own to show, so they read as an inventory under the ones that do.
+          -->
+          @if (sharedBindings().length > 0) {
+            <h2 class="section-title">Shared devices</h2>
+            <div class="binding-list lattice-card">
+              @for (binding of sharedBindings(); track binding.slot_key + binding.user_device_id) {
+                <div class="binding-row">
+                  <mat-icon class="binding-icon">developer_board</mat-icon>
+                  <span class="binding-label">{{ binding.label }}</span>
+                  <span class="binding-device">device #{{ binding.user_device_id }}</span>
+                  @if (binding.auto_bound) {
+                    <span class="auto-chip" matTooltip="Matched automatically">auto</span>
                   }
                 </div>
               }
             </div>
           }
-        }
-      </div>
-    }
-
-    <!-- ── Devices ─────────────────────────────────────────────────────── -->
-    <h2 class="section-title">Devices</h2>
-    <div class="binding-list lattice-card">
-      @for (binding of instance.bindings; track binding.slot_key) {
-        <div class="binding-row">
-          <mat-icon class="binding-icon">developer_board</mat-icon>
-          <span class="binding-label">{{ binding.label }}</span>
-          <span class="binding-device">device #{{ binding.user_device_id }}</span>
-          @if (binding.auto_bound) {
-            <span class="auto-chip" matTooltip="Matched automatically">auto</span>
-          }
-        </div>
+        </mat-tab>
       }
-    </div>
 
-    <!-- ── Drift ───────────────────────────────────────────────────────── -->
-    @if (driftedEntities().length > 0) {
-      <h2 class="section-title">Your edits</h2>
-      <div class="drift-list lattice-card">
-        <p class="drift-intro">These were changed by you, so blueprint updates leave them alone.</p>
-        @for (entity of driftedEntities(); track entity.kind + entity.id) {
-          <div class="drift-row">
-            <mat-icon class="drift-icon">edit</mat-icon>
-            <span class="drift-name">{{ entity.name }}</span>
-            <span class="drift-kind">{{ entity.kind }}</span>
-            <button mat-stroked-button (click)="reset(entity)" [disabled]="busy">Restore</button>
+      <!-- ── Settings ────────────────────────────────────────────────────── -->
+      <!--
+        The setup's own dials, in the language the device cards already use (2026-08-11): a list
+        that states each value and where it came from, and opens into an editor only for the row
+        you pick. As a wall of always-open fields it read as a form to fill in rather than a setup
+        to inspect, and a sentence-length label had nowhere to go but into its own unit.
+      -->
+      @if (instance.params.length > 0) {
+        <mat-tab>
+          <ng-template mat-tab-label>
+            <mat-icon class="tab-icon">tune</mat-icon>
+            Settings
+          </ng-template>
+
+          <div class="settings-pane">
+            <!-- How much of this setup is still the blueprint's, answered before anything is
+                 opened. A list of numbers alone never said. -->
+            <div class="tune-summary" [class.clean]="pinnedParamCount() === 0">
+              @if (pinnedParamCount(); as pinned) {
+                <span>
+                  You have set <b>{{ pinned }} of {{ instance.params.length }}</b> yourself.
+                </span>
+                <button
+                  type="button"
+                  class="tune-clear"
+                  [disabled]="busy"
+                  (click)="clearAllParams()"
+                >
+                  Clear all
+                </button>
+              } @else {
+                <span>Everything is on the blueprint's values.</span>
+              }
+            </div>
+
+            <!-- Phases narrow the list; they are not a mode a write lands in. The dot says you
+                 pinned something in that phase — which the old chevron could not show without
+                 being opened on every row in turn. -->
+            @if (instance.phases.length > 0) {
+              <div class="tune-phases" role="group" aria-label="Filter by phase">
+                <button
+                  type="button"
+                  class="tune-ph"
+                  [attr.aria-pressed]="!settingsPhase"
+                  (click)="setSettingsPhase('')"
+                >
+                  All phases
+                </button>
+                @for (phase of instance.phases; track phase.id) {
+                  <button
+                    type="button"
+                    class="tune-ph"
+                    [attr.aria-pressed]="settingsPhase === phase.key"
+                    (click)="setSettingsPhase(phase.key)"
+                  >
+                    @if (hasPinnedIn(phase.key)) {
+                      <span class="tune-pip"></span>
+                    }
+                    {{ phase.name }}
+                    @if (phase.is_current) {
+                      <span class="tune-now">now</span>
+                    }
+                  </button>
+                }
+              </div>
+            }
+
+            @if (settingsPhase) {
+              <p class="tune-scoped">
+                Showing what <b>{{ settingsPhaseName(settingsPhase) }}</b> touches, resolved for
+                that phase.
+              </p>
+            }
+
+            @if (visibleParams().length) {
+              <div class="tune-list">
+                @for (param of visibleParams(); track param.key) {
+                  <div
+                    class="tune-row"
+                    [class.is-set]="rowIsSet(param)"
+                    [class.is-locked]="!param.user_tunable"
+                  >
+                    <!-- Fixed means "the blueprint drives this", not "nobody may touch it": an
+                         admin can correct one live setup here instead of republishing to every
+                         setup derived from the blueprint. The owner gets the same row without the
+                         affordance, so nothing on screen offers an edit that would be refused. -->
+                    @if (canEdit(param)) {
+                      <button
+                        type="button"
+                        class="tune-row-btn"
+                        [attr.aria-expanded]="isParamOpen(param)"
+                        (click)="toggleParam(param)"
+                      >
+                        <span class="tune-lab">{{ param.label || param.key }}</span>
+                        <span class="tune-val">
+                          @if (rowShowsDiff(param)) {
+                            <span class="tune-was">{{ blueprintValue(param) }}</span>
+                            <span class="tune-arrow">&rarr;</span>
+                          }
+                          <span class="tune-cur">{{ paramRowValue(param) }}</span>
+                          @if (param.unit) {
+                            <span class="tune-unit">{{ param.unit }}</span>
+                          }
+                        </span>
+                        <span class="tune-src">{{ paramRowSource(param) }}</span>
+                        <span class="tune-meta">
+                          @if (!settingsPhase && pinnedPhaseCount(param) > 0) {
+                            <span
+                              class="tuned-chip"
+                              matTooltip="You set a value for {{
+                                pinnedPhaseCount(param)
+                              }} phase(s)"
+                            >
+                              {{ pinnedPhaseCount(param) }} phases
+                            </span>
+                          }
+                          @if (!param.user_tunable) {
+                            <span
+                              class="param-admin-tag"
+                              matTooltip="Fixed by the blueprint — you can change it because you are an admin"
+                              >admin</span
+                            >
+                          }
+                          @if (rowIsSet(param)) {
+                            <mat-icon class="tune-undo">settings_backup_restore</mat-icon>
+                          }
+                        </span>
+                      </button>
+                    } @else {
+                      <div class="tune-row-btn tune-row-static">
+                        <span class="tune-lab">{{ param.label || param.key }}</span>
+                        <span class="tune-val">
+                          <span class="tune-cur">{{ paramRowValue(param) }}</span>
+                          @if (param.unit) {
+                            <span class="tune-unit">{{ param.unit }}</span>
+                          }
+                        </span>
+                        <span class="tune-src">{{ paramRowSource(param) }}</span>
+                        <span class="tune-meta">
+                          <mat-icon class="tune-lock" matTooltip="The blueprint drives this one"
+                            >lock</mat-icon
+                          >
+                        </span>
+                      </div>
+                    }
+
+                    @if (isParamOpen(param)) {
+                      <div class="tune-edit">
+                        @if (!param.user_tunable) {
+                          <p class="tune-hint">
+                            The blueprint drives this. You can change it for this setup because you
+                            are an admin — the owner sees it read-only.
+                          </p>
+                        }
+
+                        <!-- Scope first, and every chip carries its own phase's value: picking
+                             where a change lands is the decision, and it used to mean opening a
+                             second stack of fields to find out what was there. -->
+                        @if (param.phases.length > 0) {
+                          <p class="tune-scope-lab">Applies to</p>
+                          <div class="tune-chips">
+                            <button
+                              type="button"
+                              class="tune-chip"
+                              [attr.aria-pressed]="paramScope(param) === ''"
+                              (click)="setParamScope(param, '')"
+                            >
+                              @if (param.override_value !== null) {
+                                <span class="tune-pip"></span>
+                              }
+                              Every phase
+                              <span class="tune-chip-val">{{ chipValue(param, null) }}</span>
+                            </button>
+                            @for (cell of param.phases; track cell.phase_key) {
+                              <button
+                                type="button"
+                                class="tune-chip"
+                                [attr.aria-pressed]="paramScope(param) === cell.phase_key"
+                                (click)="setParamScope(param, cell.phase_key)"
+                              >
+                                @if (cell.phase_override !== null) {
+                                  <span class="tune-pip"></span>
+                                }
+                                {{ cell.phase_name }}
+                                <span class="tune-chip-val">{{ chipValue(param, cell) }}</span>
+                              </button>
+                            }
+                          </div>
+                        }
+
+                        <!-- The control follows the shape of the value: a switch is two options, a
+                             time is a clock, a number is a stepper. A single text box for all
+                             three was what made "off" and "07:00" look like typing exercises. -->
+                        @if (isBooleanParam(param)) {
+                          <div class="tune-toggle" role="group" aria-label="Value">
+                            <button
+                              type="button"
+                              class="tune-opt"
+                              [attr.aria-pressed]="boolIsOn(param)"
+                              [disabled]="busy"
+                              (click)="setParamValue(param, boolWord(param, true))"
+                            >
+                              On
+                            </button>
+                            <button
+                              type="button"
+                              class="tune-opt"
+                              [attr.aria-pressed]="!boolIsOn(param)"
+                              [disabled]="busy"
+                              (click)="setParamValue(param, boolWord(param, false))"
+                            >
+                              Off
+                            </button>
+                          </div>
+                        } @else if (isTimeParam(param)) {
+                          <input
+                            class="tune-time"
+                            type="time"
+                            aria-label="Time"
+                            [value]="scopeValue(param)"
+                            [disabled]="busy"
+                            (change)="setParamValue(param, $any($event.target).value)"
+                          />
+                        } @else if (isNumericParamValue(param)) {
+                          <div class="tune-stepper">
+                            <button
+                              mat-icon-button
+                              [disabled]="busy"
+                              (click)="stepSettingsParam(param, -1)"
+                              aria-label="Decrease"
+                            >
+                              <mat-icon>remove</mat-icon>
+                            </button>
+                            <span class="tune-num">
+                              {{ scopeValue(param) }}
+                              @if (param.unit) {
+                                <span class="u">{{ param.unit }}</span>
+                              }
+                            </span>
+                            <button
+                              mat-icon-button
+                              [disabled]="busy"
+                              (click)="stepSettingsParam(param, 1)"
+                              aria-label="Increase"
+                            >
+                              <mat-icon>add</mat-icon>
+                            </button>
+                          </div>
+                        } @else {
+                          <mat-form-field
+                            appearance="outline"
+                            class="tune-free"
+                            subscriptSizing="dynamic"
+                            floatLabel="always"
+                          >
+                            <mat-label>Value</mat-label>
+                            <input
+                              matInput
+                              [value]="scopeValue(param)"
+                              [disabled]="busy"
+                              (change)="setParamValue(param, $any($event.target).value)"
+                            />
+                            @if (param.unit) {
+                              <span matTextSuffix>{{ param.unit }}</span>
+                            }
+                          </mat-form-field>
+                        }
+
+                        @if (scopePinned(param)) {
+                          <button
+                            type="button"
+                            class="tune-revert"
+                            [disabled]="busy"
+                            (click)="revertParamScope(param)"
+                          >
+                            Go back to inheriting
+                            {{ withUnit(scopeBaseline(param), param.unit) }}
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="tune-empty">
+                <b>{{ settingsPhaseName(settingsPhase) }}</b> changes none of this setup's settings
+                — it runs on whatever the other phases leave in place.
+              </p>
+            }
           </div>
-        }
-      </div>
-    }
+        </mat-tab>
+      }
 
-    <div class="page-actions">
-      <button mat-stroked-button class="delete-setup" (click)="remove()" [disabled]="busy">
-        <mat-icon>delete_outline</mat-icon>
-        Delete setup
-      </button>
-      <span class="spacer"></span>
-      <button mat-stroked-button (click)="reconcile()" [disabled]="busy">
-        <mat-icon>sync</mat-icon>
-        Update from blueprint
-      </button>
-    </div>
+      <!-- ── Phase timeline ────────────────────────────────────────────────── -->
+      @if (instance.phases.length > 0) {
+        <mat-tab>
+          <ng-template mat-tab-label>
+            <mat-icon class="tab-icon">timeline</mat-icon>
+            Phase
+          </ng-template>
+          <div class="phase-track" [class.inert]="!running">
+            @for (phase of instance.phases; track phase.id) {
+              <!-- The current step is clickable too: that is how its timer is restarted or moved. -->
+              <button
+                class="phase-step"
+                [class.current]="phase.is_current"
+                [disabled]="busy || !running"
+                (click)="setPhase(phase)"
+                [matTooltip]="
+                  !running
+                    ? 'Start this setup to choose a phase'
+                    : phase.is_current
+                      ? 'Restart or move this phase’s timer'
+                      : 'Move to this phase'
+                "
+              >
+                <span class="phase-head">
+                  <span class="phase-dot"></span>
+                  <span class="phase-name">{{ phase.name }}</span>
+                  @if (phase.is_current) {
+                    <span class="now-chip">now</span>
+                  }
+                </span>
+                <span class="phase-duration">{{ phaseDuration(phase) }}</span>
+
+                @if (showProgressBar(phase)) {
+                  <span class="phase-progress">
+                    <span class="phase-progress-fill" [style.width.%]="phaseProgress(phase)"></span>
+                  </span>
+                  <span class="phase-elapsed">{{ phaseProgressLabel(phase) }}</span>
+                }
+                @if (phaseTimerLabel(phase)) {
+                  <span class="phase-timer">{{ phaseTimerLabel(phase) }}</span>
+                }
+              </button>
+            }
+          </div>
+        </mat-tab>
+      }
+
+      <!-- ── Blueprint ─────────────────────────────────────────────────────
+           Everything about this setup's relationship to the blueprint it came from: what a newer
+           version would bring, what the user has changed so an update will leave it alone, and the
+           two actions that act on the setup as a whole. Kept off the working tabs because none of
+           it is part of running the setup — but the label carries a dot when an update is waiting,
+           so moving it here cannot hide it. -->
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon class="tab-icon">auto_awesome_mosaic</mat-icon>
+          Blueprint
+          @if (instance.blueprint_version_behind) {
+            <span class="tab-dot" aria-label="Update available"></span>
+          }
+        </ng-template>
+
+        <div class="blueprint-tab">
+          <div class="bp-origin lattice-card">
+            <mat-icon class="bp-origin-icon">auto_awesome_mosaic</mat-icon>
+            <div class="bp-origin-text">
+              <span class="bp-origin-name">{{ instance.blueprint.name }}</span>
+              <span class="bp-origin-sub">
+                Version {{ instance.blueprint.version }}
+                @if (instance.blueprint_version_behind) {
+                  · a newer one is available
+                } @else {
+                  · up to date
+                }
+              </span>
+            </div>
+            @if (instance.blueprint_version_behind) {
+              <button mat-flat-button color="primary" (click)="reconcile()" [disabled]="busy">
+                Update
+              </button>
+            }
+          </div>
+
+          @if (instance.blueprint_version_behind) {
+            <p class="bp-note">Updating brings the new version's structure. Your own edits are kept.</p>
+          }
+
+          <!-- ── Drift ─────────────────────────────────────────────────────── -->
+          @if (driftedEntities().length > 0) {
+            <h2 class="section-title">Your edits</h2>
+            <div class="drift-list lattice-card">
+              <p class="drift-intro">
+                These were changed by you, so blueprint updates leave them alone.
+              </p>
+              @for (entity of driftedEntities(); track entity.kind + entity.id) {
+                <div class="drift-row">
+                  <mat-icon class="drift-icon">edit</mat-icon>
+                  <span class="drift-name">{{ entity.name }}</span>
+                  <span class="drift-kind">{{ entity.kind }}</span>
+                  <button mat-stroked-button (click)="reset(entity)" [disabled]="busy">
+                    Restore
+                  </button>
+                </div>
+              }
+            </div>
+          }
+
+          <div class="page-actions">
+            <button mat-stroked-button class="delete-setup" (click)="remove()" [disabled]="busy">
+              <mat-icon>delete_outline</mat-icon>
+              Delete setup
+            </button>
+            <span class="spacer"></span>
+            <button mat-stroked-button (click)="reconcile()" [disabled]="busy">
+              <mat-icon>sync</mat-icon>
+              Update from blueprint
+            </button>
+          </div>
+        </div>
+      </mat-tab>
+    </mat-tab-group>
   </div>
 }

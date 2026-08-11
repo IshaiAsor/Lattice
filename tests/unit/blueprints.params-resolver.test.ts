@@ -320,3 +320,172 @@ describe('parameter references — per-phase overrides', () => {
     });
   });
 });
+
+// ── Per-device layers and the dynamic form (F11.3 / F11.6) ──────────────────────────────────
+//
+// One setup can hold several devices on independent schedules, so a value may now be tuned for ONE
+// of them. That adds two layers on top of the four, and they must sit *above* the setup-wide ones:
+// "this device wants something different" is more specific than "this setup does".
+//
+// Fields are the other half. They are facts the user states, not values the system tunes, so they
+// deliberately do NOT walk the layers — the only order is device answer → setup answer → default.
+
+describe('per-device overrides (F11.3)', () => {
+  const perDeviceDefaults = [{ key: 'level.min', default_value: '20' }];
+  const growPhase = {
+    key: 'grow',
+    name: 'Grow',
+    targets: [{ param_key: 'level.min', value: '40' }],
+  };
+  interface Override {
+    param_key: string;
+    phase_key: string;
+    value: string;
+  }
+
+  const ctxFor = (setup: Override[], binding: Override[] | null): ParamContext =>
+    buildParamContext({
+      overrides: setup,
+      defaults: perDeviceDefaults,
+      currentPhase: growPhase,
+      binding: binding ? { overrides: binding, lifecycle: 'running' } : null,
+    });
+
+  const setupBoth: Override[] = [
+    { param_key: 'level.min', phase_key: '', value: '50' },
+    { param_key: 'level.min', phase_key: 'grow', value: '55' },
+  ];
+
+  it("lets one device's own override beat the setup-wide one", () => {
+    const ctx = ctxFor(
+      [{ param_key: 'level.min', phase_key: '', value: '55' }],
+      [{ param_key: 'level.min', phase_key: '', value: '65' }],
+    );
+    expect(resolveParamWithSource('level.min', ctx)).toEqual({
+      value: '65',
+      source: 'binding_override',
+    });
+  });
+
+  it("lets a device's phase-scoped override beat its own all-phases one", () => {
+    const ctx = ctxFor(
+      [],
+      [
+        { param_key: 'level.min', phase_key: '', value: '65' },
+        { param_key: 'level.min', phase_key: 'grow', value: '75' },
+      ],
+    );
+    expect(resolveParamWithSource('level.min', ctx)).toEqual({
+      value: '75',
+      source: 'binding_phase_override',
+    });
+  });
+
+  it("keeps a device's phase-scoped override out of @param.", () => {
+    // `@param.` addresses the blueprint's own value for the settings a phase may not retune, and
+    // that rule has to hold one level down too — otherwise the per-device layer would be a way to
+    // smuggle a phase-scoped value into a reference that is defined as phase-free.
+    const ctx = ctxFor([], [{ param_key: 'level.min', phase_key: 'grow', value: '75' }]);
+    expect(resolveParam('@param.level.min', ctx)).toBe('20');
+    expect(resolveParam('@phase.level.min', ctx)).toBe('75');
+  });
+
+  it('resolves through all six layers in order, most specific first', () => {
+    // Peel one layer off at a time; each assertion pins which layer takes over next.
+    expect(
+      resolveParamWithSource(
+        'level.min',
+        ctxFor(setupBoth, [
+          { param_key: 'level.min', phase_key: '', value: '60' },
+          { param_key: 'level.min', phase_key: 'grow', value: '65' },
+        ]),
+      ),
+    ).toEqual({ value: '65', source: 'binding_phase_override' });
+
+    expect(
+      resolveParamWithSource(
+        'level.min',
+        ctxFor(setupBoth, [{ param_key: 'level.min', phase_key: '', value: '60' }]),
+      ),
+    ).toEqual({ value: '60', source: 'binding_override' });
+
+    expect(resolveParamWithSource('level.min', ctxFor(setupBoth, []))).toEqual({
+      value: '55',
+      source: 'phase_override',
+    });
+
+    expect(
+      resolveParamWithSource(
+        'level.min',
+        ctxFor([{ param_key: 'level.min', phase_key: '', value: '50' }], []),
+      ),
+    ).toEqual({ value: '50', source: 'override' });
+
+    expect(resolveParamWithSource('level.min', ctxFor([], []))).toEqual({
+      value: '40',
+      source: 'phase',
+    });
+  });
+
+  it('leaves a setup with no per-device context on exactly the four layers it always had', () => {
+    // The regression guard for every pre-F11 setup: absent binding layers, not empty ones.
+    const ctx = ctxFor([], null);
+    expect(ctx.bindingOverrides).toBeUndefined();
+    expect(ctx.bindingPhaseOverrides).toBeUndefined();
+    expect(resolveParamWithSource('level.min', ctx)).toEqual({ value: '40', source: 'phase' });
+  });
+});
+
+describe('field references (F11.6)', () => {
+  const ctxFor = (fields: Parameters<typeof buildParamContext>[0]['fields']): ParamContext =>
+    buildParamContext({ overrides: [], defaults: [], currentPhase: null, fields });
+
+  it('resolves a field to the answer given for this device', () => {
+    const ctx = ctxFor({
+      binding: [{ field_key: 'variant', value: 'B' }],
+      instance: [{ field_key: 'variant', value: 'A' }],
+      defaults: [{ key: 'variant', default_value: 'unset' }],
+    });
+    expect(resolveParam('@field.variant', ctx)).toBe('B');
+  });
+
+  it('falls back to the setup answer when the device was not asked', () => {
+    const ctx = ctxFor({
+      binding: [],
+      instance: [{ field_key: 'variant', value: 'A' }],
+      defaults: [{ key: 'variant', default_value: 'unset' }],
+    });
+    expect(resolveParam('@field.variant', ctx)).toBe('A');
+  });
+
+  it("falls back to the field's default when neither was answered", () => {
+    const ctx = ctxFor({ defaults: [{ key: 'variant', default_value: 'unset' }] });
+    expect(resolveParam('@field.variant', ctx)).toBe('unset');
+  });
+
+  it('resolves an unanswered field to null so the caller fails closed', () => {
+    // A declared field with no answer and no default must not resolve to "" — an empty string is a
+    // value, and a threshold or prompt built from one would look answered when it is not.
+    const ctx = ctxFor({ defaults: [{ key: 'variant', default_value: null }] });
+    expect(resolveParam('@field.variant', ctx)).toBeNull();
+    expect(resolveParam('@field.variant', EMPTY_PARAM_CONTEXT)).toBeNull();
+  });
+
+  it('rejects a reference to an undeclared field and names it', () => {
+    expect(validateParamRefs('@field.typo', ['level.min'], ['variant'])).toEqual([
+      '@field.typo references an undeclared field "typo"',
+    ]);
+  });
+
+  it('accepts a reference to a declared field', () => {
+    expect(validateParamRefs('@field.variant', [], ['variant'])).toEqual([]);
+  });
+
+  it('substitutes a field reference inside a prompt template', () => {
+    const ctx = ctxFor({ binding: [{ field_key: 'variant', value: 'B' }] });
+    expect(resolveText('This one is running @field.variant.', ctx)).toEqual({
+      text: 'This one is running B.',
+      unresolved: [],
+    });
+  });
+});

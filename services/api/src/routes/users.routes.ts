@@ -15,6 +15,17 @@ usersRouter.get('/me', async (req, res, next) => {
   }
 });
 
+// The zone this user's schedules are read against (F11.11). Their own, not an admin's — a wrong
+// timezone silently shifts every rule and pipeline they own.
+usersRouter.patch('/me/timezone', async (req, res, next) => {
+  try {
+    const { timezone } = (req.body ?? {}) as { timezone?: string | null };
+    res.json(await usersService.setTimezone(req.user!.id, timezone ?? null));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Admin user management.
 usersRouter.get('/', requireAdmin, async (_req, res, next) => {
   try {

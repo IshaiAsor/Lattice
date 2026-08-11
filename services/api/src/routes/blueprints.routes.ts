@@ -3,6 +3,7 @@ import { requireAppToken } from '../middlewares/auth.middleware';
 import { blueprintsDeriveService } from '../services/blueprints.derive.service';
 import { blueprintInstancesService } from '../services/blueprints.instances.service';
 import { blueprintsReconcileService } from '../services/blueprints.reconcile.service';
+import { blueprintBindingsService } from '../services/blueprints.bindings.service';
 
 // User-facing blueprints (F10.3/F10.4): browse what is derivable against your own fleet, preview
 // the slot matching, derive an instance, then read and tune it. Authoring lives behind
@@ -93,6 +94,137 @@ blueprintsRouter.post('/instances/:id/reset-lifecycle', async (req, res, next) =
   }
 });
 
+// ─── Per-binding lifecycles (F11) ─────────────────────────────────────────────────────────────
+//
+// A binding of a profiled slot runs a lifecycle of its own. These mirror the setup-level routes
+// above exactly, one level down, so each bound device is started, stopped, re-profiled and moved
+// between phases independently of the others and of the setup.
+
+blueprintsRouter.get('/instances/:id/bindings', async (req, res, next) => {
+  try {
+    res.json(await blueprintBindingsService.list(req.user!.id, Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Shared body parse for the three timer-bearing binding routes — same contract as the setup's. */
+function readTimer(body: unknown): { mode: 'reset' | 'resume' | 'at'; seconds: number } | string {
+  const { timer, elapsed_seconds } = (body ?? {}) as Record<string, unknown>;
+  const mode = timer ?? 'reset';
+  if (mode !== 'reset' && mode !== 'resume' && mode !== 'at')
+    return 'timer must be reset, resume or at';
+  if (mode === 'at' && !Number.isInteger(elapsed_seconds)) {
+    return 'elapsed_seconds (a whole number) is required when timer=at';
+  }
+  return { mode, seconds: mode === 'at' ? Number(elapsed_seconds) : 0 };
+}
+
+blueprintsRouter.post('/bindings/:bindingId/start', async (req, res, next) => {
+  try {
+    const { phase_key } = req.body ?? {};
+    if (phase_key !== undefined && phase_key !== null && typeof phase_key !== 'string') {
+      res.status(400).json({ error: 'phase_key must be a string' });
+      return;
+    }
+    const timer = readTimer(req.body);
+    if (typeof timer === 'string') {
+      res.status(400).json({ error: timer });
+      return;
+    }
+    res.json(
+      await blueprintBindingsService.start(
+        req.user!.id,
+        Number(req.params.bindingId),
+        phase_key ?? null,
+        timer.mode,
+        timer.seconds,
+      ),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+blueprintsRouter.post('/bindings/:bindingId/stop', async (req, res, next) => {
+  try {
+    res.json(await blueprintBindingsService.stop(req.user!.id, Number(req.params.bindingId)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// `profile_key` re-profiles: the binding goes back to not-started AND follows another lifecycle.
+blueprintsRouter.post('/bindings/:bindingId/reset', async (req, res, next) => {
+  try {
+    const { profile_key } = req.body ?? {};
+    if (profile_key !== undefined && profile_key !== null && typeof profile_key !== 'string') {
+      res.status(400).json({ error: 'profile_key must be a string' });
+      return;
+    }
+    res.json(
+      await blueprintBindingsService.reset(
+        req.user!.id,
+        Number(req.params.bindingId),
+        profile_key ?? null,
+      ),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// One device's own value for a parameter — the top of the precedence stack (F11.3), and the way to
+// make one bound device differ from its siblings without giving it a second lifecycle. Optional
+// `phase_key` scopes it to one phase of that device's own lifecycle; omitted means every phase.
+blueprintsRouter.put('/bindings/:bindingId/params/:key', async (req, res, next) => {
+  try {
+    const { value, phase_key } = req.body ?? {};
+    if (phase_key !== undefined && phase_key !== null && typeof phase_key !== 'string') {
+      res.status(400).json({ error: 'phase_key must be a string' });
+      return;
+    }
+    res.json(
+      await blueprintBindingsService.setOverride(
+        req.user!.id,
+        Number(req.params.bindingId),
+        req.params.key!,
+        value === null || value === undefined ? null : String(value),
+        phase_key ?? null,
+        req.user!.role === 'admin',
+      ),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+blueprintsRouter.put('/bindings/:bindingId/phase', async (req, res, next) => {
+  try {
+    const { phase_key } = req.body ?? {};
+    if (typeof phase_key !== 'string' || !phase_key.trim()) {
+      res.status(400).json({ error: 'phase_key is required' });
+      return;
+    }
+    const timer = readTimer(req.body);
+    if (typeof timer === 'string') {
+      res.status(400).json({ error: timer });
+      return;
+    }
+    res.json(
+      await blueprintBindingsService.setPhase(
+        req.user!.id,
+        Number(req.params.bindingId),
+        phase_key,
+        timer.mode,
+        timer.seconds,
+      ),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Manual phase change — the counterpart to automation-worker's auto-advance cron. Writes the phase
 // columns and the phase's time bank; no rule, scene or pipeline row is touched.
 //
@@ -147,6 +279,7 @@ blueprintsRouter.put('/instances/:id/params/:key', async (req, res, next) => {
         req.params.key!,
         value === null || value === undefined ? null : String(value),
         phase_key ?? null,
+        req.user!.role === 'admin',
       ),
     );
   } catch (err) {

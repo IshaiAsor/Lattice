@@ -442,13 +442,20 @@ model BlueprintParamOverride {
 
 ### 4.5 Provenance on derived entities
 
-`Scene`, `UserRule`, and `Pipeline` each gain three columns:
+`Scene`, `UserRule`, and `Pipeline` each gain four columns:
 
 ```prisma
 blueprint_instance_id Int?                       // → BlueprintInstance, SetNull
-blueprint_key         String? @db.VarChar(64)    // which template made it — reconcile identity
+blueprint_key         String? @db.VarChar(64)    // which template made it
+blueprint_binding_id  Int?                       // → BlueprintSlotBinding, SetNull (F11.2)
 user_modified         Boolean @default(false)    // user edited it ⇒ reconcile skips it
 ```
+
+**Reconcile identity is the pair `(blueprint_key, blueprint_binding_id)`** since F11.2. A
+`combined` template produces one row with a null binding — every pre-F11 derived row — while a
+`per_device` template produces one row per bound device of its fan-out slot, each carrying that
+binding's id. The pair is what lets adding a device create its automations and removing one disable
+exactly its own, leaving the rest untouched.
 
 `user_modified` is set by the ordinary update paths in `rules.service.ts` / `scenes.service.ts` /
 `pipelines.service.ts` whenever the row has a `blueprint_instance_id`. No new API needed — editing

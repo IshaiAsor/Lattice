@@ -35,6 +35,10 @@ export async function dispatchAction(
     actionName: action.mqtt_action_name,
     command: { value: state, duration: '*' },
     firmwareVersion,
+    // A person, speaking to Assistant rather than pressing the dashboard — same kind, and the
+    // label is what tells the two apart in the command history (F11.12).
+    source: { kind: 'manual', label: 'Google Home' },
+    actionId,
   };
 
   publish(ch, RK.ACTION_DISPATCH, payload);

@@ -21,6 +21,9 @@ import {
   OPERATORS,
   ParamDraft,
   PhaseDraft,
+  ProfileDraft,
+  FieldDraft,
+  FanOutDraft,
   PipelineDraft,
   PipelineSensorDraft,
   PipelineStageDraft,
@@ -35,6 +38,14 @@ import {
   newCondition,
   newParam,
   newPhase,
+  newProfile,
+  newField,
+  newFieldOption,
+  allDraftPhases,
+  phasesOf,
+  FAN_OUT_MODES,
+  FIELD_TYPES,
+  FIELD_SCOPES,
   newPipeline,
   newRule,
   newRuleAction,
@@ -49,11 +60,37 @@ import {
   uniqueSlug,
 } from './blueprint-draft.model';
 
+/**
+ * A template that is both phase-scoped and fanned out — rules, scenes and pipelines all are. Which
+ * phases it may be scoped to depends on how it fans out, so the two travel together.
+ */
+type ScopableDraft = FanOutDraft & { phase_scope: string[] };
+
 /** The string-typed keys of a draft row — what a reference may be written into. */
 type StringField<T> = { [K in keyof T]: T[K] extends string ? K : never }[keyof T];
 
-/** The builder's authoring sections, in the order they appear — the ones a problem can hide in. */
-const SECTIONS = ['details', 'slots', 'params', 'phases', 'rules', 'scenes', 'pipelines'] as const;
+/**
+ * The builder's authoring sections, in the order they appear — the ones a problem can hide in.
+ *
+ * Ordered by what depends on what, so nothing is ever picked from a list that is still empty:
+ *
+ *   questions → slots   what the setup asks the user reads first; a per-device question then
+ *                       names the slot whose devices it is asked about.
+ *   rules / pipelines → phases   a phase says what *ends* it by naming a rule or a pipeline, so
+ *                       authoring phases first means choosing a decider that does not exist yet.
+ *   scenes last         nothing points at a scene. It is on-demand, so it depends on everything
+ *                       and nothing depends on it.
+ */
+const SECTIONS = [
+  'details',
+  'fields',
+  'slots',
+  'params',
+  'rules',
+  'pipelines',
+  'phases',
+  'scenes',
+] as const;
 /** `backup` collapses the same way but is not authoring, so `openAllSections` leaves it alone. */
 export type SectionId = (typeof SECTIONS)[number] | 'backup';
 
@@ -269,7 +306,9 @@ export class AdminBlueprintsComponent implements OnInit {
     for (const row of [
       ...this.draft.slots,
       ...this.draft.params,
-      ...this.draft.phases,
+      ...this.draft.fields,
+      ...this.draft.profiles,
+      ...allDraftPhases(this.draft),
       ...this.draft.rules,
       ...this.draft.scenes,
       ...this.draft.pipelines,
@@ -343,7 +382,7 @@ export class AdminBlueprintsComponent implements OnInit {
       if (after !== before) n++;
       return after;
     };
-    for (const ph of this.draft.phases) {
+    for (const ph of allDraftPhases(this.draft)) {
       for (const t of ph.targets) {
         if (t.param_key === from) {
           t.param_key = to;
@@ -374,8 +413,24 @@ export class AdminBlueprintsComponent implements OnInit {
   // ── Keyed entities nothing references — key just follows the name, no rewrite needed ────────
   onPhaseNameChange(phase: PhaseDraft): void {
     if (this.frozen(phase)) return;
-    const others = this.draft.phases.filter((p) => p !== phase).map((p) => p.key);
+    // Unique *within its own lifecycle* (F11): two profiles legitimately declare the same phase
+    // key, and forcing a suffix would make the second one read as a different step than it is.
+    const others = this.activeProfile()
+      .phases.filter((p) => p !== phase)
+      .map((p) => p.key);
     phase.key = uniqueSlug(phase.name, others);
+  }
+
+  onProfileNameChange(profile: ProfileDraft): void {
+    if (this.frozen(profile)) return;
+    const others = this.draft.profiles.filter((pr) => pr !== profile).map((pr) => pr.key);
+    profile.key = uniqueSlug(profile.label, others);
+  }
+
+  onFieldLabelChange(field: FieldDraft): void {
+    if (this.frozen(field)) return;
+    const others = this.draft.fields.filter((f) => f !== field).map((f) => f.key);
+    field.key = uniqueSlug(field.label, others);
   }
   onRuleNameChange(rule: RuleDraft): void {
     if (this.frozen(rule)) return;
@@ -425,6 +480,19 @@ export class AdminBlueprintsComponent implements OnInit {
 
   phaseMetaRefs(): string[] {
     return ['@phase.name', '@phase.context_notes'];
+  }
+
+  /**
+   * The blueprint's own questions, as references (F11.6). A field is a *stated fact* — what the
+   * user said this device is for — so it reads very differently from a tunable param, and a prompt
+   * that can name it ("This pot is growing @field.plant") is the whole reason fields exist.
+   * Offered wherever a reference can go, so the author never has to type one and risk a typo that
+   * resolves to nothing at run time.
+   */
+  fieldRefs(): { ref: string; label: string }[] {
+    return this.draft.fields
+      .filter((f) => f.key)
+      .map((f) => ({ ref: `@field.${f.key}`, label: f.label || f.key }));
   }
 
   // ── Pipeline readings, grouped ─────────────────────────────────────────
@@ -500,83 +568,25 @@ export class AdminBlueprintsComponent implements OnInit {
     { value: 0, label: 'Sunday' },
   ];
 
-  /** Read a cron back into the picker. Anything unrecognised stays editable as raw cron. */
-  scheduleOf(trigger: PipelineTriggerDraft): {
-    mode: string;
-    every: number;
-    hour: number;
-    minute: number;
-    weekday: number;
-  } {
-    const cron = (trigger.schedule_cron ?? '').trim();
-    const fallback = { mode: 'cron', every: 1, hour: 0, minute: 0, weekday: 1 };
-    const parts = cron.split(/\s+/);
-    if (parts.length !== 5) return fallback;
-    const [min, hr, dom, mon, dow] = parts;
-    if (dom !== '*' || mon !== '*') return fallback;
-    let m: RegExpExecArray | null;
-    if (dow === '*' && hr === '*' && (m = /^\*\/(\d+)$/.exec(min))) {
-      return { ...fallback, mode: 'minutes', every: Number(m[1]) };
-    }
-    if (dow === '*' && min === '0' && (m = /^\*\/(\d+)$/.exec(hr))) {
-      return { ...fallback, mode: 'hours', every: Number(m[1]) };
-    }
-    if (dow === '*' && /^\d+$/.test(min) && /^\d+$/.test(hr)) {
-      return { ...fallback, mode: 'daily', hour: Number(hr), minute: Number(min) };
-    }
-    if (/^\d+$/.test(dow) && /^\d+$/.test(min) && /^\d+$/.test(hr)) {
-      return {
-        ...fallback,
-        mode: 'weekly',
-        hour: Number(hr),
-        minute: Number(min),
-        weekday: Number(dow),
-      };
-    }
-    return fallback;
-  }
-
-  setSchedule(
-    trigger: PipelineTriggerDraft,
-    patch: Partial<{ mode: string; every: number; hour: number; minute: number; weekday: number }>,
-  ): void {
-    const s = { ...this.scheduleOf(trigger), ...patch };
-    const every = Math.max(1, Math.floor(s.every || 1));
-    const hour = Math.min(23, Math.max(0, Math.floor(s.hour || 0)));
-    const minute = Math.min(59, Math.max(0, Math.floor(s.minute || 0)));
-    switch (s.mode) {
-      case 'minutes':
-        trigger.schedule_cron = `*/${every} * * * *`;
-        break;
-      case 'hours':
-        trigger.schedule_cron = `0 */${every} * * *`;
-        break;
-      case 'daily':
-        trigger.schedule_cron = `${minute} ${hour} * * *`;
-        break;
-      case 'weekly':
-        trigger.schedule_cron = `${minute} ${hour} * * ${s.weekday}`;
-        break;
-      // 'cron' leaves whatever is typed alone.
-    }
-  }
-
-  /** Plain-language echo of the stored cron, so the picker can be checked at a glance. */
+  /**
+   * Plain-language echo of a schedule trigger, so the fields can be checked at a glance.
+   *
+   * Replaces the cron picker: `schedule_cron` was accepted, stored and never evaluated, so a
+   * pipeline whose only trigger was a schedule never ran. The window shape a rule condition uses
+   * now serves both, which means one evaluator to keep correct and one thing for an author to
+   * learn — and the summary can be read back without decoding an expression.
+   */
   scheduleSummary(trigger: PipelineTriggerDraft): string {
-    const s = this.scheduleOf(trigger);
-    const at = `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`;
-    switch (s.mode) {
-      case 'minutes':
-        return `every ${s.every} minute(s)`;
-      case 'hours':
-        return `every ${s.every} hour(s)`;
-      case 'daily':
-        return `every day at ${at}`;
-      case 'weekly':
-        return `every ${this.weekdays.find((d) => d.value === s.weekday)?.label} at ${at}`;
-      default:
-        return trigger.schedule_cron ? `cron: ${trigger.schedule_cron}` : 'no schedule set';
+    if (!trigger.schedule_time) return 'no schedule set';
+    const days = trigger.schedule_days?.length
+      ? trigger.schedule_days
+          .map((d) => this.weekdays.find((w) => w.value === d)?.label ?? d)
+          .join(', ')
+      : 'every day';
+    if (trigger.schedule_until && trigger.schedule_every_minutes) {
+      return `${days}, ${trigger.schedule_time}–${trigger.schedule_until} every ${trigger.schedule_every_minutes} min`;
     }
+    return `${days} at ${trigger.schedule_time}`;
   }
 
   // ── Collapsing ─────────────────────────────────────────────────────────
@@ -662,6 +672,115 @@ export class AdminBlueprintsComponent implements OnInit {
     }
     parts.push(`sets ${phase.targets.length}`);
     return parts.join(' · ');
+  }
+
+  /**
+   * What the duration the author just typed actually means (F11.13).
+   *
+   * A literal is the same length for every device on this lifecycle; a param is the whole point of
+   * the feature and reads differently, so the hint says which of the two they have chosen rather
+   * than making them infer it from an `@` they may not have noticed typing.
+   */
+  durationHint(phase: PhaseDraft): string {
+    const value = (phase.duration_value ?? '').trim();
+    if (!value) return 'A number, or a param every device can answer differently.';
+    if (value.startsWith('@param.')) {
+      const key = value.slice('@param.'.length);
+      return this.paramKeys().includes(key)
+        ? `Each device uses its own ${key} — override it per device to make this phase shorter for one of them.`
+        : `⚠ "${key}" is not a param of this blueprint — publish will refuse it.`;
+    }
+    if (value.startsWith('@')) return `⚠ only @param. references may set a duration.`;
+    return Number(value) > 0
+      ? `The same ${value} ${phase.duration_unit ?? ''} for every device on this lifecycle.`
+      : `⚠ "${value}" is neither a positive number nor a param.`;
+  }
+
+  // ── Phase advance trigger (F11.x) ──────────────────────────────────────
+  //
+  // A phase declares what ends it. A rule/pipeline decider must sit at the phase's lifecycle level:
+  // once any slot is profiled every phase belongs to a bound device, so its decider must be
+  // per_device (and cover this profile); otherwise the setup owns the lifecycle and the decider is
+  // combined. The picker only offers automations that qualify, so an invalid pairing can't be built.
+
+  /** A one-word chip for a collapsed phase row — how it advances, when that isn't manual. */
+  phaseAdvanceChip(phase: PhaseDraft): string {
+    switch (phase.advance_mode) {
+      case 'schedule':
+        return 'timed';
+      case 'rule':
+        return 'rule';
+      case 'pipeline':
+        return 'AI';
+      default:
+        return '';
+    }
+  }
+
+  /** The declared rules or pipelines eligible to end a phase of the active profile. */
+  advanceDeciders(mode: string): { key: string; name: string }[] {
+    const anyProfiled = this.draft.slots.some((s) => s.profiled);
+    const profileKey = this.activeProfile().key;
+    const list: (RuleDraft | PipelineDraft)[] =
+      mode === 'rule' ? this.draft.rules : this.draft.pipelines;
+    return list
+      .filter((a) => a.key)
+      .filter((a) =>
+        anyProfiled
+          ? a.fan_out === 'per_device' &&
+            (a.fan_out_profiles.length === 0 || a.fan_out_profiles.includes(profileKey))
+          : a.fan_out !== 'per_device',
+      )
+      .map((a) => ({ key: a.key, name: a.name || a.key }));
+  }
+
+  /** Phases of the active profile a phase may point `advance_to_key` at ('' = next). */
+  otherPhases(phase: PhaseDraft): PhaseDraft[] {
+    return this.activeProfile().phases.filter((p) => p.key && p.key !== phase.key);
+  }
+
+  /**
+   * Spin up the rule/pipeline that ends this phase, pre-scoped to the phase and pre-set to the
+   * right fan-out level, then point the phase at it — so the author never leaves the phase to wire
+   * its exit, even though the automation lives in its own (earlier) section.
+   */
+  createDecider(phase: PhaseDraft): void {
+    const anyProfiled = this.draft.slots.some((s) => s.profiled);
+    const profileKey = this.activeProfile().key;
+    const name = `Advance ${phase.name || phase.key || 'phase'}`;
+    const fanSlot = () => this.profiledFanOutSlots()[0]?.key ?? this.fanOutSlots()[0]?.key ?? '';
+
+    if (phase.advance_mode === 'rule') {
+      const rule = newRule();
+      rule.name = name;
+      rule.key = uniqueSlug(name, this.draft.rules.map((r) => r.key));
+      rule.phase_scope = phase.key ? [phase.key] : [];
+      if (anyProfiled) {
+        rule.fan_out = 'per_device';
+        rule.fan_out_slot_key = fanSlot();
+        rule.fan_out_profiles = profileKey ? [profileKey] : [];
+      }
+      this.draft.rules.push(this.opened(rule));
+      phase.advance_ref_key = rule.key;
+    } else if (phase.advance_mode === 'pipeline') {
+      const pipeline = newPipeline();
+      pipeline.name = name;
+      pipeline.key = uniqueSlug(name, this.draft.pipelines.map((p) => p.key));
+      pipeline.phase_scope = phase.key ? [phase.key] : [];
+      if (anyProfiled) {
+        pipeline.fan_out = 'per_device';
+        pipeline.fan_out_slot_key = fanSlot();
+        pipeline.fan_out_profiles = profileKey ? [profileKey] : [];
+      }
+      this.draft.pipelines.push(this.opened(pipeline));
+      phase.advance_ref_key = pipeline.key;
+    } else {
+      return;
+    }
+    const section = phase.advance_mode === 'rule' ? 'Rules' : 'Pipelines';
+    this.snackBar.open(`Created "${name}" — finish it in the ${section} section below.`, 'OK', {
+      duration: 5000,
+    });
   }
 
   ruleSummary(rule: RuleDraft): string {
@@ -755,8 +874,145 @@ export class AdminBlueprintsComponent implements OnInit {
     param.user_tunable = tunable;
     if (!tunable) param.unit = '';
   }
+  // ── Lifecycles (F11.5) ──────────────────────────────────────────────────────────────────
+  //
+  // Phases hang off a profile, so the editor always edits ONE lifecycle at a time and switches
+  // between them — rather than showing every phase of every lifecycle in one list, where two steps
+  // called "Hold" belonging to different schedules would be indistinguishable.
+
+  /** Choice lists the template renders — declared once in the model, surfaced for the form. */
+  readonly fanOutModes = FAN_OUT_MODES;
+  readonly fieldTypes = FIELD_TYPES;
+  readonly fieldScopes = FIELD_SCOPES;
+
+  /** Which lifecycle the phases section is editing. */
+  activeProfileIndex = 0;
+
+  activeProfile(): ProfileDraft {
+    // A draft always has at least one (emptyDraft seeds it); clamp rather than trust the index,
+    // which can outlive the profile it pointed at when one is removed.
+    if (this.activeProfileIndex >= this.draft.profiles.length) this.activeProfileIndex = 0;
+    return this.draft.profiles[this.activeProfileIndex]!;
+  }
+
+  selectProfile(index: number): void {
+    this.activeProfileIndex = index;
+  }
+
+  addProfile(): void {
+    this.draft.profiles.push(newProfile());
+    this.activeProfileIndex = this.draft.profiles.length - 1;
+  }
+
+  /**
+   * Remove a lifecycle, and with it any `phase_scope` that named only its phases — leaving a scope
+   * pointing at a phase that no longer exists would silently make the automation inert.
+   */
+  removeProfile(index: number): void {
+    const removed = this.draft.profiles[index];
+    if (!removed || this.draft.profiles.length <= 1) return;
+    this.draft.profiles.splice(index, 1);
+    const live = new Set(allDraftPhases(this.draft).map((p) => p.key));
+    for (const item of [...this.draft.rules, ...this.draft.scenes, ...this.draft.pipelines]) {
+      item.phase_scope = item.phase_scope.filter((k) => live.has(k));
+    }
+    if (this.activeProfileIndex >= this.draft.profiles.length) {
+      this.activeProfileIndex = this.draft.profiles.length - 1;
+    }
+  }
+
+  /** True once more than one lifecycle exists — what the per-device slot toggle is for. */
+  get hasSeveralProfiles(): boolean {
+    return this.draft.profiles.length > 1;
+  }
+
   addPhase(): void {
-    this.draft.phases.push(this.opened(newPhase(this.draft.phases.length + 1)));
+    const profile = this.activeProfile();
+    profile.phases.push(this.opened(newPhase(profile.phases.length + 1)));
+  }
+
+  // ── The dynamic form (F11.6) ────────────────────────────────────────────────────────────
+  addField(): void {
+    this.draft.fields.push(this.opened(newField()));
+  }
+  addFieldOption(field: FieldDraft): void {
+    field.options.push(newFieldOption());
+  }
+  /** Slots whose devices can be asked about individually — a per-device question needs one. */
+  bindingSlots(): SlotDraft[] {
+    return this.draft.slots.filter((s) => s.key);
+  }
+
+  // ── Fan-out (F11.2) ─────────────────────────────────────────────────────────────────────
+  /** Slots a template can fan out over: only a multi-device one has anything to fan out to. */
+  fanOutSlots(): SlotDraft[] {
+    return this.draft.slots.filter((s) => s.key && s.max_count > 1);
+  }
+  /** The control is pointless — and the mode invalid — unless such a slot exists. */
+  canFanOut(): boolean {
+    return this.fanOutSlots().length > 0;
+  }
+  setFanOut(item: FanOutDraft, mode: string): void {
+    item.fan_out = mode;
+    if (mode === 'per_device' && !item.fan_out_slot_key) {
+      item.fan_out_slot_key = this.fanOutSlots()[0]?.key ?? '';
+    }
+    // A combined template keeps its slot key only while a lifecycle selection still reads it.
+    if (mode === 'combined' && item.fan_out_profiles.length === 0) item.fan_out_slot_key = '';
+  }
+
+  // ── Which devices (F11.9) ───────────────────────────────────────────────────────────────
+  //
+  // Orthogonal to the mode above: that says how many automations, this says which devices they
+  // cover. Selection is by lifecycle because that is the only handle an author has — they write
+  // the template long before the user owns a device, and a device moved onto another lifecycle
+  // then joins and leaves the right automations without anyone editing anything.
+
+  /** Multi-device slots whose devices each follow a lifecycle — the only ones selectable this way. */
+  profiledFanOutSlots(): SlotDraft[] {
+    return this.fanOutSlots().filter((s) => s.profiled);
+  }
+  /** The lifecycles offered as a filter, or none when no slot could be narrowed by one. */
+  fanOutProfileChoices(): ProfileDraft[] {
+    return this.profiledFanOutSlots().length > 0 ? this.draft.profiles : [];
+  }
+  /** Slots the "over slot" select offers — only profiled ones once a lifecycle filter is on. */
+  fanOutSlotChoices(item: FanOutDraft): SlotDraft[] {
+    return item.fan_out_profiles.length > 0 ? this.profiledFanOutSlots() : this.fanOutSlots();
+  }
+  /** The slot select is only worth showing when something actually reads the answer. */
+  fanOutNeedsSlot(item: FanOutDraft): boolean {
+    return item.fan_out === 'per_device' || item.fan_out_profiles.length > 0;
+  }
+  hasFanOutProfile(item: FanOutDraft, key: string): boolean {
+    return item.fan_out_profiles.includes(key);
+  }
+  toggleFanOutProfile(item: FanOutDraft, key: string): void {
+    const next = this.hasFanOutProfile(item, key)
+      ? item.fan_out_profiles.filter((k) => k !== key)
+      : [...item.fan_out_profiles, key];
+    item.fan_out_profiles = next;
+    // Narrowing needs a slot to narrow, and it has to be one whose devices have lifecycles at all.
+    if (next.length > 0 && !this.profiledFanOutSlots().some((s) => s.key === item.fan_out_slot_key)) {
+      item.fan_out_slot_key = this.profiledFanOutSlots()[0]?.key ?? '';
+    }
+    if (next.length === 0 && item.fan_out === 'combined') item.fan_out_slot_key = '';
+  }
+  /** "All of them" is the absence of a filter, not a value — clearing it is the whole action. */
+  setFanOutAllDevices(item: FanOutDraft): void {
+    item.fan_out_profiles = [];
+    if (item.fan_out === 'combined') item.fan_out_slot_key = '';
+  }
+  fanOutProfileHint(item: FanOutDraft, noun: string): string {
+    if (item.fan_out_profiles.length === 0) {
+      return `${noun} covers every device bound to the slot.`;
+    }
+    const labels = item.fan_out_profiles
+      .map((k) => this.draft.profiles.find((p) => p.key === k)?.label || k)
+      .join(', ');
+    return item.fan_out === 'per_device'
+      ? `${noun} exists once per device on ${labels} — devices on any other lifecycle get none.`
+      : `${noun} covers only the devices on ${labels}.`;
   }
   addPhaseTarget(phase: PhaseDraft): void {
     phase.targets.push({ param_key: '', value: '' });
@@ -809,13 +1065,40 @@ export class AdminBlueprintsComponent implements OnInit {
   }
 
   phaseLabel(key: string): string {
-    return this.draft.phases.find((p) => p.key === key)?.name || key;
+    return allDraftPhases(this.draft).find((p) => p.key === key)?.name || key;
   }
 
   // Phases an automation can be scoped to. A phase without a key can't be referenced yet (its key
   // follows its name), so it's excluded from the picker.
-  scopablePhases(): PhaseDraft[] {
-    return this.draft.phases.filter((p) => p.key);
+  // Across every lifecycle, deduped: a scope names phase KEYS, and the gate is evaluated against
+  // whichever profile the bound device follows — so a key declared in any of them is scopable.
+  /**
+   * The phases an automation could actually be in — not every phase in the blueprint.
+   *
+   * A scope is evaluated against the phase of whatever the automation belongs to, so offering keys
+   * it can never see produces a box that silently makes the automation inert. Two narrowings:
+   *
+   *  - a **combined** automation on a blueprint whose devices own the schedule has no phase of its
+   *    own at all, and publish rejects a scope on it — so there is nothing to offer;
+   *  - one limited to some lifecycles (F11.9) can only ever be in *those* lifecycles' phases.
+   */
+  scopablePhases(item?: FanOutDraft): PhaseDraft[] {
+    const profiled = this.draft.slots.some((s) => s.profiled);
+    if (!item) return allDraftPhases(this.draft);
+    if (profiled && item.fan_out !== 'per_device') return [];
+    const only = item.fan_out_profiles ?? [];
+    const profiles =
+      only.length > 0 ? this.draft.profiles.filter((p) => only.includes(p.key)) : this.draft.profiles;
+    return phasesOf(profiles);
+  }
+
+  /** Why the phase picker is empty, so a missing control is never just a missing control. */
+  scopeUnavailableReason(item: FanOutDraft): string | null {
+    if (this.scopablePhases(item).length > 0) return null;
+    if (this.draft.slots.some((s) => s.profiled) && item.fan_out !== 'per_device') {
+      return 'Each bound device is in its own phase, so this setup-wide automation has no phase to be scoped to. Switch it to one per device to scope it.';
+    }
+    return null;
   }
 
   // The "Active in phases" chip text on a collapsed automation row. Empty scope = every phase.
@@ -826,18 +1109,20 @@ export class AdminBlueprintsComponent implements OnInit {
 
   // --- "Active in phases" checkbox group -------------------------------------------------------
   // Empty scope means every phase, so with nothing set every box reads as ticked (default true).
-  isPhaseChecked(item: { phase_scope: string[] }, key: string): boolean {
+  isPhaseChecked(item: ScopableDraft, key: string): boolean {
     return item.phase_scope.length === 0 || item.phase_scope.includes(key);
   }
 
   // Keep the last remaining phase from being unticked — an automation active in no phase is
   // meaningless (disable it instead). The lone checked box is locked on.
-  isOnlyCheckedPhase(item: { phase_scope: string[] }, key: string): boolean {
+  isOnlyCheckedPhase(item: ScopableDraft, key: string): boolean {
     return item.phase_scope.length === 1 && item.phase_scope[0] === key;
   }
 
-  setPhaseChecked(item: { phase_scope: string[] }, key: string, checked: boolean): void {
-    const all = this.scopablePhases().map((p) => p.key);
+  setPhaseChecked(item: ScopableDraft, key: string, checked: boolean): void {
+    // Narrowed to the same set the checkboxes render, so unticking one key cannot silently drop
+    // the phases this automation was never offered in the first place.
+    const all = this.scopablePhases(item).map((p) => p.key);
     // Materialize the implicit "all" before toggling, then drop any keys no longer declared.
     const current = (item.phase_scope.length === 0 ? all : item.phase_scope).filter((k) =>
       all.includes(k),

@@ -42,6 +42,11 @@ export const RK = {
   // resolves prefs and fans out to the enabled channels. Device-scoped events that still need
   // owner resolution use NOTIFICATION_PUBLISH instead.
   NOTIFICATION_SEND: 'notification.send',
+  // A blueprint pipeline's model decided the current phase is complete (F11.x). ml-router publishes
+  // it; automation-worker (the single writer of phase columns) consumes it and advances the setup
+  // or the pot named by `bindingId`. Rule-driven advances stay in-process in automation-worker and
+  // never touch this key.
+  BLUEPRINT_PHASE_ADVANCE: 'blueprint.phase.advance',
 } as const;
 
 export type RoutingKey = (typeof RK)[keyof typeof RK];
@@ -65,6 +70,10 @@ export const QUEUES = {
   DEVICE_HEARTBEAT: 'q.device.heartbeat',
   ACTION_REQUESTED: 'q.action.requested',
   ACTION_DISPATCH: 'q.action.dispatch',
+  // Second consumer of action.dispatch: digest-service's command recorder. Dispatch is the single
+  // point every command passes through — the UI's, a rule's, a scene's, a pipeline's — so one queue
+  // here records all of them without each publisher having to remember to.
+  ACTION_DISPATCH_HISTORY: 'q.action.dispatch.history',
   ACTION_RESULT: 'q.action.result',
   ACTION_RESULT_GOOGLE_HOME: 'q.action.result.google-home',
   PICTURE_REQUESTED: 'q.picture.requested',
@@ -77,6 +86,7 @@ export const QUEUES = {
   SEALED_TEMPLATE_APPLIED: 'q.sealed.template.applied',
   NOTIFICATION_PUBLISH: 'q.notification.publish',
   NOTIFICATION_SEND: 'q.notification.send',
+  BLUEPRINT_PHASE_ADVANCE: 'q.blueprint.phase.advance',
   DLQ: 'q.dlq',
 } as const;
 

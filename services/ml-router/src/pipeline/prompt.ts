@@ -13,13 +13,23 @@ function buildPrompt(
   userContext: string,
   expectedRanges: unknown,
   hasImage: boolean,
+  phaseAdvance: { current_phase: string } | undefined,
 ): string {
+  // Offered only when this pipeline is what ends its current phase (F11.x). The model decides
+  // *whether* the phase is complete; where it goes next is the phase's own setting, so the prompt
+  // never asks the model to name a target.
+  const phaseRule = phaseAdvance
+    ? `\n- You may also decide the current phase ("${phaseAdvance.current_phase}") is complete and this setup should move on to its next phase. Add "phase_transition": { "advance": true, "reasoning": "<one sentence>" } ONLY when the readings or frame clearly show this phase is finished; otherwise omit it (or set "advance" to false).`
+    : '';
+  const phaseFormat = phaseAdvance
+    ? `, "phase_transition": { "advance": <true|false>, "reasoning": "<one sentence>" }`
+    : '';
   return `You are an IoT automation controller. Analyze the state and readings below and decide which device action(s) to execute.
 ${userContext ? `Context: ${userContext}\n` : ''}${hasImage ? 'A camera frame is attached to this message. Examine it directly — identify and, where relevant, count what you see — and weigh it alongside the state/readings below when deciding.\n' : ''}
 Rules:
 - You may recommend zero, one, or multiple actions — only include an action if it's actually warranted by the state/readings below.
 - Each "user_device_action_id" value MUST be picked verbatim from the available_actions list — never invent your own number.
-- The "value" you choose MUST satisfy that action's "valid_parameters" (when present): for type "enum" pick one of "values" verbatim; for type "range" pick an integer between "min" and "max" (or one of "aliases" if given, e.g. "on"/"off"). If "valid_parameters" is absent, infer a sensible value from the trait name instead.
+- The "value" you choose MUST satisfy that action's "valid_parameters" (when present): for type "enum" pick one of "values" verbatim; for type "range" pick an integer between "min" and "max" (or one of "aliases" if given, e.g. "on"/"off"). If "valid_parameters" is absent, infer a sensible value from the trait name instead.${phaseRule}
 - Respond with raw JSON only. No markdown, no code fences, no extra text.
 
 Current state (right now):
@@ -32,7 +42,7 @@ Available actions (choose one or more user_device_action_id values from this lis
 ${JSON.stringify(actions, null, 2)}
 
 Response format (raw JSON, no fences):
-{ "actions": [ { "user_device_action_id": <number from the list above>, "value": "<string>", "reasoning": "<one sentence>" } ] }`;
+{ "actions": [ { "user_device_action_id": <number from the list above>, "value": "<string>", "reasoning": "<one sentence>" } ]${phaseFormat} }`;
 }
 
 export async function prepareLlmPrompt(
@@ -53,6 +63,8 @@ export async function prepareLlmPrompt(
   // stage payload and the executor attaches it to the multimodal LLM message. Instruct the model
   // to look at it only when one is actually present.
   const hasImage = typeof run.context['image'] === 'string';
+  // Present only when enrich judged this pipeline the decider of its current phase (F11.x).
+  const phaseAdvance = run.context['phase_advance'] as { current_phase: string } | undefined;
 
   // A blueprint-derived pipeline's template embeds references mid-sentence ("This loop is in its
   // @phase.name phase. @phase.context_notes"), so the whole text is substituted rather than
@@ -89,6 +101,7 @@ export async function prepareLlmPrompt(
     userContext,
     expectedRanges,
     hasImage,
+    phaseAdvance,
   );
   run.context['prompt'] = finalPrompt;
   log.info(

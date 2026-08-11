@@ -1,0 +1,694 @@
+:host {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+}
+
+/* Taller than a scene tile since it gained the live surface. The two strips sit above one another
+   and used to share a square on purpose; they stopped sharing a job when this one began carrying
+   live readings and controls, and a strip of values squeezed into a scene tile's height reads as
+   neither. */
+.setup-tile {
+  flex: 1;
+  /* Every link in the flex chain needs this, not just the ends: a flex item defaults to
+     `min-width: auto`, so without it a long setup name makes the header wider than its wrapper
+     and the name's own ellipsis never engages. */
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+  box-sizing: border-box;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+
+/* The card body is the toggle. A setup with nothing bound has nothing to reveal, so it is not a
+   button at all rather than a button that does nothing. */
+.tile-open-zone {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  transition: transform 0.1s;
+}
+.tile-open-zone.interactive {
+  cursor: pointer;
+}
+.tile-open-zone.interactive:active {
+  transform: scale(0.995);
+}
+.tile-open-zone:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: var(--radius-card);
+}
+.setup-tile:hover {
+  background: var(--surface);
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* A parked setup stays on the dashboard — it is exactly the thing worth being reminded of — but
+   stops claiming to be live. */
+.setup-tile.idle {
+  opacity: 0.82;
+}
+
+/* A phase that has run out is waiting on a person: nothing else on this page needs them. Same
+   treatment the stat cards already use for a warning. */
+.setup-tile.attention {
+  border-color: rgba(251, 146, 60, 0.45);
+}
+
+/* Expanded, the tile is a panel rather than a tile: it stops being a fixed square so the action
+   cards inside can lay out on their own terms. */
+.setup-tile.is-expanded {
+  height: auto;
+}
+/* Still the toggle when open — clicking the band collapses it again. */
+.setup-tile.is-expanded .tile-open-zone {
+  flex: none;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+.tile-header {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 9px 6px 8px 11px;
+  gap: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tile-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.setup-tile.idle .tile-icon {
+  color: var(--text-dim);
+}
+
+.tile-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.card-menu-btn {
+  width: 28px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  flex-shrink: 0;
+}
+.card-menu-btn mat-icon {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+/* ── Body ────────────────────────────────────────────────────────────── */
+.tile-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 9px 11px 8px;
+  /* The tile is a fixed square and the strip's content is the user's own names, which have no
+     length limit. Clipping here is what keeps a long one off the footer rather than over it. */
+  overflow: hidden;
+}
+/* Expanded the card is full-width and sizes to its content, so the lifecycle sits beside the rest
+   rather than stacking a band of mostly-empty rail across the page — and nothing needs clipping. */
+.setup-tile.is-expanded .tile-body {
+  overflow: visible;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 22px;
+}
+/* Expanded, the lifecycle is a band across the top of the panel rather than a column: the strip it
+   used to sit beside is gone (the panel below says all of it), so a fixed 280px block would just
+   reserve the rest of the row for nothing. The rails get the width they never have in a tile, and
+   with it the device labels they normally have to truncate to 46px. */
+.setup-tile.is-expanded .tile-lifecycle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+}
+.setup-tile.is-expanded .tile-rails {
+  flex: 1;
+  min-width: 0;
+  max-width: 640px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+}
+.setup-tile.is-expanded .tile-rail-row {
+  grid-template-columns: 7px 160px 1fr;
+}
+
+.tile-lifecycle {
+  min-width: 0;
+}
+
+.tile-lead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+}
+
+/* A setup with no lifecycle and nothing live is one line of text, which centres rather than
+   clinging to the top of a tile that is now tall enough for the gap to read as a mistake. */
+.tile-body:not(:has(.tile-rails)):not(:has(.tile-live)) .tile-lifecycle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.tile-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tile-phase {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The line most likely to overrun: it carries a clock and the name of whose clock it is. */
+.tile-timer {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Small on purpose: on a dashboard the phase NAME is what a person recognises, not the fraction. */
+.tile-ring {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--primary) calc(var(--pct) * 1%), var(--border) 0);
+}
+.setup-tile.idle .tile-ring {
+  background: conic-gradient(var(--text-muted) calc(var(--pct) * 1%), var(--border) 0);
+}
+/* The hole, painted rather than transparent: the tile behind it is translucent, so a see-through
+   middle shows the ring's own gradient through the blur. */
+.tile-ring::after {
+  content: '';
+  position: absolute;
+  inset: 3.5px;
+  border-radius: 50%;
+  background: var(--bg-solid);
+}
+.tile-ring b {
+  position: relative;
+  z-index: 1;
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* ── Rails ───────────────────────────────────────────────────────────── */
+.tile-rails {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tile-rail-row {
+  display: grid;
+  grid-template-columns: 7px 46px 1fr;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+}
+/* A setup with a lifecycle of its own has one rail and no device to name, so the label column
+   would otherwise hold 46px of nothing. */
+.tile-rail-row:not(:has(.rail-label)) {
+  grid-template-columns: 7px 1fr;
+}
+
+.rail-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+.rail-dot.running {
+  background: var(--online);
+  box-shadow: 0 0 0 2.5px var(--online-glow);
+}
+.rail-dot.stopped {
+  background: var(--text-muted);
+}
+
+.rail-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phase-rail {
+  display: flex;
+  gap: 2px;
+  height: 4px;
+  min-width: 0;
+}
+
+.rail-seg {
+  position: relative;
+  min-width: 6px;
+  border-radius: 2px;
+  background: var(--border);
+}
+/* A 4px bar is a hard thing to point at, and the rail cannot spare the height to be thicker in a
+   tile this size. So the *hit* area is taller than the mark: the tooltip naming the phase is
+   reachable without the rail growing a pixel. Kept short enough not to reach the row below. */
+.rail-seg::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -3px;
+  bottom: -3px;
+}
+.rail-seg > i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: width 0.3s linear;
+}
+.rail-seg.spent > i {
+  background: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+.tile-rail-row.dim .rail-seg > i {
+  background: var(--text-muted);
+}
+.tile-rail-row.dim .rail-seg.spent > i {
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+
+.rail-more {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  padding-top: 3px;
+}
+
+/* ── Live strip ──────────────────────────────────────────────────────── */
+/* The readings and controls the setup owns, at the density a tile can afford. Values only — the
+   widgets that change them are in the panel, because a dial small enough to fit here is a dial
+   too small to aim at. */
+.tile-live {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+  /* Takes the room the lifecycle leaves and clips inside itself, so a strip that does not fit
+     loses its last row rather than pushing the whole body past the footer. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.live-head {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+
+.live-label {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.live-ago {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.live-pills {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.live-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.pill-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.pill-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.pill-value {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pill-value u {
+  text-decoration: none;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+.pill-key {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A device that has gone quiet is the one thing in this strip a person can act on. */
+.live-pill.stale {
+  border-style: dashed;
+}
+.live-pill.stale .pill-icon,
+.live-pill.stale .pill-value {
+  color: var(--text-muted);
+}
+
+/* Two rows at most: the strip's whole budget between the rails and the footer. A chip whose label
+   carries its binding name fills a row on its own, and the header already says how many are not
+   shown, so clipping a third row loses nothing a person was told to expect. */
+.live-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+  max-height: 53px;
+  overflow: hidden;
+}
+
+.live-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 4px 6px;
+  border-radius: 99px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chip-icon {
+  font-size: 13px;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.chip-state {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.live-chip.on {
+  background: color-mix(in srgb, var(--primary) 13%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.live-chip.stale {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.live-chip.more {
+  background: transparent;
+  border-style: dashed;
+  color: var(--text-dim);
+}
+
+/* ── Expanded panel ──────────────────────────────────────────────────── */
+.tile-panel {
+  padding: 4px 11px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.panel-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 2px;
+  padding: 0 9px;
+}
+
+.group-title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.group-count {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
+.group-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.group-note {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The same slot the dashboard grid gives an action card, so a card reads identically in both. */
+.panel-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* A slot, not a styled element: an action card is `flex: 1` on its own host so that it fills
+   whatever its owner lays out — set directly on the element it would stretch across the row. */
+.panel-slot {
+  position: relative;
+  display: flex;
+  width: 216px;
+  height: 188px;
+  margin: 9px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+}
+
+.panel-empty {
+  margin: 14px 9px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+.tile-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 6px 11px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.tile-footer .footer-text,
+.tile-footer .stale-note,
+.tile-footer .due {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-footer .due {
+  color: var(--warning);
+  font-weight: 600;
+}
+.tile-footer .stale-note {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.expand-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 3px 4px 3px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+}
+.expand-btn:hover {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.expand-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.expand-btn mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+/* Tablet: the action cards inside the panel take the grid's tablet slot. */
+@media (max-width: 1024px) {
+  .panel-slot {
+    width: 186px;
+    height: 178px;
+    margin: 8px;
+  }
+  .setup-tile.is-expanded .tile-lifecycle {
+    width: 240px;
+  }
+}
+
+/* Phone: two per row (see the dashboard's wrapper). The device labels go, and the strip drops to
+   a single column of two readings — the ring, the phase, the clock, one rail per device and the
+   two readings that fit are the point of the tile. */
+@media (max-width: 599px) {
+  .tile-header {
+    padding: 8px 4px 7px 10px;
+  }
+  .tile-body {
+    padding: 7px 10px 6px;
+  }
+  .tile-rails {
+    margin-top: 6px;
+    padding-top: 5px;
+  }
+  .tile-rail-row {
+    grid-template-columns: 7px 1fr;
+  }
+  .rail-label {
+    display: none;
+  }
+  .live-pills {
+    grid-template-columns: 1fr;
+  }
+  .live-pill:nth-child(n + 3) {
+    display: none;
+  }
+  /* Two per row at this width leaves the strip one row: the readings, which are the values a
+     glance is for. The chips go deliberately rather than being clipped by the body — the header's
+     total still says how many controls the setup has, and Expand still reaches them. */
+  .live-chips {
+    display: none;
+  }
+  /* Expanded on a phone the lifecycle cannot sit beside anything — stack it again. */
+  .setup-tile.is-expanded .tile-body {
+    flex-direction: column;
+    gap: 0;
+  }
+  .setup-tile.is-expanded .tile-lifecycle {
+    width: auto;
+  }
+  .panel-slot {
+    width: calc(50% - 12px);
+    height: 200px;
+    margin: 6px;
+  }
+}

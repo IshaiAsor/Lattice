@@ -332,8 +332,8 @@
 
   .right-panel {
     flex: 1;
+    /* Breathing room only — the shell (.app-main) already reserves the bottom bar. */
     padding: 12px;
-    padding-bottom: calc(var(--bottom-bar-height) + 12px);
   }
 
   .action-grid {

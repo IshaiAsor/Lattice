@@ -95,8 +95,20 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - keeps a phase-scoped row out of @param., which addresses the blueprint value
 - ignores a row scoped to a phase the instance is not in, including when it has none
 - reports the layer it used, so the instance page cannot mislabel a value
+- lets one device's own override beat the setup-wide one
+- lets a device's phase-scoped override beat its own all-phases one
+- keeps a device's phase-scoped override out of @param.
+- resolves through all six layers in order, most specific first
+- leaves a setup with no per-device context on exactly the four layers it always had
+- resolves a field to the answer given for this device
+- falls back to the setup answer when the device was not asked
+- falls back to the field's default when neither was answered
+- resolves an unanswered field to null so the caller fails closed
+- rejects a reference to an undeclared field and names it
+- accepts a reference to a declared field
+- substitutes a field reference inside a prompt template
 
-### Blueprints — `blueprints.phase-schedule.test.ts` ✅ (F10.4 phase auto-advance + F10.12 time bank)
+### Blueprints — `blueprints.phase-schedule.test.ts` ✅ (F10.4 phase auto-advance + F10.12 time bank + F11.x advance target)
 
 - converts each supported unit to seconds
 - returns null for an unknown unit rather than guessing one
@@ -104,7 +116,7 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - is due once the full duration has elapsed
 - is due when the duration is overshot, so a downtime gap still advances
 - is not due one second early
-- is never due for a phase that did not opt in to auto-advance
+- is never due for a phase not on a schedule (its advance_mode is not "schedule")
 - is never due for the last phase — a terminal phase is a resting state, not an error
 - is never due when the phase was never entered
 - is never due when the duration is missing or unparseable
@@ -116,6 +128,12 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - returns null from the last phase
 - returns null when the current ordinal is past every declared phase
 - is order-independent — it sorts rather than trusting the query order
+- with no target key, advances to the next phase by ordinal
+- with a target key, jumps to that phase wherever it sits
+- allows an explicit rewind to an earlier phase
+- is a no-op (null) from the last phase with no target
+- is a no-op (null) when the target is the current phase — the idempotency guard
+- is a no-op (null) when the target key names no phase in this profile
 - floors to whole seconds
 - never returns a negative, so a clock stepping back cannot credit unspent time
 - adds the live run to the bank for the phase in flight
@@ -126,6 +144,47 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - at takes the requested value and ignores the bank
 - floors a fractional request and refuses a negative one
 - clamps to what the column can hold rather than overflowing it
+- passes a literal through untouched
+- resolves a reference to the blueprint default when nothing overrides it
+- gives one device a shorter phase than its siblings on the same lifecycle
+- fails closed when the reference resolves to nothing
+- makes a phase with an unresolvable duration simply never due
+- advances the pinned device first, on the same phase row
+- reads a numeric string, which is how a resolved duration arrives
+- treats an unresolved reference as no duration rather than throwing
+  - the eight above are F11.13: a phase duration may be an `@param.` reference, so one lifecycle
+    can hold devices whose phases run for different lengths — the case that previously forced a
+    duplicate lifecycle to change one number
+
+### Blueprints — `blueprints.positional-refs.test.ts` ✅ (F11.14 references beside the value)
+
+- passes a literal through unchanged, so every pre-F11.14 row keeps its meaning
+- resolves a literal with no context at all — a hand-written rule has none
+- reads a phase reference through the full precedence, so an override wins
+- reads a param reference, which ignores the phase target
+- falls back to the default when neither an override nor a target sets it
+- fails closed on a reference with no context, rather than treating it as a literal
+- fails closed when the reference resolves to something that is not a number
+- rejects a negative, which firmware would read as an enormous unsigned count
+- floors a fractional value so every caller rounds the same way
+- treats absent as absent — the caller supplies "indefinitely" or "now"
+- accepts zero, which is a real delay meaning "publish now"
+- passes a literal HH:MM through
+- resolves a phase reference, so lights-off is a property of the stage
+- normalises a missing leading zero, so 7:30 and 07:30 are the same time
+- fails closed on anything that is not a time, so the schedule never fires
+- fails closed on an unresolvable reference rather than firing at a default hour
+- accepts a well-formed literal of either kind
+- accepts any well-formed reference — whether the key exists is validateParamRefs’ job
+- accepts absent, since both positions are optional
+- rejects a unit-suffixed duration, the likeliest way to write one by hand
+- rejects a negative duration
+- rejects a clock that is not HH:MM
+  - F11.14 extends what F11.13 did for a phase's own length to the values _beside_ `target_state`:
+    how long the device holds a state, how long it waits first, and what time of day a schedule
+    fires. Those were integers and a `VarChar(5)` clock, so "water for 60s" and "water for 180s"
+    were the same rule duplicated per lifecycle. The two halves pinned here are that a literal
+    still means exactly what it did, and that anything unresolvable yields null rather than a guess.
 
 ### Blueprints — `blueprints.phase-scope-gate.test.ts` ✅ (F10 phase scoping + F10.13 lifecycle gate)
 
@@ -144,6 +203,42 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
   - the load-bearing case for F10.13: empty scope passes the phase gate, so only the lifecycle gate can hold it
 - leaves hand-written automations untouched
 - holds a scoped automation whose setup is stopped in one of its phases
+- holds a per-device automation whose own device is not running
+- runs a per-device automation when both its device and its setup are running
+- holds every device’s automations when the setup is stopped, whatever the devices say
+- ignores the device gate when no device is named — a setup-wide automation is unchanged
+- collapses the two lifecycles into one effective state, setup first
+- reports a device as not started even inside a running setup
+- reports every device as stopped once the setup is stopped
+
+### Blueprints — `blueprints.fanout.test.ts` ✅ (F11.2 per-device fan-out, F11.9 device selector)
+
+- produces exactly one entity for a combined template
+- produces one entity per bound device of the fan-out slot
+- produces nothing when the fan-out slot has no bound device
+- ignores the fan-out slot key when the mode is combined
+- names each entity after the device's label
+- falls back to the device's own name when the binding has no label
+- leaves a combined entity's name untouched
+- narrows only the named slot, leaving every other slot on all of its devices
+- resolves the narrowed slot to that one device's action
+- leaves an unscoped resolver resolving every device
+- fans out per device over only the selected lifecycles
+- covers only the selected devices in one combined entity
+- leaves a selected combined entity's name untouched
+- produces nothing when no bound device follows a selected lifecycle
+- ignores an unprofiled device when a lifecycle is selected
+- covers every device when the selection is empty
+- keeps binding order when the selection is given out of order
+- narrows a combined resolver to the selected devices only
+
+### Pipelines — `pipelines.device-labels.test.ts` ✅ (F11.7 context labelling)
+
+- keeps distinct labels exactly as they are
+- disambiguates two devices that share a label
+- leaves a single device alone even when it repeats across sensors
+- disambiguates every member of a three-way collision
+- handles an empty sensor list
 
 ### Automation — `automation.rules-logic.test.ts` ✅
 
@@ -161,6 +256,41 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - does not match when today is not in the days list
 - null time never matches
 - pads single-digit hours/minutes (09:05)
+- fires at the start of a window
+- fires at each interval inside the window
+- does not fire between intervals
+- fires on the closing minute when it lands on the interval
+- does not fire past the end of the window
+- does not fire before the window opens
+- ignores the window when the interval is zero
+- ignores the interval when no end is given
+- refuses a window that ends before it starts
+- still honours the days list inside a window
+- rejects a malformed time
+- fires at the local time of the given zone
+- does not fire at that wall time in another zone
+- reads UTC when the zone is UTC
+- takes the day of week from the zone, not from UTC
+- applies the zone to a window as well as a single time
+- falls back to the server zone for an unknown name rather than never firing
+- handles midnight without reporting hour 24
+  - the seven above pin the owner's-clock evaluation: a schedule is a sentence about the user's
+    day, and before this it was read in the evaluating process's zone (UTC in a container)
+- accepts a single time
+- accepts a full window
+- rejects a missing or malformed time
+- rejects half a window, in both directions
+- rejects a window that ends before it starts
+- rejects an interval longer than the window
+- rejects an out-of-range day
+  - one validator behind the rules API, the pipelines API and blueprint publish
+- is false when it has never fired
+- is true earlier in the same minute
+- is false in the previous minute, even 10 seconds ago
+  - the minute guard: the scans tick every 10s, so a matching minute would otherwise fire six times
+- reads a single time
+- reads a window
+- says so when there is no schedule
 
 ### Provisioning — `provisioning.action-compatibility.test.ts` ✅
 
@@ -315,11 +445,15 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - ⬜ OTA: simulated device OTA ack swaps staged actions live
 - ⬜ OTA: device rejects a not-newer version (error ack rejected:not-newer)
 
-### Telemetry — `telemetry.camera.e2e.test.ts` ⬜
+### Telemetry — `telemetry.camera.e2e.test.ts` ✅
 
-- camera frame → sensor_history row + socket frame event; current_state untouched
+- ⬜ camera frame → sensor_history row + socket frame event; current_state untouched
 - take_picture with commandId → on-demand frame resolves the pending capture
-- pending capture with no frame → timeout path publishes PICTURE_RESULT status timeout
+  - now raised by `POST /api/actions/:id/capture` (a user asking from the camera card); the frame
+    comes back tagged with that commandId and lands in history
+- ⬜ pending capture with no frame → timeout path publishes PICTURE_RESULT status timeout
+  - the durable half (a `device_commands` row settling `timeout`) is unassertable from e2e until
+    the command-history read API exists — F18.7
 
 ### Telemetry — `telemetry-fault.e2e.test.ts` ✅
 
@@ -351,7 +485,7 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - ⬜ cooldown suppresses an immediate refire
 - ⬜ pipeline sensor-threshold trigger → pipelineRun row queued, cooldown respected
 
-### Blueprints — `blueprints.e2e.test.ts` ✅ (F10.2–F10.4, F10.12–F10.13)
+### Blueprints — `blueprints.e2e.test.ts` ✅ (F10.2–F10.4, F10.12–F10.13, F11)
 
 - refuses to publish a blueprint whose action is not on the slot template
 - imports and publishes a valid blueprint
@@ -389,7 +523,9 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - marks a derived rule the user edits as drift
 - publishes a v2 into the live setup, keeping the user edit and updating the rest
 - restores an edited rule from the blueprint on reset
-- derives a phase-less blueprint already running, and pauses/resumes it
+- derives a static blueprint already running, and pauses/resumes it
+- refuses to publish a static blueprint that still declares phases
+- refuses to publish a blueprint with no phases that is not marked static
   - not every blueprint is time-dependent; pausing still holds its automations, and resuming must work with no phase to enter
 - offers both boards as candidates for a multi-device slot
 - fans a scene member and a rule action out to every bound board
@@ -398,6 +534,26 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - refuses to publish an automation scoped to an undeclared phase
 - derives a scoped rule and scene, preserving their phase_scope
 - refuses to run a scene out of its phase, then allows it after advancing
+- refuses to publish a combined template that reads @phase over a profiled slot
+- derives a setup whose devices follow the lifecycle their answer chose
+- refuses a device on a profiled slot with no way to know its lifecycle
+- materialises one rule per bound device, each wired to only that device
+- materialises a per-device rule on only the selected lifecycle
+- materialises one combined scene covering only the selected devices
+- re-enables an automation it disabled once its device returns to the selection
+- leaves an automation the user disabled switched off across a reconcile
+- refuses to publish more than one lifecycle when no slot chooses between them
+- refuses to publish a selector naming an undeclared lifecycle
+- refuses to publish a selector over a slot whose devices share the setup
+- refuses to publish a selector over a slot the template never addresses
+- starts one device without touching the other
+- advances one device, leaving the other where it was
+- refuses a phase that belongs to the other device lifecycle
+- holds every device once the setup is stopped
+- summarises the devices on the setups list rather than a phase it does not have
+- carries a whole track per device on the setups list (F11.4)
+- puts a device on another lifecycle when it is reset
+- refuses a lifecycle action on a device the setup shares
   - phase scope is read at evaluation time; advancing a phase is one column write and touches no scene/rule rows
 - ⬜ derived rule fires end-to-end against sim telemetry at the phase's threshold
 - ⬜ auto-advance cron rolls an elapsed phase over

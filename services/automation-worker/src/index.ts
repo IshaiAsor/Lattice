@@ -7,8 +7,10 @@ import { env } from './config/env.config';
 import { db } from './db/client';
 import { rulesEvaluateConsumer } from './consumers/rules-evaluate.consumer';
 import { telemetryTriggerConsumer } from './consumers/telemetry-trigger.consumer';
+import { phaseAdvanceConsumer } from './consumers/phase-advance.consumer';
 import { rulesEngine } from './services/rules.engine';
 import { advanceDuePhases } from './services/phases.service';
+import { fireDueScheduleTriggers } from './services/pipeline-triggers';
 import { healthRouter } from './routes/health.routes';
 
 const { metricsHandler } = initOTel('automation-worker');
@@ -23,10 +25,21 @@ async function main() {
 
   await consume(ch, QUEUES.RULES_EVALUATE, rulesEvaluateConsumer(ch));
   await consume(ch, QUEUES.TELEMETRY_ARRIVED_AUTOMATION, telemetryTriggerConsumer(ch));
-  log.info('consumers started (rules-evaluate, telemetry-trigger)');
+  await consume(ch, QUEUES.BLUEPRINT_PHASE_ADVANCE, phaseAdvanceConsumer(ch));
+  log.info('consumers started (rules-evaluate, telemetry-trigger, phase-advance)');
 
   cron.schedule('*/10 * * * * *', () => rulesEngine.evaluateScheduledRules(ch));
   log.info('scheduled rules cron started (every 10 seconds)');
+
+  // The pipeline half of the same question. Shares the 10s tick because both match a MINUTE, and a
+  // slower scan would miss one entirely; `min_interval_sec` on the trigger is what keeps a matching
+  // minute from firing six times.
+  cron.schedule('*/10 * * * * *', () => {
+    fireDueScheduleTriggers(ch).catch((err) =>
+      log.error({ err }, 'error firing scheduled pipeline triggers'),
+    );
+  });
+  log.info('scheduled pipeline triggers cron started (every 10 seconds)');
 
   // Phase durations are hours at the shortest, so a minute of granularity is ample — and it
   // keeps the 10s rules pass free of a second query it would almost never act on.

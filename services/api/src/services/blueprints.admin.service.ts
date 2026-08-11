@@ -37,6 +37,15 @@ export interface BlueprintSummary {
   updated_at: Date;
 }
 
+/** How a template fans out over a multi-device slot (F11.2). */
+export const FAN_OUT_MODES = ['combined', 'per_device'] as const;
+
+/** Where a phase sits now that phases hang off profiles: the pair that identifies one (F11). */
+interface PhaseRef {
+  profile: string;
+  phase: string;
+}
+
 export const blueprintsAdminService = {
   async listBlueprints(): Promise<BlueprintSummary[]> {
     const rows = await db.blueprint.findMany({
@@ -92,19 +101,38 @@ export const blueprintsAdminService = {
         // instance would silently lose its place in the lifecycle. Capture the phase KEY now and
         // re-point after, which is also the only sane semantics: "still in commissioning".
         instances: {
-          select: { id: true, current_phase_id: true },
+          select: {
+            id: true,
+            current_phase_id: true,
+            // Bindings hold a phase of their own now (F11) — each has its own place in a
+            // lifecycle, and a re-import must not lose theirs either.
+            bindings: { select: { id: true, current_phase_id: true } },
+          },
         },
-        phases: { select: { id: true, key: true } },
+        profiles: { select: { key: true, phases: { select: { id: true, key: true } } } },
       },
     });
 
-    const phaseKeyByInstance = new Map<number, string>();
+    // A phase is identified by (profile, key) now, so re-pointing carries both: two profiles may
+    // declare the same phase key, and putting a binding back into the wrong one would be worse
+    // than dropping it.
+    const phaseRefByInstance = new Map<number, PhaseRef>();
+    const phaseRefByBinding = new Map<number, PhaseRef>();
     if (existing) {
-      const phaseKeyById = new Map(existing.phases.map((p) => [p.id, p.key]));
+      const refById = new Map<number, PhaseRef>();
+      for (const profile of existing.profiles) {
+        for (const ph of profile.phases)
+          refById.set(ph.id, { profile: profile.key, phase: ph.key });
+      }
       for (const instance of existing.instances) {
-        const key =
-          instance.current_phase_id !== null ? phaseKeyById.get(instance.current_phase_id) : null;
-        if (key) phaseKeyByInstance.set(instance.id, key);
+        const ref =
+          instance.current_phase_id !== null ? refById.get(instance.current_phase_id) : undefined;
+        if (ref) phaseRefByInstance.set(instance.id, ref);
+        for (const binding of instance.bindings) {
+          const bref =
+            binding.current_phase_id !== null ? refById.get(binding.current_phase_id) : undefined;
+          if (bref) phaseRefByBinding.set(binding.id, bref);
+        }
       }
     }
 
@@ -151,7 +179,11 @@ export const blueprintsAdminService = {
       if (existing) {
         await tx.blueprintSlot.deleteMany({ where: { blueprint_id: existing.id } });
         await tx.blueprintParam.deleteMany({ where: { blueprint_id: existing.id } });
-        await tx.blueprintPhase.deleteMany({ where: { blueprint_id: existing.id } });
+        // Cascades to options. The user's *answers* live on the instance keyed by field key, so a
+        // v2 that keeps a field keeps its answers (F11.6).
+        await tx.blueprintField.deleteMany({ where: { blueprint_id: existing.id } });
+        // Cascades to phases and their targets — blueprint_phases hangs off a profile now.
+        await tx.blueprintProfile.deleteMany({ where: { blueprint_id: existing.id } });
         await tx.blueprintSceneTemplate.deleteMany({ where: { blueprint_id: existing.id } });
         await tx.blueprintRuleTemplate.deleteMany({ where: { blueprint_id: existing.id } });
         await tx.blueprintPipelineTemplate.deleteMany({ where: { blueprint_id: existing.id } });
@@ -167,16 +199,31 @@ export const blueprintsAdminService = {
       // Re-point every instance at the phase it was in, matched by key. A phase the v2 removed
       // leaves the instance with none — reported as such rather than silently jumped to phase 1,
       // because guessing where a running setup belongs is worse than saying "pick one".
-      if (phaseKeyByInstance.size > 0) {
-        const newPhases = await tx.blueprintPhase.findMany({
+      if (phaseRefByInstance.size > 0 || phaseRefByBinding.size > 0) {
+        const newProfiles = await tx.blueprintProfile.findMany({
           where: { blueprint_id: bp.id },
-          select: { id: true, key: true },
+          select: { key: true, phases: { select: { id: true, key: true } } },
         });
-        const idByKey = new Map(newPhases.map((p) => [p.key, p.id]));
-        for (const [instanceId, phaseKey] of phaseKeyByInstance) {
+        // "::" cannot appear in either key (both are validated to [A-Za-z0-9_.]), so this pair
+        // cannot collide with a differently-split pair.
+        const refKey = (profile: string, phase: string): string => `${profile}::${phase}`;
+        const idByRef = new Map<string, number>();
+        for (const profile of newProfiles) {
+          for (const ph of profile.phases) idByRef.set(refKey(profile.key, ph.key), ph.id);
+        }
+        const lookup = (ref: PhaseRef): number | null =>
+          idByRef.get(refKey(ref.profile, ref.phase)) ?? null;
+
+        for (const [bindingId, ref] of phaseRefByBinding) {
+          await tx.blueprintSlotBinding.update({
+            where: { id: bindingId },
+            data: { current_phase_id: lookup(ref) },
+          });
+        }
+        for (const [instanceId, ref] of phaseRefByInstance) {
           await tx.blueprintInstance.update({
             where: { id: instanceId },
-            data: { current_phase_id: idByKey.get(phaseKey) ?? null },
+            data: { current_phase_id: lookup(ref) },
           });
         }
       }

@@ -1,11 +1,16 @@
 import {
   accruedOnEnter,
+  buildParamContext,
   isPhaseDue,
   phaseDurationSeconds,
   phaseElapsedSeconds,
+  resolvePhaseDuration,
   secondsBetween,
 } from '@lattice/params';
-import { nextPhase } from '../../services/automation-worker/src/services/phases-logic';
+import {
+  nextPhase,
+  resolveAdvanceTarget,
+} from '../../services/automation-worker/src/services/phases-logic';
 
 // F10.4 / F10.12 — the arithmetic behind blueprint phase auto-advance and the per-phase time bank.
 // Pure, so the cron's decision is testable without a stack or a two-day wait.
@@ -43,7 +48,7 @@ describe('blueprints — phase schedule (F10.4)', () => {
 
   describe('isPhaseDue', () => {
     const base = {
-      auto_advance: true,
+      is_scheduled: true,
       duration_value: 2,
       duration_unit: 'days',
       phase_started_at: new Date('2026-07-01T00:00:00Z'),
@@ -63,8 +68,8 @@ describe('blueprints — phase schedule (F10.4)', () => {
       expect(isPhaseDue(base, new Date('2026-07-02T23:59:59Z'))).toBe(false);
     });
 
-    it('is never due for a phase that did not opt in to auto-advance', () => {
-      expect(isPhaseDue({ ...base, auto_advance: false }, new Date('2026-07-30T00:00:00Z'))).toBe(
+    it('is never due for a phase not on a schedule (its advance_mode is not "schedule")', () => {
+      expect(isPhaseDue({ ...base, is_scheduled: false }, new Date('2026-07-30T00:00:00Z'))).toBe(
         false,
       );
     });
@@ -143,6 +148,41 @@ describe('blueprints — phase schedule (F10.4)', () => {
       });
     });
   });
+
+  // Where an advance lands (F11.x). Every trigger — schedule, rule, pipeline — resolves the target
+  // through this, so its idempotent no-ops (target is current / last / missing) are what stop a
+  // repeat trigger from double-banking a phase.
+  describe('resolveAdvanceTarget', () => {
+    const phases = [
+      { key: 'sprout', ordinal: 10 },
+      { key: 'grow', ordinal: 20 },
+      { key: 'harvest', ordinal: 30 },
+    ];
+
+    it('with no target key, advances to the next phase by ordinal', () => {
+      expect(resolveAdvanceTarget(phases, 10, null)).toEqual({ key: 'grow', ordinal: 20 });
+    });
+
+    it('with a target key, jumps to that phase wherever it sits', () => {
+      expect(resolveAdvanceTarget(phases, 10, 'harvest')).toEqual({ key: 'harvest', ordinal: 30 });
+    });
+
+    it('allows an explicit rewind to an earlier phase', () => {
+      expect(resolveAdvanceTarget(phases, 30, 'sprout')).toEqual({ key: 'sprout', ordinal: 10 });
+    });
+
+    it('is a no-op (null) from the last phase with no target', () => {
+      expect(resolveAdvanceTarget(phases, 30, null)).toBeNull();
+    });
+
+    it('is a no-op (null) when the target is the current phase — the idempotency guard', () => {
+      expect(resolveAdvanceTarget(phases, 20, 'grow')).toBeNull();
+    });
+
+    it('is a no-op (null) when the target key names no phase in this profile', () => {
+      expect(resolveAdvanceTarget(phases, 10, 'flowering')).toBeNull();
+    });
+  });
 });
 
 describe('blueprints — phase time bank (F10.12)', () => {
@@ -198,5 +238,96 @@ describe('blueprints — phase time bank (F10.12)', () => {
     it('clamps to what the column can hold rather than overflowing it', () => {
       expect(accruedOnEnter('at', 0, 9e12)).toBe(2147483647);
     });
+  });
+});
+
+// F11.13 — a phase duration may be a reference, which is what lets two devices on ONE lifecycle
+// run the same phase for different lengths. Before this the duration lived on the phase, the phase
+// belongs to the lifecycle, and "basil roots in 3 days, lettuce in 5" meant duplicating a lifecycle
+// to change one number.
+describe('resolvePhaseDuration', () => {
+  const ctxFor = (bindingOverrides: { param_key: string; phase_key: string; value: string }[]) =>
+    buildParamContext({
+      defaults: [{ key: 'seedling.days', default_value: '5' }],
+      overrides: [],
+      currentPhase: { key: 'seedling', name: 'Seedling', targets: [] },
+      binding: { overrides: bindingOverrides, lifecycle: 'running' },
+    });
+
+  it('passes a literal through untouched', () => {
+    expect(resolvePhaseDuration('7', ctxFor([]))).toBe('7');
+    expect(phaseDurationSeconds(resolvePhaseDuration('7', ctxFor([])), 'days')).toBe(7 * DAY);
+  });
+
+  it('resolves a reference to the blueprint default when nothing overrides it', () => {
+    const value = resolvePhaseDuration('@param.seedling.days', ctxFor([]));
+    expect(phaseDurationSeconds(value, 'days')).toBe(5 * DAY);
+  });
+
+  it('gives one device a shorter phase than its siblings on the same lifecycle', () => {
+    // The whole point: this pot pinned 3, the lifecycle still says 5 for every other pot.
+    const basil = ctxFor([{ param_key: 'seedling.days', phase_key: '', value: '3' }]);
+    const lettuce = ctxFor([]);
+    expect(phaseDurationSeconds(resolvePhaseDuration('@param.seedling.days', basil), 'days')).toBe(
+      3 * DAY,
+    );
+    expect(
+      phaseDurationSeconds(resolvePhaseDuration('@param.seedling.days', lettuce), 'days'),
+    ).toBe(5 * DAY);
+  });
+
+  it('fails closed when the reference resolves to nothing', () => {
+    // No context at all (the owner could not be loaded) and an undeclared key both mean "no
+    // duration", so the phase holds rather than advancing on a number nobody wrote.
+    expect(resolvePhaseDuration('@param.seedling.days', null)).toBeNull();
+    expect(resolvePhaseDuration('@param.nope', ctxFor([]))).toBeNull();
+  });
+
+  it('makes a phase with an unresolvable duration simply never due', () => {
+    const started = new Date('2026-08-01T00:00:00Z');
+    const later = new Date('2026-09-01T00:00:00Z'); // a month later — long past any real duration
+    expect(
+      isPhaseDue(
+        {
+          is_scheduled: true,
+          duration_value: resolvePhaseDuration('@param.nope', ctxFor([])),
+          duration_unit: 'days',
+          phase_started_at: started,
+          accrued_seconds: 0,
+          hasNextPhase: true,
+        },
+        later,
+      ),
+    ).toBe(false);
+  });
+
+  it('advances the pinned device first, on the same phase row', () => {
+    const started = new Date('2026-08-01T00:00:00Z');
+    const fourDaysIn = new Date('2026-08-05T00:00:00Z');
+    const due = (ctx: ReturnType<typeof ctxFor>) =>
+      isPhaseDue(
+        {
+          is_scheduled: true,
+          duration_value: resolvePhaseDuration('@param.seedling.days', ctx),
+          duration_unit: 'days',
+          phase_started_at: started,
+          accrued_seconds: 0,
+          hasNextPhase: true,
+        },
+        fourDaysIn,
+      );
+    expect(due(ctxFor([{ param_key: 'seedling.days', phase_key: '', value: '3' }]))).toBe(true);
+    expect(due(ctxFor([]))).toBe(false); // still 5 days for everyone else
+  });
+});
+
+describe('phaseDurationSeconds — text values', () => {
+  it('reads a numeric string, which is how a resolved duration arrives', () => {
+    expect(phaseDurationSeconds('3', 'days')).toBe(3 * DAY);
+    expect(phaseDurationSeconds(' 3 ', 'days')).toBe(3 * DAY);
+  });
+
+  it('treats an unresolved reference as no duration rather than throwing', () => {
+    expect(phaseDurationSeconds('@param.seedling.days', 'days')).toBeNull();
   });
 });

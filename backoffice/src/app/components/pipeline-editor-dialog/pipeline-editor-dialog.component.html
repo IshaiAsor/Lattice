@@ -90,7 +90,7 @@
                       <mat-form-field appearance="outline" class="full-width">
                         <mat-label>Context</mat-label>
                         <input matInput formControlName="description"
-                               placeholder="e.g. Water pump for pot 1 — controls nutrient flow" />
+                               placeholder="e.g. Circulation pump — controls flow through loop 1" />
                         <mat-hint>Sent to the LLM alongside this item to explain what it represents</mat-hint>
                         @if (it.get('description')?.hasError('required')) {
                           <mat-error>Context is required</mat-error>
@@ -318,19 +318,29 @@
                 }
 
                 @if (triggerType(ti) === 'schedule') {
+                  <!-- Leave Until/Every blank to run once a day. Filled, they repeat it through
+                       the window — "06:00 to 17:30, every 10 minutes". -->
                   <div class="field-pair">
                     <mat-form-field appearance="outline" class="field-schedule-val">
-                      <mat-label>Every</mat-label>
-                      <input matInput type="number" formControlName="schedule_value" min="1" />
+                      <mat-label>{{ t.get('schedule_until')?.value ? 'From' : 'At' }}</mat-label>
+                      <input matInput type="time" formControlName="schedule_time" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="field-schedule-val">
+                      <mat-label>Until</mat-label>
+                      <input matInput type="time" formControlName="schedule_until" />
                     </mat-form-field>
                     <mat-form-field appearance="outline" class="field-schedule-unit">
-                      <mat-label>Unit</mat-label>
-                      <mat-select formControlName="schedule_unit">
-                        @for (u of cooldownUnits; track u.value) {
-                          <mat-option [value]="u.value">{{ u.label }}</mat-option>
-                        }
-                      </mat-select>
+                      <mat-label>Every (min)</mat-label>
+                      <input matInput type="number" min="1" placeholder="once"
+                             formControlName="schedule_every_minutes" />
                     </mat-form-field>
+                  </div>
+                  <div class="days-group" [formArrayName]="'schedule_days'">
+                    @for (label of dayLabels; track $index; let d = $index) {
+                      <mat-checkbox [formControlName]="d" [matTooltip]="dayNames[d]">
+                        {{ label }}
+                      </mat-checkbox>
+                    }
                   </div>
                 }
 

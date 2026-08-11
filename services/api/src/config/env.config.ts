@@ -43,6 +43,11 @@ export const env = {
 
   rabbitmqUrl: process.env['RABBITMQ_URL'] ?? 'amqp://localhost',
 
+  // How long digest-service waits for a user-requested camera frame before recording the capture
+  // as timed out. Same env var and default as ml-router's pipeline captures — one camera, one
+  // patience. Handed back to the browser so its spinner and the server give up together.
+  pictureAckTimeoutMs: parseInt(process.env['PICTURE_ACK_TIMEOUT_MS'] ?? '15000', 10),
+
   // Web-push (VAPID) public key, served to the browser so it can subscribe. Only the public
   // key — notification-service holds the private key and does the actual sending.
   vapidPublicKey: process.env['VAPID_PUBLIC_KEY'],

@@ -6,7 +6,9 @@ import { SHARED_MATERIAL } from './shared-ui';
 import { AuthService } from './services/auth.service';
 import { ThemeService } from './services/theme.service';
 import { NotificationsService } from './services/notifications.service';
+import { UserPreferencesService } from './services/user-preferences.service';
 import { ChatComponent } from './components/chat.component/chat.component';
+import { TimezoneDialogComponent } from './components/timezone-dialog/timezone-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 
@@ -22,6 +24,7 @@ export class AppComponent implements OnInit {
   authService = inject(AuthService);
   themeService = inject(ThemeService);
   notifications = inject(NotificationsService);
+  prefs = inject(UserPreferencesService);
   dialog = inject(MatDialog);
   private router = inject(Router);
   private activatedRoute = inject(ActivatedRoute);
@@ -40,7 +43,18 @@ export class AppComponent implements OnInit {
     if (this.authService.isLoggedIn()) {
       this.notifications.refreshUnread();
       this.notifications.connectLive();
+      // Schedules belong to the user's clock, and the browser is the only thing that knows what it
+      // is. Sent once, when nothing is stored — so "local" is the default without anyone choosing.
+      this.prefs.adoptBrowserTimeZone();
     }
+  }
+
+  openTimezone(): void {
+    this.dialog.open(TimezoneDialogComponent, {
+      width: '480px',
+      maxHeight: '90vh',
+      panelClass: 'compact-dialog',
+    });
   }
 
   private updateHideSidebar() {

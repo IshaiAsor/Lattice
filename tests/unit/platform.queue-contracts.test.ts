@@ -120,7 +120,16 @@ const CASES: ContractCase[] = [
   },
   {
     rk: RK.PICTURE_REQUESTED,
-    canonical: { userId: '1', actionId: 5, commandId: 'c-1', timeoutMs: 8000 },
+    canonical: {
+      userId: '1',
+      actionId: 5,
+      commandId: 'c-1',
+      timeoutMs: 8000,
+      // Who asked (recorded on the capture's history row) and whether the frame should come back
+      // on the bus — a manual capture's does not, it reaches the browser over the socket.
+      source: { kind: 'manual' },
+      deliverResult: false,
+    },
     broken: { userId: '1', actionId: 5, commandId: 'c-1', timeoutMs: '8000' }, // timeoutMs must be number
   },
   {
@@ -228,6 +237,19 @@ const CASES: ContractCase[] = [
       channels: ['in_app', 'email'],
     },
     broken: { userId: 2, eventType: 'ota_available', data: {} }, // userId must be a string
+  },
+  {
+    rk: RK.BLUEPRINT_PHASE_ADVANCE,
+    canonical: {
+      userId: '2',
+      instanceId: 5,
+      bindingId: null,
+      source: 'pipeline',
+      refKey: 'ripeness_check',
+    },
+    // refKey is what lets the consumer re-check that the phase still names this pipeline; a message
+    // without it cannot be validated on arrival, so it must not be accepted onto the queue at all.
+    broken: { userId: '2', instanceId: 5, bindingId: null, source: 'pipeline' },
   },
 ];
 

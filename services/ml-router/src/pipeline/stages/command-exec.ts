@@ -2,8 +2,9 @@ import type { Channel } from 'amqplib';
 import { db, Prisma } from '@lattice/prisma-client';
 import { createLogger } from '@lattice/logger';
 import { publish, RK } from '@lattice/queue';
+import type { BlueprintPhaseAdvancePayload } from '@lattice/queue';
 import type { Run } from '../types';
-import type { PipelineStagePlan } from '../registry';
+import type { PhaseAdvancePlan, PipelineStagePlan } from '../registry';
 
 const log = createLogger('ml-router:pipeline:command-exec');
 
@@ -11,6 +12,20 @@ interface LlmAction {
   user_device_action_id?: number;
   value?: unknown;
   reasoning?: string;
+}
+
+// The model's phase decision, but only when this pipeline is authorised to make it (the plan says
+// so) AND the model actually chose to advance. Null otherwise, which is every pipeline that is not
+// a phase decider, and every run where the model left the phase alone.
+function phaseAdvanceRequested(
+  run: Run,
+): { plan: PhaseAdvancePlan; reasoning: string | null } | null {
+  const plan = run.plan.phaseAdvance;
+  if (!plan) return null;
+  const pt = (run.context as { phase_transition?: { advance?: unknown; reasoning?: unknown } })
+    .phase_transition;
+  if (!pt || pt.advance !== true) return null;
+  return { plan, reasoning: typeof pt.reasoning === 'string' ? pt.reasoning : null };
 }
 
 export async function runCommandExec(
@@ -27,6 +42,15 @@ export async function runCommandExec(
   const actions = (prevOutput.actions ?? []).filter(
     (a): a is LlmAction & { user_device_action_id: number } => a.user_device_action_id != null,
   );
+  const advance = phaseAdvanceRequested(run);
+  const advanceAudit = advance
+    ? {
+        instance_id: advance.plan.instanceId,
+        binding_id: advance.plan.bindingId,
+        from_phase: advance.plan.currentPhaseName,
+        reasoning: advance.reasoning,
+      }
+    : null;
 
   if (run.isDryRun) {
     const wouldExecute = actions.map((a) => ({
@@ -34,7 +58,11 @@ export async function runCommandExec(
       value: a.value ?? null,
       reasoning: a.reasoning ?? null,
     }));
-    const output = { would_execute: wouldExecute, dry_run: true } as Prisma.InputJsonValue;
+    const output = {
+      would_execute: wouldExecute,
+      ...(advanceAudit ? { would_advance: advanceAudit } : {}),
+      dry_run: true,
+    } as Prisma.InputJsonValue;
     await db.pipelineRunStage.upsert({
       where: { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
       update: { status: 'completed', output, completed_at: new Date() },
@@ -47,13 +75,44 @@ export async function runCommandExec(
         completed_at: new Date(),
       },
     });
-    log.info({ runId: run.runId, wouldExecute }, '[dry-run] command_exec would execute');
+    log.info(
+      { runId: run.runId, wouldExecute, wouldAdvance: advanceAudit },
+      '[dry-run] command_exec would execute',
+    );
     return;
   }
 
+  // A phase advance stands on its own — the model can end a phase while recommending no device
+  // action — so publish it before the no-actions early return. automation-worker is the single
+  // writer: it re-checks the lifecycle and moves exactly the one owner named here.
+  if (advance) {
+    publish(channel, RK.BLUEPRINT_PHASE_ADVANCE, {
+      userId: String(run.userId),
+      instanceId: advance.plan.instanceId,
+      bindingId: advance.plan.bindingId,
+      source: 'pipeline',
+      // Carried so the consumer can re-check that the owner's phase still names this pipeline —
+      // the plan's own gate was evaluated before the model call, several seconds ago.
+      refKey: advance.plan.refKey,
+    } satisfies BlueprintPhaseAdvancePayload);
+    log.info(
+      { runId: run.runId, instanceId: advance.plan.instanceId, bindingId: advance.plan.bindingId },
+      'command_exec requested phase advance',
+    );
+  }
+
   if (actions.length === 0) {
-    log.warn({ runId: run.runId }, 'command_exec: no actions from LLM output — skipping dispatch');
-    const output = { skipped: true, reason: 'no actions in LLM output' } as Prisma.InputJsonValue;
+    if (!advance) {
+      log.warn(
+        { runId: run.runId },
+        'command_exec: no actions from LLM output — skipping dispatch',
+      );
+    }
+    const output = {
+      skipped: actions.length === 0,
+      reason: 'no actions in LLM output',
+      ...(advanceAudit ? { phase_advance: advanceAudit } : {}),
+    } as Prisma.InputJsonValue;
     await db.pipelineRunStage.upsert({
       where: { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
       update: { status: 'completed', output, completed_at: new Date() },
@@ -94,6 +153,9 @@ export async function runCommandExec(
       userId: String(run.userId),
       actionId: a.user_device_action_id,
       value: a.value,
+      // So the command history can say which pipeline decided this, and the model's own reasoning
+      // stays findable beside it in the run's stage audit (F11.12).
+      source: { kind: 'pipeline', refId: run.pipelineId, label: run.plan.name },
     });
     return {
       user_device_action_id: a.user_device_action_id,
@@ -106,7 +168,10 @@ export async function runCommandExec(
     'ACTION_REQUESTED published',
   );
 
-  const output = { executed } as Prisma.InputJsonValue;
+  const output = {
+    executed,
+    ...(advanceAudit ? { phase_advance: advanceAudit } : {}),
+  } as Prisma.InputJsonValue;
   await db.pipelineRunStage.upsert({
     where: { run_id_stage_id: { run_id: run.runId, stage_id: stage.dbId } },
     update: { status: 'completed', output, completed_at: new Date() },

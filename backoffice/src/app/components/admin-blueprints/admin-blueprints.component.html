@@ -138,6 +138,189 @@
             <textarea matInput rows="2" [(ngModel)]="draft.context_notes"></textarea>
             <mat-hint>Background handed to the LLM for setups of this kind</mat-hint>
           </mat-form-field>
+
+          <!--
+            Static (F11.8): no slot in this setup has phases, so nothing in it is scheduled. Asked
+            rather than inferred — a blueprint part-way through being written also has no phases
+            yet, and publish should not treat "not finished" and "nothing to schedule" alike.
+          -->
+          <div class="check-row">
+            <mat-checkbox [(ngModel)]="draft.is_static">Nothing here runs on a schedule</mat-checkbox>
+            <span class="count-hint">
+              A static setup still starts and pauses — pausing holds its automations — it just has
+              no phases and no timers. Leave off if any device follows a lifecycle.
+            </span>
+          </div>
+        }
+      </div>
+
+      <!-- ── Questions for the user (F11.6) ──────────────────────────────
+           Params are values the SYSTEM tunes across phases; a field is a fact the USER states
+           once. They are separate for that reason, and a field is addressed as `@field.key` — no
+           phase retunes it, so it has no precedence to walk.
+
+           The load-bearing bit is an option's profile: it lets one question record what the user
+           said AND choose that device's schedule, so the wizard never asks the same thing twice. -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('fields')"
+            (click)="toggleSection('fields')"
+            (keyup.enter)="toggleSection('fields')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('fields') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Questions for the user</h3>
+            <span class="count-chip">{{ draft.fields.length }}</span>
+          </div>
+          <span class="spacer"></span>
+          @if (sectionOpen('fields')) {
+            <button mat-stroked-button (click)="addField()">
+              <mat-icon>add</mat-icon> Add question
+            </button>
+          }
+        </div>
+        @if (sectionOpen('fields')) {
+          <p class="section-hint">
+            Asked when someone sets this blueprint up. Each answer is readable as
+            <code>&#64;field.key</code> in a prompt or note.
+          </p>
+          @for (field of draft.fields; track $index) {
+            <div class="row-card">
+              <div class="row-head">
+                <div
+                  class="row-toggle"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-expanded]="isRowOpen(field)"
+                  (click)="toggleRow(field)"
+                  (keyup.enter)="toggleRow(field)"
+                >
+                  <mat-icon class="caret">{{
+                    isRowOpen(field) ? 'expand_more' : 'chevron_right'
+                  }}</mat-icon>
+                  <code class="row-key">&#64;field.{{ field.key || '…' }}</code>
+                  <span class="row-name">{{ field.label }}</span>
+                  <span class="row-meta">
+                    {{ field.input_type }} ·
+                    {{ field.scope === 'binding' ? 'per device' : 'per setup' }}
+                  </span>
+                  @if (field.required) {
+                    <span class="row-chip">required</span>
+                  }
+                </div>
+                <button mat-icon-button (click)="removeAt(draft.fields, $index)" matTooltip="Remove">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              @if (isRowOpen(field)) {
+                <div class="field-grid four">
+                  <mat-form-field appearance="outline" class="span-2">
+                    <mat-label>Question</mat-label>
+                    <input
+                      matInput
+                      [(ngModel)]="field.label"
+                      (ngModelChange)="onFieldLabelChange(field)"
+                    />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Answer type</mat-label>
+                    <mat-select [(ngModel)]="field.input_type">
+                      @for (type of fieldTypes; track type) {
+                        <mat-option [value]="type">{{ type }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Asked</mat-label>
+                    <mat-select [(ngModel)]="field.scope">
+                      @for (scope of fieldScopes; track scope) {
+                        <mat-option [value]="scope">
+                          {{ scope === 'binding' ? 'Once per device' : 'Once per setup' }}
+                        </mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+
+                  @if (field.scope === 'binding') {
+                    <mat-form-field appearance="outline">
+                      <mat-label>About devices in</mat-label>
+                      <mat-select [(ngModel)]="field.slot_key">
+                        @for (slot of bindingSlots(); track slot.key) {
+                          <mat-option [value]="slot.key">{{ slot.label || slot.key }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  }
+                  <mat-form-field appearance="outline" class="span-2">
+                    <mat-label>Help text</mat-label>
+                    <input matInput [(ngModel)]="field.help_text" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Default answer</mat-label>
+                    <input matInput [(ngModel)]="field.default_value" />
+                  </mat-form-field>
+                </div>
+
+                <div class="row-foot">
+                  <mat-checkbox [(ngModel)]="field.required">
+                    Must be answered before the setup can be created
+                  </mat-checkbox>
+                </div>
+
+                @if (field.input_type === 'select') {
+                  <div class="sub-block">
+                    <div class="sub-head">
+                      <span class="sub-title">Options</span>
+                      <button mat-stroked-button (click)="addFieldOption(field)">
+                        <mat-icon>add</mat-icon> Add option
+                      </button>
+                    </div>
+                    @for (option of field.options; track $index) {
+                      <div class="field-grid four">
+                        <mat-form-field appearance="outline">
+                          <mat-label>Shown as</mat-label>
+                          <input matInput [(ngModel)]="option.label" />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                          <mat-label>Answer value</mat-label>
+                          <input matInput [(ngModel)]="option.value" />
+                          <mat-hint>What &#64;field.{{ field.key || '…' }} resolves to</mat-hint>
+                        </mat-form-field>
+                        @if (field.scope === 'binding' && draft.profiles.length > 0) {
+                          <mat-form-field appearance="outline">
+                            <mat-label>Puts it on lifecycle</mat-label>
+                            <mat-select [(ngModel)]="option.profile_key">
+                              <mat-option [value]="''">— don't choose one —</mat-option>
+                              @for (profile of draft.profiles; track profile.key) {
+                                <mat-option [value]="profile.key">
+                                  {{ profile.label || profile.key }}
+                                </mat-option>
+                              }
+                            </mat-select>
+                            <mat-hint>One question, both facts</mat-hint>
+                          </mat-form-field>
+                        }
+                        <div class="row-foot">
+                          <button
+                            mat-icon-button
+                            (click)="removeAt(field.options, $index)"
+                            matTooltip="Remove"
+                          >
+                            <mat-icon>delete</mat-icon>
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+              }
+            </div>
+          }
         }
       </div>
 
@@ -279,6 +462,24 @@
                       A setup binds between {{ slot.min_count }} and {{ slot.max_count }} of these
                       devices; every rule, scene and pipeline action that names this slot is
                       repeated for each bound device.
+                    </span>
+                  </div>
+                }
+
+                <!--
+                  A profiled slot's devices each walk their own lifecycle (F11) — the user picks a
+                  schedule per device, starts and pauses each on its own, and a `per_device`
+                  template over this slot becomes one automation each. Only offered once the
+                  blueprint has a lifecycle to put them on.
+                -->
+                @if (draft.profiles.length > 0) {
+                  <div class="check-row">
+                    <mat-checkbox [(ngModel)]="slot.profiled">
+                      Each device runs its own schedule
+                    </mat-checkbox>
+                    <span class="count-hint">
+                      The user picks a lifecycle per device and starts them independently. Leave off
+                      for a device the whole setup shares.
                     </span>
                   </div>
                 }
@@ -472,12 +673,95 @@
            phase is a checkbox, all ticked by default; untick to exclude a phase. All-ticked is
            stored as an empty scope (= every phase, including ones added in a later blueprint
            version). Hidden until the blueprint declares a phase. -->
+      <!-- Reusable fan-out picker (F11.2), shared by rules, scenes and pipelines. Only meaningful
+           once a multi-device slot exists, so it is hidden until then.
+
+           `combined` is the historic shape and still the right one for anything the setup shares
+           ("if ANY of them reports X"). `per_device` is required the moment the automation reads
+           `@phase.` over a profiled slot: those devices are each in their own phase, and one entity
+           cannot resolve one reference to several values — publish rejects that combination. -->
+      <ng-template #fanOutField let-item let-noun="noun">
+        @if (canFanOut()) {
+          <div class="phase-scope-field">
+            <span class="phase-scope-label">One per device?</span>
+            <div class="fan-out-choices">
+              @for (mode of fanOutModes; track mode) {
+                <button
+                  type="button"
+                  class="profile-chip"
+                  [class.active]="item.fan_out === mode"
+                  (click)="setFanOut(item, mode)"
+                >
+                  {{ mode === 'combined' ? 'One for the setup' : 'One per device' }}
+                </button>
+              }
+              @if (fanOutNeedsSlot(item)) {
+                <mat-form-field appearance="outline" class="narrow" subscriptSizing="dynamic">
+                  <mat-label>Over slot</mat-label>
+                  <mat-select [(ngModel)]="item.fan_out_slot_key">
+                    @for (slot of fanOutSlotChoices(item); track slot.key) {
+                      <mat-option [value]="slot.key">{{ slot.label || slot.key }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              }
+            </div>
+            <span class="phase-scope-hint">
+              {{
+                item.fan_out === 'per_device'
+                  ? noun + ' becomes one per bound device, each reading that device\'s own phase.'
+                  : noun + ' is a single automation naming every bound device.'
+              }}
+            </span>
+          </div>
+
+          <!-- Which devices (F11.9). The mode above answers "how many automations"; this answers
+               "over which devices", and the two together cover one / some / all. The filter is by
+               *lifecycle* rather than by device because a template is authored before the user owns
+               anything — and because a device replanted onto another lifecycle then joins and
+               leaves the right automations by itself, where a stored device list would go stale.
+               Hidden unless some multi-device slot has per-device lifecycles to select by. -->
+          @if (fanOutProfileChoices().length > 0) {
+            <div class="phase-scope-field">
+              <span class="phase-scope-label">Which devices</span>
+              <div class="fan-out-choices">
+                <button
+                  type="button"
+                  class="profile-chip"
+                  [class.active]="item.fan_out_profiles.length === 0"
+                  (click)="setFanOutAllDevices(item)"
+                >
+                  All of them
+                </button>
+                @for (profile of fanOutProfileChoices(); track profile.key) {
+                  <button
+                    type="button"
+                    class="profile-chip"
+                    [class.active]="hasFanOutProfile(item, profile.key)"
+                    (click)="toggleFanOutProfile(item, profile.key)"
+                  >
+                    {{ profile.label || profile.key }}
+                  </button>
+                }
+              </div>
+              <span class="phase-scope-hint">{{ fanOutProfileHint(item, noun) }}</span>
+            </div>
+          }
+        }
+      </ng-template>
+
       <ng-template #phaseScopeField let-item let-noun="noun">
-        @if (scopablePhases().length > 0) {
+        @if (scopeUnavailableReason(item); as why) {
+          <div class="phase-scope-field">
+            <span class="phase-scope-label">Active in phases</span>
+            <span class="phase-scope-hint">{{ why }}</span>
+          </div>
+        }
+        @if (scopablePhases(item).length > 0) {
           <div class="phase-scope-field">
             <span class="phase-scope-label">Active in phases</span>
             <div class="phase-scope-checks">
-              @for (phase of scopablePhases(); track phase.key) {
+              @for (phase of scopablePhases(item); track phase.key) {
                 <mat-checkbox
                   [checked]="isPhaseChecked(item, phase.key)"
                   [disabled]="isOnlyCheckedPhase(item, phase.key)"
@@ -498,142 +782,6 @@
           </div>
         }
       </ng-template>
-
-      <!-- ── Phases ──────────────────────────────────────────────────── -->
-      <div class="section lattice-card">
-        <div class="section-head">
-          <div
-            class="section-toggle"
-            role="button"
-            tabindex="0"
-            [attr.aria-expanded]="sectionOpen('phases')"
-            (click)="toggleSection('phases')"
-            (keyup.enter)="toggleSection('phases')"
-          >
-            <mat-icon class="caret">{{
-              sectionOpen('phases') ? 'expand_more' : 'chevron_right'
-            }}</mat-icon>
-            <h3 class="section-title">Phases</h3>
-            <span class="count-chip">{{ draft.phases.length }}</span>
-          </div>
-          <span class="spacer"></span>
-          @if (sectionOpen('phases')) {
-            <button mat-stroked-button (click)="addPhase()">
-              <mat-icon>add</mat-icon> Add phase
-            </button>
-          }
-        </div>
-        @if (sectionOpen('phases')) {
-          @for (phase of draft.phases; track $index) {
-            <div class="row-card">
-              <div class="row-head">
-                <div
-                  class="row-toggle"
-                  role="button"
-                  tabindex="0"
-                  [attr.aria-expanded]="isRowOpen(phase)"
-                  (click)="toggleRow(phase)"
-                  (keyup.enter)="toggleRow(phase)"
-                >
-                  <mat-icon class="caret">{{
-                    isRowOpen(phase) ? 'expand_more' : 'chevron_right'
-                  }}</mat-icon>
-                  <span class="ordinal-badge">{{ phase.ordinal }}</span>
-                  <code class="row-key">{{ phase.key || 'new phase' }}</code>
-                  <span class="row-name">{{ phase.name }}</span>
-                  <span class="row-meta">{{ phaseSummary(phase) }}</span>
-                  @if (phase.auto_advance) {
-                    <span class="row-chip">auto</span>
-                  }
-                </div>
-                <button
-                  mat-icon-button
-                  (click)="removeAt(draft.phases, $index); renumber(draft.phases)"
-                  matTooltip="Remove"
-                >
-                  <mat-icon>delete</mat-icon>
-                </button>
-              </div>
-              @if (isRowOpen(phase)) {
-                <div class="field-grid four">
-                  <mat-form-field appearance="outline">
-                    <mat-label>Name</mat-label>
-                    <input
-                      matInput
-                      [(ngModel)]="phase.name"
-                      (ngModelChange)="onPhaseNameChange(phase)"
-                    />
-                  </mat-form-field>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Lasts</mat-label>
-                    <input matInput type="number" [(ngModel)]="phase.duration_value" />
-                  </mat-form-field>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Unit</mat-label>
-                    <mat-select [(ngModel)]="phase.duration_unit">
-                      @for (u of durationUnits; track u) {
-                        <mat-option [value]="u">{{ u }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
-                </div>
-                @if (phase.key && frozen(phase)) {
-                  <p class="generated-id">
-                    id <code>{{ phase.key }}</code>
-                    <span class="dim"
-                      >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming
-                      won't move it</span
-                    >
-                  </p>
-                }
-
-                <mat-form-field appearance="outline" class="full">
-                  <mat-label>Context notes (given to the LLM in this phase)</mat-label>
-                  <textarea matInput rows="2" [(ngModel)]="phase.context_notes"></textarea>
-                </mat-form-field>
-
-                <!-- Phase targets -->
-                <div class="sub-head">
-                  <span class="sub-title">Sets</span>
-                  <button mat-button (click)="addPhaseTarget(phase)">
-                    <mat-icon>add</mat-icon> Set a parameter
-                  </button>
-                </div>
-                @if (phase.targets.length === 0) {
-                  <p class="hint-inline">
-                    No targets — every parameter keeps its default in this phase.
-                  </p>
-                }
-                @for (target of phase.targets; track $index) {
-                  <div class="inline-row">
-                    <mat-form-field appearance="outline" class="grow">
-                      <mat-label>Parameter</mat-label>
-                      <mat-select [(ngModel)]="target.param_key">
-                        @for (key of paramKeys(); track key) {
-                          <mat-option [value]="key">{{ paramLabel(key) }}</mat-option>
-                        }
-                      </mat-select>
-                    </mat-form-field>
-                    <mat-form-field appearance="outline" class="grow">
-                      <mat-label>Value in this phase</mat-label>
-                      <input matInput [(ngModel)]="target.value" />
-                    </mat-form-field>
-                    <button mat-icon-button (click)="removeAt(phase.targets, $index)">
-                      <mat-icon>close</mat-icon>
-                    </button>
-                  </div>
-                }
-
-                <div class="row-foot">
-                  <mat-checkbox [(ngModel)]="phase.auto_advance">
-                    Move on automatically when the duration elapses
-                  </mat-checkbox>
-                </div>
-              }
-            </div>
-          }
-        }
-      </div>
 
       <!-- ── Rules ───────────────────────────────────────────────────── -->
       <div class="section lattice-card">
@@ -824,8 +972,30 @@
                     }
                     @if (cond.condition_type === 'schedule') {
                       <mat-form-field appearance="outline" class="narrow">
-                        <mat-label>At (HH:MM)</mat-label>
+                        <mat-label>{{ cond.schedule_until ? 'From' : 'At' }} (HH:MM)</mat-label>
                         <input matInput [(ngModel)]="cond.schedule_time" placeholder="07:30" />
+                      </mat-form-field>
+                      <!-- A window turns one firing a day into a loop — "06:00 to 17:30 every 10
+                           minutes". Leaving the two blank keeps the single-time shape, so nothing
+                           written before this reads differently. How LONG the device then holds the
+                           state is the action's "Hold for", not this. -->
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>Until (HH:MM)</mat-label>
+                        <input
+                          matInput
+                          [(ngModel)]="cond.schedule_until"
+                          placeholder="once only"
+                        />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="tiny">
+                        <mat-label>Every</mat-label>
+                        <input
+                          matInput
+                          type="number"
+                          min="1"
+                          placeholder="min"
+                          [(ngModel)]="cond.schedule_every_minutes"
+                        />
                       </mat-form-field>
                       <mat-form-field appearance="outline" class="grow" subscriptSizing="dynamic">
                         <mat-label>On days</mat-label>
@@ -889,10 +1059,55 @@
                         }
                       </mat-menu>
                     </mat-form-field>
-                    <mat-form-field appearance="outline" class="tiny">
-                      <mat-label>Delay</mat-label>
-                      <input matInput type="number" [(ngModel)]="act.delay_seconds" />
-                    </mat-form-field>
+                    <!-- Either a fixed number of seconds or a reference (F11.14). The link button
+                         swaps between them: taking the delay from a parameter is what lets one rule
+                         stagger differently per lifecycle instead of being copied per lifecycle. -->
+                    @if (act.delay_ref) {
+                      <mat-form-field appearance="outline" class="small" subscriptSizing="dynamic">
+                        <mat-label>Delay</mat-label>
+                        <input matInput [(ngModel)]="act.delay_ref" placeholder="@param.stagger_seconds" />
+                        <button matSuffix mat-icon-button (click)="act.delay_ref = ''" matTooltip="Use a fixed delay instead">
+                          <mat-icon>link_off</mat-icon>
+                        </button>
+                      </mat-form-field>
+                    } @else {
+                      <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
+                        <mat-label>Delay</mat-label>
+                        <input matInput type="number" min="0" placeholder="0" [(ngModel)]="act.delay_seconds" />
+                        <mat-hint>seconds before sending</mat-hint>
+                      </mat-form-field>
+                      <button mat-icon-button (click)="act.delay_ref = '@param.'" matTooltip="Take the delay from a parameter">
+                        <mat-icon>link</mat-icon>
+                      </button>
+                    }
+                    <!-- Held by the DEVICE, which releases it itself when the time is up — its own
+                         timer, so nothing on this side can lose it. Blank means hold indefinitely. -->
+                    @if (act.duration_ref) {
+                      <mat-form-field appearance="outline" class="small" subscriptSizing="dynamic">
+                        <mat-label>Hold for</mat-label>
+                        <input matInput [(ngModel)]="act.duration_ref" placeholder="@phase.water.seconds" />
+                        <button matSuffix mat-icon-button (click)="act.duration_ref = ''" matTooltip="Use a fixed time instead">
+                          <mat-icon>link_off</mat-icon>
+                        </button>
+                        <mat-hint>the phase decides how long</mat-hint>
+                      </mat-form-field>
+                    } @else {
+                      <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
+                        <mat-label>Hold for</mat-label>
+                        <input matInput type="number" min="0" placeholder="until changed" [(ngModel)]="act.duration_value" />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
+                        <mat-label>Unit</mat-label>
+                        <mat-select [(ngModel)]="act.duration_unit">
+                          @for (u of cooldownUnits; track u) {
+                            <mat-option [value]="u">{{ u }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                      <button mat-icon-button (click)="act.duration_ref = '@phase.'" matTooltip="Let the phase decide how long">
+                        <mat-icon>link</mat-icon>
+                      </button>
+                    }
                     <button mat-icon-button (click)="removeAt(rule.actions, $index)">
                       <mat-icon>close</mat-icon>
                     </button>
@@ -904,149 +1119,14 @@
                   [ngTemplateOutletContext]="{ $implicit: rule, noun: 'this rule' }"
                 ></ng-container>
 
+                <ng-container
+                  [ngTemplateOutlet]="fanOutField"
+                  [ngTemplateOutletContext]="{ $implicit: rule, noun: 'This rule' }"
+                ></ng-container>
+
                 <div class="row-foot">
                   <mat-checkbox [(ngModel)]="rule.is_emergency">Emergency</mat-checkbox>
                 </div>
-              }
-            </div>
-          }
-        }
-      </div>
-
-      <!-- ── Scenes ──────────────────────────────────────────────────── -->
-      <div class="section lattice-card">
-        <div class="section-head">
-          <div
-            class="section-toggle"
-            role="button"
-            tabindex="0"
-            [attr.aria-expanded]="sectionOpen('scenes')"
-            (click)="toggleSection('scenes')"
-            (keyup.enter)="toggleSection('scenes')"
-          >
-            <mat-icon class="caret">{{
-              sectionOpen('scenes') ? 'expand_more' : 'chevron_right'
-            }}</mat-icon>
-            <h3 class="section-title">Scenes</h3>
-            <span class="count-chip">{{ draft.scenes.length }}</span>
-          </div>
-          <span class="spacer"></span>
-          @if (sectionOpen('scenes')) {
-            <button mat-stroked-button (click)="addScene()">
-              <mat-icon>add</mat-icon> Add scene
-            </button>
-          }
-        </div>
-        @if (sectionOpen('scenes')) {
-          @for (scene of draft.scenes; track $index) {
-            <div class="row-card">
-              <div class="row-head">
-                <div
-                  class="row-toggle"
-                  role="button"
-                  tabindex="0"
-                  [attr.aria-expanded]="isRowOpen(scene)"
-                  (click)="toggleRow(scene)"
-                  (keyup.enter)="toggleRow(scene)"
-                >
-                  <mat-icon class="caret">{{
-                    isRowOpen(scene) ? 'expand_more' : 'chevron_right'
-                  }}</mat-icon>
-                  <code class="row-key">{{ scene.key || 'new scene' }}</code>
-                  <span class="row-name">{{ scene.name }}</span>
-                  <span class="row-meta">{{ sceneSummary(scene) }}</span>
-                  @if (scene.phase_scope.length > 0) {
-                    <span class="row-chip">{{ phaseScopeSummary(scene.phase_scope) }}</span>
-                  }
-                </div>
-                <button
-                  mat-icon-button
-                  (click)="removeAt(draft.scenes, $index)"
-                  matTooltip="Remove"
-                >
-                  <mat-icon>delete</mat-icon>
-                </button>
-              </div>
-              @if (isRowOpen(scene)) {
-                <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
-                  <mat-label>Name</mat-label>
-                  <input
-                    matInput
-                    [(ngModel)]="scene.name"
-                    (ngModelChange)="onSceneNameChange(scene)"
-                  />
-                </mat-form-field>
-                @if (scene.key && frozen(scene)) {
-                  <p class="generated-id">
-                    id <code>{{ scene.key }}</code>
-                    <span class="dim"
-                      >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming
-                      won't move it</span
-                    >
-                  </p>
-                }
-                <div class="sub-head">
-                  <span class="sub-title">Does</span>
-                  <button mat-button (click)="addSceneMember(scene)">
-                    <mat-icon>add</mat-icon> Add action
-                  </button>
-                </div>
-                @for (member of scene.members; track $index) {
-                  <div class="inline-row wrap">
-                    <mat-form-field appearance="outline" class="narrow">
-                      <mat-label>Slot</mat-label>
-                      <mat-select
-                        [(ngModel)]="member.slot_key"
-                        (ngModelChange)="onSlotChange(member)"
-                      >
-                        @for (key of slotKeys(); track key) {
-                          <mat-option [value]="key">{{ slotLabel(key) }}</mat-option>
-                        }
-                      </mat-select>
-                    </mat-form-field>
-                    <mat-form-field appearance="outline" class="grow">
-                      <mat-label>Action</mat-label>
-                      <mat-select [(ngModel)]="member.action_name" [disabled]="!member.slot_key">
-                        @for (a of actionsForSlot(member.slot_key); track a.name) {
-                          <mat-option [value]="a.name">
-                            {{ a.label }} <span class="dim">{{ a.name }}</span>
-                          </mat-option>
-                        }
-                      </mat-select>
-                    </mat-form-field>
-                    <mat-form-field appearance="outline" class="grow">
-                      <mat-label>Set to</mat-label>
-                      <input matInput [(ngModel)]="member.target_state" placeholder="OFF" />
-                      <!-- Scene target_state may hold a reference too (the seed's stop scene uses
-                           @param.pump.off_state), so it gets the same inserter as a rule action. -->
-                      <button matSuffix mat-icon-button [matMenuTriggerFor]="sceneParams">
-                        <mat-icon>data_object</mat-icon>
-                      </button>
-                      <mat-menu #sceneParams="matMenu">
-                        @for (key of paramKeys(); track key) {
-                          <button mat-menu-item (click)="insertRef(member, 'target_state', key)">
-                            {{ paramLabel(key) }}
-                            <span class="dim">&#64;phase.{{ key }}</span>
-                          </button>
-                        }
-                        @if (paramKeys().length === 0) {
-                          <button mat-menu-item disabled>Declare a parameter first</button>
-                        }
-                      </mat-menu>
-                    </mat-form-field>
-                    <mat-form-field appearance="outline" class="tiny">
-                      <mat-label>Delay</mat-label>
-                      <input matInput type="number" [(ngModel)]="member.delay_seconds" />
-                    </mat-form-field>
-                    <button mat-icon-button (click)="removeAt(scene.members, $index)">
-                      <mat-icon>close</mat-icon>
-                    </button>
-                  </div>
-                }
-                <ng-container
-                  [ngTemplateOutlet]="phaseScopeField"
-                  [ngTemplateOutletContext]="{ $implicit: scene, noun: 'this scene' }"
-                ></ng-container>
               }
             </div>
           }
@@ -1367,7 +1447,7 @@
                       <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
                         <mat-label>Prompt</mat-label>
                         <textarea matInput rows="3" [(ngModel)]="stage.prompt_template"></textarea>
-                        <mat-hint> Insert a parameter or phase detail — resolved per run </mat-hint>
+                        <mat-hint> Insert a parameter, phase detail or answer — resolved per run </mat-hint>
                       </mat-form-field>
                       <div class="ref-chips">
                         @for (ref of phaseMetaRefs(); track ref) {
@@ -1386,6 +1466,18 @@
                             (click)="appendRef(stage, 'prompt_template', '@phase.' + key)"
                           >
                             {{ paramLabel(key) }}
+                          </button>
+                        }
+                        <!-- The blueprint's own questions (F11.6). A fact the user stated, not a
+                             tunable value — "@field.plant" is what makes a prompt say what this
+                             device is actually for. -->
+                        @for (f of fieldRefs(); track f.ref) {
+                          <button
+                            mat-stroked-button
+                            class="ref-chip field"
+                            (click)="appendRef(stage, 'prompt_template', f.ref)"
+                          >
+                            {{ f.label }}
                           </button>
                         }
                       </div>
@@ -1410,92 +1502,63 @@
                         }
                       </mat-select>
                     </mat-form-field>
-                    <!-- Cron stays the stored form, but it is built here from plain language. -->
+                    <!-- The same window a rule condition uses. `schedule_cron` used to live here
+                         and was never evaluated, so a pipeline with only a schedule trigger never
+                         ran at all; one shape for both means one evaluator to keep correct. -->
                     @if (trigger.trigger_type === 'schedule') {
-                      @let sched = scheduleOf(trigger);
                       <mat-form-field appearance="outline" class="narrow">
-                        <mat-label>How often</mat-label>
-                        <mat-select
-                          [ngModel]="sched.mode"
-                          (ngModelChange)="setSchedule(trigger, { mode: $event })"
-                        >
-                          @for (m of scheduleModes; track m.id) {
-                            <mat-option [value]="m.id">{{ m.label }}</mat-option>
+                        <mat-label>{{ trigger.schedule_until ? 'From' : 'At' }} (HH:MM)</mat-label>
+                        <input matInput [(ngModel)]="trigger.schedule_time" placeholder="08:00" />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="narrow">
+                        <mat-label>Until (HH:MM)</mat-label>
+                        <input
+                          matInput
+                          [(ngModel)]="trigger.schedule_until"
+                          placeholder="once only"
+                        />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="tiny">
+                        <mat-label>Every</mat-label>
+                        <input
+                          matInput
+                          type="number"
+                          min="1"
+                          placeholder="min"
+                          [(ngModel)]="trigger.schedule_every_minutes"
+                        />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="grow" subscriptSizing="dynamic">
+                        <mat-label>On days</mat-label>
+                        <mat-select [(ngModel)]="trigger.schedule_days" multiple>
+                          @for (d of weekdays; track d.value) {
+                            <mat-option [value]="d.value">{{ d.label }}</mat-option>
                           }
                         </mat-select>
+                        <mat-hint>Leave empty for every day</mat-hint>
                       </mat-form-field>
-
-                      @if (sched.mode === 'minutes' || sched.mode === 'hours') {
-                        <mat-form-field appearance="outline" class="tiny">
-                          <mat-label>Every</mat-label>
-                          <input
-                            matInput
-                            type="number"
-                            min="1"
-                            [ngModel]="sched.every"
-                            (ngModelChange)="setSchedule(trigger, { every: $event })"
-                          />
-                        </mat-form-field>
-                      }
-                      @if (sched.mode === 'weekly') {
-                        <mat-form-field appearance="outline" class="narrow">
-                          <mat-label>Day</mat-label>
-                          <mat-select
-                            [ngModel]="sched.weekday"
-                            (ngModelChange)="setSchedule(trigger, { weekday: $event })"
-                          >
-                            @for (d of weekdays; track d.value) {
-                              <mat-option [value]="d.value">{{ d.label }}</mat-option>
-                            }
-                          </mat-select>
-                        </mat-form-field>
-                      }
-                      @if (sched.mode === 'daily' || sched.mode === 'weekly') {
-                        <mat-form-field appearance="outline" class="tiny">
-                          <mat-label>Hour</mat-label>
-                          <input
-                            matInput
-                            type="number"
-                            min="0"
-                            max="23"
-                            [ngModel]="sched.hour"
-                            (ngModelChange)="setSchedule(trigger, { hour: $event })"
-                          />
-                        </mat-form-field>
-                        <mat-form-field appearance="outline" class="tiny">
-                          <mat-label>Minute</mat-label>
-                          <input
-                            matInput
-                            type="number"
-                            min="0"
-                            max="59"
-                            [ngModel]="sched.minute"
-                            (ngModelChange)="setSchedule(trigger, { minute: $event })"
-                          />
-                        </mat-form-field>
-                      }
-                      @if (sched.mode === 'cron') {
-                        <mat-form-field appearance="outline" class="grow">
-                          <mat-label>Cron</mat-label>
-                          <input
-                            matInput
-                            [(ngModel)]="trigger.schedule_cron"
-                            placeholder="0 */6 * * *"
-                          />
-                        </mat-form-field>
-                      }
                       <span class="schedule-summary">{{ scheduleSummary(trigger) }}</span>
                     }
                     <!-- A floor on how often this pipeline may run, whatever fires it. Optional —
-                         empty means no floor. -->
+                         empty means no floor. Value + unit, like a rule's cooldown: a raw second
+                         count is not something anyone reads back correctly. -->
                     <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
-                      <mat-label>Min gap (s)</mat-label>
+                      <mat-label>Wait at least</mat-label>
                       <input
                         matInput
                         type="number"
                         min="0"
-                        [(ngModel)]="trigger.min_interval_sec"
+                        placeholder="no limit"
+                        [(ngModel)]="trigger.min_interval_value"
                       />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
+                      <mat-label>Unit</mat-label>
+                      <mat-select [(ngModel)]="trigger.min_interval_unit">
+                        @for (u of cooldownUnits; track u) {
+                          <mat-option [value]="u">{{ u }}</mat-option>
+                        }
+                      </mat-select>
                     </mat-form-field>
                     @if (trigger.trigger_type === 'sensor_threshold') {
                       <mat-form-field appearance="outline" class="narrow">
@@ -1546,9 +1609,461 @@
                   [ngTemplateOutletContext]="{ $implicit: pipeline, noun: 'this pipeline' }"
                 ></ng-container>
 
+                <ng-container
+                  [ngTemplateOutlet]="fanOutField"
+                  [ngTemplateOutletContext]="{ $implicit: pipeline, noun: 'This pipeline' }"
+                ></ng-container>
+
                 <div class="row-foot">
                   <mat-checkbox [(ngModel)]="pipeline.enabled">Enabled</mat-checkbox>
                 </div>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <!-- ── Phases ──────────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('phases')"
+            (click)="toggleSection('phases')"
+            (keyup.enter)="toggleSection('phases')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('phases') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Phases</h3>
+            @if (draft.is_static) {
+              <span class="count-chip">none — static</span>
+            } @else {
+              <span class="count-chip">{{ activeProfile().phases.length }}</span>
+            }
+          </div>
+          <span class="spacer"></span>
+          @if (sectionOpen('phases') && !draft.is_static) {
+            <button mat-stroked-button (click)="addPhase()">
+              <mat-icon>add</mat-icon> Add phase
+            </button>
+          }
+        </div>
+        @if (sectionOpen('phases') && draft.is_static) {
+          <p class="section-hint">
+            This setup is marked as running on no schedule, so it has no phases. Untick
+            <em>Nothing here runs on a schedule</em> in Details to give it a lifecycle.
+          </p>
+        }
+        @if (sectionOpen('phases') && !draft.is_static) {
+          <!--
+            Phases belong to a LIFECYCLE (F11), and one blueprint may offer several — so the editor
+            always edits one at a time. Showing them all in one list would put two steps called
+            "Hold" from different schedules side by side with nothing to tell them apart.
+          -->
+          <div class="profile-bar">
+            <span class="profile-bar-label">Lifecycle</span>
+            @for (profile of draft.profiles; track $index) {
+              <button
+                type="button"
+                class="profile-chip"
+                [class.active]="$index === activeProfileIndex"
+                (click)="selectProfile($index)"
+              >
+                {{ profile.label || profile.key || 'unnamed' }}
+                <span class="profile-chip-count">{{ profile.phases.length }}</span>
+              </button>
+            }
+            <button mat-stroked-button class="profile-add" (click)="addProfile()">
+              <mat-icon>add</mat-icon> Lifecycle
+            </button>
+          </div>
+
+          <div class="field-grid two profile-head">
+            <mat-form-field appearance="outline">
+              <mat-label>Lifecycle name</mat-label>
+              <input
+                matInput
+                [(ngModel)]="activeProfile().label"
+                (ngModelChange)="onProfileNameChange(activeProfile())"
+                placeholder="Default"
+              />
+              <mat-hint>What a user picks per device — e.g. a fast or a slow schedule.</mat-hint>
+            </mat-form-field>
+            @if (hasSeveralProfiles) {
+              <div class="profile-remove">
+                <button mat-stroked-button color="warn" (click)="removeProfile(activeProfileIndex)">
+                  <mat-icon>delete</mat-icon> Remove this lifecycle
+                </button>
+              </div>
+            }
+          </div>
+
+          @for (phase of activeProfile().phases; track $index) {
+            <div class="row-card">
+              <div class="row-head">
+                <div
+                  class="row-toggle"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-expanded]="isRowOpen(phase)"
+                  (click)="toggleRow(phase)"
+                  (keyup.enter)="toggleRow(phase)"
+                >
+                  <mat-icon class="caret">{{
+                    isRowOpen(phase) ? 'expand_more' : 'chevron_right'
+                  }}</mat-icon>
+                  <span class="ordinal-badge">{{ phase.ordinal }}</span>
+                  <code class="row-key">{{ phase.key || 'new phase' }}</code>
+                  <span class="row-name">{{ phase.name }}</span>
+                  <span class="row-meta">{{ phaseSummary(phase) }}</span>
+                  @if (phaseAdvanceChip(phase)) {
+                    <span class="row-chip">{{ phaseAdvanceChip(phase) }}</span>
+                  }
+                </div>
+                <button
+                  mat-icon-button
+                  (click)="
+                    removeAt(activeProfile().phases, $index); renumber(activeProfile().phases)
+                  "
+                  matTooltip="Remove"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              @if (isRowOpen(phase)) {
+                <div class="field-grid">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Name</mat-label>
+                    <input
+                      matInput
+                      [(ngModel)]="phase.name"
+                      (ngModelChange)="onPhaseNameChange(phase)"
+                    />
+                  </mat-form-field>
+                </div>
+                @if (phase.key && frozen(phase)) {
+                  <p class="generated-id">
+                    id <code>{{ phase.key }}</code>
+                    <span class="dim"
+                      >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming
+                      won't move it</span
+                    >
+                  </p>
+                }
+
+                <mat-form-field appearance="outline" class="full">
+                  <mat-label>Context notes (given to the LLM in this phase)</mat-label>
+                  <textarea matInput rows="2" [(ngModel)]="phase.context_notes"></textarea>
+                </mat-form-field>
+
+                <!-- Phase targets -->
+                <div class="sub-head">
+                  <span class="sub-title">Sets</span>
+                  <button mat-button (click)="addPhaseTarget(phase)">
+                    <mat-icon>add</mat-icon> Set a parameter
+                  </button>
+                </div>
+                @if (phase.targets.length === 0) {
+                  <p class="hint-inline">
+                    No targets — every parameter keeps its default in this phase.
+                  </p>
+                }
+                @for (target of phase.targets; track $index) {
+                  <div class="inline-row">
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Parameter</mat-label>
+                      <mat-select [(ngModel)]="target.param_key">
+                        @for (key of paramKeys(); track key) {
+                          <mat-option [value]="key">{{ paramLabel(key) }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Value in this phase</mat-label>
+                      <input matInput [(ngModel)]="target.value" />
+                    </mat-form-field>
+                    <button mat-icon-button (click)="removeAt(phase.targets, $index)">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </div>
+                }
+
+                <!-- What ends this phase (F11.x). The decider list only offers automations that
+                     match this phase's lifecycle level, so an invalid pairing can't be picked. -->
+                <div class="sub-head">
+                  <span class="sub-title">Advances</span>
+                </div>
+                <div class="field-grid">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Advances when</mat-label>
+                    <mat-select [(ngModel)]="phase.advance_mode">
+                      <mat-option value="manual">A person moves it on</mat-option>
+                      <mat-option value="schedule">A fixed time passes</mat-option>
+                      <mat-option value="rule">A rule fires</mat-option>
+                      <mat-option value="pipeline">An AI pipeline decides</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  @if (otherPhases(phase).length > 0) {
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>Advance to</mat-label>
+                      <mat-select [(ngModel)]="phase.advance_to_key">
+                        <mat-option value="">Next phase</mat-option>
+                        @for (p of otherPhases(phase); track p.key) {
+                          <mat-option [value]="p.key">{{ p.name || p.key }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  }
+                </div>
+
+                <!-- The duration only means anything to the `schedule` mode — it is that mode's
+                     argument, not a property of the phase. Shown here, under the mode that reads
+                     it, rather than at the top of the card where it looked like every phase had
+                     one and a manual phase appeared to be misconfigured. -->
+                @if (phase.advance_mode === 'schedule') {
+                  <div class="field-grid pair">
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>After</mat-label>
+                      <input matInput [(ngModel)]="phase.duration_value" placeholder="7" />
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>Unit</mat-label>
+                      <mat-select [(ngModel)]="phase.duration_unit">
+                        @for (u of durationUnits; track u) {
+                          <mat-option [value]="u">{{ u }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  </div>
+                  <!-- A number, or a param — and the param is what lets two devices on THIS one
+                       lifecycle run the phase for different lengths, by overriding it per device. -->
+                  <div class="ref-chips">
+                    @for (key of paramKeys(); track key) {
+                      <button
+                        mat-stroked-button
+                        class="ref-chip"
+                        (click)="phase.duration_value = '@param.' + key"
+                      >
+                        @param.{{ key }}
+                      </button>
+                    }
+                  </div>
+                  <div class="field-hint">{{ durationHint(phase) }}</div>
+                }
+
+                @if (phase.advance_mode === 'rule' || phase.advance_mode === 'pipeline') {
+                  <div class="inline-row">
+                    <mat-form-field appearance="outline" class="grow" subscriptSizing="dynamic">
+                      <mat-label>{{
+                        phase.advance_mode === 'rule' ? 'Deciding rule' : 'Deciding pipeline'
+                      }}</mat-label>
+                      <mat-select [(ngModel)]="phase.advance_ref_key">
+                        @for (a of advanceDeciders(phase.advance_mode); track a.key) {
+                          <mat-option [value]="a.key">{{ a.name }}</mat-option>
+                        }
+                      </mat-select>
+                      @if (advanceDeciders(phase.advance_mode).length === 0) {
+                        <mat-hint>None eligible yet — create one.</mat-hint>
+                      }
+                    </mat-form-field>
+                    <button mat-stroked-button (click)="createDecider(phase)">
+                      <mat-icon>add</mat-icon>
+                      Create {{ phase.advance_mode === 'rule' ? 'a rule' : 'a pipeline' }}
+                    </button>
+                  </div>
+                }
+              }
+            </div>
+          }
+        }
+      </div>
+
+      <!-- ── Scenes ──────────────────────────────────────────────────── -->
+      <div class="section lattice-card">
+        <div class="section-head">
+          <div
+            class="section-toggle"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="sectionOpen('scenes')"
+            (click)="toggleSection('scenes')"
+            (keyup.enter)="toggleSection('scenes')"
+          >
+            <mat-icon class="caret">{{
+              sectionOpen('scenes') ? 'expand_more' : 'chevron_right'
+            }}</mat-icon>
+            <h3 class="section-title">Scenes</h3>
+            <span class="count-chip">{{ draft.scenes.length }}</span>
+          </div>
+          <span class="spacer"></span>
+          @if (sectionOpen('scenes')) {
+            <button mat-stroked-button (click)="addScene()">
+              <mat-icon>add</mat-icon> Add scene
+            </button>
+          }
+        </div>
+        @if (sectionOpen('scenes')) {
+          @for (scene of draft.scenes; track $index) {
+            <div class="row-card">
+              <div class="row-head">
+                <div
+                  class="row-toggle"
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-expanded]="isRowOpen(scene)"
+                  (click)="toggleRow(scene)"
+                  (keyup.enter)="toggleRow(scene)"
+                >
+                  <mat-icon class="caret">{{
+                    isRowOpen(scene) ? 'expand_more' : 'chevron_right'
+                  }}</mat-icon>
+                  <code class="row-key">{{ scene.key || 'new scene' }}</code>
+                  <span class="row-name">{{ scene.name }}</span>
+                  <span class="row-meta">{{ sceneSummary(scene) }}</span>
+                  @if (scene.phase_scope.length > 0) {
+                    <span class="row-chip">{{ phaseScopeSummary(scene.phase_scope) }}</span>
+                  }
+                </div>
+                <button
+                  mat-icon-button
+                  (click)="removeAt(draft.scenes, $index)"
+                  matTooltip="Remove"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+              @if (isRowOpen(scene)) {
+                <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">
+                  <mat-label>Name</mat-label>
+                  <input
+                    matInput
+                    [(ngModel)]="scene.name"
+                    (ngModelChange)="onSceneNameChange(scene)"
+                  />
+                </mat-form-field>
+                @if (scene.key && frozen(scene)) {
+                  <p class="generated-id">
+                    id <code>{{ scene.key }}</code>
+                    <span class="dim"
+                      >— fixed, {{ selected()!.instance_count }} live setup(s) use it; renaming
+                      won't move it</span
+                    >
+                  </p>
+                }
+                <div class="sub-head">
+                  <span class="sub-title">Does</span>
+                  <button mat-button (click)="addSceneMember(scene)">
+                    <mat-icon>add</mat-icon> Add action
+                  </button>
+                </div>
+                @for (member of scene.members; track $index) {
+                  <div class="inline-row wrap">
+                    <mat-form-field appearance="outline" class="narrow">
+                      <mat-label>Slot</mat-label>
+                      <mat-select
+                        [(ngModel)]="member.slot_key"
+                        (ngModelChange)="onSlotChange(member)"
+                      >
+                        @for (key of slotKeys(); track key) {
+                          <mat-option [value]="key">{{ slotLabel(key) }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Action</mat-label>
+                      <mat-select [(ngModel)]="member.action_name" [disabled]="!member.slot_key">
+                        @for (a of actionsForSlot(member.slot_key); track a.name) {
+                          <mat-option [value]="a.name">
+                            {{ a.label }} <span class="dim">{{ a.name }}</span>
+                          </mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" class="grow">
+                      <mat-label>Set to</mat-label>
+                      <input matInput [(ngModel)]="member.target_state" placeholder="OFF" />
+                      <!-- Scene target_state may hold a reference too (the seed's stop scene uses
+                           @param.pump.off_state), so it gets the same inserter as a rule action. -->
+                      <button matSuffix mat-icon-button [matMenuTriggerFor]="sceneParams">
+                        <mat-icon>data_object</mat-icon>
+                      </button>
+                      <mat-menu #sceneParams="matMenu">
+                        @for (key of paramKeys(); track key) {
+                          <button mat-menu-item (click)="insertRef(member, 'target_state', key)">
+                            {{ paramLabel(key) }}
+                            <span class="dim">&#64;phase.{{ key }}</span>
+                          </button>
+                        }
+                        @if (paramKeys().length === 0) {
+                          <button mat-menu-item disabled>Declare a parameter first</button>
+                        }
+                      </mat-menu>
+                    </mat-form-field>
+                    <!-- Fixed seconds or a reference, exactly as a rule action (F11.14). -->
+                    @if (member.delay_ref) {
+                      <mat-form-field appearance="outline" class="small" subscriptSizing="dynamic">
+                        <mat-label>Delay</mat-label>
+                        <input matInput [(ngModel)]="member.delay_ref" placeholder="@param.stagger_seconds" />
+                        <button matSuffix mat-icon-button (click)="member.delay_ref = ''" matTooltip="Use a fixed delay instead">
+                          <mat-icon>link_off</mat-icon>
+                        </button>
+                      </mat-form-field>
+                    } @else {
+                      <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
+                        <mat-label>Delay</mat-label>
+                        <input matInput type="number" min="0" placeholder="0" [(ngModel)]="member.delay_seconds" />
+                        <mat-hint>seconds before sending</mat-hint>
+                      </mat-form-field>
+                      <button mat-icon-button (click)="member.delay_ref = '@param.'" matTooltip="Take the delay from a parameter">
+                        <mat-icon>link</mat-icon>
+                      </button>
+                    }
+                    <!-- Held by the DEVICE, which releases it itself when the time is up — its own
+                         timer, so nothing on this side can lose it. Blank means hold indefinitely. -->
+                    @if (member.duration_ref) {
+                      <mat-form-field appearance="outline" class="small" subscriptSizing="dynamic">
+                        <mat-label>Hold for</mat-label>
+                        <input matInput [(ngModel)]="member.duration_ref" placeholder="@phase.water.seconds" />
+                        <button matSuffix mat-icon-button (click)="member.duration_ref = ''" matTooltip="Use a fixed time instead">
+                          <mat-icon>link_off</mat-icon>
+                        </button>
+                        <mat-hint>the phase decides how long</mat-hint>
+                      </mat-form-field>
+                    } @else {
+                      <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
+                        <mat-label>Hold for</mat-label>
+                        <input matInput type="number" min="0" placeholder="until changed" [(ngModel)]="member.duration_value" />
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="tiny" subscriptSizing="dynamic">
+                        <mat-label>Unit</mat-label>
+                        <mat-select [(ngModel)]="member.duration_unit">
+                          @for (u of cooldownUnits; track u) {
+                            <mat-option [value]="u">{{ u }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+                      <button mat-icon-button (click)="member.duration_ref = '@phase.'" matTooltip="Let the phase decide how long">
+                        <mat-icon>link</mat-icon>
+                      </button>
+                    }
+                    <button mat-icon-button (click)="removeAt(scene.members, $index)">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </div>
+                }
+                <ng-container
+                  [ngTemplateOutlet]="phaseScopeField"
+                  [ngTemplateOutletContext]="{ $implicit: scene, noun: 'this scene' }"
+                ></ng-container>
+
+                <ng-container
+                  [ngTemplateOutlet]="fanOutField"
+                  [ngTemplateOutletContext]="{ $implicit: scene, noun: 'This scene' }"
+                ></ng-container>
               }
             </div>
           }

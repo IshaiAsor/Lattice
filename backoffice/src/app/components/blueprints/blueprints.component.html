@@ -8,6 +8,10 @@
     <h2 class="section-title">Your setups</h2>
     <div class="setup-list">
       @for (setup of setups; track setup.id) {
+        <!-- A panel rather than a row (F11.4): the header is the setup, and one body row per
+             lifecycle beneath it — the setup's own, or one per bound device that carries one.
+             "3 devices · 1 running" is a summary the user then has to go and decode; the rows say
+             which device, where in its track, and how long is left. -->
         <div
           class="setup-card lattice-card"
           [class.inert]="!isRunning(setup)"
@@ -17,66 +21,146 @@
           (keyup.enter)="openFromKey(setup, $event)"
           (keyup.space)="openFromKey(setup, $event)"
         >
-          <mat-icon class="setup-icon">hub</mat-icon>
-          <div class="setup-text">
-            <span class="setup-name">
-              {{ setup.name }}
-              @if (showStateChip(setup)) {
-                <span class="state-chip" [class.live]="isRunning(setup)">
-                  <mat-icon>{{ stateIcon(setup) }}</mat-icon>
-                  {{ stateLabel(setup) }}
-                </span>
-              }
-            </span>
-            <span class="setup-sub">{{ phaseLine(setup) }}</span>
-            @if (showProgressBar(setup)) {
-              <span class="setup-progress">
-                <span class="setup-progress-fill" [style.width.%]="progress(setup)"></span>
+          <div class="setup-head">
+            @if (headTrack(setup).length > 0) {
+              <span
+                class="lifecycle-ring"
+                [style.--pct]="overallPercent(setup)"
+                [matTooltip]="ringTooltip(setup)"
+              >
+                <b>{{ positionLabel(setup) }}</b>
               </span>
-            }
-          </div>
-
-          <!-- Each action handler stops its own click travelling to the row; keyboard activation
-               is filtered by the row's own keyup guard. -->
-          <div class="setup-actions">
-            <!-- Pause/Continue apply to every setup: holding its automations is meaningful with or
-                 without a lifecycle. Reset is phase-only — there is no banked time to discard and
-                 no "not started" to return to when the blueprint declares no phases. -->
-            @if (isRunning(setup)) {
-              <button
-                mat-icon-button
-                (click)="stop(setup, $event)"
-                [disabled]="busyId !== null"
-                matTooltip="Pause — holds every automation this setup owns"
-              >
-                <mat-icon>pause</mat-icon>
-              </button>
             } @else {
-              <button
-                mat-icon-button
-                class="start-action"
-                (click)="start(setup, $event)"
-                [disabled]="busyId !== null"
-                [matTooltip]="
-                  isStopped(setup) ? 'Continue from where it was paused' : 'Start this setup'
-                "
-              >
-                <mat-icon>play_arrow</mat-icon>
-              </button>
+              <mat-icon class="setup-icon">hub</mat-icon>
             }
-            @if (setup.has_phases && setup.lifecycle_state !== 'not_started') {
-              <button
-                mat-icon-button
-                (click)="resetLifecycle(setup, $event)"
-                [disabled]="busyId !== null"
-                matTooltip="Reset — back to not started, discards the time counted in every phase"
-              >
-                <mat-icon>restart_alt</mat-icon>
-              </button>
-            }
+
+            <div class="setup-text">
+              <span class="setup-name">
+                {{ setup.name }}
+                @if (showStateChip(setup)) {
+                  <span class="state-chip" [class.live]="isRunning(setup)">
+                    <mat-icon>{{ stateIcon(setup) }}</mat-icon>
+                    {{ stateLabel(setup) }}
+                  </span>
+                }
+              </span>
+              <span class="setup-sub">{{ phaseLine(setup) }}</span>
+            </div>
+
+            <!-- Each action handler stops its own click travelling to the row; keyboard activation
+                 is filtered by the row's own keyup guard. -->
+            <div class="setup-actions">
+              <!-- Pause/Continue apply to every setup: holding its automations is meaningful with
+                   or without a lifecycle. Reset is phase-only — there is no banked time to discard
+                   and no "not started" to return to when the blueprint declares no phases. -->
+              @if (isRunning(setup)) {
+                <button
+                  mat-icon-button
+                  (click)="stop(setup, $event)"
+                  [disabled]="busyId !== null"
+                  matTooltip="Pause — holds every automation this setup owns"
+                >
+                  <mat-icon>pause</mat-icon>
+                </button>
+              } @else {
+                <button
+                  mat-icon-button
+                  class="start-action"
+                  (click)="start(setup, $event)"
+                  [disabled]="busyId !== null"
+                  [matTooltip]="
+                    isStopped(setup) ? 'Continue from where it was paused' : 'Start this setup'
+                  "
+                >
+                  <mat-icon>play_arrow</mat-icon>
+                </button>
+              }
+              @if (canReset(setup)) {
+                <button
+                  mat-icon-button
+                  (click)="resetLifecycle(setup, $event)"
+                  [disabled]="busyId !== null"
+                  matTooltip="Reset — back to not started, discards the time counted in every phase"
+                >
+                  <mat-icon>restart_alt</mat-icon>
+                </button>
+              }
+            </div>
+
+            <mat-icon class="chevron">chevron_right</mat-icon>
           </div>
 
-          <mat-icon class="chevron">chevron_right</mat-icon>
+          @if (rowsFor(setup); as rows) {
+            @if (rows.length > 0) {
+              <div class="setup-body">
+                @for (row of rows; track row.key) {
+                  <div class="fleet-row" [class.dim]="row.state !== 'running'">
+                    <span class="row-dot" [class]="row.state"></span>
+                    <span class="row-name" [title]="row.label">{{ row.label }}</span>
+                    <span class="row-phase">{{ row.phaseName ?? '—' }}</span>
+
+                    <!-- The whole track: one segment per phase, sized by how long that phase
+                         lasts. Read-only here — moving a phase needs the detail page, where the
+                         consequences of the move are also on screen. -->
+                    <span
+                      class="phase-rail"
+                      role="img"
+                      [attr.aria-label]="railLabel(row)"
+                      [matTooltip]="railTooltip(row)"
+                    >
+                      @for (phase of row.phases; track phase.key) {
+                        <span
+                          class="rail-seg"
+                          [class.spent]="fillOf(row, phase) >= 100"
+                          [style.flex-grow]="weightOf(row, phase)"
+                        >
+                          <i [style.width.%]="fillOf(row, phase)"></i>
+                        </span>
+                      }
+                    </span>
+
+                    <span class="row-timer">{{ timerOf(row) }}</span>
+
+                    <!-- Per-device pause is the most common trip to the detail page; the rest of
+                         the setup carries on, which is the whole difference from pausing here. -->
+                    @if (row.bindingId !== null) {
+                      @if (row.ownState === 'running') {
+                        <button
+                          mat-icon-button
+                          class="row-action"
+                          (click)="stopDevice(setup, row, $event)"
+                          [disabled]="busyId !== null"
+                          [matTooltip]="'Pause ' + row.label + ' — the rest of the setup keeps running'"
+                        >
+                          <mat-icon>pause</mat-icon>
+                        </button>
+                      } @else {
+                        <button
+                          mat-icon-button
+                          class="row-action start-action"
+                          (click)="startDevice(setup, row, $event)"
+                          [disabled]="busyId !== null"
+                          [matTooltip]="deviceStartTooltip(setup, row)"
+                        >
+                          <mat-icon>play_arrow</mat-icon>
+                        </button>
+                      }
+                    } @else {
+                      <span class="row-action-spacer"></span>
+                    }
+                  </div>
+                }
+                @if (hiddenDeviceCount(setup) > 0) {
+                  <div class="fleet-more">
+                    +{{ hiddenDeviceCount(setup) }} more device{{
+                      hiddenDeviceCount(setup) === 1 ? '' : 's'
+                    }}
+                    — open the setup to see them all
+                  </div>
+                }
+              </div>
+            }
+          }
         </div>
       }
     </div>

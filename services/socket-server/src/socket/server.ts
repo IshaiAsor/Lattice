@@ -137,6 +137,8 @@ export async function initSocket(httpServer: http.Server, ch: Channel): Promise<
         actionId: data.actionId,
         value: data.state,
         duration: data.duration,
+        // A person pressed a control. The only path where that is true (F11.12).
+        source: { kind: 'manual' },
       };
       try {
         publish(ch, RK.ACTION_REQUESTED, payload);

@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import type { User } from '@lattice/prisma-client';
+import { isValidTimeZone } from '@lattice/params';
 import { db } from '../db';
 
 const SALT_ROUNDS = 10;
@@ -11,6 +12,8 @@ export interface PublicUser {
   role: string;
   user_type: number;
   profileImage: string | null;
+  /** IANA zone every schedule of theirs is read against. Null = never set; the server's own zone. */
+  timezone: string | null;
 }
 
 export function toPublicUser(user: User): PublicUser {
@@ -21,6 +24,7 @@ export function toPublicUser(user: User): PublicUser {
     role: user.user_role,
     user_type: user.user_type,
     profileImage: user.profile_picture_url,
+    timezone: user.timezone,
   };
 }
 
@@ -190,6 +194,29 @@ class UsersService {
         full_name: patch.full_name,
         updated_at: new Date(),
       },
+    });
+    return toPublicUser(user);
+  }
+
+  /**
+   * The zone this user's schedules mean (F11.11).
+   *
+   * Validated against the runtime's own zone table rather than a hand-written list: an unknown name
+   * would silently fall back to the server's zone at evaluation time, which is exactly the bug this
+   * column exists to fix — so it must not be storable. Null clears it back to the server's zone.
+   */
+  async setTimezone(id: number, timezone: string | null): Promise<PublicUser> {
+    if (timezone !== null && !isValidTimeZone(timezone)) {
+      throw Object.assign(new Error(`"${timezone}" is not a known IANA timezone`), {
+        statusCode: 400,
+      });
+    }
+    if (!(await this.getById(id))) {
+      throw Object.assign(new Error('User not found'), { statusCode: 404 });
+    }
+    const user = await db.user.update({
+      where: { id },
+      data: { timezone, updated_at: new Date() },
     });
     return toPublicUser(user);
   }

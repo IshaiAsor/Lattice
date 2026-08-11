@@ -305,7 +305,13 @@ services:
       - SIM_PASS=${OWNER_PASSWORD:-admin}
       - FLEET_CONFIG=fleet.dev.json
       - PERSIST=false
-      - CLEANUP_ON_EXIT=true
+      # Deliberately false. On shutdown the sim used to DELETE each device it had provisioned, and
+      # `blueprint_slot_bindings.user_device_id` cascades — so every `dev:down`, and every recreate
+      # of this container, silently emptied every blueprint setup of its bound devices and nulled
+      # the device ids on all of `device_commands`. Provisioning upserts by MAC and the fleet's MACs
+      # are deterministic, so leaving the rows in place is what makes a setup survive a restart.
+      # Set it back to true only for a run whose whole point is starting from an empty fleet.
+      - CLEANUP_ON_EXIT=false
     depends_on:
       - api
       - device-gateway

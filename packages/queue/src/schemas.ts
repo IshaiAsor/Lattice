@@ -71,11 +71,20 @@ export const deviceHeartbeatSchema = z.object({
   rssi: z.number().optional(),
 });
 
+// Who raised a command. Carried through the request → dispatch hop so the command history can
+// answer "why did this happen" — a `current_state` of "on" never could.
+export const commandSourceSchema = z.object({
+  kind: z.enum(['manual', 'rule', 'scene', 'pipeline', 'phase', 'device', 'system']),
+  refId: z.number().optional(),
+  label: z.string().optional(),
+});
+
 export const actionRequestedSchema = z.object({
   userId: z.string(),
   actionId: z.number(),
   value: z.unknown(),
   duration: z.string().optional(),
+  source: commandSourceSchema.optional(),
 });
 
 export const actionDispatchSchema = z.object({
@@ -85,6 +94,10 @@ export const actionDispatchSchema = z.object({
   command: z.unknown(),
   commandId: z.string().optional(),
   firmwareVersion: z.string().optional(),
+  source: commandSourceSchema.optional(),
+  // Resolved by whoever raised the command; the recorder would otherwise have to look it up from
+  // (deviceId, actionName) on every dispatch just to write one row.
+  actionId: z.number().optional(),
 });
 
 export const actionResultSchema = z.object({
@@ -102,6 +115,8 @@ export const pictureRequestedSchema = z.object({
   actionId: z.number(),
   commandId: z.string(),
   timeoutMs: z.number(),
+  source: commandSourceSchema.optional(),
+  deliverResult: z.boolean().optional(),
 });
 
 export const pictureResultSchema = z.object({
@@ -161,6 +176,18 @@ export const notificationSendSchema = z.object({
   context: z.object({ area_id: z.number(), area_name: z.string() }).optional(),
 });
 
+// Advance exactly ONE lifecycle owner (F11.x): the setup when `bindingId` is null, otherwise the
+// single pot with that binding id — never a fan-out. The target phase is not carried; the worker
+// reads it off the current phase's `advance_to_key`, so the phase owns "where" and this only says
+// "which one, now".
+export const blueprintPhaseAdvanceSchema = z.object({
+  userId: z.string(),
+  instanceId: z.number(),
+  bindingId: z.number().nullable(),
+  source: z.string(),
+  refKey: z.string(),
+});
+
 // Routing key → schema. Dynamic ML-stage routing keys (mlStageRK) intentionally have no
 // entry here — their payload is pipelineStageSchema but the key is per-model; publish()
 // skips validation for unknown keys.
@@ -185,4 +212,5 @@ export const EVENT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   [RK.SEALED_TEMPLATE_APPLIED]: sealedTemplateAppliedSchema,
   [RK.NOTIFICATION_PUBLISH]: notificationPublishSchema,
   [RK.NOTIFICATION_SEND]: notificationSendSchema,
+  [RK.BLUEPRINT_PHASE_ADVANCE]: blueprintPhaseAdvanceSchema,
 };

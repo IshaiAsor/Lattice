@@ -91,6 +91,19 @@
   --offline-overlay-text: #a0b0c4;
 }
 
+/* ── Icon buttons (themed state layer) ────────────────────────────────── */
+/* Material paints an icon button's hover/press state layer with the M3 neutral
+   (`--mat-sys-on-surface-variant`, #dae5e4 in dark, #44474e in light). On a glass card that lands
+   as a pale grey disc belonging to no part of this design system — and it is on every card header,
+   dialog close and toolbar button in the app, so it reads as a system-wide smudge rather than a
+   hover. Point it at the accent instead, which is the tint everything else here already hovers
+   with. Colour only: M3's opacities (hover .08 / focus .12 / pressed .12) stay, so the affordance
+   keeps the weight Material intends. */
+.mat-mdc-icon-button {
+  --mat-icon-button-state-layer-color: var(--primary);
+  --mat-icon-button-ripple-color: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
 /* ── Scrollbars (themed) ──────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;

@@ -70,7 +70,11 @@ export interface PipelineTriggerDto {
   user_device_action_id?: number | null;
   operator?: string | null;
   threshold_value?: string | null;
-  schedule_cron?: string | null;
+  /** A time, plus an optional window to repeat it in — the one schedule shape (see user rules). */
+  schedule_time?: string | null;
+  schedule_until?: string | null;
+  schedule_every_minutes?: number | null;
+  schedule_days?: number[];
   min_interval_sec?: number | null;
 }
 
@@ -114,7 +118,9 @@ export interface PipelineDetail {
     id: number; trigger_type: string;
     user_device_action_id?: number | null;
     operator?: string | null; threshold_value?: string | null;
-    schedule_cron?: string | null; min_interval_sec?: number | null;
+    schedule_time?: string | null; schedule_until?: string | null;
+    schedule_every_minutes?: number | null; schedule_days?: number[];
+    min_interval_sec?: number | null;
   }[];
 }
 

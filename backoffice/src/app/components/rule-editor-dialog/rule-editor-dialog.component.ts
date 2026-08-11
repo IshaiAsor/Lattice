@@ -10,6 +10,8 @@ import { actionControlType, ActionControlType } from 'src/app/utils/device-type.
 
 interface ConditionPrefill {
   days?: number[];
+  until?: string;
+  everyMinutes?: number | null;
   time?: string;
   user_device_id?: number | null;
   value?: string;
@@ -28,6 +30,8 @@ interface ConditionFormValue {
   condition_type: string;
   time?: string;
   days?: boolean[];
+  until?: string;
+  everyMinutes?: number | null;
   device_id?: number;
   value?: unknown;
   user_device_action_id?: number;
@@ -99,6 +103,8 @@ export class RuleEditorDialogComponent implements OnInit {
         this.addCondition(c.condition_type as 'device_state' | 'threshold' | 'schedule' | 'device_status', {
           days: c.schedule_days ?? [],
           time: c.schedule_time ?? undefined,
+          until: c.schedule_until ?? undefined,
+          everyMinutes: c.schedule_every_minutes ?? null,
           user_device_id: c.user_device_id ?? undefined,
           value: c.threshold_value ?? c.status_value ?? undefined,
           status: c.status_value ?? undefined,
@@ -146,6 +152,10 @@ export class RuleEditorDialogComponent implements OnInit {
       group = this.fb.group({
         condition_type: [type],
         time: [prefill?.time ?? '08:00', Validators.required],
+        // Blank `until` keeps the single-time shape every schedule had before; filling both turns
+        // it into a loop — "06:00 to 17:30 every 10 minutes" — evaluated by the same matcher.
+        until: [prefill?.until ?? ''],
+        everyMinutes: [prefill?.everyMinutes ?? null],
         days: this.fb.array(DAY_LABELS.map((_, i) => this.fb.control(days.includes(i)))),
       });
     } else if (type === 'device_state' || type === 'device_status') {
@@ -218,7 +228,16 @@ export class RuleEditorDialogComponent implements OnInit {
       conditions: value.conditions.map((c: ConditionFormValue) => {
         if (c.condition_type === 'schedule') {
           const days = (c.days as boolean[]).map((checked, i) => checked ? i : -1).filter(i => i >= 0);
-          return { condition_type: 'schedule', schedule_time: c.time, schedule_days: days };
+          // Half a window is not a window: the API rejects one without the other, so a
+          // part-filled form is sent as the plain single-time shape rather than as an error.
+          const looping = !!c.until && !!c.everyMinutes;
+          return {
+            condition_type: 'schedule',
+            schedule_time: c.time,
+            schedule_days: days,
+            schedule_until: looping ? c.until : null,
+            schedule_every_minutes: looping ? Number(c.everyMinutes) : null,
+          };
         }
         if (c.condition_type === 'device_state') {
           return { condition_type: 'device_state', user_device_id: c.device_id, status_value: String(c.value) };

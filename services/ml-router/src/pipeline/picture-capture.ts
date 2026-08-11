@@ -5,6 +5,7 @@ import {
   publish,
   RK,
   QUEUES,
+  type CommandSource,
   type PictureRequestedPayload,
   type PictureResultPayload,
 } from '@lattice/queue';
@@ -38,6 +39,7 @@ export async function requestPicture(
   userId: number,
   actionId: number,
   timeoutMs: number,
+  source: CommandSource,
 ): Promise<PictureResultPayload> {
   const commandId = randomUUID();
 
@@ -60,6 +62,9 @@ export async function requestPicture(
       actionId,
       commandId,
       timeoutMs,
+      // Recorded on the capture's history row, so a camera that stops answering points at the
+      // pipeline that kept asking rather than at an anonymous "system" (F18.6).
+      source,
     };
     publish(ch, RK.PICTURE_REQUESTED, payload);
     log.info({ commandId, actionId, timeoutMs }, 'picture.requested published');

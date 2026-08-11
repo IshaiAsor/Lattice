@@ -36,6 +36,35 @@
   </div>
 </div>
 
+<!-- Setups (F11.4). Above Scenes because a setup is the context the scenes below it run in, so the
+     page reads top-down. Its own strip for the same reason scenes have one: the device card-grid
+     persists drag order and uses cards as grouping drop targets, neither of which applies here.
+     Hidden entirely when the user has no setups — an empty strip is a section about nothing. -->
+@if (setups.length) {
+<div class="setups-section">
+  <div class="setups-header">
+    <mat-icon class="setups-header-icon">hub</mat-icon>
+    <span class="setups-title">Setups</span>
+    <span class="setups-count">{{ setupsRunning }} of {{ setups.length }} running</span>
+    <span class="header-spacer"></span>
+  </div>
+  <div class="setups-row">
+    @for (setup of setups; track setup.id) {
+    <!-- An expanded tile takes the whole row: it stops being a tile and becomes the panel holding
+         every action card that setup owns, which no 190px slot can hold. -->
+    <div class="setup-card-wrapper" [class.expanded]="expandedSetupId === setup.id">
+      <app-setup-tile [setup]="setup" [tick]="setupsTick"
+        [actions]="actionsFor(setup)" [expanded]="expandedSetupId === setup.id"
+        (openSetup)="openSetup(setup)" (pauseSetup)="pauseSetup(setup)"
+        (resumeSetup)="resumeSetup(setup)" (resetSetup)="resetSetup(setup)"
+        (toggleExpand)="toggleSetupExpanded(setup)"
+        (renameAction)="renameAction($event)"></app-setup-tile>
+    </div>
+    }
+  </div>
+</div>
+}
+
 <!-- Scenes (F10.5). Kept out of the device card-grid on purpose: that grid's drag-drop
      persists action order and uses cards as grouping drop targets, neither of which apply
      to a scene. -->
@@ -108,7 +137,7 @@
         [class.deprecated-card]="item.action?.status === 'deprecated'"
          [attr.data-item-index]="i"
          [class.group-hover]="groupDropTargetIndex === i"
-         (cdkDragStarted)="onDragStarted(i)"
+         (cdkDragStarted)="onDragStarted()"
          (cdkDragMoved)="onDragMoved($event)"
          (cdkDragEnded)="onDragEnded()">
 

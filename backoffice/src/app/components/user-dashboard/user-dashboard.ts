@@ -14,6 +14,12 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
 import { GroupTileComponent } from '../group-tile/group-tile.component';
 import { SceneTileComponent } from '../scene-tile/scene-tile.component';
+import { SetupTileComponent } from '../setup-tile/setup-tile.component';
+import { BlueprintsService, InstanceSummary } from 'src/app/services/blueprints.service';
+import { SetupLifecycleService } from '../blueprint-instance/setup-lifecycle.service';
+import { Router } from '@angular/router';
+import { Observable } from 'rxjs';
+import { InstanceView } from 'src/app/services/blueprints.service';
 import { SceneEditorDialogComponent } from '../scene-editor-dialog/scene-editor-dialog.component';
 import { ScenesService, SceneView } from 'src/app/services/scenes.service';
 import { ActionCardComponent } from '../action-card/action-card.component';
@@ -35,7 +41,13 @@ interface AreaSection {
 
 @Component({
   selector: 'app-user-dashboard',
-  imports: [SHARED_MATERIAL, GroupTileComponent, SceneTileComponent, ActionCardComponent],
+  imports: [
+    SHARED_MATERIAL,
+    GroupTileComponent,
+    SceneTileComponent,
+    SetupTileComponent,
+    ActionCardComponent,
+  ],
   templateUrl: './user-dashboard.html',
   styleUrl: './user-dashboard.css',
 })
@@ -50,6 +62,9 @@ export class UserDashboard implements OnInit {
   private areasService = inject(AreasService);
   private rulesService = inject(UserRulesService);
   private scenesService = inject(ScenesService);
+  private blueprintsService = inject(BlueprintsService);
+  private setupLifecycle = inject(SetupLifecycleService);
+  private router = inject(Router);
   private http = inject(HttpClient);
 
   items: DashboardItem[] = [];
@@ -66,8 +81,19 @@ export class UserDashboard implements OnInit {
   // Scene ids with an execute in flight — drives the tile spinner. Cleared on 202, since
   // execution is fire-and-forget (per-device acks arrive later as normal state updates).
   runningSceneIds = new Set<number>();
+  // Setups (F11.4). setupsTick is seconds since the last load, applied by each tile to its own
+  // current phase, so the countdowns move without the dashboard re-fetching anything.
+  setups: InstanceSummary[] = [];
+  setupsRunning = 0;
+  setupsTick = 0;
+  // The actions each setup's bound devices own, and which setup is currently expanded.
+  // Derived from allActions + setups by rebuildLayout(); never fetched separately.
+  setupActions = new Map<number, DeviceActionView[]>();
+  expandedSetupId: number | null = null;
+  private allActions: DeviceActionView[] = [];
+  private setupsLoadedAt = Date.now();
+  private setupsBusy = false;
   isDragging = false;
-  draggingIndex = -1;
   groupDropTargetIndex: number | null = null;
 
   // Stat card values
@@ -90,7 +116,15 @@ export class UserDashboard implements OnInit {
     this.loadActions();
     this.loadAreas();
     this.loadScenes();
+    this.loadSetups();
     this.loadStats();
+
+    // The same ten seconds the setups page and the phase cron use, so a countdown here cannot sit
+    // visibly at zero while the phase has in fact already advanced.
+    const ticker = setInterval(() => {
+      this.setupsTick = Math.floor((Date.now() - this.setupsLoadedAt) / 1000);
+    }, 10_000);
+    this.destroyRef.onDestroy(() => clearInterval(ticker));
 
     this.socketService
       .onActionStateUpdate()
@@ -152,9 +186,7 @@ export class UserDashboard implements OnInit {
       .onDeviceOnlineStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ deviceId, online }) => {
-        this.items
-          .filter(i => i.kind === 'action')
-          .map(i => i.action!)
+        this.allActions
           .filter(a => a.deviceId === deviceId)
           .forEach(a => {
             if (a.online && !online) a.lastOnlineDate = new Date();
@@ -189,13 +221,67 @@ export class UserDashboard implements OnInit {
     this.userActionsService
       .getUserActions()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((actions) => { this.setItems(this.buildItems(actions)); });
+      .subscribe((actions) => { this.setActions(actions); });
   }
 
   private reloadActions() {
     this.userActionsService.getUserActions().subscribe(actions => {
-      this.setItems(this.buildItems(actions));
+      this.setActions(actions);
     });
+  }
+
+  /**
+   * Every action the user owns, before the grid takes its cut. Held whole because three things
+   * read it: the grid (minus the setups'), each setup tile (its own), and the socket handlers
+   * (all of them — a setup's action still goes offline and still acks a command).
+   */
+  private setActions(actions: DeviceActionView[]) {
+    this.allActions = actions;
+    this.rebuildLayout();
+  }
+
+  /**
+   * Splits the actions between the setup tiles and the device grid. A setup's devices used
+   * to appear twice — as rails on the tile and as loose cards below — so the readings that say
+   * whether a setup is working sat in the same pile as every unrelated switch in the house. The
+   * setup's own card now carries them, and the grid stops listing them, so each appears once.
+   *
+   * Both inputs arrive asynchronously, so this runs on whichever lands second as well as first.
+   */
+  private rebuildLayout() {
+    const owner = new Map<number, number>(); // deviceId -> setup id
+    for (const setup of this.setups) {
+      for (const deviceId of setup.device_ids) owner.set(deviceId, setup.id);
+    }
+
+    const bySetup = new Map<number, DeviceActionView[]>();
+    const loose: DeviceActionView[] = [];
+    for (const action of this.allActions) {
+      const setupId = owner.get(action.deviceId);
+      if (setupId === undefined) {
+        loose.push(action);
+        continue;
+      }
+      const arr = bySetup.get(setupId) ?? [];
+      arr.push(action);
+      bySetup.set(setupId, arr);
+    }
+
+    this.setupActions = bySetup;
+    this.setItems(this.buildItems(loose));
+  }
+
+  /** The actions of one setup's bound devices, for its tile. */
+  actionsFor(setup: InstanceSummary): DeviceActionView[] {
+    return this.setupActions.get(setup.id) ?? [];
+  }
+
+  /**
+   * One setup open at a time: expanded, a tile is a full-width panel, and two of them stacked
+   * push the device grid off the page for a dashboard that is meant to be read at a glance.
+   */
+  toggleSetupExpanded(setup: InstanceSummary) {
+    this.expandedSetupId = this.expandedSetupId === setup.id ? null : setup.id;
   }
 
   // Single entry point for replacing the flat item list; keeps the derived area sections in sync.
@@ -224,6 +310,78 @@ export class UserDashboard implements OnInit {
         this.loadAreas();
         this.reloadActions(); // a rename/delete changes the names/areas the cards carry
       });
+  }
+
+  // ── Setups (F11.4) + their live surface ──────────────────────────
+  //
+  // The lifecycle is still read-only here, bar the kebab: phases, parameters and bindings are
+  // operated on the setup page, and tapping a tile goes there. What the tile does now own is the
+  // setup's *devices* — its readings and its switches — because those were the one thing a setup
+  // card did not show while the dashboard listed them separately below.
+
+  private loadSetups() {
+    this.blueprintsService
+      .listInstances()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: setups => {
+          this.setups = setups;
+          this.setupsRunning = setups.filter(s => s.lifecycle_state === 'running').length;
+          this.setupsLoadedAt = Date.now();
+          this.setupsTick = 0;
+          // Which devices belong to a setup only becomes knowable here, and the actions may
+          // already have landed — so the split is redone rather than assumed to have happened.
+          if (this.expandedSetupId !== null && !setups.some(s => s.id === this.expandedSetupId)) {
+            this.expandedSetupId = null;
+          }
+          this.rebuildLayout();
+        },
+        // A dashboard is a summary: if setups cannot be read the strip stays empty rather than
+        // taking the whole page down with an error nobody can act on from here. Every action then
+        // falls back to the grid, which is where they all were before setups had a live surface.
+        error: () => { this.setups = []; this.expandedSetupId = null; this.rebuildLayout(); },
+      });
+  }
+
+  openSetup(setup: InstanceSummary) {
+    void this.router.navigate(['/blueprints', setup.id]);
+  }
+
+  pauseSetup(setup: InstanceSummary) {
+    this.actOnSetup(this.setupLifecycle.stop(setup.id), `Paused: ${setup.name}`, 'Could not pause this setup');
+  }
+
+  resumeSetup(setup: InstanceSummary) {
+    this.actOnSetup(
+      this.setupLifecycle.start(setup.id, {
+        defaultPhaseKey: setup.current_phase?.key ?? null,
+        resuming: setup.lifecycle_state === 'stopped',
+      }),
+      `Started: ${setup.name}`,
+      'Could not start this setup',
+    );
+  }
+
+  resetSetup(setup: InstanceSummary) {
+    this.actOnSetup(this.setupLifecycle.reset(setup.id), `Lifecycle reset: ${setup.name}`, 'Could not reset');
+  }
+
+  /** Each action resolves to null when the user backs out of its confirm — not an error. */
+  private actOnSetup(action: Observable<InstanceView | null>, done: string, failed: string) {
+    if (this.setupsBusy) return;
+    this.setupsBusy = true;
+    action.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: updated => {
+        this.setupsBusy = false;
+        if (!updated) return;
+        this.loadSetups();
+        this.snackBar.open(done, 'Close', { duration: 2500 });
+      },
+      error: (err: { error?: { error?: string } }) => {
+        this.setupsBusy = false;
+        this.snackBar.open(err?.error?.error ?? failed, 'Close', { duration: 3500 });
+      },
+    });
   }
 
   // ── Scenes (F10.5) ───────────────────────────────────────────────
@@ -261,9 +419,9 @@ export class UserDashboard implements OnInit {
   }
 
   private openSceneEditor(scene: SceneView | null) {
-    const actions = this.items
-      .flatMap(i => (i.kind === 'action' ? [i.action!] : i.group!.actions))
-      .filter(a => !isTelemetryAction(a) && !isCameraAction(a));
+    // Every action, not just the grid's: a setup's devices are as valid a scene member as any
+    // other, and they stopped being in `items` when the setup tiles took them over.
+    const actions = this.allActions.filter(a => !isTelemetryAction(a) && !isCameraAction(a));
 
     const ref = this.dialog.open(SceneEditorDialogComponent, {
       data: { scene, actions },
@@ -395,11 +553,10 @@ export class UserDashboard implements OnInit {
     this.activeAreaFilter = key;
   }
 
+  // Over every action the page loaded, not just the grid's top-level ones: a setup's actions are
+  // no longer in `items` at all, and a grouped action never was — both still get socket updates.
   private findAction(actionId: number): DeviceActionView | undefined {
-    for (const item of this.items) {
-      if (item.kind === 'action' && item.action!.id === actionId) return item.action;
-    }
-    return undefined;
+    return this.allActions.find(a => a.id === actionId);
   }
 
   itemTrackId(item: DashboardItem): string {
@@ -410,14 +567,12 @@ export class UserDashboard implements OnInit {
 
   // ── Drag lifecycle ───────────────────────────────────────────────
 
-  onDragStarted(index: number) {
+  onDragStarted() {
     this.isDragging = true;
-    this.draggingIndex = index;
   }
 
   onDragEnded() {
     this.isDragging = false;
-    this.draggingIndex = -1;
     this.groupDropTargetIndex = null;
     this.areaDropTargetKey = null;
   }
@@ -428,7 +583,11 @@ export class UserDashboard implements OnInit {
 
   onDragMoved(event: CdkDragMove) {
     this.lastPointerPos = { x: event.pointerPosition.x, y: event.pointerPosition.y };
-    this.groupDropTargetIndex = this.cardIndexAtPoint(this.lastPointerPos.x, this.lastPointerPos.y);
+    this.groupDropTargetIndex = this.cardIndexAtPoint(
+      this.lastPointerPos.x,
+      this.lastPointerPos.y,
+      event.source.element.nativeElement,
+    );
     // Highlight an area band only when the pointer is over one AND not over a card (a card drop
     // means "group", which wins) — mirrors the drop() precedence so the highlight can't mislead.
     this.areaDropTargetKey =
@@ -452,12 +611,15 @@ export class UserDashboard implements OnInit {
 
   // Returns the index of the card whose bounding rect contains (px, py), excluding the dragged card.
   // Safe to call at drop time because sorting is disabled — no CSS transforms shift rects.
-  private cardIndexAtPoint(px: number, py: number): number | null {
+  // The dragged card is excluded by element identity, not by index: CDK restores the source
+  // element's visibility and fires (cdkDragEnded) *before* (cdkDropListDropped), so at drop time
+  // it is back in the DOM at its original slot with a real rect and any index-based flag is
+  // already cleared — hit-testing it would make a card its own drop target (self-group).
+  private cardIndexAtPoint(px: number, py: number, dragged: HTMLElement): number | null {
     const wrappers = document.querySelectorAll<HTMLElement>('.device-card-wrapper[data-item-index]');
     for (const w of Array.from(wrappers)) {
-      if (w.classList.contains('cdk-drag-preview')) continue;
+      if (w === dragged || w.classList.contains('cdk-drag-preview')) continue;
       const idx = +w.getAttribute('data-item-index')!;
-      if (idx === this.draggingIndex) continue;
       const r = w.getBoundingClientRect();
       if (r.width === 0) continue; // CDK hides original with display:none → zero rect
       if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) return idx;
@@ -498,15 +660,25 @@ export class UserDashboard implements OnInit {
   // ── Drop ─────────────────────────────────────────────────────────
 
   drop(event: CdkDragDrop<DashboardItem[]>) {
+    // The dragged item comes from cdkDragData, not from event.previousIndex: that index counts
+    // positions in the drop list (DOM order, area section by area section), which stops matching
+    // the flat `items` order as soon as sectioning or a filter chip reorders the cards.
+    const dragged: DashboardItem = event.item.data;
+    const draggedIdx = this.items.indexOf(dragged);
+    if (draggedIdx === -1) return;
+
     // Re-check pointer position at drop time (lastPointerPos = final cdkDragMoved position).
     // This is more reliable than the *DropTarget fields which reset on any pointer movement.
-    const targetIdx = this.cardIndexAtPoint(this.lastPointerPos.x, this.lastPointerPos.y);
+    const targetIdx = this.cardIndexAtPoint(
+      this.lastPointerPos.x,
+      this.lastPointerPos.y,
+      event.item.element.nativeElement,
+    );
     const bandKey = targetIdx === null ? this.areaBandAtPoint(this.lastPointerPos.x, this.lastPointerPos.y) : null;
-    const dragged = this.items[event.previousIndex];
     this.groupDropTargetIndex = null;
     this.areaDropTargetKey = null;
 
-    if (targetIdx !== null && dragged.kind === 'action') {
+    if (targetIdx !== null && targetIdx !== draggedIdx && dragged.kind === 'action') {
       // Precedence 1 — dropped onto another card → group them (existing behavior).
       this.handleGroupDrop(dragged, this.items[targetIdx]);
     } else if (bandKey !== null) {
@@ -514,8 +686,8 @@ export class UserDashboard implements OnInit {
       this.reassignItemToArea(dragged, bandKey);
     } else {
       // Precedence 3 — plain reorder. cdkDropListSortingDisabled → currentIndex === previousIndex.
-      const to = this.reorderIndex(this.lastPointerPos.x, this.lastPointerPos.y, event.previousIndex);
-      moveItemInArray(this.items, event.previousIndex, to);
+      const to = this.reorderIndex(this.lastPointerPos.x, this.lastPointerPos.y, draggedIdx);
+      moveItemInArray(this.items, draggedIdx, to);
       this.rebuildSections();
       this.saveOrder();
     }

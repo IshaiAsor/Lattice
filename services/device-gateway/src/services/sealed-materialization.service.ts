@@ -307,6 +307,7 @@ function dispatchConfigReload(deviceId: number, userId: number, firmwareVersion:
       actionName: 'restart',
       command: '',
       firmwareVersion,
+      source: { kind: 'system', label: 'config reload' },
     };
     publish(getChannel(), RK.ACTION_DISPATCH, payload);
   } catch (err) {

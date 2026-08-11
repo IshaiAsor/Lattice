@@ -365,7 +365,15 @@
   margin-left: var(--nav-width);
   flex: 1;
   overflow-y: auto;
-  min-height: 100vh;
+  /* box-sizing and dvh are both load-bearing, and for the same reason. There is no global
+     border-box reset, so as content-box this element measured min-height + padding-bottom =
+     100vh + 64px inside a :host that is height:100% overflow:hidden — the bottom padding, whose
+     entire job is to clear the fixed bottom bar, was clipped off-screen and bought zero
+     clearance, so every scrollable page ended its last row underneath the bar. vh would
+     reintroduce exactly that on a phone, where browser chrome makes 100vh taller than what is
+     actually on screen; dvh tracks the visible viewport. */
+  box-sizing: border-box;
+  min-height: 100dvh;
   transition: margin-left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -388,6 +396,8 @@
 @media (max-width: 599px) {
   .app-main {
     margin-left: 0;
+    /* The shell reserves exactly the bar. Pages keep their own bottom padding for breathing
+       room — they must not add the bar height again on top of this. */
     padding-bottom: var(--bottom-bar-height);
   }
 }
@@ -400,6 +410,9 @@
   left: 0;
   right: 0;
   height: var(--bottom-bar-height);
+  /* Keeps the 1px top border inside the height, so the space .app-main reserves above is exactly
+     the space the bar occupies. */
+  box-sizing: border-box;
   background: var(--nav-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);

@@ -34,35 +34,10 @@ function decomposeInterval(sec: number | null): { value: number; unit: string } 
   return { value: sec, unit: 'sec' };
 }
 
-// schedule_cron is stored as a 6-field cron (seconds first) so the "every N seconds" case is
-// representable; these are the only shapes the "Every / Unit" picker below ever produces or reads.
-const SCHEDULE_CRON_PATTERNS: { unit: string; re: RegExp }[] = [
-  { unit: 'sec',   re: /^\*\/(\d+) \* \* \* \* \*$/ },
-  { unit: 'min',   re: /^0 \*\/(\d+) \* \* \* \*$/ },
-  { unit: 'hours', re: /^0 0 \*\/(\d+) \* \* \*$/ },
-  { unit: 'days',  re: /^0 0 0 \*\/(\d+) \* \*$/ },
-];
+// Days of the week, in JS getDay() order. Empty selection = every day.
+export const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+export const DAY_NAMES  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-function decomposeCron(cron: string | null | undefined): { value: number; unit: string } {
-  const trimmed = cron?.trim();
-  if (trimmed) {
-    for (const { unit, re } of SCHEDULE_CRON_PATTERNS) {
-      const m = trimmed.match(re);
-      if (m) return { value: Number(m[1]), unit };
-    }
-  }
-  return { value: 5, unit: 'min' };
-}
-
-function buildCron(value: number, unit: string): string {
-  const n = Math.max(1, Math.round(value || 1));
-  switch (unit) {
-    case 'sec':   return `*/${n} * * * * *`;
-    case 'hours': return `0 0 */${n} * * *`;
-    case 'days':  return `0 0 0 */${n} * *`;
-    default:      return `0 */${n} * * * *`; // min
-  }
-}
 
 @Component({
   selector: 'app-pipeline-editor-dialog',
@@ -225,12 +200,15 @@ export class PipelineEditorDialogComponent implements OnInit {
           }
 
           p.triggers.forEach((t) => this.triggers.push(this.makeTrigger({
-            trigger_type:          t.trigger_type as never,
-            user_device_action_id: t.user_device_action_id,
-            operator:              t.operator,
-            threshold_value:       t.threshold_value,
-            schedule_cron:         t.schedule_cron,
-            min_interval_sec:      t.min_interval_sec ?? null,
+            trigger_type:           t.trigger_type as never,
+            user_device_action_id:  t.user_device_action_id,
+            operator:               t.operator,
+            threshold_value:        t.threshold_value,
+            schedule_time:          t.schedule_time,
+            schedule_until:         t.schedule_until,
+            schedule_every_minutes: t.schedule_every_minutes,
+            schedule_days:          t.schedule_days,
+            min_interval_sec:       t.min_interval_sec ?? null,
           })));
 
           this.loading = false;
@@ -413,64 +391,64 @@ export class PipelineEditorDialogComponent implements OnInit {
 
   // ── Trigger helpers ──────────────────────────────────────────────────────
 
+  // The schedule shape every surface now uses: a time, and optionally a window to repeat it in.
+  // This dialog used to write `schedule_cron` — a 6-field cron nothing in the platform ever read,
+  // so a pipeline whose only trigger was a schedule never ran at all.
   makeTrigger(v?: {
     trigger_type?: string; user_device_action_id?: number | null; operator?: string | null;
-    threshold_value?: string | null; schedule_cron?: string | null; min_interval_sec?: number | null;
+    threshold_value?: string | null; min_interval_sec?: number | null;
+    schedule_time?: string | null; schedule_until?: string | null;
+    schedule_every_minutes?: number | null; schedule_days?: number[] | null;
   }): FormGroup {
     const interval = decomposeInterval(v?.min_interval_sec ?? null);
-    const schedule = decomposeCron(v?.schedule_cron);
+    const days = new Set(v?.schedule_days ?? []);
     const g = this.fb.group({
-      trigger_type:          [v?.trigger_type ?? 'manual', Validators.required],
-      user_device_action_id: [v?.user_device_action_id ?? null],
-      operator:              [v?.operator ?? '>'],
-      threshold_value:       [v?.threshold_value ?? null],
-      schedule_cron:         [v?.schedule_cron ?? buildCron(schedule.value, schedule.unit)],
-      schedule_value:        [schedule.value, [Validators.required, Validators.min(1)]],
-      schedule_unit:         [schedule.unit],
-      min_interval_value:    [interval.value],
-      min_interval_unit:     [interval.unit],
+      trigger_type:           [v?.trigger_type ?? 'manual', Validators.required],
+      user_device_action_id:  [v?.user_device_action_id ?? null],
+      operator:               [v?.operator ?? '>'],
+      threshold_value:        [v?.threshold_value ?? null],
+      schedule_time:          [v?.schedule_time ?? '08:00'],
+      // Blank pair = fire once at `schedule_time`. Filled, they repeat it through the day.
+      schedule_until:         [v?.schedule_until ?? ''],
+      schedule_every_minutes: [v?.schedule_every_minutes ?? null],
+      schedule_days:          this.fb.array(DAY_LABELS.map((_, d) => this.fb.control(days.has(d)))),
+      min_interval_value:     [interval.value],
+      min_interval_unit:      [interval.unit],
     });
     g.get('trigger_type')!.valueChanges.subscribe((type) => this.updateTriggerValidators(g, type ?? 'manual'));
     this.updateTriggerValidators(g, v?.trigger_type ?? 'manual');
-
-    // The "Every / Unit" fields are the only user-facing schedule controls; schedule_cron is
-    // derived from them and carried along purely so the existing DTO shape needs no change.
-    const syncScheduleCron = () => g.get('schedule_cron')!.setValue(
-      buildCron(g.get('schedule_value')!.value ?? 1, g.get('schedule_unit')!.value ?? 'min'),
-      { emitEvent: false },
-    );
-    g.get('schedule_value')!.valueChanges.subscribe(syncScheduleCron);
-    g.get('schedule_unit')!.valueChanges.subscribe(syncScheduleCron);
-
     return g;
   }
 
   private updateTriggerValidators(g: FormGroup, type: string): void {
     const actionCtrl    = g.get('user_device_action_id')!;
     const thresholdCtrl = g.get('threshold_value')!;
-    const cronCtrl      = g.get('schedule_cron')!;
-    const scheduleCtrl  = g.get('schedule_value')!;
+    const timeCtrl      = g.get('schedule_time')!;
     if (type === 'sensor_threshold') {
       actionCtrl.setValidators([Validators.required, this.validActionId]);
       thresholdCtrl.setValidators(Validators.required);
-      cronCtrl.clearValidators();
-      scheduleCtrl.clearValidators();
+      timeCtrl.clearValidators();
     } else if (type === 'schedule') {
-      cronCtrl.setValidators(Validators.required);
-      scheduleCtrl.setValidators([Validators.required, Validators.min(1)]);
+      timeCtrl.setValidators(Validators.required);
       actionCtrl.setValidators(this.validActionId);
       thresholdCtrl.clearValidators();
     } else {
       actionCtrl.setValidators(this.validActionId);
       thresholdCtrl.clearValidators();
-      cronCtrl.clearValidators();
-      scheduleCtrl.clearValidators();
+      timeCtrl.clearValidators();
     }
     actionCtrl.updateValueAndValidity({ emitEvent: false });
     thresholdCtrl.updateValueAndValidity({ emitEvent: false });
-    cronCtrl.updateValueAndValidity({ emitEvent: false });
-    scheduleCtrl.updateValueAndValidity({ emitEvent: false });
+    timeCtrl.updateValueAndValidity({ emitEvent: false });
   }
+
+  /** The day checkboxes of one trigger, for the template's formArrayName. */
+  scheduleDays(i: number): FormArray {
+    return this.triggers.at(i).get('schedule_days') as FormArray;
+  }
+
+  readonly dayLabels = DAY_LABELS;
+  readonly dayNames  = DAY_NAMES;
 
   addTrigger():              void { this.triggers.push(this.makeTrigger()); }
   removeTrigger(i: number):  void { this.triggers.removeAt(i); }
@@ -549,7 +527,9 @@ export class PipelineEditorDialogComponent implements OnInit {
       execute_condition: string;
       triggers: {
         trigger_type: never; user_device_action_id: number | null; operator: string | null;
-        threshold_value: string | null; schedule_cron: string | null;
+        threshold_value: string | null;
+        schedule_time: string | null; schedule_until: string | null;
+        schedule_every_minutes: number | null; schedule_days: boolean[];
         min_interval_value: number; min_interval_unit: string;
       }[];
     };
@@ -588,16 +568,26 @@ export class PipelineEditorDialogComponent implements OnInit {
       name:     v.name,
       sensors:  flatSensors,
       stages,
-      triggers: v.triggers.map((t) => ({
-        trigger_type:          t.trigger_type,
-        user_device_action_id: t.user_device_action_id,
-        operator:              t.operator,
-        threshold_value:       t.threshold_value,
-        schedule_cron:         t.schedule_cron,
-        min_interval_sec:      t.min_interval_value
-                                 ? Math.round(t.min_interval_value * (UNIT_MULT[t.min_interval_unit] ?? 1))
-                                 : null,
-      })),
+      triggers: v.triggers.map((t) => {
+        // Half a window is not a smaller window — the API rejects it — so an incomplete pair is
+        // sent as no window at all, which is the single-time shape the fields already read as.
+        const repeats = t.trigger_type === 'schedule' && !!t.schedule_until && !!t.schedule_every_minutes;
+        return {
+          trigger_type:           t.trigger_type,
+          user_device_action_id:  t.user_device_action_id,
+          operator:               t.operator,
+          threshold_value:        t.threshold_value,
+          schedule_time:          t.trigger_type === 'schedule' ? (t.schedule_time || null) : null,
+          schedule_until:         repeats ? t.schedule_until : null,
+          schedule_every_minutes: repeats ? Number(t.schedule_every_minutes) : null,
+          schedule_days:          t.trigger_type === 'schedule'
+                                    ? t.schedule_days.map((on, d) => (on ? d : -1)).filter((d) => d >= 0)
+                                    : [],
+          min_interval_sec:       t.min_interval_value
+                                    ? Math.round(t.min_interval_value * (UNIT_MULT[t.min_interval_unit] ?? 1))
+                                    : null,
+        };
+      }),
     };
 
     const req$ = this.data.pipelineId

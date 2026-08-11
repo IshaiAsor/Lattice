@@ -8,7 +8,9 @@
 #include <actions/AckPublisher.h>
 #include "actions/DeviceAction.h"
 #include "actions/commands/PayloadValidation.h"
+#include "actions/commands/DurationState.h"
 #include "config/Log.h"
+#include "config/settings.h"
 
 // Command surface of DeviceAction — actuators with a validated payload, NVS-persisted state,
 // duration auto-off, and acks. Leaf classes (Outlet/Motor/Dimmer/OnboardLed) override only
@@ -41,7 +43,6 @@ class BaseCommandAction : public DeviceAction
             LOG_D("Cmd", "executing valid action: %s", action.c_str());
             executeValidAction(action);
             state = action;
-            prefService.SaveActionState((char*)actionName.c_str(), (char*)action.c_str());
             if (durationMs > 0)
             {
                 _durationMs     = durationMs;
@@ -52,6 +53,18 @@ class BaseCommandAction : public DeviceAction
             {
                 _durationActive = false;
             }
+            // The deadline is saved WITH the state, as wall-clock seconds: `millis()` restarts at
+            // zero on boot, so a countdown kept only in RAM is lost by the one event it most needs
+            // to survive. An unsynced clock stores no deadline — better none than a wrong one.
+            time_t deadline = 0;
+            if (durationMs > 0)
+            {
+                const time_t now = time(nullptr);
+                if (now >= MIN_VALID_EPOCH)
+                    deadline = now + (time_t)(durationMs / 1000);
+            }
+            const std::string stored = DurationState::encode(std::string(action.c_str()), deadline);
+            prefService.SaveActionState((char*)actionName.c_str(), (char*)stored.c_str());
             return true;
         }
         LOG_W("Cmd", "invalid parameter: %s", action.c_str());
@@ -96,7 +109,10 @@ class BaseCommandAction : public DeviceAction
     String getState() override
     {
         if (state.length() == 0)
-            state = prefService.LoadActionState((char*)actionName.c_str());
+        {
+            String raw = prefService.LoadActionState((char*)actionName.c_str());
+            state      = DurationState::decode(std::string(raw.c_str())).state.c_str();
+        }
         return state;
     }
 
@@ -104,10 +120,25 @@ class BaseCommandAction : public DeviceAction
     // commandId) so the backend records the restored state as authoritative.
     void loadState() override
     {
-        String lastState = prefService.LoadActionState((char*)actionName.c_str());
-        if (lastState.length() > 0)
+        String raw = prefService.LoadActionState((char*)actionName.c_str());
+        if (raw.length() > 0)
         {
-            bool ok = applyAction(lastState);
+            const DurationState::Saved       saved = DurationState::decode(std::string(raw.c_str()));
+            const DurationState::RestorePlan plan  = DurationState::planRestore(saved, time(nullptr), MIN_VALID_EPOCH);
+
+            // A hold that ended while the device was down (or whose clock cannot be trusted) must
+            // not come back on: restore the resting state instead. This is the case that used to
+            // leave a valve open indefinitely after a reboot.
+            String lastState =
+                plan.action == DurationState::Restore::Expired ? String("off") : String(saved.state.c_str());
+            int32_t remainingMs =
+                plan.action == DurationState::Restore::Remaining ? (int32_t)(plan.remainingSeconds * 1000) : -1;
+            if (plan.action == DurationState::Restore::Expired)
+                LOG_I("Cmd", "%s: timed hold expired while down — restoring off", actionName.c_str());
+            else if (plan.action == DurationState::Restore::Remaining)
+                LOG_I("Cmd", "%s: resuming timed hold, %lds left", actionName.c_str(), plan.remainingSeconds);
+
+            bool ok = applyAction(lastState, remainingMs);
             if (ackPublisher)
                 ackPublisher(actionName.c_str(), "", ok, lastState.c_str());
         }

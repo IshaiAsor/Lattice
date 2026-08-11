@@ -7,6 +7,7 @@ import { socket } from '../socket/emitter';
 import { takePending } from '../cache/pending';
 import type { PendingCommand } from '../cache/pending';
 import * as timeout from '../pending-timeout';
+import { recordAck } from '../command-history';
 import { db } from '../db/client';
 
 const log = createLogger('digest-service:action-result');
@@ -29,6 +30,11 @@ export function actionResultConsumer(ch: Channel) {
       timeout.clear(commandId);
       pending = await takePending(commandId);
     }
+
+    // The durable half of the same settlement (F11.12), and the only record of an ack that has no
+    // command behind it — a duration releasing, or a boot restore. Written before the branches
+    // below because an error ack returns early, and "the device refused" is worth keeping.
+    await recordAck(payload);
 
     if (status === 'error') {
       // OTA failure — rollback staged actions and restore old ones.
