@@ -2,6 +2,7 @@ import type { Channel } from 'amqplib';
 import { publish, RK } from '@lattice/queue';
 import type { DeviceStateChangedPayload, NotificationSendPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
+import { compareVersions } from '@lattice/capability-validation';
 import { db } from '../db/client';
 import { valkey, keys } from '../cache/valkey';
 import { socket } from '../socket/emitter';
@@ -21,6 +22,35 @@ export function deviceStatusConsumer(ch: Channel) {
     const userDeviceId = parseInt(deviceId, 10);
 
     log.info({ userId, deviceId, online }, 'device.status received');
+
+    // 0. Reject status from a firmware version this device has already moved past.
+    //
+    // Devices publish status RETAINED on a topic carrying their firmware version, so every
+    // OTA strands the previous version's retained `offline` on the broker forever — one prod
+    // device currently has four, back to v2.0.328. All of them resolve to the same device and
+    // are replayed on every re-subscribe (a service restart or broker reconnect), arriving
+    // with fresh receive-timestamps that the newest-wins guard below cannot tell apart. Since
+    // most of them say `offline`, replaying them is a coin-flip that marks a live device dead.
+    // A version *newer* than the catalog row is not stale — that is a device reporting an OTA
+    // that has landed but is not yet confirmed, which is exactly what section 2 settles.
+    if (version != null) {
+      const known = await db.userDevice.findUnique({
+        where: { id: userDeviceId },
+        select: { pending_firmware_version: true, device: { select: { version: true } } },
+      });
+      if (known == null) {
+        log.warn({ userDeviceId, version }, 'status for unknown device — ignored');
+        return;
+      }
+      if (compareVersions(version, known.device.version) < 0) {
+        log.warn(
+          { userDeviceId, version, currentVersion: known.device.version },
+          'status from a superseded firmware version — ignored as stale retained',
+        );
+        return;
+      }
+    }
+
     // 1. Authoritative liveness write — failure nacks → DLQ.
     //
     // Guarded on the message's own timestamp. A reconnect emits the broker's Last-Will
