@@ -4,6 +4,7 @@
 import {
   isCompatible,
   migratePins,
+  indexCapabilitiesByKey,
 } from '../../services/device-gateway/src/services/action-compatibility';
 
 describe('isCompatible', () => {
@@ -45,6 +46,66 @@ describe('isCompatible', () => {
     expect(isCompatible('VirtualAction', [], cap('VirtualAction', []))).toEqual({
       compatible: true,
     });
+  });
+
+  // The catalog rows these arrays come from are loaded with no ORDER BY, so two identical
+  // capabilities can legitimately arrive in different orders. Comparing positionally reported a
+  // rename that never happened.
+  it('accepts the same pin slots in a different order', () => {
+    expect(
+      isCompatible(
+        'I2cSocket8Action',
+        pins(['sda', 'scl', 'address', 'channel']),
+        cap('I2cSocket8Action', ['address', 'channel', 'scl', 'sda']),
+      ),
+    ).toEqual({ compatible: true });
+  });
+
+  it('names every pin slot that disappeared when several do', () => {
+    const r = isCompatible(
+      'SensorAction',
+      pins(['data', 'clock']),
+      cap('SensorAction', ['signal', 'strobe']),
+    );
+    expect(r.compatible).toBe(false);
+    expect(r.reason).toContain('"data"');
+    expect(r.reason).toContain('"clock"');
+  });
+});
+
+describe('indexCapabilitiesByKey', () => {
+  // mqtt_action_name is not unique within a device row: the 8- and 16-channel I2C socket
+  // capabilities both publish as "socket". Indexing on it kept only the last one, so every
+  // channel of an 8-channel board was compared against the 16-channel capability and reported
+  // as "implementation type changed" on an upgrade that changed nothing about it.
+  const socket8 = {
+    capability_key: 'i2c_socket_8',
+    mqtt_action_name: 'socket',
+    implementation_type: 'I2cSocket8Action',
+  };
+  const socket16 = {
+    capability_key: 'i2c_socket_16',
+    mqtt_action_name: 'socket',
+    implementation_type: 'I2cSocket16Action',
+  };
+
+  it('keeps capabilities that share an mqtt_action_name', () => {
+    const index = indexCapabilitiesByKey([socket8, socket16]);
+    expect(index.size).toBe(2);
+    expect(index.get('i2c_socket_8')).toBe(socket8);
+    expect(index.get('i2c_socket_16')).toBe(socket16);
+  });
+
+  it('resolves an action to its own capability, not a same-named sibling', () => {
+    const index = indexCapabilitiesByKey([socket8, socket16]);
+    const counterpart = index.get('i2c_socket_8');
+    expect(isCompatible('I2cSocket8Action', [], { ...counterpart!, pins: [] })).toEqual({
+      compatible: true,
+    });
+  });
+
+  it('reports a genuinely removed capability as absent', () => {
+    expect(indexCapabilitiesByKey([socket16]).get('i2c_socket_8')).toBeUndefined();
   });
 });
 

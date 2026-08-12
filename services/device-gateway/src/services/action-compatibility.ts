@@ -18,15 +18,41 @@ export function isCompatible(
   if (existingPins.length !== newPins.length) {
     return { compatible: false, reason: 'pin count changed' };
   }
-  for (let i = 0; i < existingPins.length; i++) {
-    if (existingPins[i].key !== newPins[i].key) {
-      return {
-        compatible: false,
-        reason: `pin slot "${existingPins[i].key}" renamed to "${newPins[i].key}"`,
-      };
-    }
+
+  // Compared as sets, not position by position. A pin slot is identified by its key — which is
+  // exactly how migratePins already remaps them — and the catalog rows these arrays come from
+  // are loaded with no ORDER BY, so their order is whatever Postgres returns. Two byte-identical
+  // capabilities really can arrive in different orders, and a positional compare would then
+  // report a pin rename that never happened.
+  const newKeys = new Set(newPins.map((p) => p.key));
+  const missing = existingPins.map((p) => p.key).filter((k) => !newKeys.has(k));
+  if (missing.length === 0) {
+    return { compatible: true };
   }
-  return { compatible: true };
+
+  const existingKeys = new Set(existingPins.map((p) => p.key));
+  const added = newPins.map((p) => p.key).filter((k) => !existingKeys.has(k));
+  if (missing.length === 1 && added.length === 1) {
+    return { compatible: false, reason: `pin slot "${missing[0]}" renamed to "${added[0]}"` };
+  }
+  return {
+    compatible: false,
+    reason: `pin slots ${missing.map((k) => `"${k}"`).join(', ')} no longer exist`,
+  };
+}
+
+// Index a target version's capabilities for cross-version matching.
+//
+// MUST be keyed by capability_key — the unique identity within a device row
+// (@@unique([device_id, capability_key])). mqtt_action_name is NOT unique: i2c_socket_8 and
+// i2c_socket_16 both publish as "socket", so a Map keyed on it keeps only whichever was built
+// last and silently compares actions against the wrong capability. That is what made an
+// 8-channel socket board preview all 8 channels as "implementation type changed" against the
+// 16-channel capability, on an upgrade where its own capability was unchanged.
+export function indexCapabilitiesByKey<T extends { capability_key: string }>(
+  capabilities: T[],
+): Map<string, T> {
+  return new Map(capabilities.map((c) => [c.capability_key, c]));
 }
 
 // Map a user action's configured pins from the old capability's catalog pins to the new

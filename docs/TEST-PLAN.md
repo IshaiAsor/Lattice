@@ -299,6 +299,11 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - rejects a changed pin count
 - rejects a renamed pin slot and names it in the reason
 - accepts zero-pin capabilities
+- accepts the same pin slots in a different order
+- names every pin slot that disappeared when several do
+- keeps capabilities that share an mqtt_action_name
+- resolves an action to its own capability, not a same-named sibling
+- reports a genuinely removed capability as absent
 - remaps configured pins to the new capability pin ids by key
 - drops pins whose key no longer exists in the new capability
 - drops pins referencing unknown old catalog ids
