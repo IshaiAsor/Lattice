@@ -173,11 +173,20 @@ services:
       - VALKEY_URL=redis://${REDIS_USER}:${REDIS_PASSWORD}@cache:6379
       - GOOGLE_AUTH_CLIENT_ID=${GOOGLE_AUTH_CLIENT_ID}
       - GOOGLE_AUTH_CLIENT_SECRET=${GOOGLE_AUTH_CLIENT_SECRET}
-      - GOOGLE_SERVICE_ACCOUNT_KEY=${GOOGLE_SERVICE_ACCOUNT_KEY}
+      # Keyless HomeGraph: ADC reads the impersonated-SA credential mounted below (no downloaded
+      # key). Mirrors the cluster's WIF setup — same code path, different ADC source.
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcloud/adc.json
       # Account linking hands the user to the backoffice login page. Deployed environments serve
       # both on one host (empty = same origin); locally the UI is a separate dev server.
       - BACKOFFICE_URL=${BACKOFFICE_URL:-http://localhost:4200}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+    volumes:
+      # gcloud application-default credentials (impersonated homegraph SA), read-only. Long
+      # syntax because a Windows drive-letter path (C:/...) breaks the short "a:b:c" form.
+      - type: bind
+        source: ${GOOGLE_ADC_FILE}
+        target: /gcloud/adc.json
+        read_only: true
     depends_on:
       postgres:
         condition: service_healthy

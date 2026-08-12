@@ -1,0 +1,29 @@
+# Local reverse proxy that mirrors the prod/staging ingress path layout on ONE origin, so the
+# Google Home account-linking flow (which bounces the user's phone through the public ngrok URL)
+# behaves exactly like a deployed environment.
+#
+# Point ngrok at this: `ngrok http --domain=dividual-leigha-tensible.ngrok-free.dev 8080`
+# Run Caddy:            `caddy run --config Caddyfile.local`
+# Then everything under https://dividual-leigha-tensible.ngrok-free.dev routes here.
+{
+	auto_https off
+	admin off
+}
+
+:8080 {
+	# google-home (account linking + fulfillment) — most specific path first
+	handle /api/google/* {
+		reverse_proxy localhost:3010
+	}
+	# api service
+	handle /api/* {
+		reverse_proxy localhost:3100
+	}
+	# backoffice Angular dev server. ng serve rejects a foreign Host header, so present it as
+	# localhost; the browser's own origin (the ngrok URL) is unaffected by this upstream header.
+	handle {
+		reverse_proxy localhost:4200 {
+			header_up Host localhost:4200
+		}
+	}
+}

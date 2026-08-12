@@ -222,6 +222,84 @@
       },
       "presentation": { "reveal": "always", "panel": "dedicated" },
       "problemMatcher": []
+    },
+    {
+      "label": "google:recreate-keyless",
+      "type": "shell",
+      "command": "docker compose -f compose.yaml -f compose.dev.yaml up -d --force-recreate google-home",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}"
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "google-local" },
+      "problemMatcher": []
+    },
+    {
+      "label": "google:caddy",
+      "type": "shell",
+      "command": "caddy run --config Caddyfile.local",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}"
+      },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "google-local" },
+      "problemMatcher": {
+        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "serving initial configuration|autosaved config|serving"
+        }
+      }
+    },
+    {
+      "label": "google:ngrok",
+      "type": "shell",
+      "command": "ngrok http --domain=dividual-leigha-tensible.ngrok-free.dev 8080",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}"
+      },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "google-local" },
+      "problemMatcher": {
+        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "started tunnel|Forwarding|url=|Session Status"
+        }
+      }
+    },
+    {
+      "label": "google:serve-ngrok",
+      "type": "shell",
+      "command": "npx ng serve --configuration=ngrok",
+      "options": {
+        "cwd": "${workspaceFolder:Backoffice UI}"
+      },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "google-local" },
+      "problemMatcher": {
+        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": {
+            "regexp": "Generating browser application bundles|Compiling|Building"
+          },
+          "endsPattern": {
+            "regexp": "Application bundle generation complete|Compiled successfully|watch mode enabled"
+          }
+        }
+      }
+    },
+    {
+      "label": "google:local",
+      "dependsOn": [
+        "google:recreate-keyless",
+        "google:caddy",
+        "google:ngrok",
+        "google:serve-ngrok"
+      ],
+      "problemMatcher": []
     }
   ]
 }
