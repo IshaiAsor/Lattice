@@ -59,10 +59,16 @@ class ActionMigrationService {
       }),
     ]);
 
-    const capabilityByMqttName = new Map(capabilities.map((c) => [c.mqtt_action_name, c]));
+    // Keyed by capability_key, which is what uniquely identifies a capability within a device
+    // row (@@unique([device_id, capability_key])). mqtt_action_name is NOT unique — i2c_socket_8
+    // and i2c_socket_16 both publish as "socket" — so keying by it silently dropped one of them
+    // and compared an action against whichever capability happened to be built last. That made
+    // the 8-channel socket board preview every one of its channels as "implementation type
+    // changed" against the 16-channel capability, on an upgrade where nothing about it changed.
+    const capabilityByKey = new Map(capabilities.map((c) => [c.capability_key, c]));
 
     const actions: ActionPreview[] = activeActions.map((ua) => {
-      const bp = capabilityByMqttName.get(ua.capability.mqtt_action_name ?? '');
+      const bp = capabilityByKey.get(ua.capability.capability_key);
       if (!bp) {
         return {
           id: ua.id,
@@ -127,7 +133,8 @@ class ActionMigrationService {
       }),
     ]);
 
-    const capabilityByMqttName = new Map(capabilities.map((c) => [c.mqtt_action_name, c]));
+    // Same uniqueness constraint as previewUpdate: capability_key, not mqtt_action_name.
+    const capabilityByKey = new Map(capabilities.map((c) => [c.capability_key, c]));
 
     await db.$transaction(async (tx) => {
       // Clear any previous in-flight OTA staging before applying a new one.
@@ -140,7 +147,7 @@ class ActionMigrationService {
       });
 
       for (const ua of activeActions) {
-        const bp = capabilityByMqttName.get(ua.capability.mqtt_action_name ?? '');
+        const bp = capabilityByKey.get(ua.capability.capability_key);
         if (!bp) {
           // Incompatible — stage for deprecation; leave active until OTA confirms.
           await tx.userDeviceAction.update({
