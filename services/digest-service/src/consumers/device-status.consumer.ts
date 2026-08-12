@@ -5,6 +5,7 @@ import { createLogger } from '@lattice/logger';
 import { db } from '../db/client';
 import { valkey, keys } from '../cache/valkey';
 import { socket } from '../socket/emitter';
+import { confirmOtaIfPending } from '../ota-confirm';
 
 const log = createLogger('digest-service:device-status');
 
@@ -21,47 +22,32 @@ export function deviceStatusConsumer(ch: Channel) {
 
     log.info({ userId, deviceId, online }, 'device.status received');
     // 1. Authoritative liveness write — failure nacks → DLQ.
-    await db.userDevice.update({
-      where: { id: userDeviceId },
-      data: { online, last_online_date: new Date(timestamp) },
+    //
+    // Guarded on the message's own timestamp. A reconnect emits the broker's Last-Will
+    // `offline` and the device's `online` milliseconds apart (session takeover), and
+    // consume() invokes handlers concurrently — so without this guard the older `offline`
+    // can be applied last and strand a live device as offline until its next reconnect.
+    // Writing only when we are not older makes the pair order-independent.
+    const statusAt = new Date(timestamp);
+    const applied = await db.userDevice.updateMany({
+      where: {
+        id: userDeviceId,
+        OR: [{ last_online_date: null }, { last_online_date: { lte: statusAt } }],
+      },
+      data: { online, last_online_date: statusAt },
     });
+
+    if (applied.count === 0) {
+      log.warn(
+        { userDeviceId, online, timestamp },
+        'stale device status ignored — a newer status is already recorded',
+      );
+      return;
+    }
 
     // 2. OTA confirmation: device reconnected on the expected new-version topic path.
     if (online && version) {
-      const userDevice = await db.userDevice.findUnique({
-        where: { id: userDeviceId },
-        select: { pending_firmware_version: true, pending_device_type_id: true },
-      });
-      if (
-        userDevice != null &&
-        userDevice.pending_firmware_version === version &&
-        userDevice.pending_device_type_id != null
-      ) {
-        const pendingDeviceTypeId = userDevice.pending_device_type_id;
-        await db.$transaction([
-          db.userDeviceAction.updateMany({
-            where: { user_device_id: userDeviceId, status: 'staged_active' },
-            data: { status: 'active' },
-          }),
-          db.userDeviceAction.updateMany({
-            where: { user_device_id: userDeviceId, status: 'staged_deprecated' },
-            data: { status: 'deprecated' },
-          }),
-          db.userDevice.update({
-            where: { id: userDeviceId },
-            data: {
-              current_firmware_version: version,
-              device_type_id: pendingDeviceTypeId,
-              pending_firmware_version: null,
-              pending_device_type_id: null,
-            },
-          }),
-        ]);
-        log.info(
-          { userDeviceId, version },
-          'OTA confirmed — actions activated, firmware version updated',
-        );
-      }
+      await confirmOtaIfPending(userDeviceId, version);
     }
 
     // 2. Hot cache (best-effort).

@@ -116,6 +116,14 @@ export interface ActionResultPayload {
   status: 'ok' | 'error';
   value?: unknown; // resulting state the device actually applied
   timestamp: string;
+  /**
+   * The firmware version the device is actually RUNNING, read off the ack topic path.
+   * The device publishes on `.../{version}/ack/...`, so this is the device's own report of
+   * itself rather than what the catalog believes. Used to settle an OTA: a device that
+   * rejects an update as `not-newer` while already running the pending version has in fact
+   * completed it.
+   */
+  version?: string;
 }
 
 // A request for a fresh camera frame — raised by ml-router for a pipeline's enrich stage, or by

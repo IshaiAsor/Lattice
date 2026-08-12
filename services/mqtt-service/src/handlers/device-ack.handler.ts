@@ -44,6 +44,9 @@ export function deviceAckHandler(ch: Channel): MqttHandler {
         status,
         value: raw.value,
         timestamp: new Date().toISOString(),
+        // The device acks on its own running-version topic path. Forwarding it lets digest
+        // settle an OTA from the device's self-report instead of only from the status message.
+        version: parsed.version,
       };
       publish(ch, RK.ACTION_RESULT, msg);
       log.info({ topic: parsed, msg }, 'ack received and forwarded as action.result');

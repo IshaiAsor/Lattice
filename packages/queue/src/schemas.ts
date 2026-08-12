@@ -108,6 +108,8 @@ export const actionResultSchema = z.object({
   status: z.enum(['ok', 'error']),
   value: z.unknown().optional(),
   timestamp: z.string(),
+  // The version segment of the ack topic — the firmware the device is really running.
+  version: z.string().optional(),
 });
 
 export const pictureRequestedSchema = z.object({

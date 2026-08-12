@@ -19,7 +19,12 @@ export function otaDispatchConsumer(client: MqttClient) {
       timestamp: payload.timestamp,
     });
 
-    client.publish(topic, message, { qos: 1, retain: true }, (err) => {
+    // Deliberately NOT retained. A retained notification is redelivered to every device of
+    // this type on every reconnect, which turns one release into an update attempt after each
+    // nightly router restart — devices already on the version answer `rejected:not-newer`
+    // forever. Updates are meant to be user-initiated, so this reaches the devices connected
+    // when it is published and is not replayed by the broker afterwards.
+    client.publish(topic, message, { qos: 1, retain: false }, (err) => {
       if (err) {
         log.error({ err, topic, version: payload.version }, 'failed to publish OTA update');
       } else {

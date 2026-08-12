@@ -9,6 +9,7 @@ import type { PendingCommand } from '../cache/pending';
 import * as timeout from '../pending-timeout';
 import { recordAck } from '../command-history';
 import { db } from '../db/client';
+import { confirmOtaIfPending } from '../ota-confirm';
 
 const log = createLogger('digest-service:action-result');
 
@@ -20,7 +21,7 @@ const log = createLogger('digest-service:action-result');
 // makes on its own (duration auto-off, boot restore) and still update state.
 export function actionResultConsumer(ch: Channel) {
   return async (payload: ActionResultPayload): Promise<void> => {
-    const { userId, deviceId, actionName, commandId, status, value, timestamp } = payload;
+    const { userId, deviceId, actionName, commandId, status, value, timestamp, version } = payload;
     log.info({ userId, deviceId, actionName, commandId, status }, 'action.result received');
 
     // Settle the in-flight request (if any). takePending races the timeout via GETDEL;
@@ -40,6 +41,23 @@ export function actionResultConsumer(ch: Channel) {
       // OTA failure — rollback staged actions and restore old ones.
       if (actionName === 'ota') {
         const userDeviceId = parseInt(deviceId, 10);
+        const detail = typeof value === 'string' ? value : '';
+
+        // `not-newer` is the device reporting it ALREADY runs what we offered — the opposite
+        // of a failed update. Treating it as a failure is what stranded devices whose update
+        // had in fact landed: it clears pending_firmware_version, so the confirming status
+        // message can never settle the OTA, and the device stays pinned to the old catalog
+        // row — addressed on a command topic it no longer subscribes to. Settle from the
+        // version the device reports instead of rolling back.
+        if (detail.startsWith('rejected:not-newer')) {
+          const confirmed = version != null && (await confirmOtaIfPending(userDeviceId, version));
+          log.info(
+            { userDeviceId, version, confirmed },
+            'device already runs the offered firmware — not an OTA failure',
+          );
+          return;
+        }
+
         await db.$transaction([
           db.userDeviceAction.deleteMany({
             where: { user_device_id: userDeviceId, status: 'staged_active' },
