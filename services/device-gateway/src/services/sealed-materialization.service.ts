@@ -267,6 +267,9 @@ export async function reMaterializeMatchingDevices(templateId: number): Promise<
     where: { device: { is_sealed: true } },
     include: { device: { select: { type: true, version: true } } },
   });
+  // Template targeting is a catalog question — which (type, version) rows a template covers — so
+  // the filter below stays on device.version. Only the dispatch address below uses the version
+  // the hardware actually booted.
   const matching = sealedDevices.filter((d) =>
     template.targets.some(
       (t) =>
@@ -277,7 +280,7 @@ export async function reMaterializeMatchingDevices(templateId: number): Promise<
 
   for (const dev of matching) {
     await materializeForUserDevice(dev.id);
-    dispatchConfigReload(dev.id, dev.user_id, dev.device.version);
+    dispatchConfigReload(dev.id, dev.user_id, dev.current_firmware_version ?? dev.device.version);
   }
   log.info({ templateId, applied: matching.length }, 'sealed template re-applied to live devices');
   return matching.length;

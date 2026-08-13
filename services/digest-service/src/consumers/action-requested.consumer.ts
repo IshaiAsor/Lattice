@@ -34,7 +34,9 @@ export function actionRequestedConsumer(ch: Channel) {
         current_state: true,
         user_device_id: true,
         mqtt_action_name: true,
-        user_device: { select: { device: { select: { version: true } } } },
+        user_device: {
+          select: { current_firmware_version: true, device: { select: { version: true } } },
+        },
         capability: {
           select: { traits: { select: { google_trait: { select: { valid_parameters: true } } } } },
         },
@@ -93,7 +95,10 @@ export function actionRequestedConsumer(ch: Channel) {
       actionName: row.mqtt_action_name,
       command: { value: stateValue, duration: duration ?? '*', commandId },
       commandId,
-      firmwareVersion: row.user_device.device.version,
+      // The device subscribes on the version it actually booted, which after an OTA is what it
+      // reported — not the catalog row it is still pointed at. Addressing the catalog row would
+      // publish where nothing is listening and the command would vanish silently.
+      firmwareVersion: row.user_device.current_firmware_version ?? row.user_device.device.version,
       // Carried through for the command history: who asked for this, and which action it is. A
       // request with no source is a manual one — the dashboard is the only path that omits it.
       source: payload.source ?? { kind: 'manual' },

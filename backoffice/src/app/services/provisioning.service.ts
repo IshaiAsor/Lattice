@@ -12,7 +12,10 @@ interface ProvisionTokenResponse {
   validateCACert: boolean;
 }
 import { environment } from 'src/environments/environment';
-import { from, Observable, Subject, switchMap, throwError } from 'rxjs';
+import { from, map, Observable, Subject, switchMap, throwError } from 'rxjs';
+
+const SERVICE_UUID = '12345678-1234-5678-1234-56789abcdef0';
+const CHAR_UUID = 'abcdef01-1234-5678-1234-56789abcdef0';
 
 export enum ProvisioningStep {
   BLE_PAIRING_READY = 'BLE_PAIRING_READY',
@@ -39,12 +42,92 @@ export enum ProvisioningStep {
   WIFI_PROVISIONING_IN_PROGRESS = "WIFI_PROVISIONING_IN_PROGRESS",
   MQTT_ERROR = "MQTT_ERROR",
   SUCCESS = "SUCCESS",
+  // Wi-Fi chosen in the app rather than on the device's captive portal.
+  WIFI_SCAN_RESULT = "WIFI_SCAN_RESULT",
+  WIFI_SCAN_COMPLETE = "WIFI_SCAN_COMPLETE",
+  WIFI_CONNECTING = "WIFI_CONNECTING",
+}
+
+/** One network the device can see. */
+export interface WifiNetwork {
+  ssid: string;
+  /** dBm. */
+  rssi: number;
+  secured: boolean;
 }
 
 export interface ProvisioningProgress {
   step: ProvisioningStep;
   message: string;
   timestamp: number;
+}
+
+/**
+ * The five phases setup is presented as.
+ *
+ * The 24-member step enum stays on the wire — it is a genuinely useful diagnostic, and the device
+ * is the only thing that knows which of `JSON_PARSE_ERROR` / `MISSING_PARAMS` / `WIFI_ERROR` it
+ * hit. But it is a debug log, not an onboarding screen, so the UI shows these five and keeps the
+ * raw steps behind a "Show details" disclosure.
+ */
+export type SetupPhase = 'connect' | 'network' | 'register' | 'configure' | 'live';
+
+export const SETUP_PHASE_ORDER: SetupPhase[] = [
+  'connect',
+  'network',
+  'register',
+  'configure',
+  'live',
+];
+
+const PHASE_BY_STEP: Partial<Record<ProvisioningStep, SetupPhase>> = {
+  [ProvisioningStep.BLE_PAIRING_READY]: 'connect',
+  [ProvisioningStep.BLE_PAIRING_COMPLETE]: 'connect',
+  [ProvisioningStep.PROCESSING]: 'connect',
+
+  [ProvisioningStep.NETWORK_SCANNING]: 'network',
+  [ProvisioningStep.NETWORK_FOUND]: 'network',
+  [ProvisioningStep.NETWORK_CONNECTING]: 'network',
+  [ProvisioningStep.NETWORK_CONNECTED]: 'network',
+  [ProvisioningStep.WIFI_PROVISIONING_IN_PROGRESS]: 'network',
+
+  [ProvisioningStep.REQUESTING_PROV_TOKEN]: 'register',
+  [ProvisioningStep.PROV_TOKEN_RECEIVED]: 'register',
+  [ProvisioningStep.EXCHANGING_TOKENS]: 'register',
+  [ProvisioningStep.TOKENS_EXCHANGED]: 'register',
+  [ProvisioningStep.TESTING_MQTT]: 'register',
+  [ProvisioningStep.MQTT_CONNECTED_SUCCESS]: 'register',
+  [ProvisioningStep.PROVISIONING_COMPLETE]: 'register',
+  [ProvisioningStep.SUCCESS]: 'register',
+};
+
+/** Which phase a raw step belongs to. Anything unmapped is a failure of the phase it occurred in. */
+export function phaseOfStep(step: ProvisioningStep): SetupPhase | null {
+  return PHASE_BY_STEP[step] ?? null;
+}
+
+const PHASE_LABELS: Record<SetupPhase, string> = {
+  connect: 'Paired over Bluetooth',
+  network: 'Joined your Wi-Fi network',
+  register: 'Registered with Lattice',
+  configure: 'Configured',
+  live: 'Reporting',
+};
+
+export function phaseLabel(phase: SetupPhase): string {
+  return PHASE_LABELS[phase];
+}
+
+/** Steps that mean the device gave up. Everything else is progress or diagnostic noise. */
+export function isFailureStep(step: ProvisioningStep): boolean {
+  return (
+    step === ProvisioningStep.PROVISIONING_FAILED ||
+    step === ProvisioningStep.WIFI_ERROR ||
+    step === ProvisioningStep.MQTT_ERROR ||
+    step === ProvisioningStep.JSON_ERROR ||
+    step === ProvisioningStep.JSON_PARSE_ERROR ||
+    step === ProvisioningStep.MISSING_PARAMS
+  );
 }
 
 @Injectable({
@@ -63,10 +146,6 @@ export class ProvisioningService {
     return this.provisioningProgress$.asObservable();
   }
 
-  private onProvisionSuccess(): void {
-    console.log('Provisioning successful!');
-  }
-
   private mapResponseTypeToStep(responseType: number): ProvisioningStep {
     const typeMap: Record<number, ProvisioningStep> = {
       0: ProvisioningStep.UNDEFINED,
@@ -81,6 +160,10 @@ export class ProvisioningService {
       9: ProvisioningStep.SUCCESS,
 
       // Step-by-step provisioning status updates
+    24: ProvisioningStep.WIFI_SCAN_RESULT,
+    25: ProvisioningStep.WIFI_SCAN_COMPLETE,
+    26: ProvisioningStep.WIFI_CONNECTING,
+
     10: ProvisioningStep.BLE_PAIRING_READY,
     11: ProvisioningStep.BLE_PAIRING_COMPLETE,
     12: ProvisioningStep.NETWORK_SCANNING,
@@ -99,114 +182,223 @@ export class ProvisioningService {
     return typeMap[responseType] || ProvisioningStep.PROVISIONING_FAILED;
   }
 
-  setupDevice(): Observable<string> {
-    const SERVICE_UUID = '12345678-1234-5678-1234-56789abcdef0';
-    const CHAR_UUID = 'abcdef01-1234-5678-1234-56789abcdef0';
+  // ── BLE session ─────────────────────────────────────────────────────────
+  //
+  // Setup is several exchanges, not one write: ask the device what networks it can see, send the
+  // one the user picked, then provision. So the characteristic is held open for the whole flow
+  // rather than written once and dropped.
+  private char: BluetoothRemoteGATTCharacteristic | null = null;
+  private tokenData: ProvisionTokenResponse | null = null;
+  /** The BLE advertised name is the DEVICE_TYPE, which is also its captive-portal AP prefix. */
+  private deviceName = '';
 
+  get connectedDeviceName(): string {
+    return this.deviceName;
+  }
+
+  /** The AP the device raises for its own Wi-Fi portal — `<DEVICE_TYPE>_Setup`, open network. */
+  get portalApName(): string {
+    return this.deviceName ? `${this.deviceName}_Setup` : 'the device’s setup network';
+  }
+
+  /** Pick a device in the browser's chooser, connect, and start listening. */
+  connect(): Observable<string> {
     return this.http
       .get<ProvisionTokenResponse>(`${this.gatewayUrl}/api/provisioning/provision-token`)
       .pipe(
-        switchMap((result) =>
-          from(
+        switchMap((result) => {
+          this.tokenData = result;
+          return from(
             navigator.bluetooth.requestDevice({
               // Filter by the provisioning service every Lattice device advertises, not a name
               // prefix — sealed device types advertise their DEVICE_TYPE (e.g. MULTI_SOCKET_8_CH,
               // HYDRO_FARM_*) as the BLE name, so an 'ESP32' prefix would hide them from the picker.
-              filters: [
-                { services: [SERVICE_UUID] }
-              ],
+              filters: [{ services: [SERVICE_UUID] }],
               optionalServices: [SERVICE_UUID],
             }),
-          ).pipe(
-            switchMap((device) => {
-              if (!device.gatt) {
-                return throwError(() => new Error('GATT server not found on device.'));
-              }
-              return from(device.gatt.connect());
-            }),
-            switchMap((server) => from(server.getPrimaryService(SERVICE_UUID))),
-            switchMap((service) => from(service.getCharacteristic(CHAR_UUID))),
-            switchMap((char) =>
-              this.handleCharacteristic(
-                char,
-                result.userId,
-                result.provisioningToken,
-                result.server,
-                result.mqttPort,
-                result.provisioningCallbackUrl,
-                result.validateCACert
-              )
-            ),
-          ),
-        ),
+          );
+        }),
+        switchMap((device) => {
+          if (!device.gatt) {
+            return throwError(() => new Error('GATT server not found on device.'));
+          }
+          this.deviceName = device.name ?? '';
+          return from(device.gatt.connect());
+        }),
+        switchMap((server) => from(server.getPrimaryService(SERVICE_UUID))),
+        switchMap((service) => from(service.getCharacteristic(CHAR_UUID))),
+        switchMap((char) => {
+          this.char = char;
+          char.addEventListener('characteristicvaluechanged', this.onNotification);
+          return from(char.startNotifications());
+        }),
+        map(() => this.deviceName),
       );
   }
 
-  private handleCharacteristic(
-    char: BluetoothRemoteGATTCharacteristic,
-    userId: string,
-    token: string,
-    server: string,
-    mqttPort: number,
-    provisioningCallbackUrl: string,
-    validateCACert: boolean
-  ): Observable<string> {
-    return new Observable<string>((subscriber) => {
-      const listener = (event: Event) => {
-        try {
-          const dataView = (event.target as BluetoothRemoteGATTCharacteristic).value;
-          const data = new TextDecoder().decode(dataView ?? undefined);
-          const parsedData = JSON.parse(data);
-         // console.log('Received BLE notification:', parsedData);
-          const step = this.mapResponseTypeToStep(parsedData.type);
-          const message = parsedData.response;
+  /**
+   * Ask the device which networks it can see.
+   *
+   * The device answers one notification per network then a completion marker, so this collects
+   * until that marker arrives. Firmware without this command reads the write as a malformed
+   * provisioning payload and answers MISSING_PARAMS — which is how we detect an older device and
+   * fall back to offering its captive portal instead.
+   */
+  scanNetworks(timeoutMs = 20000): Observable<WifiNetwork[]> {
+    return new Observable<WifiNetwork[]>((subscriber) => {
+      const found: WifiNetwork[] = [];
 
-          const progress: ProvisioningProgress = {
-            step,
-            message,
-            timestamp: Date.now(),
-          };
-          // console.log('Received provisioning progress:', progress);
-          this.provisioningProgress$.next(progress);
-
-          if (step === ProvisioningStep.PROVISIONING_COMPLETE) {
-            this.onProvisionSuccess();
-            subscriber.next('SUCCESS');
-            subscriber.complete();
-          } else if (step === ProvisioningStep.PROVISIONING_FAILED) {
-            subscriber.error(`Provisioning failed: ${message}`);
-          }
-        } catch (error) {
-          console.error('Error parsing BLE response:', error);
-          subscriber.error(error);
+      const sub = this.provisioningProgress$.subscribe((p) => {
+        if (p.step === ProvisioningStep.WIFI_SCAN_RESULT) {
+          const parsed = parseScanResult(p.message);
+          if (parsed) found.push(parsed);
+        } else if (p.step === ProvisioningStep.WIFI_SCAN_COMPLETE) {
+          subscriber.next(dedupeStrongest(found));
+          subscriber.complete();
+        } else if (
+          p.step === ProvisioningStep.MISSING_PARAMS ||
+          p.step === ProvisioningStep.JSON_ERROR
+        ) {
+          subscriber.error(new Error('SCAN_UNSUPPORTED'));
+        } else if (p.step === ProvisioningStep.WIFI_ERROR) {
+          subscriber.error(new Error(p.message || 'Scan failed'));
         }
-      };
+      });
 
-      char.addEventListener('characteristicvaluechanged', listener);
+      const timer = setTimeout(() => {
+        // Treat silence as "this firmware doesn't answer scans" rather than a hard failure — the
+        // portal route still works, and that is what the caller falls back to.
+        subscriber.error(new Error('SCAN_UNSUPPORTED'));
+      }, timeoutMs);
 
-      char
-        .startNotifications()
-        .then(() => {
-          const payload = JSON.stringify({
-            server: server,
-            mqttPort: mqttPort,
-            userId: userId,
-            provisioningToken: token,
-            validateCACert: validateCACert,
-            provisioningCallbackUrl: provisioningCallbackUrl,
-          });
-          console.log('Writing to characteristic with payload:', payload);
-          return char.writeValue(new TextEncoder().encode(payload));
-        })
-        .catch((error) => subscriber.error(error));
+      this.write({ cmd: 'scan' }).catch((err) => subscriber.error(err));
 
-      // Return a teardown function to be called on unsubscribe.
       return () => {
-        char.removeEventListener('characteristicvaluechanged', listener);
-        if (char.service.device.gatt?.connected) {
-          char.service.device.gatt.disconnect();
-        }
+        clearTimeout(timer);
+        sub.unsubscribe();
       };
     });
   }
+
+  /** Send the network the user picked. Resolves once the device is actually on Wi-Fi. */
+  sendWifiCredentials(ssid: string, password: string, timeoutMs = 40000): Observable<void> {
+    return new Observable<void>((subscriber) => {
+      const sub = this.provisioningProgress$.subscribe((p) => {
+        if (p.step === ProvisioningStep.NETWORK_CONNECTED) {
+          subscriber.next();
+          subscriber.complete();
+        } else if (
+          p.step === ProvisioningStep.WIFI_ERROR ||
+          p.step === ProvisioningStep.MISSING_PARAMS
+        ) {
+          subscriber.error(new Error(p.message || 'Could not join that network'));
+        }
+      });
+
+      const timer = setTimeout(
+        () => subscriber.error(new Error('Timed out joining that network')),
+        timeoutMs,
+      );
+
+      this.write({ cmd: 'wifi', ssid, password }).catch((err) => subscriber.error(err));
+
+      return () => {
+        clearTimeout(timer);
+        sub.unsubscribe();
+      };
+    });
+  }
+
+  /**
+   * Send the provisioning payload — deliberately the same bytes it has always been.
+   *
+   * This characteristic has no chunk reassembly on the device side, so the Wi-Fi credentials ride
+   * in their own small write above rather than being folded in here.
+   */
+  provision(): Observable<string> {
+    return new Observable<string>((subscriber) => {
+      const sub = this.provisioningProgress$.subscribe((p) => {
+        if (p.step === ProvisioningStep.PROVISIONING_COMPLETE) {
+          subscriber.next('SUCCESS');
+          subscriber.complete();
+        } else if (p.step === ProvisioningStep.PROVISIONING_FAILED) {
+          subscriber.error(new Error(p.message || 'Provisioning failed'));
+        }
+      });
+
+      const t = this.tokenData;
+      if (!t) {
+        subscriber.error(new Error('Not connected to a device'));
+        return;
+      }
+
+      this.write({
+        server: t.server,
+        mqttPort: t.mqttPort,
+        userId: t.userId,
+        provisioningToken: t.provisioningToken,
+        validateCACert: t.validateCACert,
+        provisioningCallbackUrl: t.provisioningCallbackUrl,
+      }).catch((err) => subscriber.error(err));
+
+      return () => sub.unsubscribe();
+    });
+  }
+
+  disconnect(): void {
+    const char = this.char;
+    this.char = null;
+    this.tokenData = null;
+    this.deviceName = '';
+    if (!char) return;
+    char.removeEventListener('characteristicvaluechanged', this.onNotification);
+    if (char.service.device.gatt?.connected) {
+      char.service.device.gatt.disconnect();
+    }
+  }
+
+  private write(body: unknown): Promise<void> {
+    if (!this.char) return Promise.reject(new Error('Not connected to a device'));
+    return this.char.writeValue(new TextEncoder().encode(JSON.stringify(body)));
+  }
+
+  // Arrow property: used as an addEventListener handler, so it must keep `this`.
+  private onNotification = (event: Event): void => {
+    try {
+      const dataView = (event.target as BluetoothRemoteGATTCharacteristic).value;
+      const parsed = JSON.parse(new TextDecoder().decode(dataView ?? undefined));
+      this.provisioningProgress$.next({
+        step: this.mapResponseTypeToStep(parsed.type),
+        message: parsed.response,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      console.error('Error parsing BLE response:', error);
+    }
+  };
+}
+
+/** `"<rssi>|<secured>|<ssid>"` — SSID last so a '|' inside it survives the split. */
+function parseScanResult(raw: string): WifiNetwork | null {
+  if (!raw) return null;
+  const first = raw.indexOf('|');
+  const second = raw.indexOf('|', first + 1);
+  if (first < 0 || second < 0) return null;
+  const ssid = raw.slice(second + 1);
+  if (!ssid) return null;
+  return {
+    rssi: Number(raw.slice(0, first)) || 0,
+    secured: raw.slice(first + 1, second) === '1',
+    ssid,
+  };
+}
+
+/** Mesh APs advertise the same SSID from several radios; show each name once, at its best signal. */
+function dedupeStrongest(networks: WifiNetwork[]): WifiNetwork[] {
+  const best = new Map<string, WifiNetwork>();
+  for (const n of networks) {
+    const seen = best.get(n.ssid);
+    if (!seen || n.rssi > seen.rssi) best.set(n.ssid, n);
+  }
+  return [...best.values()].sort((a, b) => b.rssi - a.rssi);
 }

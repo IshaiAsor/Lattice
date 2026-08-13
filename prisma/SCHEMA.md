@@ -169,6 +169,7 @@ erDiagram
     string mac_id UK
     string name
     bool online
+    string status "provisioning | active"
     int rssi "heartbeat WiFi dBm; nullable"
     datetime last_heartbeat_at "nullable"
     int pending_device_type_id FK "nullable"
@@ -867,9 +868,14 @@ erDiagram
 
 #### `user_devices` (`UserDevice`) — a physical device a user owns. `rssi`/`last_heartbeat_at` hold the latest MQTT-heartbeat diagnostics (WiFi dBm); live-only, surfaced by the devices page while online.
 
-| id  | device_type_id | user_id | mac_id            | name        | online | rssi | current_firmware_version | pending_device_type_id |
-| --- | -------------- | ------- | ----------------- | ----------- | ------ | ---- | ------------------------ | ---------------------- |
-| 7   | 1              | 2       | AA:BB:CC:00:11:22 | Garage Node | true   | -58  | v2.0.0                   | NULL                   |
+`status` tracks setup: `provisioning` (registered, no actions yet — the devices list offers
+"Finish setup") or `active`. Provisioning writes it on INSERT only, so re-provisioning an
+already-configured device leaves it `active` and skips the wizard; sealed types go straight to
+`active` because their actions are materialized from the admin template at provision time.
+
+| id  | device_type_id | user_id | mac_id            | name        | online | status | rssi | current_firmware_version | pending_device_type_id |
+| --- | -------------- | ------- | ----------------- | ----------- | ------ | ------ | ---- | ------------------------ | ---------------------- |
+| 7   | 1              | 2       | AA:BB:CC:00:11:22 | Garage Node | true   | active | -58  | v2.0.0                   | NULL                   |
 
 #### `user_action_groups` (`UserActionGroup`) — dashboard grouping. Unique `(user_id, name)`. `sort_order` = card position.
 

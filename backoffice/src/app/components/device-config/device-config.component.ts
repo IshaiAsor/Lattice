@@ -419,9 +419,38 @@ export class DeviceConfigComponent implements OnInit {
     return 'Weak signal';
   }
 
+  // Setup is a sheet, not a form — it wants room for a capability list, and the glass panel class
+  // is what gives it the app's dialog treatment (blur, radius, full-screen on mobile).
+  private static readonly SETUP_DIALOG = {
+    width: 'min(560px, 94vw)',
+    maxWidth: '94vw',
+    panelClass: 'glass-dialog',
+    autoFocus: false,
+  };
+
   addDevice() {
-    this.dialog.open(MgmtDeviceRegisterComponent, {})
+    this.dialog.open(MgmtDeviceRegisterComponent, { ...DeviceConfigComponent.SETUP_DIALOG })
       .afterClosed().subscribe(() => this.loadDevices());
+  }
+
+  /**
+   * A device registers with no actions, so setup is only half-done until the user picks what it
+   * should do. `status = 'provisioning'` is what makes an abandoned setup recoverable — without it
+   * "never configured" is indistinguishable from "removed all their actions".
+   */
+  needsSetup(device: DeviceView): boolean {
+    return device.status === 'provisioning';
+  }
+
+  finishSetup(device: DeviceView) {
+    this.dialog.open(MgmtDeviceRegisterComponent, {
+      ...DeviceConfigComponent.SETUP_DIALOG,
+      data: { deviceId: device.id },
+    })
+      .afterClosed().subscribe(() => {
+        this.loadDevices();
+        if (this.selectedDevice?.id === device.id) this.loadCapabilities();
+      });
   }
 
   renameDevice(device: DeviceView) {

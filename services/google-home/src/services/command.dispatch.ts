@@ -24,7 +24,11 @@ export async function dispatchAction(
 
   let firmwareVersion: string | undefined;
   try {
-    firmwareVersion = action.user_device.device.version ?? undefined;
+    // The device subscribes on the version it actually booted — after an OTA that is the version
+    // it reported, not the catalog row it is still pointed at. Addressing the catalog row would
+    // publish to a topic nothing subscribes to, and the EXECUTE would silently do nothing.
+    firmwareVersion =
+      action.user_device.current_firmware_version ?? action.user_device.device.version ?? undefined;
   } catch (err) {
     log.error({ userDeviceId: action.user_device_id, err }, 'could not resolve firmware version');
   }

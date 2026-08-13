@@ -622,3 +622,63 @@
 .sealed-notice mat-icon {
   color: var(--mat-sys-primary, #3f51b5);
 }
+
+/* ── Needs-setup affordance ──────────────────────────────────────────── */
+/* A device registers with no actions; until the user picks what it should do it is inert. This
+   is the way back into the setup sheet when that was closed early (status = 'provisioning'). */
+.rail-item-setup {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-chip);
+  padding: 1px 5px;
+  flex: none;
+}
+
+.setup-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent);
+}
+
+.setup-banner > mat-icon {
+  color: var(--warning);
+  flex: none;
+}
+
+.setup-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-banner-title {
+  margin: 0 0 2px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setup-banner-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+  .setup-banner {
+    flex-wrap: wrap;
+  }
+
+  .setup-banner button {
+    width: 100%;
+  }
+}

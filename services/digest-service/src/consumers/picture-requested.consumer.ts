@@ -32,7 +32,9 @@ export function pictureRequestedConsumer(ch: Channel) {
       select: {
         user_device_id: true,
         mqtt_action_name: true,
-        user_device: { select: { device: { select: { version: true } } } },
+        user_device: {
+          select: { current_firmware_version: true, device: { select: { version: true } } },
+        },
       },
     });
     if (!row) {
@@ -63,7 +65,9 @@ export function pictureRequestedConsumer(ch: Channel) {
       actionName: 'take_picture',
       command: { commandId },
       commandId,
-      firmwareVersion: row.user_device.device.version,
+      // Address the version the device actually booted (post-OTA that is what it reported), not
+      // the catalog row — otherwise this publishes to a topic nothing subscribes to.
+      firmwareVersion: row.user_device.current_firmware_version ?? row.user_device.device.version,
       source: payload.source ?? { kind: 'system' },
       actionId,
     };

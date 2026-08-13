@@ -1,0 +1,47 @@
+@if (slots.length > 0) {
+  <p class="field-section-label">Pin Assignment</p>
+  @for (slot of slots; track slot.id) {
+    <mat-form-field appearance="outline" class="cap-field">
+      <mat-label>{{ slot.label }}</mat-label>
+      <input matInput type="number" min="1" [disabled]="disabled"
+        [(ngModel)]="values.pins[slot.id]" (ngModelChange)="changed()" />
+      @if (slot.description) {
+        <mat-hint>{{ slot.description }}</mat-hint>
+      }
+      <mat-icon matSuffix class="mode-icon" [matTooltip]="slot.mode">
+        {{ slot.mode === 'OUTPUT' ? 'output' : 'input' }}
+      </mat-icon>
+    </mat-form-field>
+  }
+}
+
+@if (intervalVisible) {
+  <p class="field-section-label">Polling Interval</p>
+  <mat-form-field appearance="outline" class="cap-field">
+    <mat-label>Interval (ms)</mat-label>
+    <input matInput type="number" [disabled]="disabled"
+      [min]="cap.min_telemetry_interval_ms ?? 0"
+      [(ngModel)]="values.intervalMs" (ngModelChange)="changed()" />
+    <mat-hint>Min: {{ cap.min_telemetry_interval_ms ?? 0 }} ms</mat-hint>
+  </mat-form-field>
+}
+
+@if (isCamera) {
+  <p class="field-section-label">Camera</p>
+  <mat-form-field appearance="outline" class="cap-field">
+    <mat-label>Resolution</mat-label>
+    <mat-select [disabled]="disabled" [(ngModel)]="values.resolution" (ngModelChange)="changed()">
+      @for (r of resolutionOptions; track r.value) {
+        <mat-option [value]="r.value">{{ r.label }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-form-field appearance="outline" class="cap-field">
+    <mat-label>Transport</mat-label>
+    <mat-select [disabled]="disabled" [(ngModel)]="values.transport" (ngModelChange)="changed()">
+      @for (t of transportOptions; track t.value) {
+        <mat-option [value]="t.value">{{ t.label }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+}

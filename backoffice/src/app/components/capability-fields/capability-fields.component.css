@@ -1,0 +1,24 @@
+/* Field styling matches device-config's card bodies — this component was extracted from there,
+   and the two render side by side in the same app. */
+.field-section-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 10px 0 6px;
+}
+
+.field-section-label:first-child {
+  margin-top: 4px;
+}
+
+.cap-field {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.mode-icon {
+  font-size: 18px;
+  color: var(--text-muted);
+}

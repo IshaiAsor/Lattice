@@ -372,6 +372,11 @@ model UserDevice {
   // Live-only — surfaced by the UI while online, ignored/nulled when offline.
   rssi                     Int?
   last_heartbeat_at        DateTime? @db.Timestamp(6)
+  // Where the device is in setup. Written on provisioning INSERT only, so a re-provision
+  // (factory reset, firmware update) never drags a configured device back into the wizard:
+  //   provisioning → registered, no actions yet, setup unfinished ("Finish setup" in the list)
+  //   active       → configured, or re-provisioned over an existing config
+  status                   String    @default("active") @db.VarChar(20)
   current_firmware_version String?   @db.VarChar(64)
   pending_device_type_id   Int?
   pending_firmware_version String?   @db.VarChar(64)

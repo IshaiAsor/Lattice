@@ -75,6 +75,21 @@ deviceMgmtRouter.patch('/:id/actions/:actionId', async (req, res, next) => {
   }
 });
 
+// Finish first-run setup: activate the picked capabilities, mark the device set up, and
+// restart it so it pulls the config it now has.
+deviceMgmtRouter.post('/:id/setup/apply', async (req, res, next) => {
+  try {
+    const { selections } = req.body ?? {};
+    if (!Array.isArray(selections)) {
+      res.status(400).json({ message: 'selections must be an array' });
+      return;
+    }
+    res.json(await deviceMgmtService.applySetup(req.user!.id, Number(req.params.id), selections));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Lifecycle commands ────────────────────────────────────────────────
 for (const [path, actionName] of [
   ['reprovision', 'reprovision'],

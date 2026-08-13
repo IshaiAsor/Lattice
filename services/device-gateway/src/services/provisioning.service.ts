@@ -53,19 +53,38 @@ class ProvisioningService {
       );
     }
 
-    // 2. Upsert user_device by mac_id.
+    // 2. The firmware's own manifest is authoritative about what the hardware can do; the catalog
+    // is what every other service reads. They are published from the same source, so a mismatch
+    // means the seeded manifest is stale or the wrong build was flashed — surface it here, where
+    // the two are side by side, rather than letting it show up later as a missing capability.
+    await this.warnOnCapabilityDrift(device.id, deviceType, version, capabilities);
+
+    // 3. Upsert user_device by mac_id. `status` is set on create only — a re-provision (factory
+    // reset, firmware update) must not drag an already-configured device back into setup.
     const userDevice = await db.userDevice.upsert({
       where: { mac_id: macAddress },
       update: { user_id: userId, device_type_id: device.id },
-      create: { user_id: userId, device_type_id: device.id, mac_id: macAddress, name: deviceType },
+      create: {
+        user_id: userId,
+        device_type_id: device.id,
+        mac_id: macAddress,
+        name: deviceType,
+        status: 'provisioning',
+      },
     });
 
-    // 3. Sealed devices are factory-soldered: their config is admin-composed, not user-chosen —
+    // 4. Sealed devices are factory-soldered: their config is admin-composed, not user-chosen —
     // auto-materialize the resolved template's actions/pins/behaviors so the device pulls a full
     // config with no user setup. Regular devices materialize nothing here (user configures later).
     if (device.is_sealed) {
       try {
         await materializeForUserDevice(userDevice.id);
+        // There is no user-facing setup for a sealed device, so it is done the moment its
+        // template lands. Only on success: a failed materialization leaves it in setup so the
+        // device shows as needing attention instead of silently claiming to be configured.
+        if (userDevice.status !== 'active') {
+          await db.userDevice.update({ where: { id: userDevice.id }, data: { status: 'active' } });
+        }
       } catch (err) {
         log.warn(
           { err, userDeviceId: userDevice.id },
@@ -74,13 +93,45 @@ class ProvisioningService {
       }
     }
 
-    // 4. Return permanent JWT + URLs.
+    // 5. Return permanent JWT + URLs.
     const tokenData = this.generatePermanentToken(userId, userDevice.id, version);
     log.info(
       { userId, macAddress, deviceType, version, userDeviceId: userDevice.id },
       'provisioned device',
     );
     return tokenData;
+  }
+
+  // Compare what the firmware says it can do against what the catalog says it can do. Diagnostic
+  // only — the catalog stays authoritative and a device never authors catalog rows, so drift is
+  // logged rather than reconciled. Both sides are keyed by capability_key, the same identity OTA
+  // uses to carry actions across a firmware update.
+  private async warnOnCapabilityDrift(
+    deviceId: number,
+    deviceType: string,
+    version: string,
+    capabilities: CapabilityInput[],
+  ): Promise<void> {
+    if (!capabilities.length) return;
+
+    const catalog = await db.deviceCapability.findMany({
+      where: { device_id: deviceId },
+      select: { capability_key: true },
+    });
+
+    const catalogKeys = new Set(catalog.map((c) => c.capability_key));
+    const declaredKeys = new Set(capabilities.map((c) => c.capability_key));
+
+    const missingFromCatalog = [...declaredKeys].filter((k) => !catalogKeys.has(k));
+    const missingFromFirmware = [...catalogKeys].filter((k) => !declaredKeys.has(k));
+
+    if (missingFromCatalog.length || missingFromFirmware.length) {
+      log.warn(
+        { deviceType, version, missingFromCatalog, missingFromFirmware },
+        'capability drift: the flashed firmware and the seeded catalog disagree — ' +
+          'republish this version’s manifest (local: npm run catalog:seed; prod: CI manifest ingest)',
+      );
+    }
   }
 
   refreshMqttToken(refreshToken: string) {

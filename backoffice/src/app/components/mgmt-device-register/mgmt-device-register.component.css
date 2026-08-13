@@ -1,0 +1,553 @@
+/* Setup sheet — one scrolling page rather than a stepper, so re-entering from "Finish setup" is
+   the same view with earlier lines already ticked. Uses the app's glass-card tokens. */
+
+/* The component host sits between the dialog surface and this sheet, so it has to carry the
+   height through — otherwise the sheet measures against an auto-height box and the footer floats
+   mid-screen on mobile, where the surface is a full 100dvh. */
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The dialog surface owns the height cap (90vh desktop / full-screen mobile, from .glass-dialog),
+   so this only has to fill it and let the body be the single scroller. A second max-height here
+   would produce two nested scrollbars. */
+.setup-sheet {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  max-height: inherit;
+  overflow-x: hidden;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 20px 14px;
+  flex: none;
+}
+
+.sheet-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close-btn {
+  flex: none;
+  margin-right: -8px;
+  color: var(--text-muted);
+}
+
+/* ── Device rail: the hardware's real state, kept visible through the restart ─ */
+.device-rail {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  margin: 0 20px;
+  flex: none;
+  border-radius: 9px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.rail-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--offline);
+}
+
+.rail-dot.on {
+  background: var(--online);
+  box-shadow: 0 0 0 3px var(--online-glow);
+}
+
+.rail-dot.waiting {
+  background: var(--warning);
+}
+
+.rail-dot.off {
+  background: var(--offline);
+}
+
+.rail-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Body ───────────────────────────────────────────────────────────────── */
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px 20px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Nothing has happened yet, so the panel should read as an invitation rather than an empty
+   container waiting to be filled. */
+.intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  padding: 20px 8px 12px;
+  /* Centres itself in whatever room the body has. Does nothing on desktop, where the dialog is
+     content-sized; on mobile the dialog is full-screen and this keeps the invitation off the
+     ceiling instead of leaving half a screen of dead space under it. */
+  margin: auto 0;
+}
+
+.intro-badge {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--nav-active-bg);
+  border: 1px solid var(--border-strong);
+}
+
+.intro-icon {
+  font-size: 32px;
+  width: 32px;
+  height: 32px;
+  color: var(--primary);
+}
+
+.intro-title {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.intro-text {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  max-width: 36ch;
+  line-height: 1.55;
+}
+
+/* ── Phase checklist ────────────────────────────────────────────────────── */
+.phases {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.phase-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.phase-line.pending {
+  color: var(--text-muted);
+}
+
+.phase-tick {
+  font-size: 17px;
+  width: 17px;
+  height: 17px;
+  color: var(--online);
+  flex: none;
+}
+
+.phase-fail {
+  font-size: 17px;
+  width: 17px;
+  height: 17px;
+  color: var(--error);
+  flex: none;
+}
+
+.phase-spin {
+  flex: none;
+}
+
+/* ── Configure ──────────────────────────────────────────────────────────── */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.section-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.section-count {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cap-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  padding: 11px 12px;
+  transition: opacity 0.15s ease;
+}
+
+.cap-row.dimmed {
+  opacity: 0.55;
+}
+
+.row-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.row-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-done {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--online);
+  flex: none;
+}
+
+.row-note {
+  margin: 6px 0 0 29px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.row-fields {
+  margin-top: 10px;
+  padding-left: 29px;
+}
+
+.type-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: var(--radius-chip);
+  background: var(--nav-active-bg);
+  color: var(--primary);
+  flex: none;
+}
+
+.type-chip.sensor {
+  background: color-mix(in srgb, var(--online) 15%, transparent);
+  color: color-mix(in srgb, var(--online) 80%, var(--text));
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ── Notices ────────────────────────────────────────────────────────────── */
+.sealed-notice,
+.setup-error,
+.timeout-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sealed-notice {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.setup-error {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error) 32%, transparent);
+  color: var(--text);
+}
+
+.setup-error mat-icon {
+  color: var(--error);
+  flex: none;
+}
+
+.timeout-note {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent);
+  color: var(--text);
+}
+
+.timeout-note mat-icon {
+  color: var(--warning);
+  flex: none;
+}
+
+.timeout-title {
+  margin: 0 0 3px;
+  font-weight: 600;
+}
+
+.timeout-sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.wait-line,
+.live-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.wait-line {
+  color: var(--text-muted);
+}
+
+/* ── Diagnostics ────────────────────────────────────────────────────────── */
+.details-toggle {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.details {
+  border-radius: 8px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-line {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.detail-step {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  color: var(--primary);
+  flex: none;
+}
+
+.detail-msg {
+  color: var(--text-muted);
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+.sheet-footer {
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 14px 20px 18px;
+  flex: none;
+}
+
+/* A footer holding one action has nothing to align against, so stretch it — a lone right-aligned
+   button in a wide dialog reads as an afterthought. */
+.footer-btn {
+  flex: 1;
+}
+
+@media (max-width: 599px) {
+  /* The surface is exactly 100dvh here (app-wide mobile rule), so match it — a definite height
+     is what lets the body centre its content and the footer sit on the bottom edge. */
+  :host {
+    height: 100dvh;
+  }
+
+  .sheet-header,
+  .sheet-body,
+  .sheet-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .device-rail {
+    margin: 0 16px;
+  }
+
+  .sheet-footer button {
+    flex: 1;
+  }
+}
+
+/* ── Wi-Fi step ─────────────────────────────────────────────────────────── */
+.net-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.net-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.net-row:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.net-row.selected {
+  border-color: var(--primary);
+  background: var(--nav-active-bg);
+}
+
+.net-row:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.net-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.net-signal {
+  flex: none;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}
+
+.net-row.selected .net-signal {
+  color: var(--primary);
+}
+
+.net-ssid {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.net-lock {
+  flex: none;
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+
+.net-pass {
+  width: 100%;
+  margin: 2px 0 4px;
+}
+
+/* The other route out of this step — present but quieter than the primary path. */
+.alt-route {
+  align-self: flex-start;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.portal-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.portal-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.portal-steps strong {
+  font-weight: 650;
+  color: var(--primary);
+  word-break: break-word;
+}
+
+.portal-actions {
+  display: flex;
+}
+
+.portal-actions button {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}

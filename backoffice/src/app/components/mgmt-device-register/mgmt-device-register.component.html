@@ -1,35 +1,288 @@
-<h2 mat-dialog-title>New Device Registration</h2>
-<mat-dialog-content>
-  <p>Open Bluetooth settings and pair with the device.</p>
-</mat-dialog-content>
-<mat-dialog-content>
-  <p>After pairing, click "Yes" to complete the registration process.</p>
+<div class="setup-sheet">
 
-  @if (isProvisioning) {
-  <div>
-    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-    <p>Provisioning in progress, please wait...</p>
+  <!-- Header -->
+  <div class="sheet-header">
+    <h2 class="sheet-title">
+      {{ device ? 'Set up ' + device.deviceName : 'Set up a new device' }}
+    </h2>
+    <button mat-icon-button class="close-btn" (click)="onClose()" aria-label="Close setup">
+      <mat-icon>close</mat-icon>
+    </button>
   </div>
+
+  <!-- Device rail: the hardware's real state, visible right through the restart. -->
+  @if (device) {
+    <div class="device-rail">
+      <span class="rail-dot"
+        [class.on]="done || (device.online && !awaitingReport)"
+        [class.waiting]="awaitingReport"
+        [class.off]="reportTimedOut"></span>
+      <span class="rail-text">
+        @if (awaitingReport) {
+          Restarting · {{ device.current_firmware_version || device.version }}
+        } @else if (done) {
+          Reporting · {{ device.current_firmware_version || device.version }}
+          @if (device.rssi !== null) { · RSSI {{ device.rssi }} dBm }
+        } @else {
+          {{ device.online ? 'Connected' : 'Offline' }} · {{ device.current_firmware_version || device.version }}
+          @if (device.online && device.rssi !== null) { · RSSI {{ device.rssi }} dBm }
+        }
+      </span>
+    </div>
   }
 
-  @if (provisioningSteps.length > 0) {
-  <div class="status-log">
-    <h3>Provisioning Log:</h3>
-    <mat-list role="list">
-      @for (step of provisioningSteps; track step.step) {
-      <mat-list-item role="listitem">{{ getStepDisplayName(step.step) }}: {{ step.message }}</mat-list-item>
+  <div class="sheet-body">
+
+    <!-- Not started yet -->
+    @if (!started) {
+      <div class="intro">
+        <span class="intro-badge">
+          <mat-icon class="intro-icon">bluetooth_searching</mat-icon>
+        </span>
+        <p class="intro-title">Connect over Bluetooth</p>
+        <p class="intro-text">
+          Put your device in pairing mode, then pick it from the list your browser shows.
+          We'll get it on Wi-Fi and set it up from there.
+        </p>
+      </div>
+    }
+
+    <!-- Phase checklist -->
+    @if (started) {
+      <div class="phases">
+        @for (phase of visiblePhases; track phase) {
+          <p class="phase-line" [class.pending]="!isComplete(phase)">
+            @if (isComplete(phase)) {
+              <mat-icon class="phase-tick">check</mat-icon>
+            } @else if (error) {
+              <mat-icon class="phase-fail">error_outline</mat-icon>
+            } @else {
+              <mat-spinner diameter="14" class="phase-spin"></mat-spinner>
+            }
+            <span>{{ phaseLabel(phase) }}</span>
+          </p>
+        }
+      </div>
+    }
+
+    <!-- Wi-Fi: scanning -->
+    @if (wifiStage === 'scanning') {
+      <p class="wait-line">
+        <mat-spinner diameter="16"></mat-spinner>
+        <span>Looking for nearby Wi-Fi networks…</span>
+      </p>
+    }
+
+    <!-- Wi-Fi: pick a network here -->
+    @if (wifiStage === 'choose' || wifiStage === 'joining') {
+      <div class="section-head">
+        <span class="section-label">Choose a Wi-Fi network</span>
+      </div>
+
+      @if (wifiError) {
+        <div class="setup-error">
+          <mat-icon>error_outline</mat-icon>
+          <span>{{ wifiError }}</span>
+        </div>
       }
-    </mat-list>
-  </div>
-  }
 
-  @if (error) {
-  <div class="error-message">
-    <p>{{ error }}</p>
+      <div class="net-list">
+        @for (net of networks; track net.ssid) {
+          <button type="button" class="net-row" [class.selected]="selectedSsid === net.ssid"
+            [disabled]="wifiStage === 'joining'" (click)="selectNetwork(net.ssid)">
+            <mat-icon class="net-signal">{{ signalIcon(net.rssi) }}</mat-icon>
+            <span class="net-ssid">{{ net.ssid }}</span>
+            @if (net.secured) {
+              <mat-icon class="net-lock" matTooltip="Password required">lock</mat-icon>
+            }
+          </button>
+
+          @if (selectedSsid === net.ssid && net.secured) {
+            <mat-form-field appearance="outline" class="net-pass">
+              <mat-label>Password for {{ net.ssid }}</mat-label>
+              <input matInput type="password" autocomplete="off"
+                [disabled]="wifiStage === 'joining'"
+                [(ngModel)]="wifiPassword" (keyup.enter)="joinNetwork()" />
+            </mat-form-field>
+          }
+        }
+      </div>
+
+      @if (wifiStage === 'joining') {
+        <p class="wait-line">
+          <mat-spinner diameter="16"></mat-spinner>
+          <span>Joining {{ selectedSsid }}…</span>
+        </p>
+      }
+
+      <button mat-button class="alt-route" (click)="showPortalInstructions()">
+        <mat-icon>router</mat-icon>
+        Set Wi-Fi up on the device instead
+      </button>
+    }
+
+    <!-- Wi-Fi: the device's own captive portal -->
+    @if (wifiStage === 'portal') {
+      <div class="section-head">
+        <span class="section-label">Set Wi-Fi up on the device</span>
+      </div>
+
+      @if (!scanSupported) {
+        <p class="portal-note">
+          This device's firmware can't list nearby networks, so its Wi-Fi is set up on the device
+          itself. Updating its firmware lets you pick a network here instead.
+        </p>
+      }
+
+      <ol class="portal-steps">
+        <li>Open Wi-Fi settings on your phone or computer.</li>
+        <li>Join the open network <strong>{{ portalApName }}</strong>.</li>
+        <li>A setup page opens — pick your Wi-Fi there and enter its password.</li>
+        <li>Come back here. We'll carry on as soon as the device is online.</li>
+      </ol>
+
+      <div class="portal-actions">
+        @if (scanSupported && networks.length) {
+          <button mat-button (click)="backToNetworks()">
+            <mat-icon>arrow_back</mat-icon>
+            Choose a network here instead
+          </button>
+        }
+      </div>
+    }
+
+    <!-- Error -->
+    @if (error) {
+      <div class="setup-error">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ error }}</span>
+      </div>
+    }
+
+    @if (loadingCapabilities) {
+      <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
+
+    <!-- Configure -->
+    @if (device && !loadingCapabilities && !device.is_sealed && !done) {
+      <div class="section-head">
+        <span class="section-label">Configure</span>
+        <span class="section-count">{{ selectedCount }} selected</span>
+      </div>
+
+      @if (rows.length === 0) {
+        <p class="empty-hint">This device did not report anything it can do.</p>
+      }
+
+      <div class="rows">
+        @for (row of rows; track row.cap.id) {
+          <div class="cap-row" [class.dimmed]="!row.selected && !alreadyActive(row)">
+            <div class="row-top">
+              @if (alreadyActive(row)) {
+                <mat-icon class="row-done">check_circle</mat-icon>
+              } @else {
+                <mat-checkbox [checked]="row.selected" [disabled]="awaitingReport || applying"
+                  (change)="toggleRow(row, $event.checked)"
+                  [attr.aria-label]="'Enable ' + row.cap.label"></mat-checkbox>
+              }
+              <span class="row-name">{{ row.cap.label }}</span>
+              <span class="type-chip" [class.sensor]="row.cap.mqtt_action_type === 'telemetry'">
+                {{ typeChip(row.cap) }}
+              </span>
+            </div>
+
+            @if (alreadyActive(row)) {
+              <p class="row-note">Already set up</p>
+            } @else if (row.selected) {
+              <div class="row-fields">
+                <app-capability-fields [cap]="row.cap" [values]="row.values"
+                  [disabled]="awaitingReport || applying"></app-capability-fields>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Sealed: nothing to choose -->
+    @if (device?.is_sealed && !loadingCapabilities) {
+      <div class="sealed-notice">
+        <mat-icon>lock</mat-icon>
+        <span>This device's setup is fixed by its manufacturer template — there is nothing to
+          configure.</span>
+      </div>
+    }
+
+    <!-- Waiting / result -->
+    @if (awaitingReport) {
+      <p class="wait-line">
+        <mat-spinner diameter="16"></mat-spinner>
+        <span>Restarting to apply — this usually takes a few seconds.</span>
+      </p>
+    }
+
+    @if (reportTimedOut) {
+      <div class="timeout-note">
+        <mat-icon>schedule</mat-icon>
+        <div>
+          <p class="timeout-title">Configured, but the device hasn't reported yet</p>
+          <p class="timeout-sub">Your settings are saved. The device will pick them up next time it
+            starts.</p>
+        </div>
+      </div>
+    }
+
+    @if (done) {
+      <p class="live-line">
+        <mat-icon class="phase-tick">check_circle</mat-icon>
+        <span>Your device is set up and reporting.</span>
+      </p>
+    }
+
+    <!-- Diagnostics -->
+    @if (progressLog.length > 0) {
+      <button mat-button class="details-toggle" (click)="toggleDetails()">
+        <mat-icon>{{ showDetails ? 'expand_less' : 'expand_more' }}</mat-icon>
+        {{ showDetails ? 'Hide details' : 'Show details' }}
+      </button>
+      @if (showDetails) {
+        <div class="details">
+          @for (p of progressLog; track p.timestamp) {
+            <p class="detail-line">
+              <span class="detail-step">{{ stepName(p.step) }}</span>
+              <span class="detail-msg">{{ p.message }}</span>
+            </p>
+          }
+        </div>
+      }
+    }
   </div>
-  }
-</mat-dialog-content>
-<mat-dialog-actions align="end">
-  <button mat-raised-button color="primary" (click)="startProvisioning()">Pair with Device</button>
-  <button mat-button [mat-dialog-close]="true" cdkFocusInitial>Cancel</button>
-</mat-dialog-actions>
+
+  <!-- Footer -->
+  <div class="sheet-footer">
+    @if (!started) {
+      <button mat-flat-button color="primary" class="footer-btn" (click)="startProvisioning()">
+        Start setup
+      </button>
+    } @else if (wifiStage === 'choose' || wifiStage === 'joining') {
+      <button mat-flat-button color="primary" class="footer-btn"
+        [disabled]="!canJoin" (click)="joinNetwork()">
+        {{ wifiStage === 'joining' ? 'Joining…' : 'Join network' }}
+      </button>
+    } @else if (wifiStage === 'portal') {
+      <button mat-flat-button color="primary" class="footer-btn" (click)="useDevicePortal()">
+        I've set up Wi-Fi — continue
+      </button>
+    } @else if (done) {
+      <button mat-flat-button color="primary" class="footer-btn" (click)="finish()">Done</button>
+    } @else if (reportTimedOut) {
+      <button mat-button (click)="finish()">Close</button>
+      <button mat-flat-button color="primary" (click)="retryReport()">Try again</button>
+    } @else if (device && !device.is_sealed && !loadingCapabilities) {
+      <button mat-flat-button color="primary" class="footer-btn"
+        [disabled]="!canApply" (click)="apply()">
+        {{ applying ? 'Applying…' : (awaitingReport ? 'Applying…' : 'Apply and finish') }}
+      </button>
+    }
+  </div>
+</div>

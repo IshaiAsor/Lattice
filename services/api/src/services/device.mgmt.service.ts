@@ -1,8 +1,11 @@
 import { db } from '../db';
 import { publish, RK } from '@lattice/queue';
 import type { ActionDispatchPayload } from '@lattice/queue';
+import { createLogger } from '@lattice/logger';
 import { getChannel } from '../queue';
 import { ensureNotSealed } from './sealed-templates.service';
+
+const log = createLogger('api:device-mgmt');
 
 // User-facing device management (F2.5).
 //
@@ -19,6 +22,9 @@ export interface DeviceView {
   version: string;
   // Sealed = factory-soldered: config is admin-composed, so the device-config page is read-only.
   is_sealed: boolean;
+  // 'provisioning' = registered but never configured, so the list offers "Finish setup".
+  // 'active' = set up. See the UserDevice.status comment in schema.prisma.
+  status: string;
   current_firmware_version: string | null;
   update_available: boolean;
   // Latest WiFi RSSI (dBm) from the device heartbeat — only while online (null otherwise, so
@@ -102,6 +108,7 @@ class DeviceMgmtService {
         type: d.device.type,
         version: d.device.version,
         is_sealed: d.device.is_sealed,
+        status: d.status,
         current_firmware_version: d.current_firmware_version,
         update_available: d.device.version !== latestVersion,
         rssi: d.online ? d.rssi : null,
@@ -283,13 +290,79 @@ class DeviceMgmtService {
     });
   }
 
+  // ─── Setup completion ──────────────────────────────────────────────────
+  /**
+   * Finish first-run setup: activate the capabilities the user picked, mark the device set up,
+   * and tell it to load the config it now has.
+   *
+   * The device has no way to be told about config over MQTT — it subscribes to exactly two
+   * topics, command and OTA, and re-reads GET /device/configuration on boot. So "apply" means
+   * restart. It must be `restart` and never `reprovision`: firmware aliases reprovision to
+   * soft-reset and wipes the device's credentials, which drops real hardware into BLE
+   * provisioning mode (see dispatchConfigReload in device-gateway's sealed-materialization).
+   */
+  async applySetup(
+    userId: number,
+    deviceId: number,
+    selections: {
+      capability_id: number;
+      telemetry_interval_ms?: number | null;
+      pins?: PinInput[];
+      camera_resolution?: string | null;
+      camera_transport?: string | null;
+    }[],
+  ): Promise<{ activated: number; skipped: number }> {
+    const device = await this.getOwnedDevice(userId, deviceId);
+
+    let activated = 0;
+    let skipped = 0;
+
+    // A sealed device's actions come from the admin template at provision time, so there is
+    // nothing for the user to activate — applying setup only settles its status.
+    if (!device.is_sealed) {
+      // One instance per capability is the setup sheet's whole model (a checkbox per row), so a
+      // capability that already has one is a re-submit — of a resumed wizard, or a double tap —
+      // not a request for a second instance. Adding further instances is device-config's job.
+      const already = await db.userDeviceAction.groupBy({
+        by: ['capability_id'],
+        where: { user_device_id: deviceId },
+      });
+      const taken = new Set(already.map((a) => a.capability_id));
+
+      for (const sel of selections) {
+        if (taken.has(sel.capability_id)) {
+          skipped++;
+          continue;
+        }
+        await this.activateCapability(userId, deviceId, sel);
+        activated++;
+      }
+    }
+
+    await db.userDevice.update({ where: { id: deviceId }, data: { status: 'active' } });
+
+    // Best-effort, exactly like the sealed path: an offline device picks the config up on its
+    // next boot anyway, so a failed dispatch must not fail the whole setup.
+    try {
+      await this.dispatchCommand(userId, deviceId, 'restart');
+    } catch (err) {
+      log.warn({ err, deviceId }, 'config-reload dispatch failed — device reloads on next boot');
+    }
+
+    return { activated, skipped };
+  }
+
   // ─── Lifecycle commands (reprovision/reset/restart) ───────────────────
   // actionName is the mqtt_action_name the device firmware listens for; command is the
   // message body sent as-is (these 4 all take no parameters).
   async dispatchCommand(userId: number, deviceId: number, actionName: string): Promise<void> {
     const device = await db.userDevice.findUnique({
       where: { id: deviceId },
-      select: { user_id: true, device: { select: { version: true } } },
+      select: {
+        user_id: true,
+        current_firmware_version: true,
+        device: { select: { version: true } },
+      },
     });
     if (!device) throw Object.assign(new Error('Device not found'), { statusCode: 404 });
     if (device.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
@@ -299,7 +372,11 @@ class DeviceMgmtService {
       deviceId: String(deviceId),
       actionName,
       command: '',
-      firmwareVersion: device.device.version,
+      // The command topic carries the firmware's version segment, and firmware builds it from
+      // its own compile-time DEVICE_VERSION. After an OTA that is the version the device
+      // reported, not the catalog row it is still pointed at — addressing the catalog row would
+      // publish to a topic nothing subscribes to and the command would vanish silently.
+      firmwareVersion: device.current_firmware_version ?? device.device.version,
       // A device-level command from the management UI — no UserDeviceAction behind it, so the
       // history row records the device and the verb (F11.12).
       source: { kind: 'manual', label: `device ${actionName}` },

@@ -427,7 +427,13 @@ class RulesEngine {
               commandId,
             },
             commandId,
-            firmwareVersion: uda.user_device.device.version ?? undefined,
+            // Address the version the device actually booted (post-OTA that is what it
+            // reported), not the catalog row — otherwise the rule's command goes to a topic
+            // nothing subscribes to and the automation silently stops acting.
+            firmwareVersion:
+              uda.user_device.current_firmware_version ??
+              uda.user_device.device.version ??
+              undefined,
             // The rule's name as it reads right now: history has to survive it being renamed.
             source: { kind: 'rule', refId: rule.id, label: rule.name },
             actionId: uda.id,

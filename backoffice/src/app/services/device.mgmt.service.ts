@@ -78,6 +78,27 @@ export class DeviceMgmtService {
     });
   }
 
+  /**
+   * Finish first-run setup in one call: activate the picked capabilities, mark the device set up,
+   * and restart it so it loads the config it now has (the device has no MQTT config topic — it
+   * re-reads its config on boot, so restarting is how config is applied).
+   */
+  applySetup(
+    deviceId: number,
+    selections: {
+      capability_id: number;
+      telemetry_interval_ms?: number | null;
+      pins?: { capability_pin_id: number; pin_number: number }[];
+      camera_resolution?: string | null;
+      camera_transport?: string | null;
+    }[],
+  ): Observable<{ activated: number; skipped: number }> {
+    return this.http.post<{ activated: number; skipped: number }>(
+      `${this.apiUrl}/api/devices/${deviceId}/setup/apply`,
+      { selections },
+    );
+  }
+
   updateActivatedAction(
     deviceId: number,
     userActionId: number,
@@ -155,6 +176,9 @@ export interface DeviceView {
   version: string;
   // Sealed = factory-soldered: pins/actions are admin-composed, so device-config is read-only.
   is_sealed: boolean;
+  // 'provisioning' = registered but never configured — the list offers "Finish setup".
+  // 'active' = set up.
+  status: string;
   current_firmware_version: string | null;
   update_available: boolean;
   // Latest WiFi RSSI (dBm) from the device heartbeat; null when offline.

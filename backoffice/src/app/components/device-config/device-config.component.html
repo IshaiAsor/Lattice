@@ -82,6 +82,9 @@
               <span class="rail-item-meta">Last seen {{ device.lastOnlineDate | date: 'MMM d, HH:mm' }}</span>
             }
           </div>
+          @if (needsSetup(device)) {
+            <span class="rail-item-setup" matTooltip="Registered, but not set up yet">setup</span>
+          }
           @if (device.update_available) {
             <mat-icon class="rail-item-update" matTooltip="New firmware version available">system_update</mat-icon>
           }
@@ -182,6 +185,21 @@
           </mat-menu>
         </div>
       </div>
+
+      <!-- Registered but never configured: the wizard was closed before it did anything. -->
+      @if (needsSetup(selectedDevice!)) {
+        <div class="setup-banner">
+          <mat-icon>pending_actions</mat-icon>
+          <div class="setup-banner-text">
+            <p class="setup-banner-title">This device isn't set up yet</p>
+            <p class="setup-banner-sub">It's registered, but nothing has been switched on, so it
+              won't do anything until you finish setting it up.</p>
+          </div>
+          <button mat-flat-button color="primary" (click)="finishSetup(selectedDevice!)">
+            Finish setup
+          </button>
+        </div>
+      }
 
       @if (isSealed) {
         <div class="sealed-notice">
