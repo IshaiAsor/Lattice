@@ -1,0 +1,62 @@
+# Local end of the reverse tunnel that gives this machine a public HTTPS URL, for Google Home
+# account linking. Server side lives in the gitops repo: k8s/base/infra-access/frp-tunnel.yaml
+#
+#   frpc -c frpc.toml
+#   → https://lattice-local.duckdns.org  serves whatever is running locally
+#   → https://ui.lattice-local.duckdns.org  shows whether the tunnel is connected
+#
+# REPLACES Caddyfile.local. The `locations` below do the path routing Caddy used to do, and
+# hostHeaderRewrite does what its `header_up Host localhost:4200` did, so there is no second
+# reverse proxy and no second terminal (F7.10).
+#
+# WHY wss/443: the cluster publishes only 80, 443 and 8883, and opening another port needs a
+# Traefik change plus an OCI security-list rule that is not GitOps-owned. Riding 443 also means
+# this side dials OUT — no inbound firewall rule, no router config, and it sidesteps Docker
+# Desktop's WSL2 backend publishing ports to loopback only.
+#
+# WHILE THIS IS RUNNING your local stack is on the public internet. Registering a tunnel needs the
+# token, but what gets published is unauthenticated. Run it only while testing, and stop it after.
+#
+# The token is NOT in this file. Export it first (same value as the sealed `frp-auth` secret):
+#   PowerShell:  $env:FRP_TOKEN = "..."
+#   bash:        export FRP_TOKEN="..."
+
+serverAddr = "frp.lattice-local.duckdns.org"
+serverPort = 443
+# Control channel rides the existing HTTPS ingress as a websocket.
+transport.protocol = "wss"
+
+auth.method = "token"
+auth.token = "{{ .Envs.FRP_TOKEN }}"
+
+log.level = "info"
+
+# ── Routing (most specific path first, exactly as the prod/staging ingress orders it) ──────────
+# google-home: account linking + fulfillment. This is the whole reason the tunnel exists.
+[[proxies]]
+name = "google-home"
+type = "http"
+localIP = "127.0.0.1"
+localPort = 3010
+customDomains = ["lattice-local.duckdns.org"]
+locations = ["/api/google"]
+
+# api service
+[[proxies]]
+name = "api"
+type = "http"
+localIP = "127.0.0.1"
+localPort = 3100
+customDomains = ["lattice-local.duckdns.org"]
+locations = ["/api"]
+
+# backoffice dev server. `ng serve` rejects a foreign Host header, so present it as localhost —
+# the browser's own origin (the public URL) is unaffected by this upstream header.
+[[proxies]]
+name = "backoffice"
+type = "http"
+localIP = "127.0.0.1"
+localPort = 4200
+customDomains = ["lattice-local.duckdns.org"]
+locations = ["/"]
+hostHeaderRewrite = "localhost:4200"

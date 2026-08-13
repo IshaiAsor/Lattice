@@ -67,10 +67,13 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672
       - DATABASE_URL=postgresql://${BACKEND_DB_USER}:${BACKEND_DB_PASSWORD}@postgres:5432/${DB_NAME:-emqx_data}?sslmode=disable
-      # Embedded in provisioning responses returned to devices — must be host-reachable.
-      - DEVICE_GATEWAY_URL=http://localhost:3004
-      - OTA_MANAGER_URL=http://localhost:3001
-      - MQTT_SERVER_NAME=localhost
+      # Embedded in provisioning responses returned to devices — must be reachable FROM THE DEVICE.
+      # `localhost` only works when the "device" runs on this host (device-sim). Real hardware on
+      # the LAN needs this host's LAN IP, so set DEVICE_GATEWAY_URL / MQTT_SERVER_NAME /
+      # OTA_MANAGER_URL in .env when testing against a board.
+      - DEVICE_GATEWAY_URL=${DEVICE_GATEWAY_URL:-http://localhost:3004}
+      - OTA_MANAGER_URL=${OTA_MANAGER_URL:-http://localhost:3001}
+      - MQTT_SERVER_NAME=${MQTT_SERVER_NAME:-localhost}
       - MQTT_PORT=1883
       - MQTT_VALIDATE_CERT=false
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
