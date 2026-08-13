@@ -46,6 +46,7 @@ services:
       # google.service.getUserFromCode), so it needs the same client id/secret as google-home.
       - GOOGLE_SIGN_IN_CLIENT_ID=${GOOGLE_SIGN_IN_CLIENT_ID}
       - GOOGLE_SIGN_IN_CLIENT_SECRET=${GOOGLE_SIGN_IN_CLIENT_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:4200}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       postgres:
@@ -71,10 +72,17 @@ services:
       # `localhost` only works when the "device" runs on this host (device-sim). Real hardware on
       # the LAN needs this host's LAN IP, so set DEVICE_GATEWAY_URL / MQTT_SERVER_NAME /
       # OTA_MANAGER_URL in .env when testing against a board.
+      # Browser origins allowed to call this service. Same-origin paths (the api behind
+      # /api on the tunnel host) never need it; device-gateway has its own host, so the
+      # backoffice reaches it cross-origin and is refused without an entry here.
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:4200}
       - DEVICE_GATEWAY_URL=${DEVICE_GATEWAY_URL:-http://localhost:3004}
       - OTA_MANAGER_URL=${OTA_MANAGER_URL:-http://localhost:3001}
       - MQTT_SERVER_NAME=${MQTT_SERVER_NAME:-localhost}
-      - MQTT_PORT=1883
+      # The port advertised TO DEVICES, distinct from the internal 1883 that mqtt-service and
+      # device-sim use: a board reaching the broker over the public tunnel connects on 8883,
+      # where Traefik terminates TLS and forwards plaintext down to the local broker.
+      - MQTT_PORT=${DEVICE_MQTT_PORT:-1883}
       - MQTT_VALIDATE_CERT=false
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
@@ -320,3 +328,33 @@ services:
       - device-gateway
       - mqtt-service
     restart: always
+
+  # Reverse tunnel to the cluster, giving this machine public HTTPS + MQTT endpoints.
+  # Server side: oci-k3s-gitops k8s/base/infra-access/frp-tunnel.yaml — routing in ./frpc.toml.
+  #
+  # Behind a `tunnel` profile so a normal `dev:up` never starts it: while it runs, this stack is
+  # on the public internet. Start it only when testing Google Home linking or real hardware:
+  #   docker compose -f compose.yaml -f compose.dev.yaml --profile tunnel up -d frpc
+  #
+  # Runs as a container rather than a host binary for two reasons: container-to-container is the
+  # reliable path (Docker Desktop's WSL2 backend publishes ports to loopback only), and the
+  # endpoint AV classifies the frp binary as riskware — reverse tunnels are a common exfiltration
+  # tool, so the detection is about the capability, not this build.
+  frpc:
+    image: fatedier/frpc:v0.70.1
+    container_name: frpc
+    profiles: ['tunnel']
+    command: ['-c', '/etc/frp/frpc.toml']
+    volumes:
+      - ./frpc.toml:/etc/frp/frpc.toml:ro
+    environment:
+      # Same value as the sealed frp-auth secret in the cluster.
+      - FRP_TOKEN=${FRP_TOKEN}
+    extra_hosts:
+      # `ng serve` runs on the host, not in compose.
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      - api
+      - device-gateway
+      - google-home
+    restart: unless-stopped

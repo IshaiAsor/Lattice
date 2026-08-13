@@ -27,6 +27,9 @@
     "dev:down": "docker compose -f compose.yaml -f compose.dev.yaml down",
     "dev:hard-restart": "docker compose -f compose.yaml -f compose.dev.yaml down -v && docker compose -f compose.yaml -f compose.dev.yaml up -d --build --force-recreate && docker compose run --rm migrate",
     "dev:restart": "docker compose -f compose.yaml -f compose.dev.yaml restart",
+    "tunnel:up": "docker compose -f compose.yaml -f compose.dev.yaml --profile tunnel up -d frpc",
+    "tunnel:down": "docker compose -f compose.yaml -f compose.dev.yaml --profile tunnel stop frpc",
+    "tunnel:logs": "docker logs -f frpc",
     "prepare": "husky"
   },
   "lint-staged": {

@@ -65,7 +65,7 @@
                 }
               ]
             },
-            "ngrok": {
+            "tunnel": {
               "buildOptimizer": false,
               "optimization": false,
               "vendorChunk": true,
@@ -75,7 +75,7 @@
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
-                  "with": "src/environments/environment.ngrok.ts"
+                  "with": "src/environments/environment.tunnel.ts"
                 }
               ]
             }
@@ -92,8 +92,8 @@
               "buildTarget": "backoffice:build:development",
               "proxyConfig": "proxy.conf.json"
             },
-            "ngrok": {
-              "buildTarget": "backoffice:build:ngrok",
+            "tunnel": {
+              "buildTarget": "backoffice:build:tunnel",
               "proxyConfig": "proxy.conf.json"
             }
           },

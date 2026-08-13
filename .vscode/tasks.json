@@ -57,7 +57,9 @@
       "label": "kill-ml-executor-ports",
       "type": "shell",
       "command": "npx -y kill-port 9230 3002",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -67,7 +69,9 @@
       "options": {
         "cwd": "${workspaceFolder:Project Root}"
       },
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": ["$tsc"]
     },
     {
@@ -78,7 +82,9 @@
       "label": "kill-ml-router-ports",
       "type": "shell",
       "command": "npx -y kill-port 9238 3009",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -89,7 +95,9 @@
       "label": "kill-mqtt-service-ports",
       "type": "shell",
       "command": "npx -y kill-port 9232 3005",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -100,7 +108,9 @@
       "label": "kill-device-gateway-ports",
       "type": "shell",
       "command": "npx -y kill-port 9231 3004",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -111,7 +121,9 @@
       "label": "kill-digest-service-ports",
       "type": "shell",
       "command": "npx -y kill-port 9233 3006",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -122,7 +134,9 @@
       "label": "kill-socket-server-ports",
       "type": "shell",
       "command": "npx -y kill-port 9235 3007",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -133,7 +147,9 @@
       "label": "kill-ota-manager-ports",
       "type": "shell",
       "command": "npx -y kill-port 9234 3001",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -144,7 +160,9 @@
       "label": "kill-automation-worker-ports",
       "type": "shell",
       "command": "npx -y kill-port 9236 3008",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -155,7 +173,9 @@
       "label": "kill-notification-service-ports",
       "type": "shell",
       "command": "npx -y kill-port 9241 3011",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -166,7 +186,9 @@
       "label": "kill-google-home-ports",
       "type": "shell",
       "command": "npx -y kill-port 9237 3010",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -177,7 +199,9 @@
       "label": "kill-api-ports",
       "type": "shell",
       "command": "npx -y kill-port 9239 3100",
-      "presentation": { "reveal": "silent" },
+      "presentation": {
+        "reveal": "silent"
+      },
       "problemMatcher": []
     },
     {
@@ -200,7 +224,10 @@
       "options": {
         "cwd": "${workspaceFolder:Project Root}"
       },
-      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
       "problemMatcher": []
     },
     {
@@ -210,7 +237,10 @@
       "options": {
         "cwd": "${workspaceFolder:Prisma}"
       },
-      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
       "problemMatcher": []
     },
     {
@@ -220,7 +250,10 @@
       "options": {
         "cwd": "${workspaceFolder:Prisma}"
       },
-      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
       "problemMatcher": []
     },
     {
@@ -230,66 +263,12 @@
       "options": {
         "cwd": "${workspaceFolder:Project Root}"
       },
-      "presentation": { "reveal": "always", "panel": "dedicated", "group": "google-local" },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "google-local"
+      },
       "problemMatcher": []
-    },
-    {
-      "label": "google:caddy",
-      "type": "shell",
-      "command": "caddy run --config Caddyfile.local",
-      "options": {
-        "cwd": "${workspaceFolder:Project Root}"
-      },
-      "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated", "group": "google-local" },
-      "problemMatcher": {
-        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".",
-          "endsPattern": "serving initial configuration|autosaved config|serving"
-        }
-      }
-    },
-    {
-      "label": "google:ngrok",
-      "type": "shell",
-      "command": "ngrok http --domain=dividual-leigha-tensible.ngrok-free.dev 8080",
-      "options": {
-        "cwd": "${workspaceFolder:Project Root}"
-      },
-      "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated", "group": "google-local" },
-      "problemMatcher": {
-        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".",
-          "endsPattern": "started tunnel|Forwarding|url=|Session Status"
-        }
-      }
-    },
-    {
-      "label": "google:serve-ngrok",
-      "type": "shell",
-      "command": "npx ng serve --configuration=ngrok",
-      "options": {
-        "cwd": "${workspaceFolder:Backoffice UI}"
-      },
-      "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated", "group": "google-local" },
-      "problemMatcher": {
-        "pattern": [{ "regexp": ".", "file": 1, "location": 2, "message": 3 }],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": {
-            "regexp": "Generating browser application bundles|Compiling|Building"
-          },
-          "endsPattern": {
-            "regexp": "Application bundle generation complete|Compiled successfully|watch mode enabled"
-          }
-        }
-      }
     },
     {
       "label": "google:local",
@@ -299,6 +278,21 @@
         "google:ngrok",
         "google:serve-ngrok"
       ],
+      "problemMatcher": []
+    },
+    {
+      "label": "google:tunnel",
+      "type": "shell",
+      "command": "docker compose -f compose.yaml -f compose.dev.yaml --profile tunnel up -d frpc",
+      "problemMatcher": []
+    },
+    {
+      "label": "google:serve-tunnel",
+      "type": "shell",
+      "command": "npx ng serve --host 0.0.0.0 --configuration=tunnel",
+      "options": {
+        "cwd": "${workspaceFolder}/backoffice"
+      },
       "problemMatcher": []
     }
   ]

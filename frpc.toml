@@ -1,32 +1,33 @@
-# Local end of the reverse tunnel that gives this machine a public HTTPS URL, for Google Home
-# account linking. Server side lives in the gitops repo: k8s/base/infra-access/frp-tunnel.yaml
+# Local end of the reverse tunnel that gives this machine public HTTPS + MQTT endpoints.
+# Server side lives in the gitops repo: k8s/base/infra-access/frp-tunnel.yaml
 #
-#   frpc -c frpc.toml
-#   → https://lattice-local.duckdns.org  serves whatever is running locally
-#   → https://frp.lattice-infra.duckdns.org  shows whether the tunnel is connected
-#     (on the infra domain, behind the same Authelia SSO as Argo/Kargo/Grafana — the session
-#      cookie is scoped there, and widening it to lattice-local would send an SSO cookie to the
-#      public host that proxies to this laptop)
+#   docker compose -f compose.yaml -f compose.dev.yaml --profile tunnel up -d frpc
+#   docker logs -f frpc
 #
-# REPLACES Caddyfile.local. The `locations` below do the path routing Caddy used to do, and
-# hostHeaderRewrite does what its `header_up Host localhost:4200` did, so there is no second
-# reverse proxy and no second terminal (F7.10).
+#   https://lattice-local.duckdns.org         serves the local backoffice + api + google-home
+#   https://device.lattice-local.duckdns.org  device-gateway, for real hardware
+#   mqtt.lattice-local.duckdns.org:8883       MQTT, for real hardware (TLS, terminated at Traefik)
+#   https://frp.lattice-infra.duckdns.org     is the tunnel up? (Authelia SSO)
 #
-# WHY wss/443: the cluster publishes only 80, 443 and 8883, and opening another port needs a
-# Traefik change plus an OCI security-list rule that is not GitOps-owned. Riding 443 also means
-# this side dials OUT — no inbound firewall rule, no router config, and it sidesteps Docker
-# Desktop's WSL2 backend publishing ports to loopback only.
+# RUNS IN A CONTAINER, so the targets below are compose service names on the shared network, not
+# 127.0.0.1 — inside a container that would mean the container itself. This is also why it works at
+# all: Docker Desktop's WSL2 backend publishes ports to loopback only, so container-to-container is
+# the reliable path. `ng serve` is the exception — it runs on the host, hence host.docker.internal.
+#
+# REPLACES Caddyfile.local. frp's `locations` do the path routing Caddy used to do and
+# hostHeaderRewrite does what its Host override did, so there is no second reverse proxy and no
+# second terminal (F7.10).
 #
 # WHILE THIS IS RUNNING your local stack is on the public internet. Registering a tunnel needs the
-# token, but what gets published is unauthenticated. Run it only while testing, and stop it after.
+# token, but what gets published is unauthenticated. Stop it when you are not testing:
+#   docker compose -f compose.yaml -f compose.dev.yaml --profile tunnel stop frpc
 #
-# The token is NOT in this file. Export it first (same value as the sealed `frp-auth` secret):
-#   PowerShell:  $env:FRP_TOKEN = "..."
-#   bash:        export FRP_TOKEN="..."
+# FRP_TOKEN comes from .env (gitignored) — same value as the sealed frp-auth secret.
 
 serverAddr = "frp.lattice-local.duckdns.org"
 serverPort = 443
-# Control channel rides the existing HTTPS ingress as a websocket.
+# Control channel rides the existing HTTPS ingress as a websocket, so no extra port had to be
+# opened on the cluster or in OCI's security list.
 transport.protocol = "wss"
 
 auth.method = "token"
@@ -34,32 +35,83 @@ auth.token = "{{ .Envs.FRP_TOKEN }}"
 
 log.level = "info"
 
-# ── Routing (most specific path first, exactly as the prod/staging ingress orders it) ──────────
-# google-home: account linking + fulfillment. This is the whole reason the tunnel exists.
+# ── Browser-facing (most specific path first, as the prod/staging ingress orders it) ────────────
+# google-home: account linking + fulfillment. The reason the tunnel exists.
 [[proxies]]
 name = "google-home"
 type = "http"
-localIP = "127.0.0.1"
+localIP = "google-home"
 localPort = 3010
 customDomains = ["lattice-local.duckdns.org"]
 locations = ["/api/google"]
 
-# api service
+# socket-server. Routed by Socket.IO's fixed /socket.io path rather than its own subdomain, which
+# keeps it same-origin for the browser and needs no extra host on the cluster Ingress.
+[[proxies]]
+name = "socket"
+type = "http"
+localIP = "socket-server"
+localPort = 3007
+customDomains = ["lattice-local.duckdns.org"]
+locations = ["/socket.io"]
+
+# api service — published on 3100, but 3000 inside the network.
 [[proxies]]
 name = "api"
 type = "http"
-localIP = "127.0.0.1"
-localPort = 3100
+localIP = "api"
+localPort = 3000
 customDomains = ["lattice-local.duckdns.org"]
 locations = ["/api"]
 
-# backoffice dev server. `ng serve` rejects a foreign Host header, so present it as localhost —
-# the browser's own origin (the public URL) is unaffected by this upstream header.
+# backoffice dev server, running on the HOST rather than in compose. `ng serve` rejects a foreign
+# Host header, so present it as localhost; the browser's own origin is unaffected by this.
 [[proxies]]
 name = "backoffice"
 type = "http"
-localIP = "127.0.0.1"
+localIP = "host.docker.internal"
 localPort = 4200
 customDomains = ["lattice-local.duckdns.org"]
 locations = ["/"]
 hostHeaderRewrite = "localhost:4200"
+
+# ── Real hardware, with no LAN dependency ──────────────────────────────────────────────────────
+# A board on a network that isolates its clients — or on any network at all — reaches the stack
+# through these public names instead of this machine's LAN IP. That also ends the IP churn: DHCP
+# can move this laptop freely and the device never notices, because it only ever knew a name.
+#
+# Point the gateway at them so provisioning hands the device the public addresses:
+#   MQTT_SERVER_NAME=mqtt.lattice-local.duckdns.org
+#   MQTT_PORT=8883
+#   DEVICE_GATEWAY_URL=https://device.lattice-local.duckdns.org
+# NEEDS -prod firmware: ENV_TEST speaks plain MQTT, which carries no SNI for Traefik to route on.
+
+# device-gateway: provisioning, config pulls, camera frames.
+[[proxies]]
+name = "device-gateway"
+type = "http"
+localIP = "device-gateway"
+localPort = 3004
+customDomains = ["device.lattice-local.duckdns.org"]
+locations = ["/"]
+
+# ota-manager: firmware downloads. Published on 3001, but 3000 inside the network. Needed because
+# the download URL is handed to the device at provisioning time — without it a tunnelled board
+# provisions fine and then fails every OTA on an address it cannot route to.
+[[proxies]]
+name = "ota-manager"
+type = "http"
+localIP = "ota-manager"
+localPort = 3000
+customDomains = ["ota.lattice-local.duckdns.org"]
+locations = ["/"]
+
+# MQTT. Traefik terminates the device's TLS on the mqtts entrypoint and forwards plaintext here,
+# so this carries the last hop to the broker's plain 1883 listener. remotePort must stay 6000 —
+# frps restricts the allowed range to exactly that port.
+[[proxies]]
+name = "mqtt"
+type = "tcp"
+localIP = "emqx"
+localPort = 1883
+remotePort = 6000
