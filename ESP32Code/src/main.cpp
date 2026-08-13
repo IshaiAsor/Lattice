@@ -49,6 +49,10 @@ bool provisioningMode = false;
 // needs a human. Everything else (no AP, no broker, no WAN) is retried indefinitely.
 bool needsProvisioning = false;
 
+// Set by buttonTask when a 5s press asks for provisioning. A flag rather than a direct call
+// because BLE must be brought up on the main task, not from an arbitrary FreeRTOS context.
+volatile bool provisionRequested = false;
+
 // The served config arrives over the network, so it is retried rather than required at boot.
 bool          deviceConfigLoaded = false;
 unsigned long configRetryAt      = 0;
@@ -101,7 +105,7 @@ HttpFrameService  httpFrameService;
 void setupBleProvisioning();
 void bleResponseTask(void* pvParameters);
 void handleProvisioningQueue();
-void handleReset();
+void buttonTask(void* pv);
 void performFactoryReset();
 void loopActions();
 void handleHeartbeat();
@@ -162,6 +166,13 @@ void setup()
                             0                       // Core affinity (PRO_CPU)
     );
 
+    // The button gets its own task, started before any blocking work. setup() can spend up to
+    // WIFI_TIMEOUT (60 min) busy-waiting on a saved-but-unusable network, and loop() — the only
+    // thing that used to sample the button — does not run until setup() returns. That left the
+    // device deaf to both the 5s provisioning press and the 10s factory reset for the whole wait,
+    // with no way back other than a reflash.
+    xTaskCreatePinnedToCore(buttonTask, "ButtonTask", 2560, NULL, 2, NULL, 0);
+
     WiFi.mode(WIFI_STA); // Initialize WiFi driver to properly read from NVS
     // Let the driver re-associate on its own when the AP comes back (nightly router restart);
     // ensureWifi() only nudges it if that stalls.
@@ -184,14 +195,22 @@ void setup()
         WiFi.begin(); // Explicitly trigger connection using the saved credentials
 
         unsigned long start = millis();
-        while (millis() - start < WIFI_TIMEOUT && WiFi.status() != WL_CONNECTED)
+        while (millis() - start < WIFI_TIMEOUT && WiFi.status() != WL_CONNECTED && !provisionRequested)
         {
             Serial.print('.');
             delay(500);
         }
         Serial.println();
 
-        if (WiFi.status() != WL_CONNECTED)
+        // A held button outranks the wait: the user is telling us this network is not going to
+        // work, and an hour of dots is not an answer.
+        if (provisionRequested)
+        {
+            LOG_I("Boot", "provisioning requested by button — abandoning WiFi wait");
+            provisionRequested = false;
+            setupBleProvisioning();
+        }
+        else if (WiFi.status() != WL_CONNECTED)
         {
             LOG_W("Boot", "WiFi did not connect in time — entering provisioning mode");
             if (PROVISION_ON_ERROR)
@@ -247,7 +266,17 @@ void setup()
 void loop()
 {
     delay(100);
-    handleReset();
+    // buttonTask owns the pin; this only acts on what it decided, so BLE is still brought up on
+    // the main task.
+    if (provisionRequested)
+    {
+        provisionRequested = false;
+        if (!provisioningMode)
+        {
+            LOG_I("Reset", "provisioning requested by button");
+            setupBleProvisioning();
+        }
+    }
     onboardLed.loop();
     if (provisioningMode)
     {
@@ -255,8 +284,8 @@ void loop()
         return;
     }
 
-    // Nothing to retry until someone re-provisions; handleReset() above still serves the
-    // button, so a long press can start provisioning.
+    // Nothing to retry until someone re-provisions; buttonTask runs independently of this loop,
+    // so a long press still starts provisioning (or factory-resets) from here.
     if (needsProvisioning)
         return;
 
@@ -415,33 +444,56 @@ void bleResponseTask(void* pvParameters)
     }
 }
 
-void handleReset()
+/**
+ * Owns the button, on its own task, for the life of the device.
+ *
+ * It used to be polled from loop(), which meant it stopped working exactly when it was needed
+ * most: setup() busy-waits up to WIFI_TIMEOUT (60 min) on a saved network that may be gone, and
+ * loop() does not start until that returns. A device that could not reach its AP was unreachable
+ * by button too, leaving a reflash as the only way back.
+ *
+ * Factory reset runs here directly — it wipes NVS and reboots, so there is nothing left to
+ * coordinate. Provisioning only raises a flag, because BLE has to be started on the main task.
+ */
+void buttonTask(void* pv)
 {
-    if (digitalRead(BUTTON_PIN) == LOW)
+    (void)pv;
+    bool          pressing  = false;
+    bool          actioned  = false; // one action per press, so a long hold cannot fire twice
+    unsigned long pressedAt = 0;
+
+    for (;;)
     {
-        if (!isPressing)
+        if (digitalRead(BUTTON_PIN) == LOW)
         {
-            buttonPressTime = millis();
-            isPressing      = true;
+            if (!pressing)
+            {
+                pressing  = true;
+                actioned  = false;
+                pressedAt = millis();
+            }
+            else if (!actioned)
+            {
+                unsigned long held = millis() - pressedAt;
+                if (held > 10000)
+                {
+                    actioned = true;
+                    LOG_I("Reset", "10s press detected — initiating factory reset");
+                    performFactoryReset();
+                }
+                else if (held > 5000 && !provisioningMode)
+                {
+                    actioned = true;
+                    LOG_I("Reset", "5s press detected — requesting provisioning mode");
+                    provisionRequested = true;
+                }
+            }
         }
         else
         {
-            unsigned long pressDuration = millis() - buttonPressTime;
-            if (pressDuration > 10000)
-            {
-                LOG_I("Reset", "10s press detected — initiating factory reset");
-                performFactoryReset();
-            }
-            else if (pressDuration > 5000 && !provisioningMode)
-            {
-                LOG_I("Reset", "5s press detected — entering provisioning mode");
-                setupBleProvisioning();
-            }
+            pressing = false;
         }
-    }
-    else
-    {
-        isPressing = false;
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
