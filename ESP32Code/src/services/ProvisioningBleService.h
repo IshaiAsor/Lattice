@@ -59,6 +59,97 @@ class ProvisioningBleService
     }
     ~ProvisioningBleService() {}
 
+    /**
+     * Scan for networks and stream them back, one BLE notification per network.
+     *
+     * Sending the list as a single blob would need a chunking protocol: a dozen SSIDs overrun the
+     * negotiated MTU, and this characteristic has no reassembly on either side. One network per
+     * notification sidesteps that entirely — every frame is a few dozen bytes.
+     */
+    void HandleWifiScan()
+    {
+        LOG_I("Provision", "scanning for WiFi networks");
+
+        // Scanning needs station mode. The device is in AP+STA or STA already for the portal path,
+        // but a fresh boot with no credentials may be idle, so assert it.
+        WiFi.mode(WIFI_STA);
+        int found = WiFi.scanNetworks();
+
+        if (found < 0)
+        {
+            LOG_E("Provision", "WiFi scan failed (%d)", found);
+            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_ERROR, "FAIL: Scan failed");
+            return;
+        }
+
+        LOG_I("Provision", "scan found %d networks", found);
+
+        for (int i = 0; i < found; i++)
+        {
+            // "<rssi>|<secured>|<ssid>" — the SSID goes last so a '|' inside it survives a
+            // split-on-first-two-delimiters on the app side.
+            char line[BLE_RESPONSE_MAX_LEN];
+            snprintf(line, sizeof(line), "%d|%d|%s", WiFi.RSSI(i), WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? 0 : 1,
+                     WiFi.SSID(i).c_str());
+            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_SCAN_RESULT, line);
+            // The app's notification handler is single-threaded; back-to-back notifies on a fast
+            // link can coalesce and drop. A short gap costs nothing on a scan of this size.
+            delay(60);
+        }
+
+        WiFi.scanDelete();
+
+        char summary[32];
+        snprintf(summary, sizeof(summary), "%d", found);
+        bleNotificationService->NotifyBleDevice(ResponseType::WIFI_SCAN_COMPLETE, summary);
+    }
+
+    /**
+     * Join the network the user picked in the app.
+     *
+     * Sent as its own small write rather than folded into the provisioning payload, so that payload
+     * stays exactly the size it is today — this characteristic assumes a single write with no
+     * reassembly, and it already carries a JWT. On success the provisioning payload that follows
+     * finds WiFi.isConnected() true and skips the captive portal with no change to that code.
+     */
+    void HandleWifiCredentials(JsonDocument& doc)
+    {
+        const char* ssid     = doc["ssid"] | "";
+        const char* password = doc["password"] | "";
+
+        if (strlen(ssid) == 0)
+        {
+            LOG_E("Provision", "wifi command with no ssid");
+            bleNotificationService->NotifyBleDevice(ResponseType::MISSING_PARAMS, "FAIL: MISSING_PARAMS");
+            return;
+        }
+
+        LOG_I("Provision", "connecting to WiFi chosen in app");
+        bleNotificationService->NotifyBleDevice(ResponseType::WIFI_CONNECTING, "OK: Connecting...");
+
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(ssid, password);
+
+        // Long enough for DHCP on a slow AP, short enough that the user is not left staring at a
+        // spinner. Failure is recoverable: the app falls back to offering the captive portal.
+        const unsigned long timeoutMs = 25000;
+        unsigned long       started   = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - started < timeoutMs)
+        {
+            delay(250);
+        }
+
+        if (WiFi.status() != WL_CONNECTED)
+        {
+            LOG_E("Provision", "could not join the network chosen in app");
+            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_ERROR, "FAIL: Could not join that network");
+            return;
+        }
+
+        LOG_I("Provision", "WiFi connected from app-supplied credentials");
+        bleNotificationService->NotifyBleDevice(ResponseType::WIFI_CONNECTED_SUCCESSFULLY, "OK: WiFi Connected");
+    }
+
     void HandleProvisioning(char* payload)
     {
 
@@ -73,6 +164,22 @@ class ProvisioningBleService
         {
             LOG_E("Provision", "payload parse failed: %s", error.c_str());
             bleNotificationService->NotifyBleDevice(ResponseType::JSON_ERROR, "FAIL: JSON_ERROR");
+            return;
+        }
+
+        // Short commands the app sends BEFORE the provisioning payload, so it can offer Wi-Fi
+        // selection in the app instead of sending the user to the device's captive portal. A write
+        // without "cmd" is the provisioning payload and takes the original path untouched — which
+        // is what keeps an older app working against this firmware.
+        const char* cmd = doc["cmd"] | "";
+        if (strcmp(cmd, "scan") == 0)
+        {
+            HandleWifiScan();
+            return;
+        }
+        if (strcmp(cmd, "wifi") == 0)
+        {
+            HandleWifiCredentials(doc);
             return;
         }
 

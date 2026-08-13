@@ -83,8 +83,10 @@ class PreferencesManagerService
         if (!preferences.isKey("token") || !preferences.isKey("refresh_token") || !preferences.isKey("ref_token_url") ||
             !preferences.isKey("device_id"))
         {
+            // Report the gap; do NOT clear. Same reasoning as LoadMqttServerCredentials above: this
+            // is a read, and wiping the namespace here also destroyed mqtt_server/client_id/user and
+            // every saved action state, turning one missing key into a full loss of provisioning.
             LOG_W("Prefs", "no JWT token in storage");
-            preferences.clear();
             preferences.end();
             return nullptr;
         }

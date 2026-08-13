@@ -21,7 +21,14 @@ enum class ResponseType
     TESTING_MQTT_CONNECTION       = 20,
     MQTT_CONNECTION_SUCCESSFUL    = 21,
     PROVISIONING_SUCCESSFUL       = 22,
-    PROVISIONING_FAILED           = 23
+    PROVISIONING_FAILED           = 23,
+    // Wi-Fi chosen in the app instead of the device's captive portal. The app asks for a scan,
+    // picks a network, and sends credentials — all before the provisioning payload, which is
+    // deliberately left byte-identical. One notification per network keeps every frame far below
+    // the negotiated BLE MTU, so no chunking protocol is needed for the list.
+    WIFI_SCAN_RESULT   = 24, // one network: "<rssi>|<secured 0|1>|<ssid>"
+    WIFI_SCAN_COMPLETE = 25, // end of list; response carries the count
+    WIFI_CONNECTING    = 26
 };
 
 #define BLE_RESPONSE_MAX_LEN 256
