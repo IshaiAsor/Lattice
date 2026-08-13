@@ -3,7 +3,10 @@
 #
 #   frpc -c frpc.toml
 #   → https://lattice-local.duckdns.org  serves whatever is running locally
-#   → https://ui.lattice-local.duckdns.org  shows whether the tunnel is connected
+#   → https://frp.lattice-infra.duckdns.org  shows whether the tunnel is connected
+#     (on the infra domain, behind the same Authelia SSO as Argo/Kargo/Grafana — the session
+#      cookie is scoped there, and widening it to lattice-local would send an SSO cookie to the
+#      public host that proxies to this laptop)
 #
 # REPLACES Caddyfile.local. The `locations` below do the path routing Caddy used to do, and
 # hostHeaderRewrite does what its `header_up Host localhost:4200` did, so there is no second
