@@ -94,6 +94,16 @@ class MqttActionsHandlerService
                 ESP.restart();
                 return;
             }
+            // Per-device OTA. The fleet-wide `ota/updates/<deviceType>` branch above stays live
+            // alongside this one: the platform can only address a device individually once the
+            // whole fleet runs firmware that knows this verb, so the broadcast is dropped in a
+            // later release, never in the same one. OtaService logs and acks the outcome.
+            if (strcmp(action, "ota") == 0)
+            {
+                JwtToken* jwt = jwtService.GetCurrentJwtToken();
+                otaService->handleUpdateMessage(message.c_str(), jwt ? jwt->token.c_str() : "", ackPublisher);
+                return;
+            }
 #ifdef HAS_CAMERA
             // Legacy take_picture alias — equivalent to `read` on the camera's read surface.
             // Kept so not-yet-updated backend publishers keep working; new code sends `read`.

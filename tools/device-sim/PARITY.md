@@ -66,16 +66,17 @@ Legend: ✓ mirrored · ◐ partial / functional-equivalent · ✗ not simulated
 | `restart` → reboot, keep creds                           | `MqttActionsHandlerService` | ✓                                 |
 | `soft-reset` / `reprovision` → clear creds, re-provision | ″                           | ✓                                 |
 | `hard-reset` → wipe NVS, offline                         | ″                           | ✓ — emits `hard-reset`; CLI exits |
+| `ota` → per-device update, same payload as the broadcast | ″ + `OtaService`            | ✓ — delegates to the same handler |
 
 ## OTA
 
-| Firmware behavior                                                | Source                            | Sim                                                                 |
-| ---------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| Subscribe `ota/updates/<deviceType>`                             | `mqtt.h` / `OtaService`           | ✓                                                                   |
-| Strictly-newer semver gate                                       | `OtaService::isNewerVersion`      | ✓                                                                   |
-| Ack `starting:` / `rejected:` / `failed:` on `ack/ota`           | `OtaService` onStatus             | ✓ — `starting`/`rejected`; `failed` via opt-in `otaFail`/`OTA_FAIL` |
-| Reboot + reconnect at new version (→ `current_firmware_version`) | reboot + `device-status.consumer` | ✓                                                                   |
-| Actual firmware download + flash                                 | `OtaService::performUpdate`       | ✗ — simulated (no real binary)                                      |
+| Firmware behavior                                                                                         | Source                                                | Sim                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Two delivery paths: subscribe `ota/updates/<deviceType>` **and** accept the per-device `ota` command verb | `mqtt.h` / `MqttActionsHandlerService` / `OtaService` | ✓ — both, routed to one handler                                                                                                                                                           |
+| Strictly-newer semver gate                                                                                | `OtaService::isNewerVersion`                          | ✓                                                                                                                                                                                         |
+| Ack `starting:` / `rejected:` / `failed:` on `ack/ota`                                                    | `OtaService` onStatus                                 | ✓ — `starting`/`rejected`; `failed` via opt-in `otaFail`/`OTA_FAIL`; `starting:` is flushed before the simulated reboot (firmware acks over a live link, then spends seconds downloading) |
+| Reboot + reconnect at new version (→ `current_firmware_version`)                                          | reboot + `device-status.consumer`                     | ✓                                                                                                                                                                                         |
+| Actual firmware download + flash                                                                          | `OtaService::performUpdate`                           | ✗ — simulated (no real binary)                                                                                                                                                            |
 
 ## The rail (keep this honest)
 

@@ -475,6 +475,14 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - read reports current state, and still does after a restart
   - reserved `read` verb answers from NVS-persisted state; survives a device restart
 
+### Commands — `ota-command.e2e.test.ts` ✅
+
+- an ota command on the device topic updates that device, and its ack is not DLQd
+  - per-device `ota` verb (F3.15 step 1) reaches one device; the `starting:` ack is processed by
+    digest rather than dead-lettered as an unresolvable action
+- an ota command for a version already running is rejected, not applied
+  - strictly-newer gate answers `rejected:not-newer`, and the device keeps its version
+
 ### Commands — `commands.socket.e2e.test.ts` ✅
 
 - rejects a connection without a token

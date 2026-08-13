@@ -86,6 +86,16 @@ export function actionResultConsumer(ch: Channel) {
       return;
     }
 
+    // OTA is not a device action — nothing resolves `ota` to a UserDeviceAction, so without this
+    // the generic path below throws and dead-letters every OTA progress ack the device sends.
+    // There is no state to write either: an OTA settles when the device reports the new version,
+    // and an ack arriving from the new version's topic path is itself that evidence.
+    if (actionName === 'ota') {
+      if (version) await confirmOtaIfPending(parseInt(deviceId, 10), version);
+      log.info({ userId, deviceId, value, version }, 'OTA progress ack');
+      return;
+    }
+
     // status === 'ok' → write the device's observed state authoritatively.
     const resolved = await resolveUserDeviceAction(deviceId, actionName);
     if (resolved === null) {

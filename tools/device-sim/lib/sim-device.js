@@ -438,6 +438,13 @@ class SimDevice extends EventEmitter {
       await this.stop();
       return;
     }
+    // Per-device OTA — same payload and same handler as the fleet-wide `ota/updates/<type>`
+    // branch above, which stays live beside it (mirrors the firmware, which must accept both
+    // until the whole fleet knows this verb).
+    if (action === 'ota') {
+      await this._handleOta(msg);
+      return;
+    }
     if (action === 'take_picture') {
       let cmd;
       try {
@@ -577,7 +584,11 @@ class SimDevice extends EventEmitter {
       return;
     }
     this._log(`⇩ OTA ${this.version} → ${p.version} from ${p.url} — "flashing"...`);
-    this._publishAck('ota', { status: 'ok', value: `starting:${p.version}` });
+    // Awaited, unlike every other ack: the reboot below force-closes the connection, so a
+    // fire-and-forget publish here never leaves the process. Real firmware acks `starting:` over
+    // a live link and only reboots after a multi-second HTTP download, so the platform always
+    // sees this one — which is why it must reach the broker here too.
+    await this._publishAck('ota', { status: 'ok', value: `starting:${p.version}` });
     this.emit('ota', { from: this.version, to: p.version, accepted: true });
     this.version = p.version; // adopt new firmware version
     await this.reboot(); // reconnect on the NEW version topic → current_firmware_version
@@ -953,12 +964,26 @@ class SimDevice extends EventEmitter {
     return `${this._base()}/${this.version}/status`;
   }
 
+  // Returns a promise that settles once the packet has been handed to the socket. Fire-and-forget
+  // is fine for most callers, but anything that closes the connection right after acking must
+  // await it: reboot() force-closes the client, which discards whatever is still queued. QoS stays
+  // 0 — PubSubClient (the firmware's client) only publishes at QoS 0, so raising it here would be
+  // a divergence, not a fidelity gain.
   _publishAck(action, { status, value, commandId, unsolicited }) {
     const body = { status, value };
     if (commandId) body.commandId = commandId;
-    if (this.client)
-      this.client.publish(`${this._base()}/${this.version}/ack/${action}`, JSON.stringify(body));
+    const sent = this.client
+      ? new Promise((resolve) => {
+          this.client.publish(
+            `${this._base()}/${this.version}/ack/${action}`,
+            JSON.stringify(body),
+            {},
+            () => resolve(),
+          );
+        })
+      : Promise.resolve();
     this.emit('ack', { action, status, value, commandId, unsolicited: !!unsolicited });
+    return sent;
   }
 
   _clearDurationTimers() {
