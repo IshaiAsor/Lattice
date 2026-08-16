@@ -57,4 +57,22 @@ export const socket = {
       online,
     });
   },
+  // A pending OTA settled. The UI disables Update the moment it dispatches, so this is what
+  // releases it — on `confirmed` with the version now running, on `failed` with what the device
+  // said went wrong. A failed update emits nothing else the UI can see (the device never
+  // reconnects — it never rebooted), so without this the page would sit on "Updating…".
+  emitDeviceUpdateState(
+    userId: number,
+    userDeviceId: number,
+    status: 'confirmed' | 'failed',
+    version: string | null,
+    detail?: string,
+  ): void {
+    emitter.to(`user_${userId}`).emit(SOCKET_EVENTS.DEVICE_UPDATE_STATE, {
+      deviceId: userDeviceId,
+      status,
+      version,
+      detail,
+    });
+  },
 };

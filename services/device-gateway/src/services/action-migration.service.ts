@@ -11,6 +11,7 @@ import {
   type PinSlot,
 } from './action-compatibility';
 import { stageSealedUpgrade } from './sealed-materialization.service';
+import { otaInFlight, firmwareDownloadUrl } from './ota-dispatch';
 
 const log = createLogger('device-gateway:migration');
 
@@ -26,6 +27,11 @@ export interface UpdatePreview {
   current_version: string;
   new_version: string;
   actions: ActionPreview[];
+  // An update this device is already running. The preview stays viewable, but there is nothing
+  // to apply until it settles — a second dispatch only repeats work the device is mid-way
+  // through.
+  in_progress: boolean;
+  pending_version: string | null;
 }
 
 async function resolveVersions(userDeviceId: number) {
@@ -47,7 +53,7 @@ async function resolveVersions(userDeviceId: number) {
 
 class ActionMigrationService {
   async previewUpdate(userDeviceId: number): Promise<UpdatePreview | { up_to_date: true }> {
-    const { currentDevice, latestDevice } = await resolveVersions(userDeviceId);
+    const { userDevice, currentDevice, latestDevice } = await resolveVersions(userDeviceId);
 
     if (currentDevice.id === latestDevice.id) {
       return { up_to_date: true };
@@ -88,17 +94,34 @@ class ActionMigrationService {
       };
     });
 
+    const inFlight = otaInFlight(userDevice);
     return {
       current_version: currentDevice.version,
       new_version: latestDevice.version,
       actions,
+      in_progress: inFlight,
+      pending_version: inFlight ? userDevice.pending_firmware_version : null,
     };
   }
 
   async applyUpdate(userDeviceId: number): Promise<void> {
-    const { currentDevice, latestDevice } = await resolveVersions(userDeviceId);
+    const { userDevice, currentDevice, latestDevice } = await resolveVersions(userDeviceId);
 
     if (currentDevice.id === latestDevice.id) return;
+
+    // One dispatch per update. Nothing about pressing Update twice is idempotent: each apply
+    // tears down the staged action set and rebuilds it, and each dispatch re-announces the
+    // firmware on `ota/updates/<deviceType>` — which every device of that type acts on, not
+    // just this one. A device mid-download restarts it from the top.
+    if (otaInFlight(userDevice)) {
+      log.info(
+        { userDeviceId, pending: userDevice.pending_firmware_version },
+        'update already in flight — dispatch refused',
+      );
+      throw Object.assign(new Error('An update is already in progress for this device'), {
+        statusCode: 409,
+      });
+    }
 
     log.info(
       { userDeviceId, from: currentDevice.version, to: latestDevice.version },
@@ -115,6 +138,7 @@ class ActionMigrationService {
         data: {
           pending_device_type_id: latestDevice.id,
           pending_firmware_version: latestDevice.version,
+          pending_since: new Date(),
         },
       });
       this.dispatchOta(latestDevice.type, latestDevice.version);
@@ -191,6 +215,7 @@ class ActionMigrationService {
         data: {
           pending_device_type_id: latestDevice.id,
           pending_firmware_version: latestDevice.version,
+          pending_since: new Date(),
         },
       });
     });
@@ -208,7 +233,7 @@ class ActionMigrationService {
       const payload: OtaDispatchPayload = {
         deviceType,
         version,
-        url: `${env.otaManagerUrl}/download/${deviceType}/${version}`,
+        url: firmwareDownloadUrl(env.otaManagerUrl, deviceType, version),
         timestamp: new Date().toISOString(),
       };
       publish(getChannel(), RK.OTA_DISPATCH, payload);

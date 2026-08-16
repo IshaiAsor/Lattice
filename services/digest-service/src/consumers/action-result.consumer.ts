@@ -68,13 +68,31 @@ export function actionResultConsumer(ch: Channel) {
           }),
           db.userDevice.update({
             where: { id: userDeviceId },
-            data: { pending_firmware_version: null, pending_device_type_id: null },
+            data: {
+              pending_firmware_version: null,
+              pending_device_type_id: null,
+              pending_since: null,
+            },
           }),
         ]);
         log.warn(
           { userDeviceId, value },
           'OTA failed — staged actions removed, old actions restored',
         );
+        // The device is still on the old firmware and still connected, so nothing else will
+        // tell the page this ended — it would sit on "Updating…" until reloaded, which is how
+        // a failed update reads as a hung one and gets pressed again.
+        try {
+          socket.emitDeviceUpdateState(
+            parseInt(userId, 10),
+            userDeviceId,
+            'failed',
+            null,
+            detail || undefined,
+          );
+        } catch (err) {
+          log.warn({ err, userDeviceId }, 'OTA failure socket emit failed');
+        }
         return;
       }
 

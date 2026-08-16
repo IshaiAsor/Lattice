@@ -12,6 +12,10 @@ export const SOCKET_EVENTS = {
   ACTION_STATE_PENDING: 'action_state_pending',
   ACTION_STATE_FAILED: 'action_state_failed',
   DEVICE_STATUS_CHANGE: 'device_status_change',
+  // A pending OTA settled — confirmed on the new version, or failed and rolled back. The UI
+  // holds the Update control disabled from the moment it dispatches, so this is what releases
+  // it; without it a failed update leaves the device looking like it is still updating.
+  DEVICE_UPDATE_STATE: 'device_update_state',
   PIPELINE_RUN_UPDATE: 'pipeline_run_update',
   // In-app notification pushed to a user's room by notification-service's in-app channel.
   NOTIFICATION: 'notification',

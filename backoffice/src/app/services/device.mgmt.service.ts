@@ -181,6 +181,12 @@ export interface DeviceView {
   status: string;
   current_firmware_version: string | null;
   update_available: boolean;
+  // An update already dispatched to this device and not yet confirmed or failed. While true the
+  // Update control is disabled: a second dispatch re-stages the migration and re-announces the
+  // firmware to every device of the type, and restarts a download already in progress.
+  update_in_progress: boolean;
+  // The version that in-flight update is installing (null when none).
+  pending_firmware_version: string | null;
   // Latest WiFi RSSI (dBm) from the device heartbeat; null when offline.
   rssi: number | null;
   // Area (F10.0) this device belongs to, or null when unassigned.
@@ -199,6 +205,10 @@ export interface UpdatePreview {
   current_version: string;
   new_version: string;
   actions: ActionPreview[];
+  // An update this device is already running — the preview is viewable, but there is nothing
+  // to apply until it settles.
+  in_progress: boolean;
+  pending_version: string | null;
 }
 
 export interface DeviceActionView {

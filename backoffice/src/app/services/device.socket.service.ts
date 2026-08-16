@@ -13,6 +13,7 @@ export class DeviceSocketService {
 
   readonly actionStateUpdate$: Observable<{ actionId: number, state: unknown, commandId?: string }>;
   readonly deviceOnlineStatusChange$: Observable<{ deviceId: number, online: boolean }>;
+  readonly deviceUpdateState$: Observable<{ deviceId: number, status: 'confirmed' | 'failed', version: string | null, detail?: string }>;
   readonly actionStatePending$: Observable<{ actionId: number, commandId: string, state: unknown }>;
   readonly actionStateFailed$: Observable<{ actionId: number, commandId: string, lastState?: unknown }>;
   readonly pipelineRunUpdate$: Observable<{ runId: number, pipelineId: number, status: string, error?: string }>;
@@ -36,6 +37,7 @@ export class DeviceSocketService {
 
     this.actionStateUpdate$ = socketEvent('action_state_update');
     this.deviceOnlineStatusChange$ = socketEvent('device_status_change');
+    this.deviceUpdateState$ = socketEvent('device_update_state');
     this.actionStatePending$ = socketEvent('action_state_pending');
     this.actionStateFailed$ = socketEvent('action_state_failed');
     this.pipelineRunUpdate$ = socketEvent('pipeline_run_update');
@@ -49,6 +51,13 @@ export class DeviceSocketService {
 
   onDeviceOnlineStatusChange(): Observable<{ deviceId: number, online: boolean }> {
     return this.deviceOnlineStatusChange$;
+  }
+
+  // A dispatched firmware update settled — 'confirmed' (device is running `version`) or
+  // 'failed' (rolled back, `detail` is what the device reported). Releases the Update control,
+  // which stays disabled from dispatch until this arrives.
+  onDeviceUpdateState(): Observable<{ deviceId: number, status: 'confirmed' | 'failed', version: string | null, detail?: string }> {
+    return this.deviceUpdateState$;
   }
 
   onActionStateUpdate(): Observable<{ actionId: number, state: unknown, commandId?: string }> {

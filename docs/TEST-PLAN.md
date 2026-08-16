@@ -309,6 +309,20 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - drops pins referencing unknown old catalog ids
 - handles empty inputs
 
+### Provisioning — `provisioning.ota-dispatch.test.ts` ✅
+
+- is false when no update is pending
+- is true for an update dispatched moments ago
+- is true just inside the window
+- is false once the window has passed, so the update can be retried
+  - the escape hatch: a device that went offline mid-download never settles its pending OTA, so
+    the in-flight refusal has to expire or that device can never be updated again
+- is false when the dispatch time is unknown
+- addresses the firmware file the CI entrypoint writes
+  - ota-manager serves the firmware dir with express.static and CI writes `<version>.bin`, so an
+    extensionless URL 404s and the device answers `failed:-102:File Not Found (404)`
+- does not double the separator when the base url has a trailing slash
+
 ### Commands — `commands.command-models.test.js` ✅
 
 - OutletCommandAction accepts on/off/1/0 and rejects others

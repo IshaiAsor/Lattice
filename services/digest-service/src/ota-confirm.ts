@@ -1,5 +1,6 @@
 import { createLogger } from '@lattice/logger';
 import { db } from './db/client';
+import { socket } from './socket/emitter';
 
 const log = createLogger('digest-service:ota-confirm');
 
@@ -26,7 +27,7 @@ export async function confirmOtaIfPending(
 ): Promise<boolean> {
   const userDevice = await db.userDevice.findUnique({
     where: { id: userDeviceId },
-    select: { pending_firmware_version: true, pending_device_type_id: true },
+    select: { pending_firmware_version: true, pending_device_type_id: true, user_id: true },
   });
 
   if (
@@ -125,9 +126,17 @@ export async function confirmOtaIfPending(
         device_type_id: pendingDeviceTypeId,
         pending_firmware_version: null,
         pending_device_type_id: null,
+        pending_since: null,
       },
     });
   });
+
+  // Best-effort: the OTA is settled either way, and the page recovers on its next load.
+  try {
+    socket.emitDeviceUpdateState(userDevice.user_id, userDeviceId, 'confirmed', reportedVersion);
+  } catch (err) {
+    log.warn({ err, userDeviceId }, 'OTA confirm socket emit failed');
+  }
 
   log.info(
     { userDeviceId, version: reportedVersion, carried: staged.length },

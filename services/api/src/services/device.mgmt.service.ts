@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { publish, RK } from '@lattice/queue';
+import { publish, RK, OTA_IN_FLIGHT_MS } from '@lattice/queue';
 import type { ActionDispatchPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import { getChannel } from '../queue';
@@ -27,6 +27,12 @@ export interface DeviceView {
   status: string;
   current_firmware_version: string | null;
   update_available: boolean;
+  // An update this device is already running: dispatched, not yet confirmed or failed. The
+  // devices page holds its Update control disabled while this is true — pressing it again
+  // re-stages the migration and re-announces the firmware to every device of the type.
+  update_in_progress: boolean;
+  // What that in-flight update is installing (null when none) — the UI shows it as the target.
+  pending_firmware_version: string | null;
   // Latest WiFi RSSI (dBm) from the device heartbeat — only while online (null otherwise, so
   // the UI never shows a stale signal for an offline device).
   rssi: number | null;
@@ -100,6 +106,13 @@ class DeviceMgmtService {
 
     return devices.map((d) => {
       const latestVersion = latestVersions.get(d.device.type) ?? d.device.version;
+      // Same window device-gateway refuses a second dispatch inside, read from the same
+      // constant: what the user sees and what the platform will accept have to agree, or the
+      // page shows an enabled button that 409s (or a disabled one that never comes back).
+      const updateInProgress =
+        d.pending_firmware_version != null &&
+        d.pending_since != null &&
+        Date.now() - d.pending_since.getTime() < OTA_IN_FLIGHT_MS;
       return {
         id: d.id,
         deviceName: d.name,
@@ -111,6 +124,8 @@ class DeviceMgmtService {
         status: d.status,
         current_firmware_version: d.current_firmware_version,
         update_available: d.device.version !== latestVersion,
+        update_in_progress: updateInProgress,
+        pending_firmware_version: updateInProgress ? d.pending_firmware_version : null,
         rssi: d.online ? d.rssi : null,
         area_id: d.area_id,
       };

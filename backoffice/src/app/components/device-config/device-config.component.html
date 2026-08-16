@@ -85,7 +85,10 @@
           @if (needsSetup(device)) {
             <span class="rail-item-setup" matTooltip="Registered, but not set up yet">setup</span>
           }
-          @if (device.update_available) {
+          @if (isUpdating(device)) {
+            <mat-icon class="rail-item-updating"
+              [matTooltip]="'Updating to ' + device.pending_firmware_version">sync</mat-icon>
+          } @else if (device.update_available) {
             <mat-icon class="rail-item-update" matTooltip="New firmware version available">system_update</mat-icon>
           }
           <span class="status-dot" [class.online]="device.online" [class.offline]="!device.online"
@@ -137,7 +140,14 @@
 
         <!-- Device lifecycle: the per-device menu of the former standalone devices page -->
         <div class="config-header-actions">
-          @if (selectedDevice.update_available) {
+          <!-- While an update is in flight the button is replaced, not just disabled: the device
+               is downloading and about to reboot, and pressing again restarts that from the top. -->
+          @if (isUpdating(selectedDevice)) {
+            <span class="updating-chip" matTooltip="The device is downloading and will reboot when it finishes">
+              <mat-icon class="spin">sync</mat-icon>
+              Updating to {{ selectedDevice.pending_firmware_version }}…
+            </span>
+          } @else if (selectedDevice.update_available) {
             <button mat-flat-button color="primary" class="update-btn"
               [disabled]="!selectedDevice.online" (click)="updateFirmware(selectedDevice)">
               <mat-icon>system_update</mat-icon>
@@ -149,10 +159,11 @@
           </button>
           <mat-menu #deviceMenu="matMenu">
             @if (selectedDevice!.update_available) {
-              <button mat-menu-item class="menu-update" [disabled]="!selectedDevice!.online"
+              <button mat-menu-item class="menu-update"
+                [disabled]="!selectedDevice!.online || isUpdating(selectedDevice)"
                 (click)="updateFirmware(selectedDevice!)">
                 <mat-icon>system_update</mat-icon>
-                <span>Update Firmware</span>
+                <span>{{ isUpdating(selectedDevice) ? 'Updating…' : 'Update Firmware' }}</span>
               </button>
             }
             <button mat-menu-item (click)="renameDevice(selectedDevice!)">

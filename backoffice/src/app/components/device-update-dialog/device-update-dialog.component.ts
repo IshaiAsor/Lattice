@@ -27,6 +27,13 @@ export interface DeviceUpdateDialogData {
         <p class="hint">Device is already on the latest firmware version.</p>
       }
 
+      @if (!loading && preview?.in_progress) {
+        <p class="warn-note">
+          An update to <code>{{ preview!.pending_version }}</code> is already running on this
+          device. It downloads and reboots on its own — starting another would only restart it.
+        </p>
+      }
+
       @if (!loading && preview) {
         <p class="version-line">
           <span class="label">Current:</span> <code>{{ preview.current_version }}</code>
@@ -59,7 +66,7 @@ export interface DeviceUpdateDialogData {
 
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close [disabled]="applying">Cancel</button>
-      @if (preview && !upToDate) {
+      @if (preview && !upToDate && !preview.in_progress) {
         <button mat-flat-button color="primary" (click)="confirm()" [disabled]="applying">
           @if (applying) { Updating… } @else { Update }
         </button>
@@ -132,13 +139,26 @@ export class DeviceUpdateDialogComponent implements OnInit {
   }
 
   confirm() {
+    // Guards the double-click the disabled attribute cannot: the click that set `applying` and
+    // the one that arrives before change detection has painted it are the same millisecond.
+    if (this.applying) return;
     this.applying = true;
     this.deviceMgmtService.applyUpdate(this.data.device.id).subscribe({
       next: () => {
-        this.snack.open('Update applied — OTA sent to device', 'Close', { duration: 3000 });
+        // Sent, not done — the device downloads and reboots on its own, and the devices page
+        // reports the outcome when it settles.
+        this.snack.open('Update sent — the device is downloading', 'Close', { duration: 3000 });
         this.dialogRef.close(true);
       },
-      error: () => {
+      error: (err: { status?: number }) => {
+        // 409 = this device is already updating; the platform refused a second dispatch.
+        // Close as if we had dispatched, so the caller reloads and shows the in-flight state
+        // this client had not seen yet.
+        if (err?.status === 409) {
+          this.snack.open('An update is already running on this device', 'Close', { duration: 4000 });
+          this.dialogRef.close(true);
+          return;
+        }
         this.applying = false;
         this.snack.open('Update failed', 'Close', { duration: 3000 });
       },

@@ -122,6 +122,22 @@ export class DeviceConfigComponent implements OnInit {
         .subscribe((pm) => this.applyRouteId(pm.get('id')));
     });
 
+    // A dispatched update settles here, not when the dialog closes: the device downloads and
+    // reboots long after that. Confirmed reloads capabilities too — the new firmware version is
+    // a different catalog row, which can deprecate actions.
+    this.socketService.onDeviceUpdateState()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(({ deviceId, status, version, detail }) => {
+        if (!this.devices.some(d => d.id === deviceId)) return;
+        if (status === 'confirmed') {
+          this.snack.open(`Device updated to ${version}`, 'Close', { duration: 4000 });
+          this.loadDevices(() => { if (this.selectedDevice?.id === deviceId) this.loadCapabilities(); });
+        } else {
+          this.snack.open(`Update failed${detail ? `: ${detail}` : ''}`, 'Close', { duration: 6000 });
+          this.loadDevices();
+        }
+      });
+
     this.socketService.onDeviceOnlineStatusChange()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ deviceId, online }) => {
@@ -540,15 +556,23 @@ export class DeviceConfigComponent implements OnInit {
     });
   }
 
+  // True from the moment an update is dispatched until the device confirms it or it fails.
+  // Nothing about a second dispatch is harmless — it re-stages the migration and re-announces
+  // the firmware to every device of the type — so the control is held, not just debounced.
+  isUpdating(device: DeviceView | null): boolean {
+    return !!device?.update_in_progress;
+  }
+
   updateFirmware(device: DeviceView) {
+    if (this.isUpdating(device)) return;
     this.dialog.open(DeviceUpdateDialogComponent, {
       width: '440px',
       panelClass: ['glass-dialog', 'compact-dialog'],
       data: { device },
-    }).afterClosed().subscribe((updated) => {
-      // Reload on success so the header version + rail update badge reflect the new firmware,
-      // then re-read capabilities (a firmware change can deprecate actions).
-      if (updated) this.loadDevices(() => this.loadCapabilities());
+    }).afterClosed().subscribe((dispatched) => {
+      // Reload either way: on a dispatch to pick up the pending state that disables the button
+      // (and on a 409, to pick up the in-flight update this client had not seen yet).
+      if (dispatched) this.loadDevices();
     });
   }
 

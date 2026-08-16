@@ -183,6 +183,13 @@ export interface OtaDispatchPayload {
   timestamp: string;
 }
 
+// How long a dispatched OTA is treated as still in flight (device-gateway refuses a second
+// dispatch inside it; the api reports the device as updating). A real update settles in
+// seconds — the window only has to outlast a slow download, and past it the OTA is declared
+// dead so the user can retry a device that went offline mid-update and never came back.
+// Shared so the gate and what the UI is told can never disagree.
+export const OTA_IN_FLIGHT_MS = 10 * 60_000;
+
 // A sealed device template was released/changed by an admin (api service). device-gateway
 // consumes this and re-materializes every already-provisioned device the template matches,
 // then pushes a config reload — the "apply migration" for sealed devices.

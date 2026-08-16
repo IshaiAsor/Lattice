@@ -380,6 +380,12 @@ model UserDevice {
   current_firmware_version String?   @db.VarChar(64)
   pending_device_type_id   Int?
   pending_firmware_version String?   @db.VarChar(64)
+  // When the pending OTA was dispatched. An update in flight is the reason the platform
+  // refuses a second dispatch (each one re-stages the migration and re-announces the
+  // firmware to the whole device type), and this is what makes that refusal expire: past
+  // OTA_IN_FLIGHT_MS the update is declared dead, so a device that went offline mid-update
+  // can be retried instead of being locked out of updating forever.
+  pending_since            DateTime? @db.Timestamp(6)
   area_id                  Int?
   created_at               DateTime  @default(now()) @db.Timestamp(6)
   updated_at               DateTime  @default(now()) @db.Timestamp(6)

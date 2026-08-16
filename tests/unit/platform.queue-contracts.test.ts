@@ -202,7 +202,7 @@ const CASES: ContractCase[] = [
     canonical: {
       deviceType: 'ESP32S3_MINI',
       version: 'v2.0.9',
-      url: 'http://ota/download/ESP32S3_MINI/v2.0.9',
+      url: 'http://ota/download/ESP32S3_MINI/v2.0.9.bin',
       timestamp: new Date().toISOString(),
     },
     broken: { deviceType: 'ESP32S3_MINI', version: 'v2.0.9', timestamp: 'now' }, // url missing
@@ -212,7 +212,7 @@ const CASES: ContractCase[] = [
     canonical: {
       deviceType: 'ESP32S3_MINI',
       version: 'v2.0.9',
-      url: 'http://ota/download/ESP32S3_MINI/v2.0.9',
+      url: 'http://ota/download/ESP32S3_MINI/v2.0.9.bin',
       releaseNotes: 'fixes',
       timestamp: new Date().toISOString(),
     },

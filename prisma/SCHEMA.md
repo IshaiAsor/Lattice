@@ -173,6 +173,7 @@ erDiagram
     int rssi "heartbeat WiFi dBm; nullable"
     datetime last_heartbeat_at "nullable"
     int pending_device_type_id FK "nullable"
+    datetime pending_since "OTA dispatched at; nullable"
     int area_id FK "nullable"
   }
   UserActionGroup {
@@ -873,9 +874,15 @@ erDiagram
 already-configured device leaves it `active` and skips the wizard; sealed types go straight to
 `active` because their actions are materialized from the admin template at provision time.
 
-| id  | device_type_id | user_id | mac_id            | name        | online | status | rssi | current_firmware_version | pending_device_type_id |
-| --- | -------------- | ------- | ----------------- | ----------- | ------ | ------ | ---- | ------------------------ | ---------------------- |
-| 7   | 1              | 2       | AA:BB:CC:00:11:22 | Garage Node | true   | active | -58  | v2.0.0                   | NULL                   |
+`pending_device_type_id`/`pending_firmware_version`/`pending_since` are the in-flight OTA: set
+together when the user applies an update, cleared together when the device confirms the new
+version or the update fails. While they are set the platform refuses a second dispatch for the
+device — each one re-stages the migration and re-announces the firmware — until `pending_since`
+falls outside the OTA window, after which the update is declared dead and can be retried.
+
+| id  | device_type_id | user_id | mac_id            | name        | online | status | rssi | current_firmware_version | pending_device_type_id | pending_since |
+| --- | -------------- | ------- | ----------------- | ----------- | ------ | ------ | ---- | ------------------------ | ---------------------- | ------------- |
+| 7   | 1              | 2       | AA:BB:CC:00:11:22 | Garage Node | true   | active | -58  | v2.0.0                   | NULL                   | NULL          |
 
 #### `user_action_groups` (`UserActionGroup`) — dashboard grouping. Unique `(user_id, name)`. `sort_order` = card position.
 
