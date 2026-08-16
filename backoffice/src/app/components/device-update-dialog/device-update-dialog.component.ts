@@ -1,7 +1,12 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { DeviceMgmtService, UpdatePreview, DeviceView } from 'src/app/services/device.mgmt.service';
+import {
+  DeviceMgmtService,
+  UpdatePreview,
+  ActionPreview,
+  DeviceView,
+} from 'src/app/services/device.mgmt.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 
 export interface DeviceUpdateDialogData {
@@ -43,10 +48,14 @@ export interface DeviceUpdateDialogData {
 
         <p class="section-label">Action compatibility</p>
         <div class="action-list">
-          @for (action of preview.actions; track action.id) {
-            <div class="action-row" [class.deprecated]="action.status === 'deprecated'">
+          @for (action of preview.actions; track action.mqttName) {
+            <div
+              class="action-row"
+              [class.deprecated]="action.status === 'deprecated'"
+              [class.added]="action.status === 'new'"
+            >
               <mat-icon class="status-icon">
-                {{ action.status === 'ok' ? 'check_circle' : 'warning' }}
+                {{ statusIcon(action.status) }}
               </mat-icon>
               <span class="action-name">{{ action.name }}</span>
               @if (action.reason) {
@@ -100,6 +109,12 @@ export interface DeviceUpdateDialogData {
       border-color: color-mix(in srgb, var(--warning) 28%, transparent);
     }
     .action-row.deprecated .status-icon { color: var(--warning); }
+    /* An added action is good news, not a caution — tint it with the accent, not the warning. */
+    .action-row.added {
+      background: color-mix(in srgb, var(--primary) 10%, transparent);
+      border-color: color-mix(in srgb, var(--primary) 26%, transparent);
+    }
+    .action-row.added .status-icon { color: var(--primary); }
     .action-name { font-weight: 500; color: var(--text); }
     .reason { color: var(--text-muted); font-size: 12px; margin-left: auto; }
     .warn-note { font-size: 12px; color: var(--warning); margin-top: 12px; }
@@ -120,6 +135,11 @@ export class DeviceUpdateDialogComponent implements OnInit {
     return this.preview?.actions.some(a => a.status === 'deprecated') ?? false;
   }
 
+  statusIcon(status: ActionPreview['status']): string {
+    if (status === 'deprecated') return 'warning';
+    return status === 'new' ? 'add_circle' : 'check_circle';
+  }
+
   ngOnInit() {
     this.deviceMgmtService.getUpdatePreview(this.data.device.id).subscribe({
       next: (result) => {
@@ -130,9 +150,17 @@ export class DeviceUpdateDialogComponent implements OnInit {
           this.preview = result;
         }
       },
-      error: () => {
+      // 422 = a sealed device whose target version has no released template. That is an admin
+      // gap, not a transient failure, so it gets its own message instead of "failed to load" —
+      // the previous behaviour was to preview it as a clean diff and invite an Update that
+      // would stage nothing.
+      error: (err: { status?: number; error?: { error?: string } }) => {
         this.loading = false;
-        this.snack.open('Failed to load update preview', 'Close', { duration: 3000 });
+        const message =
+          err?.status === 422
+            ? (err.error?.error ?? 'No released template covers this firmware version yet')
+            : 'Failed to load update preview';
+        this.snack.open(message, 'Close', { duration: err?.status === 422 ? 6000 : 3000 });
         this.dialogRef.close();
       },
     });

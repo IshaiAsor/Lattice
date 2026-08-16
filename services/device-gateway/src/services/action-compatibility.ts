@@ -6,6 +6,100 @@ export interface PinSlot {
   key: string;
 }
 
+export interface ActionPreview {
+  // null for an action the new template adds — there is no user_device_action row for it yet.
+  id: number | null;
+  name: string;
+  mqttName: string;
+  status: 'ok' | 'new' | 'deprecated';
+  reason?: string;
+}
+
+export interface SealedTemplateEntry {
+  capability_key: string;
+  mqtt_action_name: string;
+  action_label: string;
+  sort_order: number;
+}
+
+export interface ExistingAction {
+  id: number;
+  action_name: string;
+  mqtt_action_name: string;
+}
+
+/**
+ * What a sealed device's update will actually do (F3.18).
+ *
+ * A sealed device does not name-match user actions across versions the way a self-configured one
+ * does — its config IS the admin template for the target version. Running the generic capability
+ * diff over it compares template-materialized actions against the target's raw catalog
+ * capabilities, trips `isCompatible` on the first check, and reports "implementation type changed"
+ * for *every* action: all 8 channels of MULTI_SOCKET_8_CH flagged at once under a deprecation
+ * warning, describing a code path `applyUpdate` never takes (it short-circuits to
+ * `stageSealedUpgrade`, which stages the template cleanly and deprecates nothing).
+ *
+ * So this mirrors the apply path instead of second-guessing it:
+ *   - `stageSealedUpgrade` skips an entry whose capability the target version does not carry
+ *     (`if (!cap) continue`), so `targetCapabilityKeys` filters those out here too;
+ *   - `confirmOtaIfPending` re-identifies actions across the version by `mqtt_action_name`, so an
+ *     entry matching an existing action is *carried* (keeps its row, name and grouping) rather
+ *     than replaced — which is the difference between "ok" and a scary "deprecated";
+ *   - an existing action with no entry in the new template is the one case that really is going
+ *     away, and is the only thing that should raise a warning.
+ */
+export function diffSealedTemplate(
+  entries: SealedTemplateEntry[],
+  existing: ExistingAction[],
+  targetCapabilityKeys: Set<string>,
+): ActionPreview[] {
+  const staged = entries
+    .filter((e) => targetCapabilityKeys.has(e.capability_key))
+    .sort((a, b) => a.sort_order - b.sort_order);
+  const stagedNames = new Set(staged.map((e) => e.mqtt_action_name));
+
+  // Lowest id wins per name, matching confirmOtaIfPending's `orderBy: { id: 'asc' }` survivor
+  // pick. Sorted here rather than trusting the caller: naming a different row than the one the
+  // confirm path keeps would report a rename that never happens — the same class of lie F3.18 is
+  // about.
+  const existingByName = new Map<string, ExistingAction>();
+  for (const a of [...existing].sort((x, y) => x.id - y.id)) {
+    if (!existingByName.has(a.mqtt_action_name)) existingByName.set(a.mqtt_action_name, a);
+  }
+
+  const preview: ActionPreview[] = staged.map((entry) => {
+    const survivor = existingByName.get(entry.mqtt_action_name);
+    return survivor
+      ? {
+          id: survivor.id,
+          name: survivor.action_name,
+          mqttName: entry.mqtt_action_name,
+          status: 'ok' as const,
+        }
+      : {
+          id: null,
+          // No row yet, so the template's label is the only name this action has.
+          name: entry.action_label,
+          mqttName: entry.mqtt_action_name,
+          status: 'new' as const,
+          reason: 'added in this version',
+        };
+  });
+
+  for (const a of existing) {
+    if (stagedNames.has(a.mqtt_action_name)) continue;
+    preview.push({
+      id: a.id,
+      name: a.action_name,
+      mqttName: a.mqtt_action_name,
+      status: 'deprecated',
+      reason: 'not in the new template',
+    });
+  }
+
+  return preview;
+}
+
 export function isCompatible(
   implType: string,
   existingPins: PinSlot[],

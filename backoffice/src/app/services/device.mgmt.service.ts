@@ -194,10 +194,11 @@ export interface DeviceView {
 }
 
 export interface ActionPreview {
-  id: number;
+  // null for an action a sealed device's new template adds — no user_device_action row exists yet.
+  id: number | null;
   name: string;
   mqttName: string;
-  status: 'ok' | 'deprecated';
+  status: 'ok' | 'new' | 'deprecated';
   reason?: string;
 }
 

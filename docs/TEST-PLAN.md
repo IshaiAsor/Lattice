@@ -308,6 +308,16 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - drops pins whose key no longer exists in the new capability
 - drops pins referencing unknown old catalog ids
 - handles empty inputs
+- carries every channel across as ok — the exact case that used to read as destroyed
+  - F3.18: a sealed preview must describe `stageSealedUpgrade`, not the generic capability diff
+    that flagged all 8 MULTI_SOCKET_8_CH channels as "implementation type changed"
+- keeps the user-facing name of a carried action rather than resetting it to the template label
+- marks an entry with no existing action as new, with no row id
+- deprecates only an action the new template actually drops
+- skips an entry whose capability the target version does not carry
+  - mirrors `stageSealedUpgrade`'s `if (!cap) continue`
+- orders staged entries by sort_order
+- matches the lowest-id row when a name is duplicated, as the confirm path does
 
 ### Provisioning — `provisioning.ota-dispatch.test.ts` ✅
 

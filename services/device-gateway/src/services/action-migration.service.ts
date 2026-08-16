@@ -8,20 +8,16 @@ import {
   isCompatible,
   migratePins,
   indexCapabilitiesByKey,
+  diffSealedTemplate,
   type PinSlot,
+  type ActionPreview,
 } from './action-compatibility';
-import { stageSealedUpgrade } from './sealed-materialization.service';
+import { stageSealedUpgrade, resolveTemplateForDevice } from './sealed-materialization.service';
 import { otaInFlight, firmwareDownloadUrl } from './ota-dispatch';
 
 const log = createLogger('device-gateway:migration');
 
-export interface ActionPreview {
-  id: number;
-  name: string;
-  mqttName: string;
-  status: 'ok' | 'deprecated';
-  reason?: string;
-}
+export type { ActionPreview };
 
 export interface UpdatePreview {
   current_version: string;
@@ -57,6 +53,20 @@ class ActionMigrationService {
 
     if (currentDevice.id === latestDevice.id) {
       return { up_to_date: true };
+    }
+
+    // Mirror applyUpdate's short-circuit (:134). Without this the preview runs the generic
+    // capability diff over a sealed device and reports every action as incompatible — describing
+    // a migration that will not happen, since applyUpdate stages the admin template instead.
+    if (latestDevice.is_sealed) {
+      const inFlight = otaInFlight(userDevice);
+      return {
+        current_version: currentDevice.version,
+        new_version: latestDevice.version,
+        actions: await this.previewSealedActions(userDeviceId, latestDevice),
+        in_progress: inFlight,
+        pending_version: inFlight ? userDevice.pending_firmware_version : null,
+      };
     }
 
     const [capabilities, activeActions] = await Promise.all([
@@ -102,6 +112,44 @@ class ActionMigrationService {
       in_progress: inFlight,
       pending_version: inFlight ? userDevice.pending_firmware_version : null,
     };
+  }
+
+  // The sealed half of previewUpdate: what stageSealedUpgrade will actually stage for this target.
+  private async previewSealedActions(
+    userDeviceId: number,
+    latestDevice: { id: number; type: string; version: string },
+  ): Promise<ActionPreview[]> {
+    const template = await resolveTemplateForDevice(latestDevice.type, latestDevice.version);
+    if (!template) {
+      // stageSealedUpgrade would return false here and stage nothing, so the update is a no-op.
+      // Saying so is the point: previewing it as a clean diff invites the user to press Update on
+      // something that cannot work.
+      throw Object.assign(
+        new Error(
+          `No released sealed template covers ${latestDevice.type} ${latestDevice.version} — ` +
+            'an admin must release one before this device can update',
+        ),
+        { statusCode: 422 },
+      );
+    }
+
+    const [capabilities, existing] = await Promise.all([
+      db.deviceCapability.findMany({
+        where: { device_id: latestDevice.id },
+        select: { capability_key: true },
+      }),
+      db.userDeviceAction.findMany({
+        where: { user_device_id: userDeviceId, status: { in: ['active', 'staged_deprecated'] } },
+        select: { id: true, action_name: true, mqtt_action_name: true },
+        orderBy: { id: 'asc' },
+      }),
+    ]);
+
+    return diffSealedTemplate(
+      template.entries,
+      existing,
+      new Set(capabilities.map((c) => c.capability_key)),
+    );
   }
 
   async applyUpdate(userDeviceId: number): Promise<void> {
