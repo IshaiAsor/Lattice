@@ -143,6 +143,14 @@ jobs:
           cd ESP32Code
           pio run -e ${{ matrix.env-name }}
 
+      # Last line of defence before an image is published: an OTA writes the whole binary into the
+      # inactive slot, so one that does not fit is only discovered on the device, after it has
+      # committed to updating. The env is already built above, so this re-link costs seconds.
+      - name: Firmware size gate for ${{ matrix.device-type }}
+        run: |
+          cd ESP32Code
+          ./tools/check-firmware-size.sh ${{ matrix.env-name }}
+
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:

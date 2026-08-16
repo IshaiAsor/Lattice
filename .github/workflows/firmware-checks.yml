@@ -63,11 +63,35 @@ jobs:
         working-directory: ESP32Code
         run: pio check -e esp32s3_mini-test --fail-on-defect high --fail-on-defect medium
 
-  build-smoke:
-    # PR-only compile check of the two representative envs (plain + HAS_CAMERA). Full prod
-    # builds stay in esp32-ota-ci.yml on push to master.
-    if: github.event_name == 'pull_request'
+  # Enumerate the hardware envs so the size gate below fans out over all of them. Reads the
+  # [env:...] headers rather than default_envs: an env left out of default_envs still gets flashed
+  # to a device, so it still has to fit its slot.
+  firmware-envs:
     runs-on: ubuntu-latest
+    outputs:
+      envs: ${{ steps.list.outputs.envs }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        working-directory: ESP32Code
+        run: |
+          ENVS=$(sed -n 's/^\[env:\(.*\)\]/\1/p' platformio.ini | tr -d '\r' | grep -v '^native$' | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "envs=$ENVS" >> "$GITHUB_OUTPUT"
+          echo "$ENVS"
+
+  # Compile + size gate for every hardware env. This subsumes the old two-env compile smoke test:
+  # building all of them IS the smoke test, and each one is measured against its own OTA slot.
+  #
+  # Runs on push as well as PR. The previous job was `if: github.event_name == 'pull_request'`
+  # while this repo commits straight to master, so the size gate had effectively never executed —
+  # MULTI_SOCKET_8_CH reached 99.75% of its slot without CI ever measuring it.
+  size-gate:
+    needs: firmware-envs
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env-name: ${{ fromJson(needs.firmware-envs.outputs.envs) }}
     steps:
       - uses: actions/checkout@v4
       - name: Cache PlatformIO
@@ -75,26 +99,17 @@ jobs:
         with:
           path: ~/.platformio
           key: ${{ runner.os }}-platformio-${{ hashFiles('ESP32Code/platformio.ini') }}
+          # The exact key includes platformio.ini, which CI itself rewrites on every release
+          # (DEVICE_VERSION_STR) — so without a prefix fallback each release would cold-download
+          # the whole toolchain once per matrix job. The toolchain does not change with a version
+          # bump, so restoring a near-miss is both safe and much cheaper.
+          restore-keys: |
+            ${{ runner.os }}-platformio-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Install PlatformIO
         run: pip install platformio
-      - name: Build (mini + cam, test envs)
+      - name: Build + size gate (${{ matrix.env-name }})
         working-directory: ESP32Code
-        run: pio run -e esp32s3_mini-test -e esp32s3_cam-test
-      - name: Firmware size gate
-        working-directory: ESP32Code
-        # The mini OTA slot (ota_partitions.csv ota_0/ota_1) is 0x1E0000 = 1966080 bytes and is
-        # the binding constraint. Fail if the mini image exceeds 95% of it, so "near the ceiling"
-        # is a gated number instead of a surprise at flash time.
-        run: |
-          SLOT=1966080
-          BIN=.pio/build/esp32s3_mini-test/firmware.bin
-          SIZE=$(stat -c%s "$BIN")
-          PCT=$(( SIZE * 100 / SLOT ))
-          echo "mini firmware.bin: $SIZE bytes / $SLOT slot = ${PCT}%"
-          if [ "$PCT" -ge 95 ]; then
-            echo "::error::firmware is ${PCT}% of the OTA slot (>=95%) — shrink before merging"
-            exit 1
-          fi
+        run: ./tools/check-firmware-size.sh "${{ matrix.env-name }}"
