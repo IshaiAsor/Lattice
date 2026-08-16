@@ -5,6 +5,7 @@ import { db } from '../db';
 import { getChannel } from '../queue';
 import { env } from '../config/env.config';
 import { ensureNotSealed } from './sealed-templates.service';
+import { requestConfigReload } from './config-reload';
 
 // User action management (F2.6). Action *instances* are created by the provisioning /
 // device-config flow (device-gateway) with pins configured up front; the api manages
@@ -187,6 +188,12 @@ class UserActionsService {
         updated_at: new Date(),
       },
     });
+
+    // Only the interval reaches the device — name, group and default trait are platform-side, and
+    // restarting a device because the user renamed a tile would be a poor trade.
+    if (patch.telemetry_interval_ms !== undefined) {
+      requestConfigReload(userId, action.user_device_id);
+    }
   }
 
   // Replace the action's enabled behaviors (unified action model). Declarative: the passed set
@@ -268,6 +275,10 @@ class UserActionsService {
         });
       }
     });
+
+    // Behaviors gate the action's surfaces on the device itself (whether it commands, reads on a
+    // cycle, or answers on demand) and are served in its config — so they take effect on reload.
+    requestConfigReload(userId, action.user_device_id);
   }
 
   async reorderActions(userId: number, orderedIds: number[]): Promise<void> {
@@ -293,6 +304,9 @@ class UserActionsService {
     const action = await this.ensureOwned(userId, actionId);
     ensureNotSealed(action.isSealed);
     await db.userDeviceAction.delete({ where: { id: actionId } });
+
+    // Until it reloads, the device keeps driving a pin for an action the platform no longer has.
+    requestConfigReload(userId, action.user_device_id);
   }
 
   // Latest camera frame for on-load display (F6.7). Frames are pushed live over the socket
@@ -376,6 +390,8 @@ class UserActionsService {
       where: { id: actionId },
       select: {
         capability_id: true,
+        // Carried so config-affecting edits can ask the owning device to reload (F3.11).
+        user_device_id: true,
         user_device: { select: { user_id: true, device: { select: { is_sealed: true } } } },
       },
     });

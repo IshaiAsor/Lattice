@@ -1,11 +1,8 @@
 import { db } from '../db';
-import { publish, RK, OTA_IN_FLIGHT_MS } from '@lattice/queue';
-import type { ActionDispatchPayload } from '@lattice/queue';
-import { createLogger } from '@lattice/logger';
-import { getChannel } from '../queue';
+import { OTA_IN_FLIGHT_MS } from '@lattice/queue';
 import { ensureNotSealed } from './sealed-templates.service';
-
-const log = createLogger('api:device-mgmt');
+import { dispatchDeviceCommand } from './device-command.dispatch';
+import { requestConfigReload } from './config-reload';
 
 // User-facing device management (F2.5).
 //
@@ -254,6 +251,10 @@ class DeviceMgmtService {
         },
       },
     });
+
+    // A new action is config the device does not have yet — it only learns of it on a reload.
+    requestConfigReload(userId, deviceId);
+
     return { id: action.id };
   }
 
@@ -303,18 +304,18 @@ class DeviceMgmtService {
         }
       }
     });
+
+    // Pins, interval and camera settings are all read from the served config, so the device runs
+    // the old ones until it reloads. Unconditional (rather than only when a device-facing field
+    // moved) because this endpoint is the device-config editor: every call to it is a config edit.
+    requestConfigReload(userId, deviceId);
   }
 
   // ─── Setup completion ──────────────────────────────────────────────────
   /**
    * Finish first-run setup: activate the capabilities the user picked, mark the device set up,
-   * and tell it to load the config it now has.
-   *
-   * The device has no way to be told about config over MQTT — it subscribes to exactly two
-   * topics, command and OTA, and re-reads GET /device/configuration on boot. So "apply" means
-   * restart. It must be `restart` and never `reprovision`: firmware aliases reprovision to
-   * soft-reset and wipes the device's credentials, which drops real hardware into BLE
-   * provisioning mode (see dispatchConfigReload in device-gateway's sealed-materialization).
+   * and tell it to load the config it now has — see config-reload.ts for why that is a restart
+   * and never a reprovision.
    */
   async applySetup(
     userId: number,
@@ -356,48 +357,16 @@ class DeviceMgmtService {
 
     await db.userDevice.update({ where: { id: deviceId }, data: { status: 'active' } });
 
-    // Best-effort, exactly like the sealed path: an offline device picks the config up on its
-    // next boot anyway, so a failed dispatch must not fail the whole setup.
-    try {
-      await this.dispatchCommand(userId, deviceId, 'restart');
-    } catch (err) {
-      log.warn({ err, deviceId }, 'config-reload dispatch failed — device reloads on next boot');
-    }
+    requestConfigReload(userId, deviceId);
 
     return { activated, skipped };
   }
 
   // ─── Lifecycle commands (reprovision/reset/restart) ───────────────────
-  // actionName is the mqtt_action_name the device firmware listens for; command is the
-  // message body sent as-is (these 4 all take no parameters).
+  // The user-initiated ones, straight from the device menu. Delegates to the shared dispatcher
+  // (config-reload uses the same one, without going through this class).
   async dispatchCommand(userId: number, deviceId: number, actionName: string): Promise<void> {
-    const device = await db.userDevice.findUnique({
-      where: { id: deviceId },
-      select: {
-        user_id: true,
-        current_firmware_version: true,
-        device: { select: { version: true } },
-      },
-    });
-    if (!device) throw Object.assign(new Error('Device not found'), { statusCode: 404 });
-    if (device.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
-
-    const payload: ActionDispatchPayload = {
-      userId: String(userId),
-      deviceId: String(deviceId),
-      actionName,
-      command: '',
-      // The command topic carries the firmware's version segment, and firmware builds it from
-      // its own compile-time DEVICE_VERSION. After an OTA that is the version the device
-      // reported, not the catalog row it is still pointed at — addressing the catalog row would
-      // publish to a topic nothing subscribes to and the command would vanish silently.
-      firmwareVersion: device.current_firmware_version ?? device.device.version,
-      // A device-level command from the management UI — no UserDeviceAction behind it, so the
-      // history row records the device and the verb (F11.12).
-      source: { kind: 'manual', label: `device ${actionName}` },
-    };
-    const ch = await getChannel();
-    publish(ch, RK.ACTION_DISPATCH, payload);
+    await dispatchDeviceCommand(userId, deviceId, actionName);
   }
 
   private async ensureOwned(userId: number, deviceId: number): Promise<void> {

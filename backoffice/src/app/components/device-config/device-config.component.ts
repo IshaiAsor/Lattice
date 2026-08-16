@@ -294,7 +294,6 @@ export class DeviceConfigComponent implements OnInit {
         this.snack.open(`${cap.label} added — restarting device`, 'Close', { duration: 2500 });
         this.cancelAdd();
         this.loadCapabilities();
-        this.deviceMgmtService.restartDevice(deviceId).subscribe();
       },
       error: () => this.snack.open('Failed to add action', 'Close', { duration: 3000 }),
     });
@@ -354,7 +353,6 @@ export class DeviceConfigComponent implements OnInit {
           this.snack.open(`${cap.label} updated — restarting device`, 'Close', { duration: 2500 });
           this.cancelEdit();
           this.loadCapabilities();
-          this.deviceMgmtService.restartDevice(deviceId).subscribe();
         };
         // Persist the enabled behaviors (unified action model) if the capability declares any.
         if (cap.available_behaviors.length > 0) {
@@ -392,12 +390,10 @@ export class DeviceConfigComponent implements OnInit {
 
   removeAction(cap: CapabilityView, instance: UserActionView) {
     if (!this.selectedDevice) return;
-    const deviceId = this.selectedDevice.id;
     this.userActionsService.deleteAction(instance.id).subscribe({
       next: () => {
         this.snack.open(`${instance.name} removed — restarting device`, 'Close', { duration: 2500 });
         this.loadCapabilities();
-        this.deviceMgmtService.restartDevice(deviceId).subscribe();
       },
       error: () => this.snack.open('Failed to remove action', 'Close', { duration: 3000 }),
     });

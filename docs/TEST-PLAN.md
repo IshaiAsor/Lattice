@@ -345,6 +345,19 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - ignores a missing or blank report instead of erasing what we know
 - treats a padded report as the same version, not a change
 
+### Devices — `api.config-reload.test.ts` ✅
+
+- reloads the device with restart, never reprovision
+  - firmware aliases reprovision to soft-reset and wipes credentials, dropping real hardware into
+    BLE provisioning mode — the one outcome this path must never produce (F3.11)
+- collapses the writes of one edit into a single restart
+  - the device-config editor updates the action and then saves its behaviors; each restart costs
+    the device a boot cycle
+- dispatches after the last write, not the first
+- debounces per device, so one device never swallows another reload
+- reloads again after the previous one has fired
+- swallows a failed dispatch — the config write has already committed
+
 ### Commands — `commands.command-models.test.js` ✅
 
 - OutletCommandAction accepts on/off/1/0 and rejects others
