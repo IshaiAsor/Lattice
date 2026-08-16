@@ -323,6 +323,18 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
     extensionless URL 404s and the device answers `failed:-102:File Not Found (404)`
 - does not double the separator when the base url has a trailing slash
 
+### Devices — `digest.device-version.test.ts` ✅
+
+- records the first version ever observed for a device
+- does not write when the device reports what we already have
+  - one heartbeat per device per 60s must not cost a write
+- records a newer version, which is the OTA-landed case
+- records an older version too, rather than assuming versions only move forward
+  - a downgrade or USB re-flash is real; the column exists to address the device where it actually
+    listens, so the device's own report wins (F3.16)
+- ignores a missing or blank report instead of erasing what we know
+- treats a padded report as the same version, not a change
+
 ### Commands — `commands.command-models.test.js` ✅
 
 - OutletCommandAction accepts on/off/1/0 and rejects others

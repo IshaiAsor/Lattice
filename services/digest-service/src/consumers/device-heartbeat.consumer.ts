@@ -3,6 +3,7 @@ import { createLogger } from '@lattice/logger';
 import { db } from '../db/client';
 import { valkey, keys } from '../cache/valkey';
 import { socket } from '../socket/emitter';
+import { recordReportedVersion } from '../device-version';
 
 const log = createLogger('digest-service:device-heartbeat');
 
@@ -40,6 +41,12 @@ export function deviceHeartbeatConsumer() {
     } catch (err) {
       log.error({ err, userDeviceId }, 'device heartbeat diagnostics update failed');
     }
+
+    // The version a device reports here is the most trustworthy one we get (F3.16): heartbeats are
+    // published live and never retained, so unlike the status topic there is no stale replay to
+    // filter, and one arrives every 60s — so a device that changed firmware behind our back is
+    // addressable again within a heartbeat rather than never.
+    await recordReportedVersion(userDeviceId, version, 'heartbeat');
 
     // A heartbeat is proof of life, so it also HEALS a wrongly-recorded offline. Liveness
     // otherwise moves only on the device's status publishes, which happen once per connect —

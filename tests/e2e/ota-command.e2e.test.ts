@@ -18,6 +18,8 @@ import {
   publishCommand,
   simOpts,
   poll,
+  login,
+  apiGet,
 } from './helpers/stack';
 import { connect, QUEUES } from '../../packages/queue/src';
 
@@ -111,6 +113,21 @@ describe('per-device OTA command e2e', () => {
         (v: string) => v === target,
         { timeoutMs: 20000 },
       );
+
+      // F3.16: the platform must now LEARN that version. Nothing staged this update — there is no
+      // pending_firmware_version — so `confirmOtaIfPending` does nothing, and before the writeback
+      // `current_firmware_version` stayed NULL while every dispatcher fell back to the catalog row.
+      // That is the "online but uncommandable" prod incident, reproduced here as its fix.
+      const token = await login();
+      const recorded = await poll(
+        async () => {
+          const devices = await apiGet('/api/devices', token);
+          return devices.find((d: any) => d.id === Number(dev.deviceId));
+        },
+        (row: any) => row?.current_firmware_version === target,
+        { timeoutMs: 20000 },
+      );
+      expect(recorded.current_firmware_version).toBe(target);
 
       // Regression guard for the ok-branch resolve: the `starting:` ack must be processed, not
       // dead-lettered. Skipped (loudly) where the broker isn't reachable from the test runner.

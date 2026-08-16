@@ -10,6 +10,7 @@ import * as timeout from '../pending-timeout';
 import { recordAck } from '../command-history';
 import { db } from '../db/client';
 import { confirmOtaIfPending } from '../ota-confirm';
+import { recordReportedVersion } from '../device-version';
 
 const log = createLogger('digest-service:action-result');
 
@@ -36,6 +37,13 @@ export function actionResultConsumer(ch: Channel) {
     // command behind it — a duration releasing, or a boot restore. Written before the branches
     // below because an error ack returns early, and "the device refused" is worth keeping.
     await recordAck(payload);
+
+    // An ack is published on `.../{version}/ack/...`, so it carries the version the device is
+    // actually running (F3.16). Recorded here, above every branch below, because the error and
+    // `not-newer` paths both return early — and `not-newer` in particular is a device telling us
+    // outright that it runs something other than what we offered, which is precisely when our
+    // record is most likely to be wrong.
+    await recordReportedVersion(parseInt(deviceId, 10), version, 'ack');
 
     if (status === 'error') {
       // OTA failure — rollback staged actions and restore old ones.

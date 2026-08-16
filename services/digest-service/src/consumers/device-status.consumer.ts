@@ -7,6 +7,7 @@ import { db } from '../db/client';
 import { valkey, keys } from '../cache/valkey';
 import { socket } from '../socket/emitter';
 import { confirmOtaIfPending } from '../ota-confirm';
+import { recordReportedVersion } from '../device-version';
 
 const log = createLogger('digest-service:device-status');
 
@@ -78,6 +79,12 @@ export function deviceStatusConsumer(ch: Channel) {
     // 2. OTA confirmation: device reconnected on the expected new-version topic path.
     if (online && version) {
       await confirmOtaIfPending(userDeviceId, version);
+      // Then record the version regardless of whether an OTA was pending (F3.16). Runs after the
+      // confirm so a genuine OTA still gets its transactional promote (staged actions + catalog
+      // repoint) and this is a no-op; what it adds is the case with no pending row at all — a
+      // device that changed firmware by some route the platform did not initiate. Safe here
+      // because section 0 has already rejected the stale retained replays this topic is prone to.
+      await recordReportedVersion(userDeviceId, version, 'status');
     }
 
     // 2. Hot cache (best-effort).
