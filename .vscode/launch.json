@@ -5,12 +5,21 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Start SSH Tunnel",
+      // Reverse tunnel (frpc container) giving this machine public HTTPS + MQTT endpoints —
+      // Google Home account linking and real hardware with no LAN dependency. Routing lives in
+      // frpc.toml; needs FRP_TOKEN in .env. The backoffice is served from the HOST, so pair this
+      // with the "google:serve-tunnel" task when the UI has to be reachable too.
+      // WHILE IT RUNS THE LOCAL STACK IS ON THE PUBLIC INTERNET — `npm run tunnel:down` after.
+      "name": "Open Tunnel (frp)",
       "type": "node",
       "request": "launch",
-      "preLaunchTask": "ssh-postgres-tunnel",
+      "preLaunchTask": "tunnel:up",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["-e", "console.log('✅ SSH tunnel task started in the background.');"]
+      "runtimeArgs": [
+        "-e",
+        "console.log('✅ frp tunnel up → https://lattice-local.duckdns.org | device.* | ota.* | mqtt.*:8883\\n   follow: npm run tunnel:logs   stop: npm run tunnel:down');"
+      ],
+      "presentation": { "group": "tools" }
     },
     {
       "type": "node",

@@ -2,37 +2,6 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "kill-old-tunnel",
-      "type": "shell",
-      "command": "npx -y kill-port 5432",
-      "presentation": {
-        "reveal": "silent"
-      }
-    },
-    {
-      "label": "ssh-postgres-tunnel",
-      "dependsOn": ["kill-old-tunnel"],
-      "dependsOrder": "sequence",
-      "type": "shell",
-      "command": "ssh -L 5432:localhost:5432 -i C:\\Users\\Consist\\Desktop\\k3s-infra\\k3s-a1.1.key ubuntu@k3sa1-ishai.duckdns.org 'sudo fuser -k 5432/tcp || true; sudo kubectl port-forward svc/postgres 5432:5432 -n my-apps'",
-      "isBackground": true,
-      "problemMatcher": {
-        "pattern": [
-          {
-            "regexp": ".",
-            "file": 1,
-            "location": 2,
-            "message": 3
-          }
-        ],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".",
-          "endsPattern": "^Forwarding from"
-        }
-      }
-    },
-    {
       "label": "serve-backoffice",
       "type": "shell",
       "command": "npm start",
@@ -281,9 +250,33 @@
       "problemMatcher": []
     },
     {
-      "label": "google:tunnel",
+      // frpc runs detached behind the compose `tunnel` profile, so this task exits once the
+      // container is up — the "Open Tunnel (frp)" launch config uses it as its preLaunchTask.
+      "label": "tunnel:up",
       "type": "shell",
-      "command": "docker compose -f compose.yaml -f compose.dev.yaml --profile tunnel up -d frpc",
+      "command": "npm run tunnel:up",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "tunnel"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "tunnel:down",
+      "type": "shell",
+      "command": "npm run tunnel:down",
+      "options": {
+        "cwd": "${workspaceFolder:Project Root}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "tunnel"
+      },
       "problemMatcher": []
     },
     {
