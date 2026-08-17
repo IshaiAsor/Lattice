@@ -241,6 +241,17 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - keeps binding order when the selection is given out of order
 - narrows a combined resolver to the selected devices only
 
+### Blueprints — `blueprints.template-usage.test.ts` ✅ (F10.10 sealed-template change propagation)
+
+- collects an action reference from every place a blueprint can hold one
+  - the omission failure: an uncollected addressing site is a guard that passes on an edit that breaks a live setup
+- ignores a row that addresses no action, like a schedule condition
+- carries the slot and action of each reference, not just where it came from
+- says nothing when the entry set still provides every referenced action
+- reports every reference the entry set no longer provides
+- names the blueprint, its status and the exact place, so the admin can go and fix it
+- reports a renamed action once per place that addresses it
+
 ### Pipelines — `pipelines.device-labels.test.ts` ✅ (F11.7 context labelling)
 
 - keeps distinct labels exactly as they are
@@ -635,6 +646,13 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - puts a device on another lifecycle when it is reset
 - refuses a lifecycle action on a device the setup shares
   - phase scope is read at evaluation time; advancing a phase is one column write and touches no scene/rule rows
+- reports which published blueprints a sealed template holds up
+  - F10.10, on its own template + blueprint pair: these cases break a dependency on purpose
+- blocks an entry removal that would strand a published blueprint reference
+  - entry names are positional, so removing one silently renames its siblings — the guard compares the whole name set
+- lets an unrelated sealed-template edit through untouched
+- refuses to delete a sealed template a published blueprint depends on
+- proceeds on force, and then reports the reference it broke
 - ⬜ derived rule fires end-to-end against sim telemetry at the phase's threshold
 - ⬜ auto-advance cron rolls an elapsed phase over
 

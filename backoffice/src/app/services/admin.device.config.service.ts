@@ -77,6 +77,17 @@ export interface SealedTemplateSummary {
   targets: SealedTemplateTarget[];
   _count: { entries: number };
 }
+// A blueprint that fills one of its slots from this template (F10.10). `stranded` lists references
+// that no longer resolve against the template's current entries — already broken, not hypothetical.
+export interface SealedTemplateUsage {
+  blueprint_id: number;
+  key: string;
+  name: string;
+  status: string;
+  slot_keys: string[];
+  refs: { slot_key: string; action_name: string; where: string }[];
+  stranded: string[];
+}
 
 export interface AdminDeviceAction {
   id: number;
@@ -127,9 +138,19 @@ export class AdminDeviceConfigService {
   }
   updateSealedTemplate(
     id: number,
-    body: { name?: string; targets?: SealedTemplateTarget[]; entries?: SealedTemplateEntry[] },
+    body: {
+      name?: string;
+      targets?: SealedTemplateTarget[];
+      entries?: SealedTemplateEntry[];
+      // Proceed even though the edit strands a published blueprint's reference — only ever set
+      // from an explicit "save anyway" after the server has listed what breaks.
+      force?: boolean;
+    },
   ): Observable<SealedTemplate> {
     return this.http.patch<SealedTemplate>(`${this.base}/sealed/templates/${id}`, body);
+  }
+  getSealedTemplateUsage(id: number): Observable<SealedTemplateUsage[]> {
+    return this.http.get<SealedTemplateUsage[]>(`${this.base}/sealed/templates/${id}/usage`);
   }
   deleteSealedTemplate(id: number): Observable<void> {
     return this.http.delete<void>(`${this.base}/sealed/templates/${id}`);

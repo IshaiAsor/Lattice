@@ -83,6 +83,59 @@
         <p class="message">{{ message() }}</p>
       }
 
+      <!-- What this edit would break, and the explicit way past it (F10.10). -->
+      @if (problems().length) {
+        <div class="problems">
+          <p class="problems-head">
+            <mat-icon>link_off</mat-icon> These blueprint references would stop resolving
+          </p>
+          <ul>
+            @for (p of problems(); track p) {
+              <li>{{ p }}</li>
+            }
+          </ul>
+          @if (blocked()) {
+            <button mat-stroked-button class="force-btn" (click)="save(true)" [disabled]="loading()">
+              <mat-icon>warning</mat-icon> Save anyway
+            </button>
+          }
+        </div>
+      }
+
+      <!-- Standing dependents: shown before the admin edits, not after the save is refused. -->
+      @if (usage().length) {
+        <div class="usage">
+          <mat-icon>account_tree</mat-icon>
+          <div>
+            <strong>Used by {{ usage().length }} blueprint{{ usage().length === 1 ? '' : 's' }}</strong>
+            <div class="usage-bps">
+              @for (u of usage(); track u.blueprint_id) {
+                <span class="usage-bp">
+                  {{ u.name }} <em>({{ u.status }})</em> · slot {{ u.slot_keys.join(', ') }} ·
+                  {{ u.refs.length }} ref{{ u.refs.length === 1 ? '' : 's' }}
+                </span>
+              }
+            </div>
+            <span class="usage-note">
+              They address actions by name. Add a replacement entry and retire the old one — renaming
+              or removing an entry they use silently breaks them.
+            </span>
+          </div>
+        </div>
+      }
+      @if (strandedNow().length) {
+        <div class="problems">
+          <p class="problems-head">
+            <mat-icon>report</mat-icon> Already broken — these references resolve to nothing today
+          </p>
+          <ul>
+            @for (s of strandedNow(); track s) {
+              <li>{{ s }}</li>
+            }
+          </ul>
+        </div>
+      }
+
       <!-- Targets -->
       <div class="section glass">
         <div class="section-head">

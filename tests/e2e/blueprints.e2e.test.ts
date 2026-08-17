@@ -40,6 +40,9 @@ const TANK_TEMPLATE = `E2E Tank Board ${SUFFIX}`;
 const SOCKET_TEMPLATE = `E2E Socket Board ${SUFFIX}`;
 const BLUEPRINT_KEY = `e2e_tank_${SUFFIX}`;
 const INSTANCE_NAME = `E2E Tank Loop ${SUFFIX}`;
+// F10.10's own pair — see the group at the end of the file for why it is not the shared fixture.
+const GUARD_TEMPLATE = `E2E Guard Board ${SUFFIX}`;
+const GUARD_KEY = `e2e_guard_${SUFFIX}`;
 
 // Sealed catalog identities that carry the capabilities this vertical needs. Both expose the
 // full generic capability set (the catalog is firmware-generated), so the template selects.
@@ -154,6 +157,8 @@ describe('blueprints e2e (F10)', () => {
   let scopeInstanceId: number | undefined;
   let noPhaseBlueprintId: number | undefined;
   let noPhaseInstanceId: number | undefined;
+  let guardTemplateId: number | undefined;
+  let guardBlueprintId: number | undefined;
 
   beforeAll(async () => {
     if (!(await stackUp())) return;
@@ -223,6 +228,13 @@ describe('blueprints e2e (F10)', () => {
 
   afterAll(async () => {
     if (!token) return;
+    // The blueprint first: the template it fills a slot from now refuses to be deleted under it.
+    if (guardBlueprintId)
+      await apiDelete(`/api/admin/blueprints/${guardBlueprintId}`, token).catch(() => {});
+    if (guardTemplateId)
+      await apiDelete(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token).catch(
+        () => {},
+      );
     if (noPhaseInstanceId)
       await apiDelete(`/api/blueprints/instances/${noPhaseInstanceId}`, token).catch(() => {});
     if (noPhaseBlueprintId)
@@ -1744,5 +1756,175 @@ describe('blueprints e2e (F10)', () => {
     const instance = await apiGet(`/api/blueprints/instances/${deviceInstanceId}`, token);
     const tank = instance.bindings.find((b: any) => b.slot_key === 'tank');
     expect(tank.binding_id).toBeNull(); // no lifecycle of its own, so nothing to start
+  });
+
+  // ── F10.10: sealed-template change propagation ────────────────────────────────────────────
+  //
+  // A published blueprint addresses (slot_key, mqtt_action_name); the template owns the names. The
+  // failure being guarded is silent — a stranded reference resolves to nothing at the next
+  // derive/reconcile and the entity is skipped — so every case here asserts on the *refusal*, not
+  // on some observable breakage after the fact.
+  //
+  // This group gets its own template + blueprint. The point of it is to break a dependency on
+  // purpose, and doing that to the shared fixture would take the rest of the suite with it. The
+  // guard template targets a version range no sim board is in, so it can be released without
+  // overlapping the socket template and without materialising onto a device.
+
+  const guardEntries = (count: number, label = 'Socket') =>
+    [0, 1].slice(0, count).map((channel) => ({
+      capability_key: 'i2c_socket_8',
+      action_label: `${label} ${channel + 1}`,
+      sort_order: channel,
+      pins: [
+        { pin_slot_key: 'sda', pin_number: 8 },
+        { pin_slot_key: 'scl', pin_number: 9 },
+        { pin_slot_key: 'address', pin_number: 32 },
+        { pin_slot_key: 'channel', pin_number: channel },
+      ],
+      behaviors: [{ behavior: 'command' }],
+    }));
+
+  itStack('reports which published blueprints a sealed template holds up', async () => {
+    const created = await apiPost('/api/admin/catalog/sealed/templates', token, {
+      name: GUARD_TEMPLATE,
+    });
+    guardTemplateId = created.id;
+    await apiPatch(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token, {
+      targets: [{ device_type: SOCKET_TYPE, version_min: 'v100.0.0', version_max: 'v199.0.0' }],
+      entries: guardEntries(2),
+    });
+    await apiPost(`/api/admin/catalog/sealed/templates/${guardTemplateId}/release`, token, {});
+
+    const imported = await apiPost('/api/admin/blueprints/import', token, {
+      key: GUARD_KEY,
+      name: `E2E Guard ${SUFFIX}`,
+      is_static: true,
+      slots: [{ key: 'sockets', label: 'Socket board', sealed_template: GUARD_TEMPLATE }],
+      params: [{ key: 'pump.state', label: 'On value', default_value: 'on', user_tunable: false }],
+      phases: [],
+      scenes: [
+        {
+          key: 'stop_all',
+          name: `Guard stop ${SUFFIX}`,
+          members: [{ slot_key: 'sockets', action_name: 'i2c_socket_8', target_state: 'off' }],
+        },
+      ],
+      rules: [
+        {
+          key: 'guard_rule',
+          name: `Guard rule ${SUFFIX}`,
+          conditions: [
+            {
+              condition_type: 'device_status',
+              slot_key: 'sockets',
+              action_name: 'i2c_socket_8',
+              status_value: 'offline',
+            },
+          ],
+          actions: [
+            {
+              slot_key: 'sockets',
+              action_name: 'i2c_socket_8_2',
+              target_state: '@param.pump.state',
+            },
+          ],
+        },
+      ],
+      pipelines: [],
+    });
+    guardBlueprintId = imported.id;
+    await apiPost(`/api/admin/blueprints/${guardBlueprintId}/publish`, token, {});
+
+    const usage = await apiGet(
+      `/api/admin/catalog/sealed/templates/${guardTemplateId}/usage`,
+      token,
+    );
+    expect(usage).toHaveLength(1);
+    expect(usage[0].blueprint_id).toBe(guardBlueprintId);
+    expect(usage[0].status).toBe('published');
+    expect(usage[0].slot_keys).toEqual(['sockets']);
+    // Every place that can address an action is collected, not just the rule action.
+    expect(usage[0].refs.map((r: any) => r.where).sort()).toEqual([
+      'rule "guard_rule" action',
+      'rule "guard_rule" condition',
+      'scene "stop_all" member',
+    ]);
+    expect(usage[0].stranded).toEqual([]); // nothing broken yet
+  });
+
+  itStack('blocks an entry removal that would strand a published blueprint reference', async () => {
+    // Dropping the second entry is the positional rename in disguise: `i2c_socket_8_2` simply
+    // stops existing, and the rule action that names it would resolve to nothing.
+    const { status, body } = await apiRaw(
+      'PATCH',
+      `/api/admin/catalog/sealed/templates/${guardTemplateId}`,
+      token,
+      { entries: guardEntries(1) },
+    );
+    expect(status).toBe(409);
+    expect(body.details).toHaveLength(1);
+    expect(body.details[0]).toContain(`E2E Guard ${SUFFIX}`);
+    expect(body.details[0]).toContain('i2c_socket_8_2');
+    expect(body.details[0]).toContain('rule "guard_rule" action');
+
+    // Refused *before* the write: the entry set is untouched.
+    const after = await apiGet(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token);
+    expect(after.entries.map((e: any) => e.mqtt_action_name)).toEqual([
+      'i2c_socket_8',
+      'i2c_socket_8_2',
+    ]);
+  });
+
+  itStack('lets an unrelated sealed-template edit through untouched', async () => {
+    // Same entries, same generated names, different labels — nothing a blueprint addresses moves.
+    await apiPatch(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token, {
+      entries: guardEntries(2, 'Renamed socket'),
+    });
+    const after = await apiGet(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token);
+    expect(after.entries.map((e: any) => e.action_label)).toEqual([
+      'Renamed socket 1',
+      'Renamed socket 2',
+    ]);
+    const usage = await apiGet(
+      `/api/admin/catalog/sealed/templates/${guardTemplateId}/usage`,
+      token,
+    );
+    expect(usage[0].stranded).toEqual([]);
+  });
+
+  itStack('refuses to delete a sealed template a published blueprint depends on', async () => {
+    const { status, body } = await apiRaw(
+      'DELETE',
+      `/api/admin/catalog/sealed/templates/${guardTemplateId}`,
+      token,
+    );
+    expect(status).toBe(409);
+    expect(body.details[0]).toContain(`E2E Guard ${SUFFIX}`);
+    expect(body.details[0]).toContain('slot sockets');
+    // Still there — the FK would have refused it too, but as an unexplained 500.
+    await apiGet(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token);
+  });
+
+  itStack('proceeds on force, and then reports the reference it broke', async () => {
+    await apiPatch(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token, {
+      entries: guardEntries(1),
+      force: true,
+    });
+    const usage = await apiGet(
+      `/api/admin/catalog/sealed/templates/${guardTemplateId}/usage`,
+      token,
+    );
+    expect(usage[0].stranded).toHaveLength(1);
+    expect(usage[0].stranded[0]).toContain('i2c_socket_8_2');
+
+    // Putting the entry back needs no force: the reference resolves again, so the guard is silent.
+    await apiPatch(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token, {
+      entries: guardEntries(2),
+    });
+    const healed = await apiGet(
+      `/api/admin/catalog/sealed/templates/${guardTemplateId}/usage`,
+      token,
+    );
+    expect(healed[0].stranded).toEqual([]);
   });
 });

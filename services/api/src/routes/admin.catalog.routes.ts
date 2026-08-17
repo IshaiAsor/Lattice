@@ -91,14 +91,24 @@ adminCatalogRouter.get('/sealed/templates/:id', async (req, res, next) => {
     next(err);
   }
 });
+// Which blueprints depend on this template, and which of their references no longer resolve
+// (F10.10) — what the editor shows before an edit strands one.
+adminCatalogRouter.get('/sealed/templates/:id/usage', async (req, res, next) => {
+  try {
+    res.json(await sealedTemplatesService.getUsage(Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
 adminCatalogRouter.patch('/sealed/templates/:id', async (req, res, next) => {
   try {
-    const { name, targets, entries } = req.body ?? {};
+    const { name, targets, entries, force } = req.body ?? {};
     res.json(
       await sealedTemplatesService.updateTemplate(Number(req.params.id), {
         name,
         targets,
         entries,
+        force: force === true,
       }),
     );
   } catch (err) {

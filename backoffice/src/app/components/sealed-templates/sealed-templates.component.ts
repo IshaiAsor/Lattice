@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
@@ -10,6 +10,7 @@ import {
   SealedTemplateEntry,
   SealedTemplateSummary,
   SealedTemplateTarget,
+  SealedTemplateUsage,
 } from 'src/app/services/admin.device.config.service';
 
 // One composed action instance in the editor. A capability may be added multiple times (e.g. 8
@@ -18,6 +19,13 @@ interface DraftInstance {
   capability_key: string;
   label: string; // catalog label (display)
   base_mqtt_name: string; // capability's base mqtt_action_name (server suffixes _2/_3…)
+  // The name this instance is ALREADY stored under, when it came from a saved entry. Sent back
+  // verbatim so a round-trip renames nothing: the catalog's base name and the stored one can
+  // legitimately differ (a template seeded through the API may have used the capability_key as its
+  // base), and rebuilding from the catalog would silently rename every entry — which is exactly
+  // what strands a published blueprint's (slot_key, action_name) reference (F10.10). Null for an
+  // instance the admin has just added, which has no name yet and takes the catalog's base.
+  mqtt_action_name: string | null;
   action_label: string;
   default_trait_value: string | null;
   traitOptions: string[];
@@ -54,6 +62,16 @@ export class SealedTemplatesComponent implements OnInit {
   referenceDeviceId: number | null = null;
   message = signal<string>('');
   loading = signal(false);
+
+  // F10.10 — what depends on this template. `usage` is loaded with the template (so the admin sees
+  // the dependents before editing); `problems` holds the server's list of what a rejected save
+  // would break, and `blocked` is what turns Save into an explicit "save anyway".
+  usage = signal<SealedTemplateUsage[]>([]);
+  problems = signal<string[]>([]);
+  blocked = signal(false);
+  // References that are broken *already* — what a forced save (or a seeded template edit) leaves
+  // behind. Distinct from `problems`, which is what a rejected save would have broken.
+  strandedNow = computed(() => this.usage().flatMap((u) => u.stranded));
 
   ngOnInit() {
     // Load the list + identities first (open() needs the identities to build its palette), then let
@@ -129,6 +147,7 @@ export class SealedTemplatesComponent implements OnInit {
   }
 
   open(id: number) {
+    this.service.getSealedTemplateUsage(id).subscribe((u) => this.usage.set(u));
     this.service.getSealedTemplate(id).subscribe((t) => {
       this.selected.set(t);
       this.name = t.name;
@@ -137,6 +156,8 @@ export class SealedTemplatesComponent implements OnInit {
       this.palette = [];
       this.instances = [];
       this.message.set('');
+      this.problems.set([]);
+      this.blocked.set(false);
       // Load the palette from the first target's newest matching identity so existing instances
       // can be rebuilt against their capability metadata.
       const firstTarget = t.targets[0];
@@ -197,6 +218,7 @@ export class SealedTemplatesComponent implements OnInit {
       capability_key: c.capability_key,
       label: c.label,
       base_mqtt_name: c.mqtt_action_name,
+      mqtt_action_name: null, // new instance — the server names it from the base
       action_label: label,
       default_trait_value: null,
       traitOptions: c.google_traits ?? [],
@@ -217,6 +239,7 @@ export class SealedTemplatesComponent implements OnInit {
       capability_key: e.capability_key,
       label: c.label,
       base_mqtt_name: c.mqtt_action_name,
+      mqtt_action_name: e.mqtt_action_name ?? null, // keep the name it is already addressed by
       action_label: e.action_label,
       default_trait_value: e.default_trait_value ?? null,
       traitOptions: c.google_traits ?? [],
@@ -233,24 +256,44 @@ export class SealedTemplatesComponent implements OnInit {
     };
   }
 
-  save() {
+  // `force` is only ever passed by the "Save anyway" button, which appears once the server has
+  // listed the published blueprint references this edit would strand (F10.10).
+  save(force = false) {
     const t = this.selected();
     if (!t) return;
     this.loading.set(true);
+    this.problems.set([]);
     this.service
-      .updateSealedTemplate(t.id, { name: this.name, targets: this.targets, entries: this.toWireEntries() })
+      .updateSealedTemplate(t.id, {
+        name: this.name,
+        targets: this.targets,
+        entries: this.toWireEntries(),
+        force,
+      })
       .subscribe({
         next: (updated) => {
           this.selected.set(updated);
           this.loading.set(false);
-          this.message.set('Saved.');
+          this.blocked.set(false);
+          this.message.set(force ? 'Saved — the references listed above are now broken.' : 'Saved.');
           this.reload();
+          // Re-read the dependents: a forced save is exactly when `stranded` becomes non-empty.
+          this.service.getSealedTemplateUsage(t.id).subscribe((u) => this.usage.set(u));
         },
-        error: (e) => {
-          this.loading.set(false);
-          this.message.set(e?.error?.message ?? 'Save failed');
-        },
+        error: (e) => this.failed(e, 'Save failed'),
       });
+  }
+
+  // One error path for all three writes: the dependency guard answers 409 with a `details` list,
+  // and that list is the whole point — a message alone would say "something breaks" and nothing more.
+  private failed(e: unknown, fallback: string) {
+    // The api's error body is `{ error, details? }` (exception.middleware) — `error.message` was
+    // read here before and is never set, so every failure showed the bare fallback.
+    const res = e as { status?: number; error?: { error?: string; message?: string; details?: string[] } };
+    this.loading.set(false);
+    this.message.set(res?.error?.error ?? res?.error?.message ?? fallback);
+    this.problems.set(res?.error?.details ?? []);
+    this.blocked.set(res?.status === 409);
   }
 
   release() {
@@ -258,7 +301,9 @@ export class SealedTemplatesComponent implements OnInit {
     if (!t) return;
     if (!confirm('Release this template? It will be applied to all matching provisioned devices.')) return;
     this.loading.set(true);
-    // Persist current edits first, then release.
+    this.problems.set([]);
+    // Persist current edits first, then release. The save carries the dependency guard, so a
+    // release that would strand a published blueprint is refused here rather than after it is live.
     this.service
       .updateSealedTemplate(t.id, { name: this.name, targets: this.targets, entries: this.toWireEntries() })
       .subscribe({
@@ -270,33 +315,35 @@ export class SealedTemplatesComponent implements OnInit {
               this.open(t.id);
               this.reload();
             },
-            error: (e) => {
-              this.loading.set(false);
-              this.message.set(e?.error?.message ?? 'Release failed');
-            },
+            error: (e) => this.failed(e, 'Release failed'),
           });
         },
-        error: (e) => {
-          this.loading.set(false);
-          this.message.set(e?.error?.message ?? 'Save failed');
-        },
+        error: (e) => this.failed(e, 'Save failed'),
       });
   }
 
   remove() {
     const t = this.selected();
     if (!t || !confirm(`Delete template "${t.name}"?`)) return;
-    this.service.deleteSealedTemplate(t.id).subscribe(() => {
-      // Navigating to the base clears the id from the URL (applyRouteId then nulls the selection).
-      this.router.navigate(['/admin/sealed-templates']);
-      this.reload();
+    this.problems.set([]);
+    this.service.deleteSealedTemplate(t.id).subscribe({
+      next: () => {
+        // Navigating to the base clears the id from the URL (applyRouteId then nulls the selection).
+        this.router.navigate(['/admin/sealed-templates']);
+        this.reload();
+      },
+      // A template holding up a blueprint is refused (409). Without this the delete simply did
+      // nothing, with no page state to say why.
+      error: (e) => this.failed(e, 'Delete failed'),
     });
   }
 
   private toWireEntries(): SealedTemplateEntry[] {
     return this.instances.map((e, i) => ({
       capability_key: e.capability_key,
-      mqtt_action_name: e.base_mqtt_name, // server suffixes _2/_3… per repeated instance
+      // Its own stored name where it has one, else the capability's base — the server suffixes
+      // _2/_3… per repeated instance and steps over names already taken.
+      mqtt_action_name: e.mqtt_action_name ?? e.base_mqtt_name,
       action_label: e.action_label,
       default_trait_value: e.default_trait_value,
       sort_order: i,

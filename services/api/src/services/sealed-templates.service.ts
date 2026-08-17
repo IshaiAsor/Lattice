@@ -3,6 +3,11 @@ import { publish, RK } from '@lattice/queue';
 import type { SealedTemplateAppliedPayload } from '@lattice/queue';
 import { getChannel } from '../queue';
 import { versionInRange, rangesOverlap } from '@lattice/capability-validation';
+import {
+  findTemplateUsage,
+  strandedReferences,
+  type TemplateUsage,
+} from './sealed-templates.usage';
 
 // Sealed-device template authoring (admin only). A sealed template is the admin's SELECTION from
 // the shared catalog: which capabilities (by capability_key) to activate on a factory-soldered
@@ -17,6 +22,11 @@ function badRequest(message: string): Error {
 }
 function notFound(message = 'Sealed template not found'): Error {
   return Object.assign(new Error(message), { statusCode: 404 });
+}
+// 409 + `details`: the caller is not malformed, it is in conflict with something already published,
+// and the admin needs the full list of what breaks — not one reason per round trip.
+function conflict(message: string, details: string[]): Error {
+  return Object.assign(new Error(message), { statusCode: 409, details });
 }
 
 /**
@@ -65,13 +75,26 @@ export interface EntryInput {
 // Assign each entry a unique mqtt_action_name: the capability's base name for the first instance,
 // <base>_2/_3/… for repeats — the same scheme deviceMgmtService.activateCapability uses for
 // regular devices, so the firmware served-config + MQTT dispatch handle N instances unchanged.
+//
+// The caller may send an entry's *existing* name as its base, to keep an already-addressed entry
+// addressable (the editor does this — see DraftInstance.mqtt_action_name). That mixes bases like
+// "socket" and "socket_2" in one list, so a generated suffix can land on a name another entry
+// already holds; the loop steps past taken names instead of colliding on the
+// (template_id, mqtt_action_name) unique index.
 function assignMqttNames(entries: EntryInput[]): (EntryInput & { mqtt_action_name: string })[] {
   const seen = new Map<string, number>();
+  const used = new Set<string>();
   return entries.map((e) => {
     const base = e.mqtt_action_name?.trim() || e.capability_key;
-    const n = seen.get(base) ?? 0;
+    let n = seen.get(base) ?? 0;
+    let name = n === 0 ? base : `${base}_${n + 1}`;
+    while (used.has(name)) {
+      n += 1;
+      name = `${base}_${n + 1}`;
+    }
     seen.set(base, n + 1);
-    return { ...e, mqtt_action_name: n === 0 ? base : `${base}_${n + 1}` };
+    used.add(name);
+    return { ...e, mqtt_action_name: name };
   });
 }
 
@@ -115,15 +138,52 @@ class SealedTemplatesService {
     return created;
   }
 
+  // ─── Reverse dependency: which blueprints this template holds up (F10.10) ─────
+  getUsage(id: number): Promise<TemplateUsage[]> {
+    return findTemplateUsage(id);
+  }
+
+  /**
+   * Refuse an entry edit that would strand a published blueprint's action reference.
+   *
+   * Only *published* blueprints block: a draft is still held by the publish gate, which validates
+   * against the template as it will be by then, so blocking on a draft would forbid editing a
+   * template while anyone has an unfinished blueprint mentioning it.
+   *
+   * `force` is the deliberate escape hatch — an admin retiring an action on purpose will fix the
+   * blueprints next, and this must not become a deadlock between two edits that need each other.
+   * What it must never be is the *default*, which is exactly the state this item was filed about.
+   */
+  private async assertNoStrandedBlueprints(id: number, names: Set<string>): Promise<void> {
+    const usage = await findTemplateUsage(id);
+    const problems = usage
+      .filter((u) => u.status === 'published')
+      .flatMap((u) => strandedReferences(u, names));
+    if (problems.length === 0) return;
+    throw conflict(
+      `this edit strands ${problems.length} reference(s) in ${
+        new Set(problems.map((p) => p.split(' — ')[0])).size
+      } published blueprint(s) — add a replacement entry and retire the old one rather than renaming, or re-send with force to proceed anyway`,
+      problems,
+    );
+  }
+
   // Full authoring update: name and/or a bulk replace of targets/entries. Editing does not
   // affect live devices until `release` is called.
   async updateTemplate(
     id: number,
-    body: { name?: string; targets?: TargetInput[]; entries?: EntryInput[] },
+    body: { name?: string; targets?: TargetInput[]; entries?: EntryInput[]; force?: boolean },
   ): Promise<FullTemplate> {
     await this.getTemplate(id);
     if (body.targets) body.targets.forEach(assertValidTarget);
     if (body.entries) assertValidEntries(body.entries);
+
+    // Names are assigned here, before the write, because the guard has to compare the name set the
+    // save WOULD produce: the suffixes are positional, so removing one entry renames its siblings.
+    const named = body.entries ? assignMqttNames(body.entries) : null;
+    if (named && !body.force) {
+      await this.assertNoStrandedBlueprints(id, new Set(named.map((e) => e.mqtt_action_name)));
+    }
 
     await db.$transaction(async (tx) => {
       if (body.name !== undefined) {
@@ -144,10 +204,9 @@ class SealedTemplatesService {
           })),
         });
       }
-      if (body.entries) {
-        // Replace the whole entry set (cascades pins/behaviors). Names are assigned here so each
-        // instance of a repeated capability gets a unique mqtt_action_name.
-        const named = assignMqttNames(body.entries);
+      if (named) {
+        // Replace the whole entry set (cascades pins/behaviors), under the names assigned above so
+        // each instance of a repeated capability gets a unique mqtt_action_name.
         await tx.sealedTemplateEntry.deleteMany({ where: { template_id: id } });
         for (const [i, e] of named.entries()) {
           await tx.sealedTemplateEntry.create({
@@ -183,6 +242,16 @@ class SealedTemplatesService {
 
   async deleteTemplate(id: number): Promise<void> {
     await this.getTemplate(id);
+    // BlueprintSlot.sealed_template_id is onDelete: Restrict, so the database would refuse this
+    // anyway — as an opaque 500. Name the dependents instead. No force here: unlike an entry edit,
+    // there is no state the admin could reach by pushing through.
+    const usage = await this.getUsage(id);
+    if (usage.length > 0) {
+      throw conflict(
+        `sealed template fills slots in ${usage.length} blueprint(s) — delete or re-point those first`,
+        usage.map((u) => `"${u.name}" (${u.status}) — slot ${u.slot_keys.join(', ')}`),
+      );
+    }
     await db.sealedTemplate.delete({ where: { id } }); // cascades targets/entries/pins/behaviors
   }
 
