@@ -41,10 +41,4 @@ inline std::string buildForAction(const std::string& tmpl, const std::string& us
 {
     return replaceAll(build(tmpl, userId, deviceId, version), "#", actionName);
 }
-
-// OTA topic uses a single %{devicetype} placeholder.
-inline std::string buildForDeviceType(const std::string& tmpl, const std::string& deviceType)
-{
-    return replaceAll(tmpl, "%{devicetype}", deviceType);
-}
 } // namespace TopicBuilder

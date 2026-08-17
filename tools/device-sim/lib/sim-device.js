@@ -392,8 +392,11 @@ class SimDevice extends EventEmitter {
       this.client.on('connect', () => {
         this._log(`✔ MQTT connected (v${this.version})`);
         this.client.publish(this._statusTopic(), 'online', { retain: true });
+        // One subscription, matching firmware's mqtt.h: a firmware update arrives as the `ota`
+        // command verb on this same per-device topic. The fleet-wide `ota/updates/<deviceType>`
+        // broadcast is gone from both sides — it addressed a device *type*, so one Update press
+        // flashed every connected device of that type.
         this.client.subscribe(`${this._base()}/+/command/#`);
-        this.client.subscribe(`ota/updates/${this.opts.deviceType}`);
         // Boot/reboot state restore: republish last command states as unsolicited acks.
         for (const [action, value] of this._lastState) {
           this._publishAck(action, { status: 'ok', value, unsolicited: true });
@@ -410,11 +413,6 @@ class SimDevice extends EventEmitter {
   // ── MQTT message handling ────────────────────────────────────────────────
   async _onMessage(topic, payload) {
     const msg = payload.toString();
-
-    if (topic.startsWith('ota/updates/')) {
-      await this._handleOta(msg);
-      return;
-    }
 
     const parts = topic.split('/');
     const ci = parts.indexOf('command');
@@ -438,9 +436,8 @@ class SimDevice extends EventEmitter {
       await this.stop();
       return;
     }
-    // Per-device OTA — same payload and same handler as the fleet-wide `ota/updates/<type>`
-    // branch above, which stays live beside it (mirrors the firmware, which must accept both
-    // until the whole fleet knows this verb).
+    // Firmware update — now the only way one arrives, mirroring firmware's
+    // MqttActionsHandlerService. The topic names this device, so an update reaches it alone.
     if (action === 'ota') {
       await this._handleOta(msg);
       return;

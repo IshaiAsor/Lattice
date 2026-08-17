@@ -43,16 +43,9 @@ class MqttActionsHandlerService
         for (unsigned int i = 0; i < length; i++)
             message += (char)payload[i];
 
-        // Handle OTA topic first — `ota/updates/<deviceType>` has only 3 parts, so this must run
-        // before we index parts[1/3/5/6] (which only exist on the 7-part command topic).
-        if (strcmp(parts[0], "ota") == 0)
-        {
-            // Authenticate the firmware download with the device's current JWT.
-            JwtToken* jwt = jwtService.GetCurrentJwtToken();
-            otaService->handleUpdateMessage(message.c_str(), jwt ? jwt->token.c_str() : "", ackPublisher);
-            return;
-        }
-
+        // Everything below indexes parts[1/3/5/6], which only exist on the 7-part per-device
+        // topic. The device subscribes to nothing else, but the broker is not a contract — a
+        // shorter topic reaching this callback must bail before any of those reads.
         if (parts.size() < 7)
         {
             LOG_W("Mqtt", "unexpected topic format (%d parts) — ignoring", (int)parts.size());
@@ -94,10 +87,11 @@ class MqttActionsHandlerService
                 ESP.restart();
                 return;
             }
-            // Per-device OTA. The fleet-wide `ota/updates/<deviceType>` branch above stays live
-            // alongside this one: the platform can only address a device individually once the
-            // whole fleet runs firmware that knows this verb, so the broadcast is dropped in a
-            // later release, never in the same one. OtaService logs and acks the outcome.
+            // Firmware update — now the only way one arrives. This device is named in the topic,
+            // so an update reaches it and nothing else; the `ota/updates/<deviceType>` broadcast
+            // that used to sit beside this branch flashed every connected device of the type.
+            // OtaService logs and acks the outcome, and authenticates the download with the
+            // device's current JWT.
             if (strcmp(action, "ota") == 0)
             {
                 JwtToken* jwt = jwtService.GetCurrentJwtToken();

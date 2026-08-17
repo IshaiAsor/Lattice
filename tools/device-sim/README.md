@@ -98,7 +98,7 @@ The sim honours the same control commands the firmware does
 | `restart`                    | offline → drop MQTT → reconnect (creds kept) → re-pull config                                                                                                                                                                              |
 | `soft-reset` / `reprovision` | offline → re-provision (fresh device JWT) → reconnect → re-pull                                                                                                                                                                            |
 | `hard-reset`                 | offline → disconnect → emit `hard-reset` (CLI exits)                                                                                                                                                                                       |
-| OTA on `ota/updates/<type>`  | if strictly newer: ack `starting:<v>`, adopt the version, "reboot", reconnect on the **new** version topic (UI's `current_firmware_version` updates); if not newer: ack `rejected:not-newer`; with `OTA_FAIL=true`: ack `failed:` and stay |
+| `ota`                        | if strictly newer: ack `starting:<v>`, adopt the version, "reboot", reconnect on the **new** version topic (UI's `current_firmware_version` updates); if not newer: ack `rejected:not-newer`; with `OTA_FAIL=true`: ack `failed:` and stay |
 
 Like firmware, the reset/restart commands are **not** acked (the device reboots instead).
 
@@ -165,7 +165,8 @@ The repo root runs **Jest** (`jest.config.js`):
 4. `POST /api/provisioning/provision` → `{deviceId, mqttToken, deviceConfigUrl, refreshToken, …}`
 5. (if `ACTIVATE_ALL`) activate not-yet-configured capabilities via `POST /api/devices/:id/actions`
 6. **`GET {deviceConfigUrl}?deviceId&version`** (device JWT) → the device's _active_ actions
-7. MQTT connect; subscribe `…/command/#` + `ota/updates/<type>`; publish `status=online` (LWT offline)
+7. MQTT connect; subscribe `…/command/#` (the only subscription — OTA arrives as the `ota` verb on
+   it); publish `status=online` (LWT offline)
 8. drive telemetry per action interval; camera frames over WS/HTTP; per-type command validation +
    ack (echoing `commandId`); duration auto-off; NVS-style state restore; token refresh near expiry;
    resets + OTA per the table above

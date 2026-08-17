@@ -8,7 +8,6 @@
 static const char* COMMAND   = "users/%{userid}/devices/%{deviceid}/%{version}/command/#";
 static const char* TELEMETRY = "users/%{userid}/devices/%{deviceid}/%{version}/telemetry/#";
 static const char* STATUS    = "users/%{userid}/devices/%{deviceid}/%{version}/status";
-static const char* OTA       = "ota/updates/%{devicetype}";
 
 void test_build_fills_all_placeholders()
 {
@@ -34,12 +33,6 @@ void test_status_has_no_hash()
     TEST_ASSERT_EQUAL_STRING("users/u1/devices/d1/v1/status", t.c_str());
 }
 
-void test_ota_device_type_placeholder()
-{
-    std::string t = TopicBuilder::buildForDeviceType(OTA, "ESP32S3_MINI");
-    TEST_ASSERT_EQUAL_STRING("ota/updates/ESP32S3_MINI", t.c_str());
-}
-
 void test_replace_all_is_idempotent_without_placeholder()
 {
     std::string t = TopicBuilder::replaceAll("no/placeholder/here", "#", "x");
@@ -56,7 +49,6 @@ int main(int, char**)
     RUN_TEST(test_build_leaves_hash_untouched);
     RUN_TEST(test_build_for_action_substitutes_hash);
     RUN_TEST(test_status_has_no_hash);
-    RUN_TEST(test_ota_device_type_placeholder);
     RUN_TEST(test_replace_all_is_idempotent_without_placeholder);
     return UNITY_END();
 }

@@ -21,7 +21,6 @@ const char COMMAND_TOPIC[]       = "users/%{userid}/devices/%{deviceid}/%{versio
 const char STATUS_TOPIC[]        = "users/%{userid}/devices/%{deviceid}/%{version}/status";
 const char TELEMETRY_TOPIC[]     = "users/%{userid}/devices/%{deviceid}/%{version}/telemetry/#";
 const char ACK_TOPIC[]           = "users/%{userid}/devices/%{deviceid}/%{version}/ack/#";
-const char OTA_TOPIC[]           = "ota/updates/%{devicetype}";
 const char HEARTBEAT_TOPIC[]     = "users/%{userid}/devices/%{deviceid}/%{version}/heartbeat";
 const char AP_HOTSPOT_NAME[]     = DEVICE_TYPE_STR "_Setup";
 const char AP_HOTSPOT_PASSWORD[] = ""; // Open network for easier provisioning

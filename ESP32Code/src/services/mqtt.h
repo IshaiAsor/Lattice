@@ -34,7 +34,6 @@ class MqttService
     // trailing "#" slot, substituted per-action at publish time.
     std::string _commandTopic;
     std::string _statusTopic;
-    std::string _otaTopic;
     std::string _telemetryBase;
     std::string _ackBase;
     std::string _heartbeatTopic;
@@ -65,7 +64,6 @@ class MqttService
         const std::string ver = DEVICE_VERSION;
         _commandTopic         = TopicBuilder::build(COMMAND_TOPIC, uid, did, ver);
         _statusTopic          = TopicBuilder::build(STATUS_TOPIC, uid, did, ver);
-        _otaTopic             = TopicBuilder::buildForDeviceType(OTA_TOPIC, DEVICE_TYPE);
         _telemetryBase        = TopicBuilder::build(TELEMETRY_TOPIC, uid, did, ver);
         _ackBase              = TopicBuilder::build(ACK_TOPIC, uid, did, ver);
         _heartbeatTopic       = TopicBuilder::build(HEARTBEAT_TOPIC, uid, did, ver);
@@ -180,8 +178,12 @@ class MqttService
                             _statusTopic.c_str(), 0, true, "offline"))
         {
             client->publish(_statusTopic.c_str(), "online", true);
+            // One subscription: everything the platform asks of this device — including a
+            // firmware update, which arrives as the `ota` command verb — comes down the
+            // per-device command topic. The fleet-wide `ota/updates/<deviceType>` broadcast is
+            // gone; it was addressed at a device *type*, so one user pressing Update flashed
+            // every connected device of that type.
             client->subscribe(_commandTopic.c_str());
-            client->subscribe(_otaTopic.c_str());
 
             LOG_I("Mqtt", "connected and subscribed to topics");
             return true;
