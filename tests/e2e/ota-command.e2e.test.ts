@@ -1,10 +1,14 @@
-// E2E: the per-device `ota` command verb (F3.15 step 1). Until now OTA reached a device only
-// through the fleet-wide retained `ota/updates/<deviceType>` announcement, so "update this one
-// device" was not expressible. Firmware (and the sim) now accept `ota` on the per-device command
-// topic as well — both paths stay live until the whole fleet knows the verb.
+// E2E: firmware updates are addressed at one device (F3.15). OTA used to reach a device only
+// through the fleet-wide `ota/updates/<deviceType>` announcement, so "update this one device" was
+// not expressible — pressing Update flashed every connected device of that type, and a device
+// that happened to be offline missed it with no retry. An update is now the `ota` verb on the
+// per-device command topic, and the broadcast is gone from both the platform and the firmware.
 //
-// Also guards the ack path: an `ota` ack has no UserDeviceAction behind it, and digest used to
-// throw on the ok branch trying to resolve one, dead-lettering every `starting:` progress ack.
+// Covers all three halves of that:
+//   * the verb itself round-trips and the device adopts the version;
+//   * a dispatch on `q.ota.dispatch` reaches its device and NO other device of the same type;
+//   * the ack path — an `ota` ack has no UserDeviceAction behind it, and digest used to throw on
+//     the ok branch trying to resolve one, dead-lettering every `starting:` progress ack.
 //
 // Mutating (device firmware version) — acceptance-safe as e2e-bot.
 
@@ -21,7 +25,8 @@ import {
   login,
   apiGet,
 } from './helpers/stack';
-import { connect, QUEUES } from '../../packages/queue/src';
+import { connect, publish, QUEUES, RK } from '../../packages/queue/src';
+import type { OtaDispatchPayload } from '../../packages/queue/src';
 
 jest.setTimeout(90000);
 
@@ -61,26 +66,43 @@ async function dlqContains(ch: Channel, marker: string, windowMs: number): Promi
 
 describe('per-device OTA command e2e', () => {
   let dev: any;
+  // A second device of the SAME type, which must never be touched by an update aimed at `dev`.
+  // That is the whole of F3.15: delivery used to be by device type, so one device's update was
+  // every device's update.
+  let bystander: any;
   let pub: MqttClient | null = null;
-  const MAC = `SIM-E2E-OTA-${Date.now().toString(36)}`;
+  const DEVICE_TYPE = process.env.DEVICE_TYPE || 'ESP32S3_MINI';
+  const RUN = Date.now().toString(36);
+  const MAC = `SIM-E2E-OTA-${RUN}`;
+  const BYSTANDER_MAC = `SIM-E2E-OTA-BY-${RUN}`;
 
   beforeAll(async () => {
     if (!(await stackUp())) return;
     dev = new SimDevice(
       simOpts({
         mac: MAC,
-        deviceType: process.env.DEVICE_TYPE || 'ESP32S3_MINI',
+        deviceType: DEVICE_TYPE,
         autoTelemetry: false,
         camera: false,
       }),
     );
     await dev.start();
+    bystander = new SimDevice(
+      simOpts({
+        mac: BYSTANDER_MAC,
+        deviceType: DEVICE_TYPE,
+        autoTelemetry: false,
+        camera: false,
+      }),
+    );
+    await bystander.start();
     pub = backendPublisher();
   });
 
   afterAll(async () => {
     if (pub) await new Promise((r) => pub!.end(false, {}, () => r(null)));
     if (dev) await dev.cleanup();
+    if (bystander) await bystander.cleanup();
   });
 
   itStack(
@@ -163,4 +185,62 @@ describe('per-device OTA command e2e', () => {
     expect(evt.reason).toBe('not-newer');
     expect(dev.version).toBe(current);
   });
+
+  // The F3.15 acceptance criterion, tested at the layer that decides blast radius: one
+  // OtaDispatchPayload on the queue, through mqtt-service, onto the wire.
+  //
+  // Patch band 95000+ keeps this newer than the 90000-band version the first case leaves behind,
+  // whichever order Jest runs them in.
+  itStack(
+    'a dispatch reaches the device it names and no other device of the same type',
+    async () => {
+      let ch: Channel | null = null;
+      try {
+        ch = await connect(RABBIT_URL);
+      } catch {
+        console.warn(`RabbitMQ unreachable at ${RABBIT_URL} — skipping the dispatch fan-out case`);
+        return;
+      }
+
+      try {
+        const target = newerVersion(dev.version, 95000 + (Date.now() % 1000));
+        const bystanderBefore = bystander.version;
+
+        const flashed = dev.waitFor('ota', (o: any) => o.to === target, 25000);
+        // Anything at all from the bystander is a failure — it must not so much as evaluate an
+        // update it was not sent.
+        const bystanderTouched = bystander
+          .waitFor('ota', () => true, 12000)
+          .then((o: any) => o)
+          .catch(() => null);
+
+        const payload: OtaDispatchPayload = {
+          deviceType: DEVICE_TYPE,
+          version: target,
+          url: `http://ota-manager:3001/download/${DEVICE_TYPE}/${target}.bin`,
+          timestamp: new Date().toISOString(),
+          userId: Number(dev.userId),
+          deviceId: Number(dev.deviceId),
+          // What it is running now — the topic segment it subscribes on, not the target above.
+          firmwareVersion: dev.version,
+        };
+        publish(ch, RK.OTA_DISPATCH, payload);
+
+        const evt = await flashed;
+        expect(evt.accepted).toBe(true);
+        await poll(
+          async () => dev.version,
+          (v: string) => v === target,
+          { timeoutMs: 20000 },
+        );
+
+        // Under the old broadcast this device took the update too, on nothing more than sharing a
+        // device type with the one the user pressed Update on.
+        expect(await bystanderTouched).toBeNull();
+        expect(bystander.version).toBe(bystanderBefore);
+      } finally {
+        await new Promise<void>((resolve) => ch!.connection.close(() => resolve()));
+      }
+    },
+  );
 });

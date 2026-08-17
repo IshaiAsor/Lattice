@@ -54,6 +54,15 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - rejects topics with fewer than six segments
 - rejects topics with empty required segments
 
+### Commands — `mqtt.ota-topic.test.ts` ✅ (F3.15)
+
+- addresses one device, on the same layout every other command uses
+- carries no device type, so it cannot fan out across a fleet
+  - the point of F3.15: updates went out on `ota/updates/<deviceType>`, so one Update press
+    flashed every connected device of that type
+- uses the running version, not the version being updated to
+- keeps the two devices of one user apart
+
 ### Blueprints — `blueprints.params-resolver.test.ts` ✅ (F10.1 `@lattice/params`)
 
 - recognises a whole-value reference
@@ -332,6 +341,11 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
   - ota-manager serves the firmware dir with express.static and CI writes `<version>.bin`, so an
     extensionless URL 404s and the device answers `failed:-102:File Not Found (404)`
 - does not double the separator when the base url has a trailing slash
+- uses the version the device last reported
+- falls back to the catalog row when the device has never reported
+- addresses the running version, never the version being updated to
+  - firmware subscribes on its own compile-time `DEVICE_VERSION`, so the target names a topic that
+    does not exist until the update has already happened (the F3.16 "online but deaf" bug class)
 
 ### Devices — `digest.device-version.test.ts` ✅
 
@@ -531,6 +545,10 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
     digest rather than dead-lettered as an unresolvable action
 - an ota command for a version already running is rejected, not applied
   - strictly-newer gate answers `rejected:not-newer`, and the device keeps its version
+- a dispatch reaches the device it names and no other device of the same type
+  - the F3.15 acceptance criterion end-to-end: one `q.ota.dispatch` message through mqtt-service
+    onto the wire, with a second sim of the same device type asserted untouched — the fleet-wide
+    `ota/updates/<deviceType>` broadcast updated it too, on nothing more than a shared type
 
 ### Commands — `commands.socket.e2e.test.ts` ✅
 

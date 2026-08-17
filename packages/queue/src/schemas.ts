@@ -153,10 +153,23 @@ export const otaDispatchSchema = z.object({
   url: z.string(),
   releaseNotes: z.string().optional(),
   timestamp: z.string(),
+  // Required — see OtaDispatchPayload. A dispatch with no device to aim at has nowhere to go
+  // since the fleet-wide broadcast was dropped, so it fails here rather than silently.
+  userId: z.number(),
+  deviceId: z.number(),
+  firmwareVersion: z.string(),
 });
 
-// Shape mirrors otaDispatchSchema for now but kept separate as it may diverge (CI metadata).
-export const otaIncomingSchema = otaDispatchSchema;
+// No longer an alias of otaDispatchSchema: an incoming release announcement carries no device
+// identity (ota-manager knows a firmware exists, not who should take it), so it keeps the
+// original five fields.
+export const otaIncomingSchema = z.object({
+  deviceType: z.string(),
+  version: z.string(),
+  url: z.string(),
+  releaseNotes: z.string().optional(),
+  timestamp: z.string(),
+});
 
 export const sealedTemplateAppliedSchema = z.object({
   templateId: z.number(),

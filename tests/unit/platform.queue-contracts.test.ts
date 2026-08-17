@@ -215,8 +215,19 @@ const CASES: ContractCase[] = [
       url: 'http://ota/download/ESP32S3_MINI/v2.0.9.bin',
       releaseNotes: 'fixes',
       timestamp: new Date().toISOString(),
+      userId: 1,
+      deviceId: 6,
+      firmwareVersion: 'v2.0.8', // the version it is RUNNING, not `version` above
     },
-    broken: { deviceType: 'ESP32S3_MINI', version: 'v2.0.9', url: 'http://x', timestamp: 42 }, // timestamp must be string
+    // Device identity is required since F3.15 — there is no fleet-wide broadcast left to fall
+    // back to, so a dispatch that names no device has nowhere to go and must fail at the
+    // publisher rather than reach a topic nothing subscribes to.
+    broken: {
+      deviceType: 'ESP32S3_MINI',
+      version: 'v2.0.9',
+      url: 'http://x',
+      timestamp: new Date().toISOString(),
+    },
   },
   {
     rk: RK.SEALED_TEMPLATE_APPLIED,

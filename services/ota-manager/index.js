@@ -31,9 +31,11 @@ if (!JWT_SECRET) {
 
 // This service never touches MQTT. Firmware distribution is GitOps/Kargo-driven: the init
 // container's entrypoint.sh writes each device's latest.json into the shared volume; on startup
-// we announce those releases onto RabbitMQ (q.ota.incoming). digest-service validates/audits and
-// forwards q.ota.dispatch → mqtt-service, the sole MQTT owner, which publishes the retained
-// ota/updates/<deviceType> notification. The HTTP side is read-only (serve + metadata only).
+// we announce those releases onto RabbitMQ (q.ota.incoming), where digest-service validates and
+// audits them. The chain stops there — a release is an ANNOUNCEMENT, not an instruction to any
+// device. Updating a device is user-initiated: device-gateway stages the pending version and
+// publishes q.ota.dispatch, and mqtt-service sends it to that one device as an `ota` command on
+// its own topic. The HTTP side is read-only (serve + metadata only).
 
 // Devices authenticate firmware downloads with their own `device_usage` JWT
 // (Bearer header, or `?token=` for the static download path).

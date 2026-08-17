@@ -68,8 +68,13 @@ The service listens on `http://localhost:3000` by default (Docker Compose maps i
 The service does **not** accept firmware uploads. Publishing is GitOps/Kargo-driven: CI builds the
 `lattice-firmware` image → Kargo promotes the image tag → the ota-manager init container's
 `entrypoint.sh` writes `<version>.bin` + `latest.json` per device → on startup this process
-**publishes `q.ota.incoming`** for each → digest-service validates/audits → `q.ota.dispatch` →
-`mqtt-service` publishes the retained `ota/updates/<deviceType>` notification.
+**publishes `q.ota.incoming`** for each → digest-service validates/audits it.
+
+That chain ends there: a release is an **announcement**, and digest deliberately does not forward
+it to devices (`ota-incoming.consumer.ts`). Actually updating a device is user-initiated —
+device-gateway's `applyUpdate` stages the pending version and publishes `q.ota.dispatch`, and
+`mqtt-service` sends it to that one device as an `ota` command on its own topic. Nothing is
+published to a device type, and nothing is retained.
 
 ## API endpoints
 
@@ -95,9 +100,11 @@ firmware/
     {version}.bin      <- the binary
 ```
 
-On startup, each device's `latest.json` is published to `q.ota.incoming`; the chain ends with
-`mqtt-service` publishing the retained `ota/updates/{deviceType}` message (QoS 1) that ESP32 devices
-subscribe to. `latest.json` is produced by the init container's `entrypoint.sh`, not by this process.
+On startup, each device's `latest.json` is published to `q.ota.incoming`, and the chain ends there —
+digest-service validates and audits it, but a release is an announcement and reaches no device on
+its own. A device is updated only when a user asks: device-gateway stages the pending version and
+publishes `q.ota.dispatch`, and `mqtt-service` sends it as an `ota` command on that one device's
+topic. `latest.json` is produced by the init container's `entrypoint.sh`, not by this process.
 
 ## Gotchas
 

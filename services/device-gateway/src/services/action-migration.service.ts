@@ -13,7 +13,7 @@ import {
   type ActionPreview,
 } from './action-compatibility';
 import { stageSealedUpgrade, resolveTemplateForDevice } from './sealed-materialization.service';
-import { otaInFlight, firmwareDownloadUrl } from './ota-dispatch';
+import { otaInFlight, firmwareDownloadUrl, otaTopicVersion } from './ota-dispatch';
 
 const log = createLogger('device-gateway:migration');
 
@@ -158,9 +158,8 @@ class ActionMigrationService {
     if (currentDevice.id === latestDevice.id) return;
 
     // One dispatch per update. Nothing about pressing Update twice is idempotent: each apply
-    // tears down the staged action set and rebuilds it, and each dispatch re-announces the
-    // firmware on `ota/updates/<deviceType>` — which every device of that type acts on, not
-    // just this one. A device mid-download restarts it from the top.
+    // tears down the staged action set and rebuilds it, and a device already mid-download
+    // restarts it from the top on the second `ota` command.
     if (otaInFlight(userDevice)) {
       log.info(
         { userDeviceId, pending: userDevice.pending_firmware_version },
@@ -189,7 +188,7 @@ class ActionMigrationService {
           pending_since: new Date(),
         },
       });
-      this.dispatchOta(latestDevice.type, latestDevice.version);
+      this.dispatchOta(userDevice, latestDevice);
       return;
     }
 
@@ -272,24 +271,42 @@ class ActionMigrationService {
       'device action migration staged',
     );
 
-    this.dispatchOta(latestDevice.type, latestDevice.version);
+    this.dispatchOta(userDevice, latestDevice);
   }
 
-  // Best-effort OTA dispatch — failure is logged but not fatal (picked up on next reconnect).
-  private dispatchOta(deviceType: string, version: string): void {
+  // Best-effort OTA dispatch — failure is logged but not fatal (the user can press Update again).
+  //
+  // Addressed at exactly the device that was staged (F3.15). This used to publish the fleet-wide
+  // `ota/updates/<deviceType>` announcement, so one press flashed every connected device of the
+  // type while the staged `pending_*` columns described only this one — and a device that was
+  // offline at that moment missed the update with no retry.
+  private dispatchOta(
+    userDevice: {
+      id: number;
+      user_id: number;
+      current_firmware_version: string | null;
+      device: { version: string };
+    },
+    latestDevice: { type: string; version: string },
+  ): void {
+    const { type: deviceType, version } = latestDevice;
     try {
       const payload: OtaDispatchPayload = {
         deviceType,
         version,
         url: firmwareDownloadUrl(env.otaManagerUrl, deviceType, version),
         timestamp: new Date().toISOString(),
+        userId: userDevice.user_id,
+        deviceId: userDevice.id,
+        // The version it is running now, not the one it is going to — see otaTopicVersion.
+        firmwareVersion: otaTopicVersion(userDevice),
       };
       publish(getChannel(), RK.OTA_DISPATCH, payload);
-      log.info({ deviceType, version }, 'OTA dispatch sent');
+      log.info({ deviceId: userDevice.id, deviceType, version }, 'OTA dispatch sent');
     } catch (err) {
       log.warn(
-        { err },
-        'OTA dispatch failed — firmware will be picked up on next device reconnect',
+        { err, deviceId: userDevice.id },
+        'OTA dispatch failed — the update stays staged and can be re-sent',
       );
     }
   }

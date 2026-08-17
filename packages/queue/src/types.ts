@@ -175,12 +175,26 @@ export interface PipelineStageDonePayload {
   error?: string;
 }
 
+// A firmware update aimed at ONE device (F3.15). Every field below the timestamp is what makes
+// that possible, and all of them are required: an OTA used to go out on the fleet-wide
+// `ota/updates/<deviceType>` topic, so pressing Update on one device flashed every connected
+// device of that type and an offline one missed it with no retry. There is no broadcast to fall
+// back to any more, so an unaddressed dispatch is a bug — better rejected by the schema at the
+// publisher than published to a topic nothing subscribes to.
 export interface OtaDispatchPayload {
   deviceType: string;
+  // The TARGET version — what the device compares against its own and downloads.
   version: string;
   url: string;
   releaseNotes?: string;
   timestamp: string;
+  userId: number;
+  deviceId: number;
+  // The version the device is RUNNING, which is the topic segment it subscribes on — NOT
+  // `version` above. Firmware builds its command topic from its own compile-time DEVICE_VERSION,
+  // so addressing the target would publish to a topic that only exists *after* the update this
+  // message is trying to cause.
+  firmwareVersion: string;
 }
 
 // How long a dispatched OTA is treated as still in flight (device-gateway refuses a second
@@ -198,10 +212,10 @@ export interface SealedTemplateAppliedPayload {
   timestamp: string;
 }
 
-// Incoming OTA release trigger — published by ota-manager/CI, consumed by
-// digest-service which validates + audit-logs, then forwards to OtaDispatchPayload.
-// Shape mirrors OtaDispatchPayload for now but kept separate as it may diverge
-// (e.g. carry CI metadata or an auth token).
+// Incoming OTA release trigger — published by ota-manager/CI, consumed by digest-service which
+// validates + audit-logs it. It no longer forwards to OtaDispatchPayload: a release is an
+// ANNOUNCEMENT, and the two shapes have genuinely diverged now that a dispatch names one device.
+// An announcement names none — ota-manager knows a firmware exists, not who should take it.
 export interface OtaIncomingPayload {
   deviceType: string;
   version: string;
