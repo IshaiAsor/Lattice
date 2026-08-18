@@ -25,6 +25,10 @@ describe('automation e2e', () => {
   let outlet: any; // command action on the device (rule target)
   let sensorActionId: number | undefined;
   let outletActionId: number | undefined;
+  // The commandId of the last command the rule dispatched. The below-threshold case asserts that
+  // no *new* command arrives; without an identity to compare against it would also catch the
+  // previous case's command arriving late, and fail for a reason that has nothing to do with it.
+  let lastCommandId: string | undefined;
   const ruleIds: number[] = [];
   const MAC = `SIM-E2E-RULE-${Date.now().toString(36)}`;
 
@@ -98,6 +102,7 @@ describe('automation e2e', () => {
     dev.publishTelemetry(sensor.mqtt_action_name, 150);
     const cmd = await commandP;
     expect(cmd.valid).toBe(true);
+    lastCommandId = cmd.commandId;
   });
 
   itStack('below-threshold telemetry does not fire the rule', async () => {
@@ -106,10 +111,18 @@ describe('automation e2e', () => {
       return;
     }
 
-    // Wait out the 1s cooldown from the previous fire, then send a value under the
-    // threshold and assert no command arrives in a bounded window.
+    // Wait out the rule's 1s cooldown (a real product delay, not a synchronisation guess), then
+    // send a value under the threshold and assert no *new* command arrives in a bounded window.
+    // Matching on commandId is what makes this deterministic: the previous case's command can be
+    // redelivered or simply arrive late under load, and a match on action alone would read that
+    // as "the rule fired below its threshold" — the exact false positive this test exists to
+    // rule out.
     await new Promise((r) => setTimeout(r, 1500));
-    const commandP = dev.waitFor('command', (c: any) => c.action === outlet.mqtt_action_name, 5000);
+    const commandP = dev.waitFor(
+      'command',
+      (c: any) => c.action === outlet.mqtt_action_name && c.commandId !== lastCommandId,
+      5000,
+    );
     dev.publishTelemetry(sensor.mqtt_action_name, 50);
     await expect(commandP).rejects.toThrow(/timed out/);
   });

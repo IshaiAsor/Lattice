@@ -592,7 +592,8 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
   - the other direction: a resolver returning something falsy would make every comparison pass
 - resolves a param through phase → default → override, in that order
   - and asserts the rule row is byte-identical across all three — the central invariant
-- refuses to override a param the blueprint marked phase-driven
+- lets an admin pin a param the blueprint marked phase-driven
+  - `user_tunable = false` is "not the owner's dial", not "unchangeable" — the owner-refused half needs a non-admin user this suite lacks
 - starts the setup, entering the phase the user names
   - deriving builds a setup; starting it is a separate act, because when the real process began is something only the user knows
 - banks the time spent in a phase when the setup leaves it

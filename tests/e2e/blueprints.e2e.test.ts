@@ -41,7 +41,6 @@ const SOCKET_TEMPLATE = `E2E Socket Board ${SUFFIX}`;
 const BLUEPRINT_KEY = `e2e_tank_${SUFFIX}`;
 const INSTANCE_NAME = `E2E Tank Loop ${SUFFIX}`;
 // F10.10's own pair — see the group at the end of the file for why it is not the shared fixture.
-const GUARD_TEMPLATE = `E2E Guard Board ${SUFFIX}`;
 const GUARD_KEY = `e2e_guard_${SUFFIX}`;
 
 // Sealed catalog identities that carry the capabilities this vertical needs. Both expose the
@@ -228,13 +227,11 @@ describe('blueprints e2e (F10)', () => {
 
   afterAll(async () => {
     if (!token) return;
-    // The blueprint first: the template it fills a slot from now refuses to be deleted under it.
+    // Blueprints before templates, throughout: a sealed template a blueprint still fills a slot
+    // from now refuses to be deleted (F10.10), so the template sweep at the end would fail.
+    // guardTemplateId is the SHARED socket template, deleted with the others below — not here.
     if (guardBlueprintId)
       await apiDelete(`/api/admin/blueprints/${guardBlueprintId}`, token).catch(() => {});
-    if (guardTemplateId)
-      await apiDelete(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token).catch(
-        () => {},
-      );
     if (noPhaseInstanceId)
       await apiDelete(`/api/blueprints/instances/${noPhaseInstanceId}`, token).catch(() => {});
     if (noPhaseBlueprintId)
@@ -514,15 +511,29 @@ describe('blueprints e2e (F10)', () => {
     expect(ruleAfter.actions[0].id).toBe(ruleBefore.actions[0].id);
   });
 
-  itStack('refuses to override a param the blueprint marked phase-driven', async () => {
-    const { status, body } = await apiRaw(
-      'PUT',
+  // `user_tunable = false` means "not the OWNER's dial", not "unchangeable" — an admin may pin a
+  // fixed param on a live setup, which is the only route to one short of republishing the blueprint
+  // to every setup derived from it (see setOverride's `isAdmin`). This suite holds an admin token,
+  // so it pins the admin half. **The owner-refused half is not covered anywhere** — it needs a
+  // non-admin user this suite does not have.
+  itStack('lets an admin pin a param the blueprint marked phase-driven', async () => {
+    let instance = await apiPut(
       `/api/blueprints/instances/${instanceId}/params/pump.state`,
       token,
-      { value: 'OFF' },
+      { value: 'off' },
     );
-    expect(status).toBe(400);
-    expect(body.error).toContain('phase-driven');
+    let pump = instance.params.find((p: any) => p.key === 'pump.state');
+    expect(pump.value).toBe('off');
+    expect(pump.source).toBe('override');
+
+    // Clear it again: later cases dispatch this param at a real board, and 'off' would make the
+    // scene execution assertions read the wrong state.
+    instance = await apiPut(`/api/blueprints/instances/${instanceId}/params/pump.state`, token, {
+      value: null,
+    });
+    pump = instance.params.find((p: any) => p.key === 'pump.state');
+    expect(pump.value).toBe('on');
+    expect(pump.source).toBe('default');
   });
 
   // ── Phase timers (F10.12) ────────────────────────────────────────────────
@@ -1765,10 +1776,17 @@ describe('blueprints e2e (F10)', () => {
   // derive/reconcile and the entity is skipped — so every case here asserts on the *refusal*, not
   // on some observable breakage after the fact.
   //
-  // This group gets its own template + blueprint. The point of it is to break a dependency on
-  // purpose, and doing that to the shared fixture would take the rest of the suite with it. The
-  // guard template targets a version range no sim board is in, so it can be released without
-  // overlapping the socket template and without materialising onto a device.
+  // The guard blueprint fills its slot from the suite's own SOCKET_TEMPLATE rather than a private
+  // one. A second template cannot be released for this device type at all: releasing rejects a
+  // target range that overlaps an already-released one, AND rejects a range with no catalog version
+  // in it — and the socket template already covers every version the catalog has. So the two rules
+  // together leave no window for a private template, and the shared one is what a dependent
+  // blueprint must point at.
+  //
+  // Safe because this group runs LAST: the only thing after it is afterAll. The mutating cases
+  // below edit the shared template on purpose, and the final case puts it back. Every assertion
+  // therefore looks its own blueprint up by key instead of assuming it is the only dependent —
+  // the suite's other published blueprints address the same template.
 
   const guardEntries = (count: number, label = 'Socket') =>
     [0, 1].slice(0, count).map((channel) => ({
@@ -1785,21 +1803,15 @@ describe('blueprints e2e (F10)', () => {
     }));
 
   itStack('reports which published blueprints a sealed template holds up', async () => {
-    const created = await apiPost('/api/admin/catalog/sealed/templates', token, {
-      name: GUARD_TEMPLATE,
-    });
-    guardTemplateId = created.id;
-    await apiPatch(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token, {
-      targets: [{ device_type: SOCKET_TYPE, version_min: 'v100.0.0', version_max: 'v199.0.0' }],
-      entries: guardEntries(2),
-    });
-    await apiPost(`/api/admin/catalog/sealed/templates/${guardTemplateId}/release`, token, {});
+    // templateIds[1] is SOCKET_TEMPLATE — released in beforeAll, with entries i2c_socket_8 and
+    // i2c_socket_8_2, which is exactly the two-entry shape these cases need.
+    guardTemplateId = templateIds[1];
 
     const imported = await apiPost('/api/admin/blueprints/import', token, {
       key: GUARD_KEY,
       name: `E2E Guard ${SUFFIX}`,
       is_static: true,
-      slots: [{ key: 'sockets', label: 'Socket board', sealed_template: GUARD_TEMPLATE }],
+      slots: [{ key: 'sockets', label: 'Socket board', sealed_template: SOCKET_TEMPLATE }],
       params: [{ key: 'pump.state', label: 'On value', default_value: 'on', user_tunable: false }],
       phases: [],
       scenes: [
@@ -1839,17 +1851,21 @@ describe('blueprints e2e (F10)', () => {
       `/api/admin/catalog/sealed/templates/${guardTemplateId}/usage`,
       token,
     );
-    expect(usage).toHaveLength(1);
-    expect(usage[0].blueprint_id).toBe(guardBlueprintId);
-    expect(usage[0].status).toBe('published');
-    expect(usage[0].slot_keys).toEqual(['sockets']);
+    // The suite's other blueprints fill a slot from this template too, so the lookup is by key —
+    // asserting "exactly one dependent" would be asserting the fixture, not the reverse lookup.
+    const mine = usage.find((u: any) => u.key === GUARD_KEY);
+    expect(mine).toBeDefined();
+    expect(mine.blueprint_id).toBe(guardBlueprintId);
+    expect(mine.status).toBe('published');
+    expect(mine.slot_keys).toEqual(['sockets']);
     // Every place that can address an action is collected, not just the rule action.
-    expect(usage[0].refs.map((r: any) => r.where).sort()).toEqual([
+    expect(mine.refs.map((r: any) => r.where).sort()).toEqual([
       'rule "guard_rule" action',
       'rule "guard_rule" condition',
       'scene "stop_all" member',
     ]);
-    expect(usage[0].stranded).toEqual([]); // nothing broken yet
+    // Nothing broken yet — for any dependent, not just ours.
+    expect(usage.flatMap((u: any) => u.stranded)).toEqual([]);
   });
 
   itStack('blocks an entry removal that would strand a published blueprint reference', async () => {
@@ -1862,10 +1878,16 @@ describe('blueprints e2e (F10)', () => {
       { entries: guardEntries(1) },
     );
     expect(status).toBe(409);
-    expect(body.details).toHaveLength(1);
-    expect(body.details[0]).toContain(`E2E Guard ${SUFFIX}`);
-    expect(body.details[0]).toContain('i2c_socket_8_2');
-    expect(body.details[0]).toContain('rule "guard_rule" action');
+    // Our blueprint's rule action is named; every line names the entry that would vanish. Other
+    // dependents of the shared template appear too, which is the point — the guard reports all of
+    // them, not the first one it finds.
+    const details: string[] = body.details;
+    expect(details.every((d) => d.includes('i2c_socket_8_2'))).toBe(true);
+    expect(
+      details.some(
+        (d) => d.includes(`E2E Guard ${SUFFIX}`) && d.includes('rule "guard_rule" action'),
+      ),
+    ).toBe(true);
 
     // Refused *before* the write: the entry set is untouched.
     const after = await apiGet(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token);
@@ -1889,7 +1911,7 @@ describe('blueprints e2e (F10)', () => {
       `/api/admin/catalog/sealed/templates/${guardTemplateId}/usage`,
       token,
     );
-    expect(usage[0].stranded).toEqual([]);
+    expect(usage.flatMap((u: any) => u.stranded)).toEqual([]);
   });
 
   itStack('refuses to delete a sealed template a published blueprint depends on', async () => {
@@ -1899,8 +1921,11 @@ describe('blueprints e2e (F10)', () => {
       token,
     );
     expect(status).toBe(409);
-    expect(body.details[0]).toContain(`E2E Guard ${SUFFIX}`);
-    expect(body.details[0]).toContain('slot sockets');
+    expect(
+      (body.details as string[]).some(
+        (d) => d.includes(`E2E Guard ${SUFFIX}`) && d.includes('slot sockets'),
+      ),
+    ).toBe(true);
     // Still there — the FK would have refused it too, but as an unexplained 500.
     await apiGet(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token);
   });
@@ -1914,8 +1939,9 @@ describe('blueprints e2e (F10)', () => {
       `/api/admin/catalog/sealed/templates/${guardTemplateId}/usage`,
       token,
     );
-    expect(usage[0].stranded).toHaveLength(1);
-    expect(usage[0].stranded[0]).toContain('i2c_socket_8_2');
+    const mine = usage.find((u: any) => u.key === GUARD_KEY);
+    expect(mine.stranded).toHaveLength(1);
+    expect(mine.stranded[0]).toContain('i2c_socket_8_2');
 
     // Putting the entry back needs no force: the reference resolves again, so the guard is silent.
     await apiPatch(`/api/admin/catalog/sealed/templates/${guardTemplateId}`, token, {
@@ -1925,6 +1951,6 @@ describe('blueprints e2e (F10)', () => {
       `/api/admin/catalog/sealed/templates/${guardTemplateId}/usage`,
       token,
     );
-    expect(healed[0].stranded).toEqual([]);
+    expect(healed.flatMap((u: any) => u.stranded)).toEqual([]);
   });
 });
