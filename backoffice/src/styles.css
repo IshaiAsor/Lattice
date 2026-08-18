@@ -192,6 +192,40 @@ app-root {
   border-radius: 16px !important;
 }
 
+/* ── Pipeline editor ──────────────────────────────────────────────────── */
+/* The editor owns its own header/body/footer chrome (board + rail + drawer), so
+   the dialog surface must contribute no padding and must not scroll — each of
+   the editor's three regions scrolls on its own. */
+.pipeline-editor-dialog .mat-mdc-dialog-container,
+.pipeline-editor-dialog .mat-mdc-dialog-surface,
+.pipeline-editor-dialog .mdc-dialog__surface {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* The generic <600px block below stretches the SURFACE to 100dvh but leaves the
+   overlay pane at its configured pixel height, which left the app shell visible
+   above and below the editor. The pane has to stretch AND be pinned — same fix as
+   .camera-dialog-panel / .compact-dialog below.
+   Sizing alone is not enough: the overlay container is `height: 100%` of a fixed
+   element, which on a phone with a retracting URL bar resolves to the LARGE
+   viewport, while the pane is 100dvh (the small one). A centred pane then sits
+   (large - small) / 2 too low and its footer falls off the bottom of the screen.
+   Desktop and emulated viewports have no dynamic toolbar, so this only shows on
+   real hardware. */
+@media (max-width: 599px) {
+  .cdk-overlay-pane.pipeline-editor-dialog {
+    position: absolute !important;
+    inset: 0 !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin: 0 !important;
+    transform: none !important;
+  }
+}
+
 /* ── Glass bottom sheet ───────────────────────────────────────────────── */
 .glass-bottom-sheet .mat-bottom-sheet-container {
   background: var(--card-bg) !important;

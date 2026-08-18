@@ -48,9 +48,13 @@ export class PipelinesComponent implements OnInit {
 
   openEditor(pipeline?: PipelineListItem): void {
     const ref = this.dialog.open(PipelineEditorDialogComponent, {
-      width: '760px',
-      maxHeight: '90vh',
-      panelClass: 'glass-dialog',
+      // The board + rail + drawer needs the width; below 600px the global
+      // full-bleed rules take over and the drawer becomes a bottom sheet.
+      width: '1040px',
+      maxWidth: '96vw',
+      height: '760px',
+      maxHeight: '92vh',
+      panelClass: ['glass-dialog', 'pipeline-editor-dialog'],
       data: { pipelineId: pipeline?.id ?? null },
     });
     ref.afterClosed().subscribe((saved) => { if (saved) this.load(); });

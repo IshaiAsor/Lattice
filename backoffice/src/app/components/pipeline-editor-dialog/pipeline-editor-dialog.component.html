@@ -1,390 +1,609 @@
-<h2 mat-dialog-title>
-  {{ data.pipelineId ? 'Edit Pipeline' : 'New Pipeline' }}
-</h2>
+<div class="editor-shell" [formGroup]="form">
 
-<mat-dialog-content class="editor-content">
+  <!-- ── Header: name + always-reachable Save ──────────────────────────── -->
+  <div class="ed-head">
+    <div class="ed-head-top">
+      <span class="ed-eyebrow">{{ data.pipelineId ? 'Edit pipeline' : 'New pipeline' }}</span>
+      <span class="spacer"></span>
+      <button mat-icon-button type="button" mat-dialog-close matTooltip="Close">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <div class="ed-head-main">
+      <!-- The name belongs to the header, not to Inputs, so it reports on itself here. -->
+      <input #nameInput class="ed-name" [class.invalid]="nameInvalid" formControlName="name"
+             placeholder="Name this pipeline" aria-label="Pipeline name"
+             (blur)="nameBlurred = true" />
+      <span class="spacer"></span>
+      @if (pipelineErrors.length > 0) {
+        <span class="issue-chip" [class.neutral]="!anyRevealed" [matTooltip]="pipelineErrors.join('\n')">
+          {{ anyRevealed ? pipelineErrors.length + (pipelineErrors.length === 1 ? ' issue' : ' issues') : 'Incomplete' }}
+        </span>
+      }
+      <button mat-button type="button" mat-dialog-close class="hide-narrow">Cancel</button>
+      <button mat-flat-button color="primary" type="button" class="save-btn"
+              [disabled]="saving || pipelineErrors.length > 0" (click)="save()">
+        @if (saving) { <mat-icon class="spin">sync</mat-icon> } @else { Save }
+      </button>
+    </div>
+  </div>
+
   @if (loading) { <mat-progress-bar mode="indeterminate" /> }
 
-  <form [formGroup]="form" class="editor-form">
+  <!-- ── Body: status rail + summary board, with the focused panel over it ─ -->
+  <div class="ed-body">
 
-    <mat-stepper [linear]="false" animationDuration="0ms" #stepper>
+    <!-- Rail: jump-to plus per-section state. Deliberately NOT covered by the panel
+         scrim, so an outstanding error stays visible while you edit another section. -->
+    <nav class="rail">
+      <div class="rail-cap">Pipeline</div>
+      <div class="rail-list">
+        @for (s of sections; track s.key) {
+          <button type="button" class="rail-i"
+                  [class.on]="openSection === s.key"
+                  [class.bad]="visibleErrors(s.key).length > 0"
+                  (click)="openPanel(s.key)">
+            <span class="dot" [ngClass]="'sec-' + s.key"></span>
+            <span class="rail-label">{{ s.label }}</span>
+            @if (visibleErrors(s.key).length > 0) {
+              <mat-icon class="rail-warn">error_outline</mat-icon>
+            } @else if (s.key === 'inputs') {
+              <span class="cnt">{{ totalItemCount }}</span>
+            } @else if (s.key === 'enrich') {
+              <span class="cnt">{{ sensorFlaggedPairs.length }}</span>
+            } @else if (s.key === 'triggers') {
+              <span class="cnt">{{ triggers.length }}</span>
+            }
+          </button>
+        }
+      </div>
 
-      <!-- ── Step 1: Sensors & Actions ────────────────────────────────── -->
-      <mat-step label="Sensors & Actions">
-        <mat-form-field appearance="outline" class="full-width">
-          <mat-label>Pipeline name</mat-label>
-          <input matInput formControlName="name" placeholder="e.g. Environment Monitor" />
-        </mat-form-field>
+      <!-- Always present while something blocks Save — this is the one line that answers
+           "why is Save greyed out", even before any section has earned its red. -->
+      @if (firstError) {
+        <div class="rail-valid" [class.neutral]="!anyRevealed">
+          <mat-icon>{{ anyRevealed ? 'error_outline' : 'radio_button_unchecked' }}</mat-icon>
+          <span><b>{{ firstError.section }}</b> · {{ firstError.message }}</span>
+        </div>
+      }
+    </nav>
 
-        <div formArrayName="groups">
-          @for (g of groups.controls; track g; let gi = $index) {
-            <div [formGroupName]="gi" class="group-block">
+    <!-- Board: the pipeline's spec sheet. Every card is a read surface that opens a panel. -->
+    <div class="board">
 
-              <div class="group-header">
-                <mat-form-field appearance="outline" class="field-group-name">
-                  <mat-label>Group name</mat-label>
-                  <input matInput formControlName="name" placeholder="e.g. Climate control" />
-                </mat-form-field>
-                <span class="spacer"></span>
-                <button mat-icon-button type="button" class="remove-btn"
-                        matTooltip="Remove group" (click)="removeGroup(gi)">
-                  <mat-icon>delete_outline</mat-icon>
+      <button type="button" class="bcard"
+              [class.bad]="visibleErrors('inputs').length > 0"
+              (click)="openPanel('inputs')">
+        <div class="bhead">
+          <span class="dot sec-inputs"></span>
+          <span class="btitle">Inputs</span>
+          <span class="bsum">{{ inputsSummary }}</span>
+          <mat-icon class="bedit">chevron_right</mat-icon>
+        </div>
+        @for (g of groups.controls; track g; let gi = $index) {
+          <div class="bgroup">
+            <span class="grp-n">{{ itemGroupName(gi) }}</span>
+            <div class="chips">
+              @for (it of itemsOf(gi).controls; track it; let ii = $index) {
+                <span class="chip">{{ itemActionName(gi, ii) || 'not set' }}</span>
+              }
+            </div>
+          </div>
+        }
+        @for (e of visibleErrors('inputs'); track e) {
+          <span class="cerr"><mat-icon>error_outline</mat-icon>{{ e }}</span>
+        }
+      </button>
+
+      <button type="button" class="bcard"
+              [class.bad]="visibleErrors('enrich').length > 0"
+              (click)="openPanel('enrich')">
+        <div class="bhead">
+          <span class="dot sec-enrich"></span>
+          <span class="btitle">Enrich</span>
+          <span class="bsum">{{ enrichSummary }}</span>
+          <mat-icon class="bedit">chevron_right</mat-icon>
+        </div>
+        @for (l of enrichLines; track l.text) {
+          <div class="kv"><span class="v">{{ l.text }}</span><span class="k">×{{ l.count }}</span></div>
+        }
+        @for (e of visibleErrors('enrich'); track e) {
+          <span class="cerr"><mat-icon>error_outline</mat-icon>{{ e }}</span>
+        }
+      </button>
+
+      <button type="button" class="bcard"
+              [class.bad]="visibleErrors('reasoning').length > 0"
+              (click)="openPanel('reasoning')">
+        <div class="bhead">
+          <span class="dot sec-reasoning"></span>
+          <span class="btitle">Reasoning</span>
+          <span class="bsum">{{ llmModelName }}</span>
+          <mat-icon class="bedit">chevron_right</mat-icon>
+        </div>
+        @if (form.get('prompt_template')?.value) {
+          <div class="quote">{{ form.get('prompt_template')?.value }}</div>
+        }
+        @for (e of visibleErrors('reasoning'); track e) {
+          <span class="cerr"><mat-icon>error_outline</mat-icon>{{ e }}</span>
+        }
+      </button>
+
+      @if (hasActionItems) {
+        <button type="button" class="bcard" (click)="openPanel('action')">
+          <div class="bhead">
+            <span class="dot sec-action"></span>
+            <span class="btitle">Action</span>
+            <span class="bsum">{{ actionSummary }}</span>
+            <mat-icon class="bedit">chevron_right</mat-icon>
+          </div>
+          <div class="kv"><span class="k">Can command</span><span class="v">{{ availableActionItems.length }}</span></div>
+        </button>
+      }
+
+      <button type="button" class="bcard bcard-wide"
+              [class.bad]="visibleErrors('triggers').length > 0"
+              (click)="openPanel('triggers')">
+        <div class="bhead">
+          <span class="dot sec-triggers"></span>
+          <span class="btitle">Triggers</span>
+          <span class="bsum">{{ triggersSummary }}</span>
+          <mat-icon class="bedit">chevron_right</mat-icon>
+        </div>
+        @for (t of triggers.controls; track t; let ti = $index) {
+          <div class="kv">
+            <span class="type-badge" [ngClass]="'badge-' + triggerType(ti)">
+              {{ triggerTypeLabels[triggerType(ti)] }}
+            </span>
+            <span class="v">{{ triggerDescription(ti) }}</span>
+          </div>
+        }
+        @for (e of visibleErrors('triggers'); track e) {
+          <span class="cerr"><mat-icon>error_outline</mat-icon>{{ e }}</span>
+        }
+      </button>
+
+    </div>
+
+    <!-- ── Focused editing surface: right drawer ≥600px, bottom sheet below ── -->
+    @if (openSection) {
+      <button type="button" class="panel-scrim" (click)="closePanel()" aria-label="Close panel"></button>
+
+      <section class="panel">
+        <div class="panel-grab"></div>
+
+        <div class="panel-head">
+          <span class="dot" [ngClass]="'sec-' + openSection"></span>
+          <span class="panel-title">{{ openSectionLabel }}</span>
+          <span class="spacer"></span>
+          <button mat-icon-button type="button" (click)="closePanel()" matTooltip="Close">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <div class="panel-body">
+          @switch (openSection) {
+
+            <!-- ── Inputs ───────────────────────────────────────────────── -->
+            @case ('inputs') {
+              <div class="group-tabs">
+                @for (g of groups.controls; track g; let gi = $index) {
+                  <button type="button" class="gtab" [class.on]="gi === activeGroupIndex"
+                          (click)="activeGroupIndex = gi">
+                    {{ itemGroupName(gi) }}<span class="gtab-n">{{ itemsOf(gi).length }}</span>
+                  </button>
+                }
+                <button type="button" class="gtab gtab-add" (click)="addGroup()" matTooltip="Add group">
+                  <mat-icon>add</mat-icon>
                 </button>
               </div>
 
-              <div formArrayName="items">
-                @for (it of itemsOf(gi).controls; track it; let ii = $index) {
-                  <div [formGroupName]="ii" class="sensor-row">
+              <div formArrayName="groups">
+                @for (g of groups.controls; track g; let gi = $index) {
+                  <div [formGroupName]="gi" class="group-card" [class.group-hidden]="gi !== activeGroupIndex">
 
-                    <div class="row-header">
-                      <span class="type-badge"
-                        [class.badge-sensor]="!it.get('inject_as_action')?.value"
-                        [class.badge-exec]="it.get('inject_as_action')?.value">
-                        {{ itemBadge(gi, ii) }}
-                      </span>
-                      <span class="spacer"></span>
+                    <div class="group-card-head">
+                      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                        <mat-label>Group name</mat-label>
+                        <input matInput formControlName="name" placeholder="e.g. Climate control" />
+                      </mat-form-field>
                       <button mat-icon-button type="button" class="remove-btn"
-                              matTooltip="Remove" (click)="removeItem(gi, ii)">
-                        <mat-icon>remove_circle_outline</mat-icon>
+                              matTooltip="Remove group" (click)="removeGroup(gi)">
+                        <mat-icon>delete_outline</mat-icon>
                       </button>
                     </div>
 
-                    <div class="row-fields">
-                      <mat-form-field appearance="outline" class="field-action flex-grow">
-                        <mat-label>Sensor / action</mat-label>
-                        <input matInput
-                               formControlName="user_device_action_id"
-                               [matAutocomplete]="itemAuto"
-                               placeholder="Search sensors & actions…" />
-                        <mat-autocomplete #itemAuto="matAutocomplete" [displayWith]="actionDisplayName">
-                          @if (filteredScalarActions(it).length) {
-                            <mat-optgroup label="Sensors & actions">
-                              @for (a of filteredScalarActions(it); track a.id) {
-                                <mat-option [value]="a.id">{{ a.deviceName }} — {{ a.name }}</mat-option>
-                              }
-                            </mat-optgroup>
+                    <div formArrayName="items">
+                      @for (it of itemsOf(gi).controls; track it; let ii = $index) {
+                        <div [formGroupName]="ii" class="item-card"
+                             [class.bad]="revealed('inputs') && itemHasError(gi, ii)">
+
+                          @if (isItemExpanded(gi, ii)) {
+                            <div class="item-head">
+                              <span class="type-badge"
+                                    [class.badge-sensor]="!it.get('inject_as_action')?.value"
+                                    [class.badge-exec]="it.get('inject_as_action')?.value">
+                                {{ itemBadge(gi, ii) }}
+                              </span>
+                              <span class="spacer"></span>
+                              <button mat-icon-button type="button" class="remove-btn"
+                                      matTooltip="Remove item" (click)="removeItem(gi, ii)">
+                                <mat-icon>remove_circle_outline</mat-icon>
+                              </button>
+                              <button mat-icon-button type="button" (click)="toggleItem(gi, ii)"
+                                      matTooltip="Collapse">
+                                <mat-icon>expand_less</mat-icon>
+                              </button>
+                            </div>
+
+                            <div class="item-body">
+                              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                                <mat-label>Sensor / action</mat-label>
+                                <input matInput
+                                       formControlName="user_device_action_id"
+                                       [matAutocomplete]="itemAuto"
+                                       placeholder="Search sensors & actions…" />
+                                <mat-autocomplete #itemAuto="matAutocomplete" [displayWith]="actionDisplayName">
+                                  @if (filteredScalarActions(it).length) {
+                                    <mat-optgroup label="Sensors & actions">
+                                      @for (a of filteredScalarActions(it); track a.id) {
+                                        <mat-option [value]="a.id">{{ a.deviceName }} — {{ a.name }}</mat-option>
+                                      }
+                                    </mat-optgroup>
+                                  }
+                                  @if (filteredImageActions(it).length) {
+                                    <mat-optgroup label="Camera / vision">
+                                      @for (a of filteredImageActions(it); track a.id) {
+                                        <mat-option [value]="a.id">{{ a.deviceName }} — {{ a.name }}</mat-option>
+                                      }
+                                    </mat-optgroup>
+                                  }
+                                </mat-autocomplete>
+                                @if (it.get('user_device_action_id')?.hasError('invalidAction')) {
+                                  <mat-error>Select an item from the list</mat-error>
+                                }
+                                @if (it.get('user_device_action_id')?.hasError('duplicateAction')) {
+                                  <mat-error>Already used elsewhere in this pipeline</mat-error>
+                                }
+                              </mat-form-field>
+
+                              <!-- One toggle per row: the pair used to share a wrapping flex row,
+                                   which collapsed into an unreadable stack on a phone. -->
+                              <div class="toggle-rows">
+                                <mat-slide-toggle class="tg-row" labelPosition="before"
+                                                  formControlName="inject_as_sensor">
+                                  Sensor reading for LLM
+                                </mat-slide-toggle>
+                                <mat-slide-toggle class="tg-row" labelPosition="before"
+                                                  formControlName="inject_as_action">
+                                  Available action for LLM
+                                </mat-slide-toggle>
+                              </div>
+
+                              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                                <mat-label>Context</mat-label>
+                                <input matInput formControlName="description"
+                                       placeholder="e.g. Ambient temperature, main room" />
+                                <mat-hint>Sent to the LLM to explain what this item represents</mat-hint>
+                                @if (it.get('description')?.hasError('required')) {
+                                  <mat-error>Context is required</mat-error>
+                                }
+                              </mat-form-field>
+                            </div>
+                          } @else {
+                            <button type="button" class="item-collapsed" (click)="toggleItem(gi, ii)">
+                              <span class="type-badge"
+                                    [class.badge-sensor]="!it.get('inject_as_action')?.value"
+                                    [class.badge-exec]="it.get('inject_as_action')?.value">
+                                {{ itemBadge(gi, ii) }}
+                              </span>
+                              <span class="item-name">{{ itemActionName(gi, ii) || 'Not set' }}</span>
+                              <span class="spacer"></span>
+                              @if (revealed('inputs') && itemHasError(gi, ii)) { <mat-icon class="item-warn">error_outline</mat-icon> }
+                              <mat-icon class="chev">expand_more</mat-icon>
+                            </button>
                           }
-                          @if (filteredImageActions(it).length) {
-                            <mat-optgroup label="Camera / vision">
-                              @for (a of filteredImageActions(it); track a.id) {
-                                <mat-option [value]="a.id">{{ a.deviceName }} — {{ a.name }}</mat-option>
-                              }
-                            </mat-optgroup>
-                          }
-                        </mat-autocomplete>
-                        @if (it.get('user_device_action_id')?.hasError('invalidAction')) {
-                          <mat-error>Select an item from the list</mat-error>
-                        }
-                        @if (it.get('user_device_action_id')?.hasError('duplicateAction')) {
-                          <mat-error>Already used elsewhere in this pipeline</mat-error>
-                        }
-                      </mat-form-field>
+
+                        </div>
+                      }
                     </div>
 
-                    <div class="row-fields toggle-row">
-                      <mat-slide-toggle formControlName="inject_as_sensor">Sensor reading for LLM</mat-slide-toggle>
-                      <mat-slide-toggle formControlName="inject_as_action">Available action for LLM</mat-slide-toggle>
-                    </div>
-
-                    <div class="sensor-desc-row">
-                      <mat-form-field appearance="outline" class="full-width">
-                        <mat-label>Context</mat-label>
-                        <input matInput formControlName="description"
-                               placeholder="e.g. Circulation pump — controls flow through loop 1" />
-                        <mat-hint>Sent to the LLM alongside this item to explain what it represents</mat-hint>
-                        @if (it.get('description')?.hasError('required')) {
-                          <mat-error>Context is required</mat-error>
-                        }
-                      </mat-form-field>
-                    </div>
-
+                    <button mat-stroked-button type="button" class="add-btn" (click)="addItem(gi)">
+                      <mat-icon>add</mat-icon> Add item to group
+                    </button>
                   </div>
                 }
               </div>
-              <button mat-stroked-button type="button" class="add-btn-inner" (click)="addItem(gi)">
-                <mat-icon>add</mat-icon> Add item to group
+
+              <button mat-stroked-button type="button" class="add-btn add-group-btn" (click)="addGroup()">
+                <mat-icon>add</mat-icon> Add group
               </button>
+            }
 
-            </div>
-          }
-        </div>
-        <button mat-stroked-button type="button" class="add-btn" (click)="addGroup()">
-          <mat-icon>add</mat-icon> Add group
-        </button>
-        <div class="step-actions">
-          <span class="spacer"></span>
-          <button mat-flat-button color="primary" type="button" matStepperNext>Next</button>
-        </div>
-      </mat-step>
-
-      <!-- ── Step 2: Enrich ────────────────────────────────────────────── -->
-      <mat-step label="Enrich">
-        @if (sensorFlaggedPairs.length === 0 && imageItemPairs.length === 0) {
-          <p class="step-empty-note">
-            No sensor-flagged items yet — go back to step 1 and enable "Sensor reading for LLM" on at least one item.
-          </p>
-        }
-        @if (imageItemPairs.length > 0) {
-          <p class="step-empty-note">
-            <mat-icon inline>photo_camera</mat-icon>
-            Camera items don't need compression — the vision model reads a live frame directly, not the historic digest:
-            {{ imageItemPairs.map(p => itemActionName(p.gi, p.ii)).join(', ') }}
-          </p>
-        }
-        <div formArrayName="groups">
-          @for (pair of sensorFlaggedPairs; track itemsOf(pair.gi).at(pair.ii)) {
-            <ng-container [formGroupName]="pair.gi">
-              <div formArrayName="items">
-                <div [formGroupName]="pair.ii" class="sensor-row">
-                  <div class="row-header">
-                    <span class="type-badge badge-sensor">{{ groups.at(pair.gi).get('name')?.value || 'sensor' }}</span>
-                    <span class="spacer"></span>
-                  </div>
-                  <div class="row-fields">
-                    <mat-form-field appearance="outline" class="field-compression">
-                      <mat-label>Compression</mat-label>
-                      <mat-select formControlName="compression">
-                        @for (c of compressionOptions; track c.value) {
-                          <mat-option [value]="c.value">{{ c.label }}</mat-option>
-                        }
-                      </mat-select>
-                    </mat-form-field>
-
-                    @if (compression(pair.gi, pair.ii) !== 'last_n') {
-                      <mat-form-field appearance="outline" class="field-window">
-                        <mat-label>Window</mat-label>
-                        <input matInput type="number" formControlName="window_value" min="1" />
-                      </mat-form-field>
-                      <mat-form-field appearance="outline" class="field-unit">
-                        <mat-label>Unit</mat-label>
-                        <mat-select formControlName="window_unit">
-                          @for (u of windowUnits; track u) {
-                            <mat-option [value]="u">{{ u }}</mat-option>
-                          }
-                        </mat-select>
-                      </mat-form-field>
-                    }
-
-                    @if (compression(pair.gi, pair.ii) === 'last_n') {
-                      <mat-form-field appearance="outline" class="field-n-large">
-                        <mat-label>Last N readings</mat-label>
-                        <input matInput type="number" formControlName="n" placeholder="e.g. 5" min="1" />
-                      </mat-form-field>
-                    }
-                  </div>
-                </div>
-              </div>
-            </ng-container>
-          }
-        </div>
-        <div class="step-actions">
-          <button mat-button type="button" matStepperPrevious>Back</button>
-          <span class="spacer"></span>
-          <button mat-flat-button color="primary" type="button" matStepperNext>Next</button>
-        </div>
-      </mat-step>
-
-      <!-- ── Step 3: LLM ───────────────────────────────────────────────── -->
-      <mat-step label="LLM">
-        <div class="row-fields col">
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Language model</mat-label>
-            <mat-select formControlName="llm_model_id">
-              @for (m of llmModels; track m.id) {
-                <mat-option [value]="m.id">{{ m.name }} {{ m.version }}</mat-option>
+            <!-- ── Enrich ───────────────────────────────────────────────── -->
+            @case ('enrich') {
+              @if (sensorFlaggedPairs.length === 0 && imageItemPairs.length === 0) {
+                <p class="panel-note">
+                  Nothing to compress yet — turn on “Sensor reading for LLM” for at least one item in Inputs.
+                </p>
               }
-            </mat-select>
-            @if (!llmModels.length) {
-              <mat-hint>No LLM models in catalog yet</mat-hint>
+              @if (imageItemPairs.length > 0) {
+                <p class="panel-note">
+                  <mat-icon>photo_camera</mat-icon>
+                  Camera items skip compression — the vision model reads a live frame, not the historic digest.
+                </p>
+              }
+
+              <div formArrayName="groups">
+                @for (pair of sensorFlaggedPairs; track itemsOf(pair.gi).at(pair.ii)) {
+                  <ng-container [formGroupName]="pair.gi">
+                    <div formArrayName="items">
+                      <div [formGroupName]="pair.ii" class="enrich-row">
+                        <div class="item-head">
+                          <span class="type-badge badge-sensor">{{ itemActionName(pair.gi, pair.ii) }}</span>
+                          <span class="enrich-src">{{ itemGroupName(pair.gi) }}</span>
+                        </div>
+                        <div class="item-body">
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Compression</mat-label>
+                            <mat-select formControlName="compression">
+                              @for (c of compressionOptions; track c.value) {
+                                <mat-option [value]="c.value">{{ c.label }}</mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+
+                          @if (compression(pair.gi, pair.ii) !== 'last_n') {
+                            <div class="field-pair">
+                              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                                <mat-label>Window</mat-label>
+                                <input matInput type="number" formControlName="window_value" min="1" />
+                              </mat-form-field>
+                              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="field-unit">
+                                <mat-label>Unit</mat-label>
+                                <mat-select formControlName="window_unit">
+                                  @for (u of windowUnits; track u) {
+                                    <mat-option [value]="u">{{ u }}</mat-option>
+                                  }
+                                </mat-select>
+                              </mat-form-field>
+                            </div>
+                          } @else {
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                              <mat-label>Last N readings</mat-label>
+                              <input matInput type="number" formControlName="n" placeholder="e.g. 5" min="1" />
+                            </mat-form-field>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </ng-container>
+                }
+              </div>
             }
-          </mat-form-field>
 
-          <!-- Vision-model (VLM/YOLO) selector parked: a camera item's frame now goes straight to
-               the multimodal LLM. Re-enable by restoring this block plus the stage push and
-               validation in pipeline-editor-dialog.component.ts. -->
-          @if (hasImageSensor) {
-            <p class="vision-note">A camera item is included — its frame is sent to the language model to analyze directly.</p>
-          }
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Context for the LLM</mat-label>
-            <textarea matInput formControlName="prompt_template" rows="3"
-                      placeholder="e.g. Prioritize security over comfort"></textarea>
-            @if (form.get('prompt_template')?.hasError('required')) {
-              <mat-error>Context for the LLM is required</mat-error>
-            }
-          </mat-form-field>
-        </div>
-        <div class="step-actions">
-          <button mat-button type="button" matStepperPrevious>Back</button>
-          <span class="spacer"></span>
-          <button mat-flat-button color="primary" type="button" matStepperNext>Next</button>
-        </div>
-      </mat-step>
-
-      <!-- ── Step 4: Execute (only when the pipeline can command something) ── -->
-      @if (hasActionItems) {
-        <mat-step label="Execute">
-          <p class="exec-note">
-            <mat-icon>info_outline</mat-icon>
-            Executes the action the LLM recommends from this pipeline's available actions.
-          </p>
-          <div class="exec-fields">
-            <mat-form-field appearance="outline" class="field-notify">
-              <mat-label>Notification</mat-label>
-              <mat-select formControlName="notify">
-                <mat-option value="none">None</mat-option>
-                <mat-option value="socket">Socket (real-time)</mat-option>
-                <mat-option value="push">Push notification</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="field-exec-cond">
-              <mat-label>Execute when</mat-label>
-              <mat-select formControlName="execute_condition">
-                <mat-option value="always">Always</mat-option>
-                <mat-option value="on_positive">Only on positive LLM decision</mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-          <div class="step-actions">
-            <button mat-button type="button" matStepperPrevious>Back</button>
-            <span class="spacer"></span>
-            <button mat-flat-button color="primary" type="button" matStepperNext>Next</button>
-          </div>
-        </mat-step>
-      }
-
-      <!-- ── Step 5: Triggers ──────────────────────────────────────────── -->
-      <mat-step label="Triggers">
-        <div formArrayName="triggers">
-          @for (t of triggers.controls; track t; let ti = $index) {
-            <div [formGroupName]="ti" class="trigger-row">
-
-              <div class="row-header">
-                <span class="type-badge"
-                  [class.badge-threshold]="triggerType(ti) === 'sensor_threshold'"
-                  [class.badge-schedule]="triggerType(ti) === 'schedule'"
-                  [class.badge-manual]="triggerType(ti) === 'manual'">
-                  {{ triggerType(ti) === 'sensor_threshold' ? 'threshold' :
-                     triggerType(ti) === 'schedule' ? 'schedule' : 'manual' }}
-                </span>
-                <span class="spacer"></span>
-                <button mat-icon-button type="button" class="remove-btn"
-                        matTooltip="Remove" (click)="removeTrigger(ti)">
-                  <mat-icon>remove_circle_outline</mat-icon>
+            <!-- ── Reasoning ────────────────────────────────────────────── -->
+            @case ('reasoning') {
+              <div class="panel-cap">Language model</div>
+              @for (m of llmModels; track m.id) {
+                <button type="button" class="model-opt"
+                        [class.on]="form.get('llm_model_id')?.value === m.id"
+                        (click)="form.get('llm_model_id')?.setValue(m.id)">
+                  <span class="radio" [class.on]="form.get('llm_model_id')?.value === m.id"></span>
+                  <span class="model-name">{{ m.name }} {{ m.version }}</span>
                 </button>
-              </div>
+              }
+              @if (!llmModels.length) {
+                <p class="panel-note">No LLM models in the catalog yet.</p>
+              }
 
-              <div class="row-fields">
-                <mat-form-field appearance="outline" class="field-trigger-type">
-                  <mat-label>Type</mat-label>
-                  <mat-select formControlName="trigger_type">
-                    @for (tt of triggerTypes; track tt) {
-                      <mat-option [value]="tt">{{ tt }}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
+              @if (hasImageSensor) {
+                <p class="panel-note">
+                  <mat-icon>photo_camera</mat-icon>
+                  A camera item is included — its frame goes to this model directly.
+                </p>
+              }
 
-                @if (triggerType(ti) === 'sensor_threshold') {
-                  <mat-form-field appearance="outline" class="field-action">
-                    <mat-label>Sensor action</mat-label>
-                    <input matInput
-                           formControlName="user_device_action_id"
-                           [matAutocomplete]="triggerAuto"
-                           placeholder="Search…" />
-                    <mat-autocomplete #triggerAuto="matAutocomplete" [displayWith]="actionDisplayName">
-                      @for (a of filteredScalarActions(t); track a.id) {
-                        <mat-option [value]="a.id">{{ a.deviceName }} — {{ a.name }}</mat-option>
-                      }
-                    </mat-autocomplete>
-                    @if (t.get('user_device_action_id')?.hasError('invalidAction')) {
-                      <mat-error>Select an item from the list</mat-error>
-                    }
-                  </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width prompt-field">
+                <mat-label>Context for the LLM</mat-label>
+                <textarea matInput formControlName="prompt_template" rows="5"
+                          placeholder="e.g. Prioritise air quality over quiet operation"></textarea>
+                <mat-hint>Sent with every run, alongside the readings and available actions</mat-hint>
+              </mat-form-field>
+            }
 
-                  <mat-form-field appearance="outline" class="field-op">
-                    <mat-label>Operator</mat-label>
-                    <mat-select formControlName="operator">
-                      @for (op of operators; track op) {
-                        <mat-option [value]="op">{{ op }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
+            <!-- ── Action ───────────────────────────────────────────────── -->
+            @case ('action') {
+              <p class="panel-note">
+                <mat-icon>info_outline</mat-icon>
+                Runs whichever action the model picks from this pipeline’s available actions.
+              </p>
 
-                  <mat-form-field appearance="outline" class="field-threshold">
-                    <mat-label>Threshold</mat-label>
-                    <input matInput formControlName="threshold_value" placeholder="5.8" />
-                  </mat-form-field>
-                }
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                <mat-label>Notification</mat-label>
+                <mat-select formControlName="notify">
+                  @for (n of notifyChoices; track n.value) {
+                    <mat-option [value]="n.value">{{ n.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
 
-                @if (triggerType(ti) === 'schedule') {
-                  <!-- Leave Until/Every blank to run once a day. Filled, they repeat it through
-                       the window — "06:00 to 17:30, every 10 minutes". -->
-                  <div class="field-pair">
-                    <mat-form-field appearance="outline" class="field-schedule-val">
-                      <mat-label>{{ t.get('schedule_until')?.value ? 'From' : 'At' }}</mat-label>
-                      <input matInput type="time" formControlName="schedule_time" />
-                    </mat-form-field>
-                    <mat-form-field appearance="outline" class="field-schedule-val">
-                      <mat-label>Until</mat-label>
-                      <input matInput type="time" formControlName="schedule_until" />
-                    </mat-form-field>
-                    <mat-form-field appearance="outline" class="field-schedule-unit">
-                      <mat-label>Every (min)</mat-label>
-                      <input matInput type="number" min="1" placeholder="once"
-                             formControlName="schedule_every_minutes" />
-                    </mat-form-field>
-                  </div>
-                  <div class="days-group" [formArrayName]="'schedule_days'">
-                    @for (label of dayLabels; track $index; let d = $index) {
-                      <mat-checkbox [formControlName]="d" [matTooltip]="dayNames[d]">
-                        {{ label }}
-                      </mat-checkbox>
-                    }
-                  </div>
-                }
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                <mat-label>Execute when</mat-label>
+                <mat-select formControlName="execute_condition">
+                  @for (c of execCondChoices; track c.value) {
+                    <mat-option [value]="c.value">{{ c.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
 
-                <div class="field-pair">
-                  <mat-form-field appearance="outline" class="field-schedule-val">
-                    <mat-label>Cooldown</mat-label>
-                    <input matInput type="number" formControlName="min_interval_value" min="1" />
-                  </mat-form-field>
-                  <mat-form-field appearance="outline" class="field-schedule-unit">
-                    <mat-label>Unit</mat-label>
-                    <mat-select formControlName="min_interval_unit">
-                      @for (u of cooldownUnits; track u.value) {
-                        <mat-option [value]="u.value">{{ u.label }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
+              <div class="panel-cap avail-cap">Available to the model</div>
+              @for (a of availableActionItems; track a.id) {
+                <div class="avail-row">
+                  <span class="type-badge badge-exec">action</span>
+                  <span>{{ a.name }}</span>
+                  <span class="spacer"></span>
+                  <span class="avail-src">{{ a.group }}</span>
                 </div>
+              }
+            }
+
+            <!-- ── Triggers ─────────────────────────────────────────────── -->
+            @case ('triggers') {
+              <div formArrayName="triggers">
+                @for (t of triggers.controls; track t; let ti = $index) {
+                  <div [formGroupName]="ti" class="trigger-card"
+                       [ngClass]="'trig-' + triggerType(ti)"
+                       [class.bad]="revealed('triggers') && triggerHasError(ti)">
+
+                    @if (expandedTriggerIndex === ti) {
+                      <div class="item-head">
+                        <span class="type-badge" [ngClass]="'badge-' + triggerType(ti)">
+                          {{ triggerTypeLabels[triggerType(ti)] }}
+                        </span>
+                        <span class="spacer"></span>
+                        <button mat-icon-button type="button" class="remove-btn"
+                                matTooltip="Remove trigger" (click)="removeTrigger(ti)">
+                          <mat-icon>remove_circle_outline</mat-icon>
+                        </button>
+                        <button mat-icon-button type="button" (click)="toggleTrigger(ti)" matTooltip="Collapse">
+                          <mat-icon>expand_less</mat-icon>
+                        </button>
+                      </div>
+
+                      <div class="item-body">
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                          <mat-label>Type</mat-label>
+                          <mat-select formControlName="trigger_type">
+                            @for (tt of triggerTypes; track tt) {
+                              <mat-option [value]="tt">{{ triggerTypeLabels[tt] }}</mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+
+                        @if (triggerType(ti) === 'sensor_threshold') {
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Sensor action</mat-label>
+                            <input matInput
+                                   formControlName="user_device_action_id"
+                                   [matAutocomplete]="triggerAuto"
+                                   placeholder="Search…" />
+                            <mat-autocomplete #triggerAuto="matAutocomplete" [displayWith]="actionDisplayName">
+                              @for (a of filteredScalarActions(t); track a.id) {
+                                <mat-option [value]="a.id">{{ a.deviceName }} — {{ a.name }}</mat-option>
+                              }
+                            </mat-autocomplete>
+                            @if (t.get('user_device_action_id')?.hasError('invalidAction')) {
+                              <mat-error>Select an item from the list</mat-error>
+                            }
+                          </mat-form-field>
+
+                          <div class="field-pair">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="field-op">
+                              <mat-label>Operator</mat-label>
+                              <mat-select formControlName="operator">
+                                @for (op of operators; track op) {
+                                  <mat-option [value]="op">{{ op }}</mat-option>
+                                }
+                              </mat-select>
+                            </mat-form-field>
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                              <mat-label>Threshold</mat-label>
+                              <input matInput formControlName="threshold_value" placeholder="e.g. 900" />
+                            </mat-form-field>
+                          </div>
+                        }
+
+                        @if (triggerType(ti) === 'schedule') {
+                          <!-- Leave Until/Every blank to run once a day. Filled, they repeat it
+                               through the window — "06:00 to 17:30, every 10 minutes". -->
+                          <div class="field-pair">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                              <mat-label>{{ t.get('schedule_until')?.value ? 'From' : 'At' }}</mat-label>
+                              <input matInput type="time" formControlName="schedule_time" />
+                            </mat-form-field>
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                              <mat-label>Until</mat-label>
+                              <input matInput type="time" formControlName="schedule_until" />
+                            </mat-form-field>
+                          </div>
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Every (minutes)</mat-label>
+                            <input matInput type="number" min="1" placeholder="once"
+                                   formControlName="schedule_every_minutes" />
+                          </mat-form-field>
+
+                          <div class="days-block">
+                            <span class="days-cap">Repeat on — none selected means every day</span>
+                            <div class="days">
+                              @for (label of dayLabels; track $index; let d = $index) {
+                                <button type="button" class="day"
+                                        [class.on]="scheduleDays(ti).at(d).value"
+                                        [matTooltip]="dayNames[d]"
+                                        (click)="toggleDay(ti, d)">{{ label }}</button>
+                              }
+                            </div>
+                          </div>
+                        }
+
+                        <div class="field-pair">
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                            <mat-label>Cooldown</mat-label>
+                            <input matInput type="number" formControlName="min_interval_value" min="1" />
+                          </mat-form-field>
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="field-unit">
+                            <mat-label>Unit</mat-label>
+                            <mat-select formControlName="min_interval_unit">
+                              @for (u of cooldownUnits; track u.value) {
+                                <mat-option [value]="u.value">{{ u.label }}</mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+                        </div>
+                      </div>
+                    } @else {
+                      <button type="button" class="item-collapsed" (click)="toggleTrigger(ti)">
+                        <span class="type-badge" [ngClass]="'badge-' + triggerType(ti)">
+                          {{ triggerTypeLabels[triggerType(ti)] }}
+                        </span>
+                        <span class="item-name">{{ triggerDescription(ti) }}</span>
+                        <span class="spacer"></span>
+                        @if (revealed('triggers') && triggerHasError(ti)) { <mat-icon class="item-warn">error_outline</mat-icon> }
+                        <mat-icon class="chev">expand_more</mat-icon>
+                      </button>
+                    }
+
+                  </div>
+                }
               </div>
 
-            </div>
+              <button mat-stroked-button type="button" class="add-btn" (click)="addTrigger()">
+                <mat-icon>add</mat-icon> Add trigger
+              </button>
+            }
           }
         </div>
-        <button mat-stroked-button type="button" class="add-btn" (click)="addTrigger()">
-          <mat-icon>add</mat-icon> Add trigger
-        </button>
 
-        @if (pipelineErrors.length > 0) {
-          <div class="pipeline-errors">
-            @for (e of pipelineErrors; track e) {
-              <div class="pipeline-error-row"><mat-icon>error_outline</mat-icon> {{ e }}</div>
-            }
-          </div>
-        }
-
-        <div class="step-actions">
-          <button mat-button type="button" matStepperPrevious>Back</button>
+        <div class="panel-foot">
           <span class="spacer"></span>
-          <button mat-button type="button" mat-dialog-close>Cancel</button>
-          <button mat-flat-button color="primary" [disabled]="saving || form.invalid || pipelineErrors.length > 0" (click)="save()">
-            @if (saving) { <mat-icon>sync</mat-icon> } @else { Save }
-          </button>
+          <button mat-flat-button color="primary" type="button" (click)="closePanel()">Done</button>
         </div>
-      </mat-step>
+      </section>
+    }
 
-    </mat-stepper>
-  </form>
-</mat-dialog-content>
+  </div>
+
+  <!-- ── Mobile only: the rail's job, in the thumb zone ─────────────────── -->
+  @if (firstError) {
+    <button type="button" class="issue-bar" (click)="goToFirstError()">
+      <mat-icon>error_outline</mat-icon>
+      <span class="issue-bar-text">
+        <b>{{ pipelineErrors.length }} issue{{ pipelineErrors.length === 1 ? '' : 's' }} · {{ firstError.section }}</b>
+        <span class="issue-bar-sub">{{ firstError.message }}</span>
+      </span>
+      <mat-icon class="chev">chevron_right</mat-icon>
+    </button>
+  }
+
+</div>

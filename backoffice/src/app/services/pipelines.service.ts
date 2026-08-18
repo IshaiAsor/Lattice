@@ -102,6 +102,12 @@ export interface PipelineDetail {
     id: number; ordinal: number; kind: string;
     ml_model_id?: number | null;
     ml_model?: { id: number; kind: string; name: string; version: string } | null;
+    // Writes go up nested under `config` (see InferStageDto / CommandExecStageDto), but the API
+    // stores them as columns and reads them back FLAT — it never returns a `config` object.
+    // `config` stays declared only so older readers keep compiling.
+    prompt_template?: string | null;
+    notify?: string | null;
+    execute_condition?: string | null;
     config?: Record<string, unknown> | null;
   }[];
   sensors: {
