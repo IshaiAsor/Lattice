@@ -6,10 +6,7 @@
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 #include <Preferences.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <NimBLEDevice.h>
 #include <ArduinoJson.h>
 #include <nvs_flash.h>
 #include "certs/cert.h"
@@ -29,6 +26,12 @@
 #include "actions/commands/OnboardLedCommandAction.h"
 #include "config/Log.h"
 extern OnboardLedAction onboardLed;
+
+// Last ESP-IDF STA disconnect reason, captured by the WiFi event handler installed in
+// HandleWifiCredentials. A join that fails only reports "timed out" otherwise, which does not
+// distinguish a wrong password (WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT / AUTH_FAIL) from an AP that
+// was never found (NO_AP_FOUND) or a link that dropped mid-handshake — three different fixes.
+static volatile uint8_t g_lastWifiDisconnectReason = 0;
 #ifdef FREE_BLE_BEFORE_TLS
 // Defined in main.cpp — releases the BLE stack so mbedTLS can allocate on low-heap boards.
 extern void teardownBleForTls();
@@ -73,12 +76,25 @@ class ProvisioningBleService
         // Scanning needs station mode. The device is in AP+STA or STA already for the portal path,
         // but a fresh boot with no credentials may be idle, so assert it.
         WiFi.mode(WIFI_STA);
+
+        // A scan cannot start while the station is mid-connect — esp_wifi_scan_start() returns
+        // ESP_ERR_WIFI_STATE and Arduino surfaces that as -2. Boot retries the saved network and a
+        // failed join keeps retrying, so by the time the app asks for a list there is often a
+        // connect in flight. Stand the radio down first (never erasing stored credentials).
+        if (!WiFi.isConnected())
+        {
+            WiFi.disconnect(false, false);
+            delay(100);
+        }
+
         int found = WiFi.scanNetworks();
 
         if (found < 0)
         {
             LOG_E("Provision", "WiFi scan failed (%d)", found);
-            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_ERROR, "FAIL: Scan failed");
+            char msg[BLE_RESPONSE_MAX_LEN];
+            snprintf(msg, sizeof(msg), "FAIL: Scan failed (%d)", found);
+            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_ERROR, msg);
             return;
         }
 
@@ -127,6 +143,21 @@ class ProvisioningBleService
         LOG_I("Provision", "connecting to WiFi chosen in app");
         bleNotificationService->NotifyBleDevice(ResponseType::WIFI_CONNECTING, "OK: Connecting...");
 
+        // Installed once, on first use. The reason code is the only thing that separates "wrong
+        // password" from "AP out of range" from "associated but never got an IP" — all of which
+        // present identically as the timeout below.
+        static bool reasonHookInstalled = false;
+        if (!reasonHookInstalled)
+        {
+            WiFi.onEvent(
+                [](arduino_event_id_t, arduino_event_info_t info) {
+                    g_lastWifiDisconnectReason = info.wifi_sta_disconnected.reason;
+                },
+                ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+            reasonHookInstalled = true;
+        }
+        g_lastWifiDisconnectReason = 0;
+
         WiFi.mode(WIFI_STA);
         WiFi.begin(ssid, password);
 
@@ -141,12 +172,65 @@ class ProvisioningBleService
 
         if (WiFi.status() != WL_CONNECTED)
         {
-            LOG_E("Provision", "could not join the network chosen in app");
-            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_ERROR, "FAIL: Could not join that network");
+            const uint8_t reason = g_lastWifiDisconnectReason;
+            LOG_E("Provision", "could not join the network chosen in app (status %d, reason %u)",
+                  static_cast<int>(WiFi.status()), static_cast<unsigned>(reason));
+
+            // Leave the radio idle. A timed-out WiFi.begin() leaves the station retrying, and
+            // esp_wifi_scan_start() refuses to run while a connect is in flight — which is why a
+            // failed join was followed by "WiFi scan failed (-2)" on every later attempt, turning
+            // one bad password into a dead provisioning session. Never erase stored credentials
+            // here: this device may already hold working ones.
+            WiFi.disconnect(false, false);
+
+            char msg[BLE_RESPONSE_MAX_LEN];
+            snprintf(msg, sizeof(msg), "FAIL: Could not join that network (reason %u)", static_cast<unsigned>(reason));
+            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_ERROR, msg);
             return;
         }
 
         LOG_I("Provision", "WiFi connected from app-supplied credentials");
+        bleNotificationService->NotifyBleDevice(ResponseType::WIFI_CONNECTED_SUCCESSFULLY, "OK: WiFi Connected");
+    }
+
+    /**
+     * Start the device's own setup AP, on request, while the app still holds the BLE link.
+     *
+     * The captive portal already existed, but the only thing that could start it was the arrival
+     * of the full provisioning payload — which the app does not send until the user confirms they
+     * have finished with the portal. So the app told the user to join a network that could not
+     * exist yet, and the AP only appeared after they clicked the button saying they had used it.
+     * This command lets the app open the portal at the moment it shows those instructions.
+     *
+     * Blocking, like the payload path that also calls startConfigPortal: the portal owns the
+     * device until it is configured or times out. The BLE notify task keeps running, so the app
+     * still receives the outcome.
+     */
+    void HandleOpenPortal()
+    {
+        if (WiFi.isConnected())
+        {
+            LOG_I("Provision", "portal requested but WiFi is already connected");
+            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_CONNECTED_SUCCESSFULLY, "OK: WiFi Connected");
+            return;
+        }
+
+        LOG_I("Provision", "opening config portal on request (AP %s)", AP_HOTSPOT_NAME);
+        bleNotificationService->NotifyBleDevice(ResponseType::WIFI_PROVISIONING_IN_PROGRESS,
+                                                "OK: Awaiting WiFi connection via portal...");
+
+        // Stand any in-flight connect down first, for the same reason the scan path does.
+        WiFi.disconnect(false, false);
+        delay(100);
+
+        if (!wm->startConfigPortal(AP_HOTSPOT_NAME, AP_HOTSPOT_PASSWORD))
+        {
+            LOG_E("Provision", "config portal failed or timed out");
+            bleNotificationService->NotifyBleDevice(ResponseType::WIFI_ERROR, "FAIL: Portal timed out or failed.");
+            return;
+        }
+
+        LOG_I("Provision", "WiFi connected via portal; credentials saved to flash");
         bleNotificationService->NotifyBleDevice(ResponseType::WIFI_CONNECTED_SUCCESSFULLY, "OK: WiFi Connected");
     }
 
@@ -180,6 +264,11 @@ class ProvisioningBleService
         if (strcmp(cmd, "wifi") == 0)
         {
             HandleWifiCredentials(doc);
+            return;
+        }
+        if (strcmp(cmd, "portal") == 0)
+        {
+            HandleOpenPortal();
             return;
         }
 

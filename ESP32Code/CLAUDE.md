@@ -46,6 +46,12 @@ fails at ≥95% of the mini OTA slot).
 - **TLS**: prod always validates against the pinned CA in `src/certs/` (there is no `setInsecure`
   fallback and no `validateCACert` flag — the platform still sends the field for old firmware, but
   new firmware ignores it). `ENV_TEST` uses plain (non-TLS) transports.
+- **BLE is NimBLE, never Bluedroid.** Provisioning uses `NimBLEDevice.h` (`h2zero/NimBLE-Arduino`).
+  Including any Arduino Bluedroid header (`BLEDevice.h`, `BLEServer.h`, `BLE2902.h`, …) links
+  `libbt.a` back in — that was **587 KB, 30% of the image**, and it is what put the classic-ESP32
+  builds at 99.7% of their 1.92 MB OTA slot. The swap freed 512 KB (F3.19). NimBLE creates the
+  0x2902 CCCD itself for NOTIFY characteristics, so never add one by hand; callback overrides take
+  a trailing `NimBLEConnInfo&` and a wrong signature compiles but is silently never called.
 
 ## Code layout & style
 

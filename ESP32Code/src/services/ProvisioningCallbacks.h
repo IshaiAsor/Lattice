@@ -1,7 +1,7 @@
 #pragma once
 #include "BleNotificationService.h"
 #include "config/Log.h"
-class ProvisioningCallbacks : public BLECharacteristicCallbacks
+class ProvisioningCallbacks : public NimBLECharacteristicCallbacks
 {
   private:
     BleNotificationService* bleNotificationService;
@@ -13,13 +13,23 @@ class ProvisioningCallbacks : public BLECharacteristicCallbacks
     {
     }
 
-    void onWrite(BLECharacteristic* pCharacteristic)
+    // NimBLE hands the connection info to every characteristic callback; unused here, but the
+    // signature has to match or the override is silently never called.
+    void onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo) override
     {
-        std::string value = pCharacteristic->getValue();
+        // NimBLEAttValue rather than std::string: it is the stack's own buffer, so this avoids a
+        // copy of the payload on the BLE task's stack. c_str() is NUL-terminated, as memcpy below
+        // assumes.
+        NimBLEAttValue value = pCharacteristic->getValue();
 
         if (value.length() > 0)
         {
-            LOG_D("Ble", "received data over BLE");
+            // Length matters here: a characteristic value is capped at 512 bytes (BLE's ATT
+            // ceiling, not a NimBLE limit), and the provisioning payload — JWT included — lands
+            // close to it. A payload that reached this callback truncated would fail as a JSON
+            // parse error further down, which would not point at the real cause. Compiles out
+            // in prod (INFO).
+            LOG_D("Ble", "received %u bytes over BLE (attribute ceiling 512)", static_cast<unsigned>(value.length()));
 
             char* payload = (char*)malloc(value.size() + 1);
             if (payload == NULL)

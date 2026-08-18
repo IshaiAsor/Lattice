@@ -6,10 +6,7 @@
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 #include <Preferences.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <NimBLEDevice.h>
 #include <ArduinoJson.h>
 #include <nvs_flash.h>
 #include "certs/cert.h"
@@ -81,7 +78,7 @@ BleNotificationService      bleNotificationService(&bleServer, &bleResponseQueue
 ProvisioningCallbacks       provisioningCallbacks(&bleNotificationService, &provisioningQueue);
 ProvisioningBleService      provisioningBleService(&bleNotificationService, &dateTimeSyncService, &wm, &prefService,
                                                    &jwtService, &mqttService);
-BLECharacteristic*          pCharacteristic;
+NimBLECharacteristic*       pCharacteristic;
 DynamicDeviceActionsService deviceActionsService;
 OnboardLedAction            onboardLed("onboardLed", ONBOARD_LED_PIN);
 
@@ -510,29 +507,46 @@ void setupBleProvisioning()
 {
     provisioningMode = true;
     onboardLed.execute("blue");
-    BLEDevice::init(DEVICE_TYPE);
-    BLEServer* pServer = BLEDevice::createServer();
+    NimBLEDevice::init(DEVICE_TYPE);
+    NimBLEServer* pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new BleServer());
-    BLEService* pService = pServer->createService(SERVICE_UUID);
-    pCharacteristic      = pService->createCharacteristic(CHAR_UUID, BLECharacteristic::PROPERTY_WRITE |
-                                                                         BLECharacteristic::PROPERTY_NOTIFY);
+    NimBLEService* pService = pServer->createService(SERVICE_UUID);
+    pCharacteristic = pService->createCharacteristic(CHAR_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY);
     pCharacteristic->setCallbacks(&provisioningCallbacks);
-    pCharacteristic->addDescriptor(new BLE2902());
+    // No explicit 0x2902 descriptor: NimBLE creates the CCCD itself for any characteristic that
+    // declares NOTIFY, and adding one by hand produces a duplicate the client can subscribe to
+    // but that the stack never writes. This is the Bluedroid `new BLE2902()` line, deleted.
     pService->start();
-    BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(true);
-    BLEDevice::startAdvertising();
+    pAdvertising->enableScanResponse(true);
+    // NimBLEDevice::init() only sets the GAP device-name characteristic, which a central can read
+    // *after* connecting. Bluedroid additionally put the name in the advertisement; NimBLE does
+    // not, so without this the browser's pairing dialog lists the device as "Unknown or
+    // Unsupported Device (<MAC>)". Must come after enableScanResponse: setName() prefers the scan
+    // response, and it has to go there — the 128-bit service UUID already eats 18 of the 31
+    // advertising bytes, which no DEVICE_TYPE of ours fits alongside.
+    if (!pAdvertising->setName(DEVICE_TYPE))
+    {
+        LOG_W("Ble", "advertised name did not fit — device will show as unnamed");
+    }
+    NimBLEDevice::startAdvertising();
     LOG_I("Ble", "BLE server started — waiting for a client to connect");
 }
 
 #ifdef FREE_BLE_BEFORE_TLS
-// Classic ESP32 (no PSRAM) can't hold the Bluedroid stack AND mbedTLS's ~40 KB of SSL
-// record buffers at once — the provisioning TLS handshake dies with
-// MBEDTLS_ERR_SSL_ALLOC_FAILED (-0x7F00). Provisioning restarts the device on both success
-// and failure, so once WiFi creds + the provisioning token are in hand BLE has no job left:
-// release the whole stack to reclaim the heap the handshakes need. Called by
-// ProvisioningBleService right before the MQTT probe / provision call. Idempotent.
+#include <esp_bt.h> // esp_bt_controller_mem_release — see the note in teardownBleForTls
+// Classic ESP32 (no PSRAM) could not hold the BLE stack AND mbedTLS's ~40 KB of SSL record
+// buffers at once — the provisioning TLS handshake died with MBEDTLS_ERR_SSL_ALLOC_FAILED
+// (-0x7F00). Provisioning restarts the device on both success and failure, so once WiFi creds
+// + the provisioning token are in hand BLE has no job left: release the whole stack to reclaim
+// the heap the handshakes need. Called by ProvisioningBleService right before the MQTT probe /
+// provision call. Idempotent.
+//
+// This was written against Bluedroid. NimBLE's host needs substantially less RAM, so the
+// original allocation failure may no longer be reachable — but that is a claim about heap on a
+// real board, so the teardown stays until provisioning TLS has been re-tested on classic-ESP32
+// hardware under NimBLE. See F3.19.
 void teardownBleForTls()
 {
     static bool torn = false;
@@ -546,8 +560,21 @@ void teardownBleForTls()
         vTaskDelete(bleResponseTaskHandle); // no more notifies will touch the characteristic
         bleResponseTaskHandle = NULL;
     }
-    pCharacteristic = NULL;  // freed by deinit below — must not be dereferenced after this
-    BLEDevice::deinit(true); // release Bluedroid + BT controller memory back to the heap
+    pCharacteristic = NULL;     // freed by deinit below — must not be dereferenced after this
+    NimBLEDevice::deinit(true); // stops the host and disables + deinits the BT controller
+
+    // NimBLE's deinit stops there. Bluedroid's deinit(true) went one step further and called
+    // esp_bt_controller_mem_release(), which is what actually hands the controller's static BT
+    // memory back to the heap — and that heap is the entire reason this function exists. Without
+    // it the swap would quietly give back less than it used to, on the one board that cannot
+    // spare it. The controller is already deinited above, which is the precondition; if it is
+    // not, this returns an error rather than crashing. Safe because provisioning reboots the
+    // device on both success and failure, so BLE is never needed again this boot.
+    esp_err_t memRc = esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+    if (memRc != ESP_OK)
+    {
+        LOG_W("Ble", "controller mem release failed (%d) — TLS may be short on heap", memRc);
+    }
     LOG_I("Ble", "BLE released (free heap %u)", ESP.getFreeHeap());
 }
 #endif

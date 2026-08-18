@@ -1,6 +1,6 @@
 #pragma once
 #include "BleServer.h"
-#include <BLEDevice.h>
+#include <NimBLEDevice.h>
 #include <Arduino.h>
 
 #include "models/BluetoothResponse.h"
