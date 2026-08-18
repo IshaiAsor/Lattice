@@ -65,6 +65,15 @@
       </div>
     }
 
+    <!-- Registering with Bluetooth already released: the device finishes on its own from here, so
+         say so rather than leaving a spinner that looks stuck. -->
+    @if (awaitingRegistration && !error) {
+      <p class="wait-line">
+        <mat-spinner diameter="16"></mat-spinner>
+        <span>Finishing over Wi-Fi — some devices release Bluetooth at this point.</span>
+      </p>
+    }
+
     <!-- Wi-Fi: scanning -->
     @if (wifiStage === 'scanning') {
       <p class="wait-line">

@@ -2,8 +2,8 @@ import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { Subject, timer, Subscription } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { Subject, timer, interval, of, Subscription } from 'rxjs';
+import { takeUntil, switchMap, catchError } from 'rxjs/operators';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import {
   ProvisioningService,
@@ -72,6 +72,17 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
    */
   private static readonly REPORT_TIMEOUT_MS = 30_000;
 
+  /**
+   * How often to ask the platform whether the device registered, and how long to keep asking.
+   *
+   * Only used once the device may have gone dark (see watchForRegistration). It covers the MQTT
+   * probe plus the provision call over TLS — seconds of work, not a reboot — with room for a slow
+   * link, because the alternative to being generous here is telling the user setup failed when it
+   * did not.
+   */
+  private static readonly REGISTER_POLL_MS = 2_000;
+  private static readonly REGISTER_TIMEOUT_MS = 60_000;
+
   readonly phaseOrder = SETUP_PHASE_ORDER;
   readonly phaseLabel = phaseLabel;
 
@@ -100,6 +111,8 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
   loadingCapabilities = false;
 
   applying = false;
+  /** Set while the device is finishing registration with its BLE link already released. */
+  awaitingRegistration = false;
   /** Set once config is applied and we are waiting for the device to come back. */
   awaitingReport = false;
   reportTimedOut = false;
@@ -107,6 +120,10 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
   private reportWatch?: Subscription;
+  private provisionWatch?: Subscription;
+  private registerWatch?: Subscription;
+  /** Registration has two independent proofs (see watchForRegistration); only the first counts. */
+  private registrationSettled = false;
   private knownDeviceIds = new Set<number>();
 
   ngOnInit(): void {
@@ -126,6 +143,8 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.reportWatch?.unsubscribe();
+    this.registerWatch?.unsubscribe();
+    this.provisionWatch?.unsubscribe();
     // The characteristic is held open across the whole flow now, so closing the sheet has to
     // release it — otherwise the device stays paired to a dialog that no longer exists.
     this.provisioningService.disconnect();
@@ -153,6 +172,8 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
     this.progressLog = [];
     this.completed.clear();
     this.currentPhase = 'connect';
+    this.stopRegistrationWatch();
+    this.registrationSettled = false;
 
     // Remember what we already had, so the device that appears afterwards can be identified
     // without guessing. A re-provision of a known device shows up as no new id, which the
@@ -254,6 +275,10 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
 
   showPortalInstructions(): void {
     this.wifiStage = 'portal';
+    // Start the AP as the instructions go up, not after the user confirms they already used it.
+    // Rejected by firmware that predates the `portal` command, which is harmless — there the old
+    // order still applies and useDevicePortal() opens it.
+    this.provisioningService.openDevicePortal().catch(() => undefined);
   }
 
   backToNetworks(): void {
@@ -262,7 +287,7 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
   }
 
   private runProvisioning(): void {
-    this.provisioningService.provision().subscribe({
+    this.provisionWatch = this.provisioningService.provision().subscribe({
       error: (err) => {
         this.error = typeof err === 'string' ? err : (err?.message ?? 'Setup failed');
       },
@@ -299,6 +324,8 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
         this.wifiError = progress.message || 'Could not join that network';
         return;
       }
+      // A device that reports a failure will not register; stop waiting for it to.
+      this.stopRegistrationWatch();
       this.error = progress.message || 'The device reported a problem.';
       return;
     }
@@ -311,11 +338,96 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
       this.currentPhase = phase;
     }
 
-    if (progress.step === ProvisioningStep.PROVISIONING_COMPLETE) {
-      this.completed.add('register');
-      this.currentPhase = 'configure';
-      this.findProvisionedDevice();
+    // From here the device may never speak over BLE again — see watchForRegistration.
+    if (progress.step === ProvisioningStep.TESTING_MQTT) {
+      this.watchForRegistration();
     }
+
+    if (progress.step === ProvisioningStep.PROVISIONING_COMPLETE) {
+      this.settleRegistration();
+    }
+  }
+
+  /**
+   * Watch the platform, not the Bluetooth link, for the end of registration.
+   *
+   * Firmware built with FREE_BLE_BEFORE_TLS — the classic-ESP32 types (ESP32_WROOM32E,
+   * MULTI_SOCKET_8_CH) — releases the entire BLE stack at TESTING_MQTT, because that board cannot
+   * hold BLE and mbedTLS's record buffers at once and the provisioning TLS handshakes come next.
+   * So on those boards PROVISIONING_SUCCESSFUL is a notification the browser can never receive:
+   * the device registers, reboots, comes back online, and this dialog sits on "Registered with
+   * Lattice" forever. A BLE link that simply drops mid-provision looks identical. Rather than
+   * special-case a board, poll the one thing that is authoritative either way — whether the device
+   * turned up in the account.
+   *
+   * Runs alongside the BLE wait rather than replacing it: whichever proof lands first settles it.
+   */
+  private watchForRegistration(): void {
+    if (this.registerWatch || this.registrationSettled) return;
+
+    this.awaitingRegistration = true;
+    const sub = new Subscription();
+
+    sub.add(
+      interval(MgmtDeviceRegisterComponent.REGISTER_POLL_MS)
+        .pipe(
+          takeUntil(this.destroy$),
+          // A failed poll is not a failed setup — the device is registering over its own link, so
+          // keep asking until the window closes.
+          switchMap(() =>
+            this.deviceMgmt.getDevices().pipe(catchError(() => of<DeviceView[]>([]))),
+          ),
+        )
+        .subscribe((devices) => {
+          const fresh = devices.filter((d) => !this.knownDeviceIds.has(d.id)).at(-1);
+          if (fresh) this.settleRegistration(fresh);
+        }),
+    );
+
+    sub.add(
+      timer(MgmtDeviceRegisterComponent.REGISTER_TIMEOUT_MS)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(() => {
+          if (this.registrationSettled) return;
+          this.stopRegistrationWatch();
+          // The device restarts on a failed provision, so it is not coming back to this session.
+          this.error =
+            'The device went quiet before it finished registering. Put it back in pairing mode ' +
+            'and try again — if it did register, it will be in your devices with "Finish setup".';
+        }),
+    );
+
+    this.registerWatch = sub;
+  }
+
+  /**
+   * Registration is done, on whichever evidence arrived first. Idempotent: the BLE notification
+   * and the poll can both land.
+   */
+  private settleRegistration(found?: DeviceView): void {
+    if (this.registrationSettled) return;
+    this.registrationSettled = true;
+    this.stopRegistrationWatch();
+    // Nothing more is coming over BLE — on the teardown boards the stack is already gone.
+    this.provisionWatch?.unsubscribe();
+    this.provisionWatch = undefined;
+
+    this.completed.add('register');
+    this.currentPhase = 'configure';
+
+    if (!found) {
+      this.findProvisionedDevice();
+      return;
+    }
+    this.device = found;
+    this.loadingCapabilities = true;
+    this.loadCapabilities(found);
+  }
+
+  private stopRegistrationWatch(): void {
+    this.awaitingRegistration = false;
+    this.registerWatch?.unsubscribe();
+    this.registerWatch = undefined;
   }
 
   /** The device that just registered: the id we did not have before, else the newest in setup. */

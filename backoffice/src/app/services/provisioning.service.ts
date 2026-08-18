@@ -280,6 +280,20 @@ export class ProvisioningService {
     });
   }
 
+  /**
+   * Ask the device to open its own setup AP now.
+   *
+   * Without this the portal instructions were unfollowable: the firmware only started the AP when
+   * the full provisioning payload arrived, which happens after the user clicks "I've set up
+   * Wi-Fi - continue" - so the network they were told to join did not exist until they claimed to
+   * have used it. Fire-and-forget: the outcome arrives on provisioningProgress$ once the user
+   * finishes in the portal, and firmware without the `portal` command answers MISSING_PARAMS,
+   * which is an answer, not a failure - the old order still works there.
+   */
+  openDevicePortal(): Promise<void> {
+    return this.write({ cmd: 'portal' });
+  }
+
   /** Send the network the user picked. Resolves once the device is actually on Wi-Fi. */
   sendWifiCredentials(ssid: string, password: string, timeoutMs = 40000): Observable<void> {
     return new Observable<void>((subscriber) => {
