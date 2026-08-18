@@ -365,6 +365,10 @@
 }
 
 .details {
+  /* A scroll container's automatic minimum size is 0, so as a flex child of the scrolling body it
+     collapsed to a single crushed line the moment the sheet outgrew the dialog — the log has to
+     keep its own 180px box and let the body scroll instead. */
+  flex: none;
   border-radius: 8px;
   background: var(--surface-alt);
   border: 1px solid var(--border);

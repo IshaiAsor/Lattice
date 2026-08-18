@@ -34,6 +34,9 @@
 
   /* Cards */
   --card-bg:       rgba(255, 255, 255, 0.78);
+  /* Dialogs sit over a dimmed backdrop, so they need more fill than a card sitting on the page —
+     at the card's alpha the blackened backdrop shows through and the panel reads grey, not glass. */
+  --dialog-bg:     rgba(255, 255, 255, 0.92);
   --card-shadow:   0 8px 32px rgba(99, 102, 241, 0.12);
   --card-shadow-hover: 0 12px 40px rgba(99, 102, 241, 0.20);
   --radius-card:   16px;
@@ -84,6 +87,7 @@
   --border-strong: rgba(255, 255, 255, 0.15);
 
   --card-bg:       rgba(255, 255, 255, 0.08);
+  --dialog-bg:     rgba(255, 255, 255, 0.08);
   --card-shadow:   0 8px 40px rgba(0, 0, 0, 0.55);
   --card-shadow-hover: 0 12px 48px rgba(0, 0, 0, 0.65);
   --offline-overlay-bg:   rgba(6, 10, 22, 0.92);
@@ -328,9 +332,14 @@ app-root {
 
 /* ── Glassmorphism dialog ─────────────────────────────────────────────── */
 .glass-dialog .mat-mdc-dialog-container {
-  --mdc-dialog-container-color: var(--card-bg);
+  --mdc-dialog-container-color: var(--dialog-bg);
   --mdc-dialog-subhead-color: var(--text);
   --mdc-dialog-supporting-text-color: var(--text-muted);
+  /* The fill lives here, not on the surface: --mdc-dialog-container-color paints the *surface*,
+     which the rule below clears to transparent, so without this the panel is nothing but a blur.
+     Dark mode hid that (blurring a dark page looks like a dark panel); light mode showed it as a
+     grey wash with the backdrop bleeding through. */
+  background: var(--dialog-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border);

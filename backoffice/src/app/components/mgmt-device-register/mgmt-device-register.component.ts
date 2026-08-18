@@ -292,6 +292,13 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
 
     if (isFailureStep(progress.step)) {
       if (this.isExpectedDuringScan(progress.step)) return;
+      // While the Wi-Fi step is on screen it owns the error surface, and a failed join arrives
+      // twice — once as this step and once as the sendWifiCredentials error. Reporting both
+      // printed the same line in the step and again in the generic notice below it.
+      if (this.wifiStage) {
+        this.wifiError = progress.message || 'Could not join that network';
+        return;
+      }
       this.error = progress.message || 'The device reported a problem.';
       return;
     }
