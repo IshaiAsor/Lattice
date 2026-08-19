@@ -1,192 +1,654 @@
-.editor-form {
+/* ── Rule editor — summary board + status rail + one focused panel ────────
+   Same shell as the pipeline editor: the shell owns the dialog's full height and never
+   scrolls; the rail, the board and the panel body each scroll on their own. The panel is a
+   right drawer at >=600px and a bottom sheet below it (see the media query at the end). */
+
+:host { display: block; height: 100%; }
+
+/* Surfaces are OPAQUE and explicitly stepped, not the app's translucent --surface tokens.
+   A glass card over a glass dialog gives no tonal separation at this density. */
+.editor-shell {
+  --ed-bg:     #eaeefb;  /* the board field the cards sit on */
+  --ed-rail:   #f6f8ff;
+  --ed-head:   #ffffff;
+  --ed-card:   #ffffff;
+  --ed-nested: #f4f6ff;
+  --ed-hover:  rgba(79, 70, 229, 0.06);
+
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 0 24px;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  background: var(--ed-bg);
 }
 
-.full-width {
-  width: 100%;
+:host-context(.dark-theme) .editor-shell {
+  --ed-bg:     #0e1728;
+  --ed-rail:   #101a2e;
+  --ed-head:   #131d33;
+  --ed-card:   #18233c;
+  --ed-nested: #1a2440;
+  --ed-hover:  rgba(56, 189, 248, 0.08);
 }
 
-/* ── Section labels ─────────────────────────────────────────────── */
+.spacer { flex: 1; }
+.full-width { width: 100%; }
+.flex-grow { flex: 1; min-width: 0; }
 
-.section-label {
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.ed-head {
+  background: var(--ed-head);
+  flex-shrink: 0;
+  padding: 10px 8px 12px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ed-head-top { display: flex; align-items: center; }
+
+.ed-eyebrow {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--stage-vlm);
-  margin: 12px 0 4px;
+  color: var(--text-muted);
 }
 
-.section-label.then {
-  color: var(--primary);
-}
-
-/* ── Match toggle ────────────────────────────────────────────────── */
-
-.operator-toggle {
+.ed-head-main {
   display: flex;
-  justify-content: center;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 10px;
+  padding-right: 8px;
 }
 
-/* ── Condition card ──────────────────────────────────────────────── */
+/* The name is the dialog's title, edited in place — it used to cost a whole form-field row. */
+.ed-name {
+  font: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed var(--border-strong);
+  padding: 2px 4px 3px 0;
+  outline: none;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.ed-name:focus { border-bottom: 1px solid var(--primary); }
+.ed-name.invalid { border-bottom: 1px solid var(--error); }
+.ed-name.invalid::placeholder { color: color-mix(in srgb, var(--error) 70%, var(--text-muted)); }
+.ed-name::placeholder { color: var(--text-muted); opacity: 0.75; }
 
-.condition-row {
-  background: color-mix(in srgb, var(--stage-vlm) 5%, transparent);
-  border: 1px solid var(--border);
-  border-left: 3px solid color-mix(in srgb, var(--stage-vlm) 50%, transparent);
-  border-radius: 10px;
-  padding: 10px 12px 4px;
-  margin-bottom: 8px;
+.issue-chip {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error) 28%, transparent);
+  border-radius: var(--radius-chip, 6px);
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+/* Before any section has been opened, "not filled in yet" is not a failure — say it in the
+   muted voice and save the red for once the user has been there. */
+.issue-chip.neutral {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+  border-color: color-mix(in srgb, var(--text-muted) 22%, transparent);
+  font-weight: 600;
+}
+
+.save-btn { flex-shrink: 0; }
+
+/* ── Body ───────────────────────────────────────────────────────────────── */
+
+.ed-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
   position: relative;
 }
 
-.condition-header {
+/* ── Status rail ────────────────────────────────────────────────────────── */
+
+/* Solid rather than glass: the connector line behind the dots needs the dots to punch an
+   opaque ring through it, which a translucent surface can't provide. */
+.rail {
+  --rail-bg: var(--ed-rail);
+  background: var(--rail-bg);
+  border-right: 1px solid var(--border);
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow-y: auto;
+  z-index: 3;
+}
+
+.rail-cap {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 0 10px 9px;
+}
+
+.rail-list { position: relative; display: flex; flex-direction: column; gap: 2px; }
+.rail-list::before {
+  content: '';
+  position: absolute;
+  left: 20px;
+  top: 22px;
+  bottom: 22px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.rail-i {
+  position: relative;
+  height: 44px;
+  border-radius: 10px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.rail-i:hover { background: var(--nav-hover-bg); }
+.rail-i.on { background: var(--nav-active-bg); color: var(--nav-active-text); font-weight: 600; }
+.rail-i.bad { background: color-mix(in srgb, var(--error) 8%, transparent); color: var(--error); font-weight: 600; }
+
+.rail-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 3px var(--rail-bg);
+}
+.rail-i.bad .dot { background: var(--error) !important; }
+
+.sec-conditions { background: var(--stage-llm); }
+.sec-actions    { background: var(--stage-exec); }
+.sec-timing     { background: var(--stage-digest); }
+.sec-priority   { background: var(--stage-vlm); }
+
+.cnt {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border-radius: 9px;
+  padding: 2px 7px;
+}
+.rail-i.on .cnt { color: var(--nav-active-text); }
+
+.rail-warn {
+  margin-left: auto;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--error);
+}
+
+.rail-valid {
+  margin-top: auto;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--error);
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+}
+.rail-valid mat-icon { font-size: 15px; width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+
+.rail-valid.neutral {
+  background: color-mix(in srgb, var(--text-muted) 7%, transparent);
+  border-color: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  color: var(--text-muted);
+}
+
+/* ── Summary board ──────────────────────────────────────────────────────── */
+
+.board {
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 14px;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.bcard {
+  grid-column: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 14px 14px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--ed-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.bcard:hover { box-shadow: var(--card-shadow-hover); border-color: var(--border-strong); }
+.bcard.bad { border-color: color-mix(in srgb, var(--error) 32%, transparent); }
+.bcard-wide { grid-column: 1 / -1; }
+
+.bhead { display: flex; align-items: center; gap: 9px; }
+.btitle { font-size: 13.5px; font-weight: 600; }
+.bsum {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bedit { font-size: 18px; width: 18px; height: 18px; color: var(--text-dim); flex-shrink: 0; }
+
+.kv { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; line-height: 1.5; }
+.kv .k { color: var(--text-muted); flex-shrink: 0; }
+.kv .v { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
+
+.quote {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  border-left: 2px solid var(--border-strong);
+  padding-left: 9px;
+}
+
+/* A card never hides its own problem — this is the whole reason the board has a rail. */
+.cerr {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.cerr mat-icon { font-size: 15px; width: 15px; height: 15px; flex-shrink: 0; }
+
+/* ── Focused panel (drawer / bottom sheet) ──────────────────────────────── */
+
+.panel-scrim {
+  position: absolute;
+  left: 220px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+  cursor: pointer;
+  z-index: 3;
+}
+
+.panel {
+  --panel-bg: var(--ed-bg);
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: min(460px, 66%);
+  background: var(--panel-bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -14px 0 44px color-mix(in srgb, var(--primary) 18%, transparent);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  z-index: 4;
+}
+
+.panel-grab { display: none; }
+
+.panel-head {
+  background: var(--ed-head);
+  flex-shrink: 0;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-head .dot { box-shadow: none; }
+.panel-title { font-size: 15px; font-weight: 600; }
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 16px;
+}
+
+.panel-foot {
+  background: var(--ed-head);
+  flex-shrink: 0;
+  height: 68px;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 0 16px;
+  border-top: 1px solid var(--border);
 }
 
-.condition-type-badge {
+.panel-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--ed-nested);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  margin: 0 0 16px;
+}
+.panel-note mat-icon { font-size: 16px; width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+
+.panel-note.note-bad {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  border-color: color-mix(in srgb, var(--error) 25%, transparent);
+}
+
+.panel-cap {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 9px;
+}
+.cap-spaced { margin-top: 22px; }
+
+/* ── Match toggle (Conditions panel) ────────────────────────────────────── */
+
+.match-toggle { width: 100%; }
+.match-toggle ::ng-deep .mat-button-toggle { flex: 1; }
+
+/* ── Condition / action cards ───────────────────────────────────────────── */
+
+.item-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  background: var(--ed-card);
+}
+.item-card.bad { border-color: color-mix(in srgb, var(--error) 32%, transparent); }
+
+.cond-threshold { border-left: 3px solid color-mix(in srgb, var(--stage-exec) 55%, transparent); }
+.cond-state     { border-left: 3px solid color-mix(in srgb, var(--stage-digest) 55%, transparent); }
+.cond-schedule  { border-left: 3px solid color-mix(in srgb, var(--primary) 55%, transparent); }
+.act-card       { border-left: 3px solid color-mix(in srgb, var(--stage-exec) 55%, transparent); }
+
+.item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px 4px 10px;
+}
+
+.item-body {
+  padding: 6px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.item-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 8px 7px 10px;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.item-collapsed:hover { background: var(--ed-hover); }
+
+/* Wraps to two lines rather than ellipsising on one: these hold whole sensor paths and
+   threshold expressions, which are far wider than the row and unreadable cut off. */
+.item-name {
+  font-size: 13px;
+  line-height: 1.35;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.item-warn { font-size: 18px; width: 18px; height: 18px; color: var(--error); flex-shrink: 0; }
+.chev { font-size: 20px; width: 20px; height: 20px; color: var(--text-muted); flex-shrink: 0; }
+
+/* ── Type badges ────────────────────────────────────────────────────────── */
+
+.type-badge {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: color-mix(in srgb, var(--stage-vlm) 15%, transparent);
-  color: var(--stage-vlm);
-  border: 1px solid color-mix(in srgb, var(--stage-vlm) 30%, transparent);
   border-radius: var(--radius-chip, 6px);
   padding: 3px 7px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.condition-type-badge.schedule {
-  background: color-mix(in srgb, var(--primary) 15%, transparent);
+.badge-state {
+  background: color-mix(in srgb, var(--stage-digest) 14%, transparent);
+  color: var(--stage-digest);
+  border: 1px solid color-mix(in srgb, var(--stage-digest) 30%, transparent);
+}
+.badge-threshold,
+.badge-actions {
+  background: color-mix(in srgb, var(--stage-exec) 14%, transparent);
+  color: var(--stage-exec);
+  border: 1px solid color-mix(in srgb, var(--stage-exec) 30%, transparent);
+}
+.badge-schedule {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
   color: var(--primary);
-  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
 }
-
-.condition-type-badge.device-status {
-  background: color-mix(in srgb, var(--online) 15%, transparent);
-  color: var(--online);
-  border-color: color-mix(in srgb, var(--online) 30%, transparent);
+.badge-emergency {
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+  color: var(--error);
+  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
 }
-
-.condition-header .header-spacer { flex: 1; }
 
 .remove-btn { color: var(--error, #ef5350); }
 
-/* ── State / threshold fields ────────────────────────────────────── */
+/* ── Fields ─────────────────────────────────────────────────────────────── */
 
-.state-fields {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: start;
-}
+.field-pair { display: flex; gap: 10px; align-items: flex-start; }
+.field-unit  { width: 128px; flex-shrink: 0; }
+.field-op    { width: 96px;  flex-shrink: 0; }
+.field-delay { width: 104px; flex-shrink: 0; }
 
-.op-field  { width: 72px; }
-.val-field { width: 100px; }
+/* ── Timing panel ───────────────────────────────────────────────────────── */
 
-/* ── Schedule fields ─────────────────────────────────────────────── */
-
-.schedule-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.time-field { width: 130px; }
-
-.days-group {
-  display: flex;
-  gap: 2px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-/* ── Action card ─────────────────────────────────────────────────── */
-
-.action-row {
-  background: color-mix(in srgb, var(--primary) 5%, transparent);
-  border: 1px solid var(--border);
-  border-left: 3px solid color-mix(in srgb, var(--primary) 50%, transparent);
-  border-radius: 10px;
-  padding: 10px 12px 4px;
-  margin-bottom: 8px;
-}
-
-.action-row-header {
+.delay-row {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
-}
-
-.action-row-header .header-spacer { flex: 1; }
-
-.action-fields {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: start;
-}
-
-.state-val-field { width: 100px; }
-.delay-field     { width: 84px; }
-
-/* ── Sensor note ─────────────────────────────────────────────────── */
-
-.sensor-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  min-height: 44px;
+  font-size: 13px;
   color: var(--text-muted);
-  margin: 0 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+.delay-row:last-of-type { border-bottom: 0; margin-bottom: 14px; }
+.delay-name { overflow-wrap: anywhere; }
+
+/* ── Priority panel ─────────────────────────────────────────────────────── */
+
+.prio-row {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  margin-bottom: 14px;
+}
+.prio-row mat-slide-toggle { display: block; width: 100%; }
+.prio-row ::ng-deep .mdc-form-field { display: flex; width: 100%; }
+.prio-row ::ng-deep .mdc-form-field > label {
+  flex: 1;
+  font-size: 14px;
+  padding-left: 0;
+  padding-right: 12px;
 }
 
-.sensor-note mat-icon {
-  font-size: 16px;
-  width: 16px;
-  height: 16px;
+/* ── Day picker (schedule condition) ────────────────────────────────────── */
+
+.days-block { display: flex; flex-direction: column; gap: 8px; }
+.days-cap { font-size: 11px; color: var(--text-muted); }
+.days { display: flex; gap: 6px; }
+.day {
+  flex: 1;
+  min-width: 40px;
+  max-width: 56px;
+  height: 44px;
+  border-radius: 22px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.day:hover { border-color: var(--primary); }
+.day.on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg-solid);
+  font-weight: 600;
 }
 
-/* ── Add / stroked buttons ───────────────────────────────────────── */
+/* ── Add buttons ────────────────────────────────────────────────────────── */
 
 .add-btn {
   width: 100%;
-  margin-bottom: 4px;
   border-color: var(--border) !important;
   color: var(--text-muted) !important;
 }
 
-/* ── Cooldown row ────────────────────────────────────────────────── */
+/* ── Mobile issue bar (the rail's job, in the thumb zone) ───────────────── */
 
-.cooldown-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 12px;
-  margin-bottom: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-}
+.issue-bar { display: none; }
 
-.cooldown-label {
-  font-size: 13px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  padding-top: 16px;
-}
+/* ── Phone: rail collapses, panel becomes a bottom sheet ────────────────── */
 
-.cooldown-field { width: 110px; }
+@media (max-width: 599px) {
+  .ed-head { padding: 8px 4px 10px 14px; }
+  .ed-name { font-size: 19px; }
+  .hide-narrow { display: none; }
 
-/* ── Emergency checkbox ──────────────────────────────────────────── */
+  .ed-body { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: none; }
+  .board { padding: 12px; }
 
-.emergency-toggle {
-  margin-bottom: 4px;
+  .panel-scrim { left: 0; }
+
+  /* Mirrors the app's `compact-dialog` sheet: 20px top radius, hugging content up to 88%. */
+  .panel {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: auto;
+    max-height: 88%;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -12px 40px color-mix(in srgb, var(--text) 30%, transparent);
+  }
+  .panel-grab {
+    display: flex;
+    justify-content: center;
+    padding: 8px 0 0;
+    flex-shrink: 0;
+  }
+  .panel-grab::before {
+    content: '';
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+  .panel-head { height: 48px; }
+  .panel-foot { height: 76px; }
+
+  .issue-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    width: 100%;
+    min-height: 56px;
+    padding: 0 8px 0 14px;
+    box-sizing: border-box;
+    border: 0;
+    border-top: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+    background: color-mix(in srgb, var(--error) 12%, transparent);
+    color: var(--error);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .issue-bar-text { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+  .issue-bar-text b { font-size: 13px; font-weight: 500; }
+  .issue-bar-sub {
+    font-size: 11px;
+    opacity: 0.85;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .issue-bar .chev { color: currentColor; }
 }

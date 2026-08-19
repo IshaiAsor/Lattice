@@ -1,29 +1,52 @@
+/* Rules list — the pipelines card system (stats row, 14px card with a status spine, meta
+   badges, action strip) with the one thing rules have and pipelines don't: the IF → THEN strip. */
+
 .rules-page {
   padding: 16px 0 24px;
 }
 
-/* ── Empty state ─────────────────────────────────────────────────────── */
+/* ── Stats row ───────────────────────────────────────────────────────── */
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 24px;
-  text-align: center;
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  box-shadow: var(--card-shadow);
+}
+
+.stat-card.stat-err {
+  border-color: color-mix(in srgb, var(--error) 30%, transparent);
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
-  margin-top: 8px;
+  margin-bottom: 6px;
 }
 
-.empty-icon {
-  font-size: 48px;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
-  color: var(--text-dim);
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
 }
 
-/* ── Rule cards ──────────────────────────────────────────────────────── */
+.stat-err .stat-value {
+  color: var(--error);
+}
+
+/* ── Rule list ───────────────────────────────────────────────────────── */
 
 .rules-list {
   display: flex;
@@ -32,61 +55,72 @@
 }
 
 .rule-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
   overflow: hidden;
-  transition: box-shadow 0.15s ease, opacity 0.2s ease;
+  transition: opacity 0.2s;
 }
 
-.rule-card.disabled {
-  opacity: 0.50;
-}
+.rule-card.emergency { border-left-color: var(--error); }
+.rule-card.disabled  { opacity: 0.55; border-left-color: var(--offline); }
 
 /* ── Card header ─────────────────────────────────────────────────────── */
 
-.rule-header {
+.card-header {
+  padding: 12px 14px 10px;
+}
+
+.card-title-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 10px 10px 0;
-  border-bottom: 1px solid var(--border);
-  border-left: 4px solid var(--primary);
-  padding-left: 14px;
-}
-
-.rule-card.disabled .rule-header {
-  border-left-color: var(--offline);
-}
-
-.rule-icon {
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
-  color: var(--primary);
-  flex-shrink: 0;
-}
-
-.rule-card.disabled .rule-icon {
-  color: var(--offline);
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
 .rule-name {
+  font-weight: 600;
   font-size: 15px;
-  font-weight: 500;
   color: var(--text);
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.spacer { flex: 1; }
+/* ── Condition-type pills ────────────────────────────────────────────── */
 
-.delete-btn mat-icon { color: var(--error); }
+.cond-pills {
+  display: flex;
+  gap: 4px;
+}
 
-/* ── Emergency rule accent ───────────────────────────────────────────── */
+.cond-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-chip);
+  border: 1px solid;
+}
 
-.rule-card.emergency .rule-header { border-left-color: var(--error); }
-.rule-card.emergency .rule-icon { color: var(--error); }
+.pill-schedule {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.pill-threshold {
+  background: color-mix(in srgb, var(--stage-exec) 10%, transparent);
+  color: var(--stage-exec);
+  border-color: color-mix(in srgb, var(--stage-exec) 28%, transparent);
+}
+
+.pill-state {
+  background: color-mix(in srgb, var(--stage-digest) 10%, transparent);
+  color: var(--stage-digest);
+  border-color: color-mix(in srgb, var(--stage-digest) 28%, transparent);
+}
 
 .emergency-badge {
   display: inline-flex;
@@ -110,52 +144,81 @@
   height: 13px;
 }
 
-/* ── Flow row ────────────────────────────────────────────────────────── */
+/* ── Card meta ───────────────────────────────────────────────────────── */
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.meta-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+.status-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+}
+
+.status-ok { background: color-mix(in srgb, var(--stage-exec) 12%, transparent); color: var(--stage-exec); }
+.status-q  { background: color-mix(in srgb, var(--text-muted) 10%, transparent); color: var(--text-muted); }
+
+/* ── Flow strip ──────────────────────────────────────────────────────── */
 
 .rule-flow {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px;
   flex-wrap: wrap;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
 }
 
-.rule-segment {
+.flow-seg {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  flex: 1;
-  min-width: 160px;
+  min-width: 0;
 }
 
 .flow-badge {
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
   border-radius: var(--radius-chip);
-  padding: 2px 7px;
+  border: 1px solid;
   flex-shrink: 0;
-  line-height: 1.6;
 }
 
 .if-badge {
-  background: color-mix(in srgb, var(--stage-vlm) 15%, transparent);
-  color: var(--stage-vlm);
-  border: 1px solid color-mix(in srgb, var(--stage-vlm) 30%, transparent);
+  background: color-mix(in srgb, var(--stage-llm) 12%, transparent);
+  color: var(--stage-llm);
+  border-color: color-mix(in srgb, var(--stage-llm) 28%, transparent);
 }
 
 .then-badge {
-  background: color-mix(in srgb, var(--primary) 15%, transparent);
-  color: var(--primary);
-  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  background: color-mix(in srgb, var(--stage-exec) 12%, transparent);
+  color: var(--stage-exec);
+  border-color: color-mix(in srgb, var(--stage-exec) 28%, transparent);
 }
 
 .flow-text {
-  font-size: 13px;
-  color: var(--text-muted);
-  flex: 1;
-  min-width: 0;
+  font-size: 12.5px;
   line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .flow-arrow {
@@ -163,65 +226,103 @@
   font-size: 18px;
   width: 18px;
   height: 18px;
-  flex-shrink: 0;
-  align-self: center;
 }
 
-/* ── Footer ──────────────────────────────────────────────────────────── */
+/* ── Card actions ────────────────────────────────────────────────────── */
 
-.rule-footer {
+.card-actions {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 16px 10px;
-  font-size: 11px;
-  color: var(--text-muted);
+  padding: 6px 10px;
   border-top: 1px solid var(--border);
 }
 
-.footer-icon {
-  font-size: 13px;
-  width: 13px;
-  height: 13px;
-  color: var(--text-dim);
+.card-actions mat-slide-toggle {
+  margin-right: 4px;
 }
 
-/* ── Tablet ──────────────────────────────────────────────────────────── */
+.action-btn { color: var(--text-muted); }
+.action-delete:hover { color: var(--error); }
 
-@media (max-width: 1024px) {
-  .rules-page {
-    padding: 16px;
-  }
+/* ── Fire history ────────────────────────────────────────────────────── */
+
+.history-panel {
+  border-top: 1px solid var(--border);
+  padding: 8px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-/* ── Mobile ──────────────────────────────────────────────────────────── */
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  min-height: 28px;
+}
 
-@media (max-width: 599px) {
-  .rules-page {
-    padding: 12px;
-    /* Breathing room only — the shell (.app-main) already reserves the bottom bar. */
-    padding-bottom: 16px;
-  }
+.history-icon {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  color: var(--primary);
+}
 
-  .page-header h2 {
-    font-size: 18px;
-  }
+.history-when { color: var(--text); }
 
+.history-value {
+  font-size: 11.5px;
+  padding: 1px 7px;
+  border-radius: var(--radius-chip);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid var(--border);
+}
+
+.history-empty {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-muted);
+}
+
+.empty-state mat-icon {
+  font-size: 48px;
+  height: 48px;
+  width: 48px;
+  opacity: 0.4;
+}
+
+.empty-state p {
+  margin-top: 8px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .rules-page { padding: 12px 0 16px; }
+
+  /* The strip stacks: IF over THEN, with the arrow turning to point down between them.
+     Wrapping alone put the arrow wherever the text happened to end, so each card broke
+     differently — column is the only layout that reads the same on every rule. */
   .rule-flow {
     flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    padding: 12px;
+    align-items: flex-start;
+    gap: 6px;
   }
-
-  .flow-arrow {
-    transform: rotate(90deg);
-    align-self: center;
-    margin: 0 auto;
-  }
-
-  .rule-segment {
-    min-width: unset;
-    width: 100%;
-  }
+  .flow-seg { align-items: flex-start; }
+  .flow-arrow { transform: rotate(90deg); margin-left: 10px; }
 }

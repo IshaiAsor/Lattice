@@ -1,53 +1,118 @@
 <div class="rules-page">
-  @if (rules.length === 0) {
-    <div class="empty-state lattice-card">
-      <mat-icon class="empty-icon">auto_awesome</mat-icon>
-      <p>No rules yet. Create one to automate your devices.</p>
+
+  <!-- Stats row -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total</div>
+      <div class="stat-value">{{ rules.length }}</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-label">Enabled</div>
+      <div class="stat-value">{{ totalEnabled }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Fired (24h)</div>
+      <div class="stat-value">{{ firedToday }}</div>
+    </div>
+    <div class="stat-card stat-err">
+      <div class="stat-label">Emergency</div>
+      <div class="stat-value">{{ emergencyCount }}</div>
+    </div>
+  </div>
+
+  @if (loading) {
+    <mat-progress-bar mode="indeterminate" />
   }
 
+  <!-- Rule cards -->
   <div class="rules-list">
     @for (rule of rules; track rule.id) {
-      <div class="rule-card lattice-card" [class.disabled]="!rule.enabled" [class.emergency]="rule.is_emergency">
-        <div class="rule-header">
-          <mat-icon class="rule-icon">{{ rule.is_emergency ? 'warning' : 'bolt' }}</mat-icon>
-          <span class="rule-name">{{ rule.name }}</span>
-          @if (rule.is_emergency) {
-            <span class="emergency-badge"><mat-icon>warning</mat-icon>Emergency</span>
-          }
-          <span class="spacer"></span>
-          <mat-slide-toggle
-            [checked]="rule.enabled"
-            (change)="toggle(rule)"
-            [matTooltip]="rule.enabled ? 'Enabled' : 'Disabled'">
-          </mat-slide-toggle>
-          <button mat-icon-button (click)="openEditor(rule)" matTooltip="Edit">
-            <mat-icon>edit</mat-icon>
-          </button>
-          <button mat-icon-button (click)="delete(rule)" matTooltip="Delete" class="delete-btn">
-            <mat-icon>delete</mat-icon>
-          </button>
+      <div class="rule-card" [class.disabled]="!rule.enabled" [class.emergency]="rule.is_emergency">
+
+        <!-- Card header -->
+        <div class="card-header">
+          <div class="card-title-row">
+            <span class="rule-name">{{ rule.name }}</span>
+            <div class="cond-pills">
+              @for (p of conditionPills(rule); track p.label) {
+                <span class="cond-pill" [ngClass]="p.cls">{{ p.label }}</span>
+              }
+            </div>
+            @if (rule.is_emergency) {
+              <span class="emergency-badge">
+                <mat-icon>warning</mat-icon>Emergency
+              </span>
+            }
+          </div>
+          <div class="card-meta">
+            <span class="meta-badge">{{ matchLabel(rule) }}</span>
+            <span class="meta-badge">{{ cooldownLabel(rule) }}</span>
+            <span class="status-chip" [ngClass]="statusChip(rule).cls">{{ statusChip(rule).text }}</span>
+          </div>
         </div>
 
+        <!-- IF → THEN: the rule's identity, kept from the old card and restyled -->
         <div class="rule-flow">
-          <div class="rule-segment">
+          <div class="flow-seg">
             <span class="flow-badge if-badge">IF</span>
             <span class="flow-text">{{ conditionSummary(rule) }}</span>
           </div>
           <mat-icon class="flow-arrow">arrow_forward</mat-icon>
-          <div class="rule-segment">
+          <div class="flow-seg">
             <span class="flow-badge then-badge">THEN</span>
             <span class="flow-text">{{ actionSummary(rule) }}</span>
           </div>
         </div>
 
-        @if (rule.last_triggered) {
-          <div class="rule-footer">
-            <mat-icon class="footer-icon">schedule</mat-icon>
-            Last triggered: {{ rule.last_triggered | date:'short' }}
+        <!-- Card actions -->
+        <div class="card-actions">
+          <mat-slide-toggle [checked]="rule.enabled" (change)="toggle(rule)" />
+
+          <button mat-icon-button class="action-btn"
+                  (click)="toggleHistory(rule.id)"
+                  matTooltip="Fire history">
+            <mat-icon>history</mat-icon>
+          </button>
+
+          <button mat-icon-button class="action-btn"
+                  (click)="openEditor(rule)"
+                  matTooltip="Edit">
+            <mat-icon>edit</mat-icon>
+          </button>
+
+          <button mat-icon-button class="action-btn action-delete"
+                  (click)="delete(rule)"
+                  matTooltip="Delete">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+
+        <!-- Inline fire history -->
+        @if (expandedHistory === rule.id) {
+          <div class="history-panel">
+            @for (e of eventsFor(rule.id); track e.fired) {
+              <div class="history-row">
+                <mat-icon class="history-icon">bolt</mat-icon>
+                <span class="history-when">{{ e.fired | date: 'short' }}</span>
+                @if (e.value) {
+                  <span class="history-value">{{ e.value }}</span>
+                }
+              </div>
+            } @empty {
+              <div class="history-empty">This rule has not fired yet.</div>
+            }
           </div>
         }
+
+      </div>
+    }
+
+    @if (!loading && rules.length === 0) {
+      <div class="empty-state">
+        <mat-icon>auto_awesome</mat-icon>
+        <p>No rules yet. Create one to automate your devices.</p>
       </div>
     }
   </div>
+
 </div>

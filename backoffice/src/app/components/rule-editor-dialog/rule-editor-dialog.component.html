@@ -1,256 +1,520 @@
-<h2 mat-dialog-title>{{ data.rule ? 'Edit Rule' : 'New Rule' }}</h2>
+<div class="editor-shell" [formGroup]="form">
 
-<mat-dialog-content>
-  <form [formGroup]="form" class="editor-form">
-
-    <!-- Name -->
-    <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Rule name</mat-label>
-      <input matInput formControlName="name" placeholder="e.g. Cool down when hot">
-    </mat-form-field>
-
-    <!-- Emergency flag (unified rule) -->
-    <mat-checkbox formControlName="is_emergency" class="emergency-toggle">Emergency rule</mat-checkbox>
-
-    <!-- Condition operator -->
-    <div class="section-label">Match</div>
-    <div class="operator-toggle">
-      <mat-button-toggle-group formControlName="condition_operator">
-        <mat-button-toggle value="AND">ALL (AND)</mat-button-toggle>
-        <mat-button-toggle value="OR">ANY (OR)</mat-button-toggle>
-      </mat-button-toggle-group>
+  <!-- ── Header: name + always-reachable Save ──────────────────────────── -->
+  <div class="ed-head">
+    <div class="ed-head-top">
+      <span class="ed-eyebrow">{{ data.rule ? 'Edit rule' : 'New rule' }}</span>
+      <span class="spacer"></span>
+      <button mat-icon-button type="button" mat-dialog-close matTooltip="Close">
+        <mat-icon>close</mat-icon>
+      </button>
     </div>
 
-    <!-- Conditions -->
-    <div class="section-label">Conditions</div>
-    <div formArrayName="conditions">
-      @for (cond of conditionsArray.controls; track $index; let i = $index) {
-        <div [formGroupName]="i" class="condition-row">
+    <div class="ed-head-main">
+      <!-- The name belongs to the header, not to a section, so it reports on itself here. -->
+      <input #nameInput class="ed-name" [class.invalid]="nameInvalid" formControlName="name"
+             placeholder="Name this rule" aria-label="Rule name"
+             (blur)="nameBlurred = true" />
+      <span class="spacer"></span>
+      @if (ruleErrors.length > 0) {
+        <span class="issue-chip" [class.neutral]="!anyRevealed" [matTooltip]="ruleErrors.join('\n')">
+          {{ anyRevealed ? ruleErrors.length + (ruleErrors.length === 1 ? ' issue' : ' issues') : 'Incomplete' }}
+        </span>
+      }
+      <button mat-button type="button" mat-dialog-close class="hide-narrow">Cancel</button>
+      <button mat-flat-button color="primary" type="button" class="save-btn"
+              [disabled]="ruleErrors.length > 0" (click)="save()">Save</button>
+    </div>
+  </div>
 
-          <div class="condition-header">
-            <span class="condition-type-badge"
-              [class.schedule]="cond.get('condition_type')?.value === 'schedule'"
-              [class.device-status]="cond.get('condition_type')?.value === 'device_status'">
-              {{ cond.get('condition_type')?.value === 'schedule' ? 'Schedule' :
-                 cond.get('condition_type')?.value === 'threshold' ? 'Threshold' :
-                 cond.get('condition_type')?.value === 'device_status' ? 'Device Status' : 'State' }}
+  <!-- ── Body: status rail + summary board, with the focused panel over it ─ -->
+  <div class="ed-body">
+
+    <!-- Rail: jump-to plus per-section state. Deliberately NOT covered by the panel scrim, so an
+         outstanding error stays visible while you edit another section. -->
+    <nav class="rail">
+      <div class="rail-cap">Rule</div>
+      <div class="rail-list">
+        @for (s of sectionMeta; track s.key) {
+          <button type="button" class="rail-i"
+                  [class.on]="openSection === s.key"
+                  [class.bad]="visibleErrors(s.key).length > 0"
+                  (click)="openPanel(s.key)">
+            <span class="dot" [ngClass]="'sec-' + s.key"></span>
+            <span class="rail-label">{{ s.label }}</span>
+            @if (visibleErrors(s.key).length > 0) {
+              <mat-icon class="rail-warn">error_outline</mat-icon>
+            } @else if (s.key === 'conditions') {
+              <span class="cnt">{{ conditionsArray.length }}</span>
+            } @else if (s.key === 'actions') {
+              <span class="cnt">{{ actionsArray.length }}</span>
+            }
+          </button>
+        }
+      </div>
+
+      <!-- Always present while something blocks Save — this is the one line that answers
+           "why is Save greyed out", even before any section has earned its red. -->
+      @if (firstError) {
+        <div class="rail-valid" [class.neutral]="!anyRevealed">
+          <mat-icon>{{ anyRevealed ? 'error_outline' : 'radio_button_unchecked' }}</mat-icon>
+          <span><b>{{ firstError.section }}</b> · {{ firstError.message }}</span>
+        </div>
+      }
+    </nav>
+
+    <!-- Board: the rule's spec sheet. Every card is a read surface that opens a panel. -->
+    <div class="board">
+
+      <button type="button" class="bcard bcard-wide"
+              [class.bad]="visibleErrors('conditions').length > 0"
+              (click)="openPanel('conditions')">
+        <div class="bhead">
+          <span class="dot sec-conditions"></span>
+          <span class="btitle">Conditions</span>
+          <span class="bsum">{{ conditionsSummary }}</span>
+          <mat-icon class="bedit">chevron_right</mat-icon>
+        </div>
+        @for (c of conditionsArray.controls; track c; let i = $index) {
+          <div class="kv">
+            <span class="type-badge" [ngClass]="'badge-' + conditionKind(i).key">
+              {{ conditionKind(i).label }}
             </span>
-            <span class="header-spacer"></span>
-            <button mat-icon-button type="button" (click)="removeCondition(i)"
-                    class="remove-btn" matTooltip="Remove">
-              <mat-icon>remove_circle_outline</mat-icon>
-            </button>
+            <span class="v">{{ conditionDescription(i) }}</span>
           </div>
+        }
+        @for (e of visibleErrors('conditions'); track e) {
+          <span class="cerr"><mat-icon>error_outline</mat-icon>{{ e }}</span>
+        }
+      </button>
 
-          @if (cond.get('condition_type')?.value === 'device_state') {
-            <!-- Device State: device + online/offline -->
-            <div class="state-fields">
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Device</mat-label>
-                <mat-select formControlName="device_id">
-                  @for (d of uniqueDevices; track d.id) {
-                    <mat-option [value]="d.id">{{ d.name }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="val-field">
-                <mat-label>Is</mat-label>
-                <mat-select formControlName="value">
-                  <mat-option value="online">Online</mat-option>
-                  <mat-option value="offline">Offline</mat-option>
-                </mat-select>
-              </mat-form-field>
-            </div>
-          }
+      <button type="button" class="bcard"
+              [class.bad]="visibleErrors('actions').length > 0"
+              (click)="openPanel('actions')">
+        <div class="bhead">
+          <span class="dot sec-actions"></span>
+          <span class="btitle">Actions</span>
+          <span class="bsum">{{ actionsSummary }}</span>
+          <mat-icon class="bedit">chevron_right</mat-icon>
+        </div>
+        @for (a of actionsArray.controls; track a; let i = $index) {
+          <div class="kv"><span class="v">{{ actionDescription(i) }}</span></div>
+        }
+        @for (e of visibleErrors('actions'); track e) {
+          <span class="cerr"><mat-icon>error_outline</mat-icon>{{ e }}</span>
+        }
+      </button>
 
-          @if (cond.get('condition_type')?.value === 'threshold') {
-            <!-- Threshold: device → action → operator → numeric value -->
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Device</mat-label>
-              <mat-select formControlName="device_id" (selectionChange)="onConditionDeviceChange(i)">
-                @for (d of uniqueDevices; track d.id) {
-                  <mat-option [value]="d.id">{{ d.name }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>Action</mat-label>
-              <mat-select formControlName="user_device_action_id"
-                          (selectionChange)="onConditionActionChange(i)">
-                @for (a of getActionsForDevice(cond.get('device_id')?.value); track a.id) {
-                  <mat-option [value]="a.id">{{ a.name }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-            <div class="state-fields">
-              <mat-form-field appearance="outline" class="op-field">
-                <mat-label>Is</mat-label>
-                <mat-select formControlName="operator">
-                  @for (op of getConditionOperators(i); track op.value) {
-                    <mat-option [value]="op.value">{{ op.label }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-              @switch (getActionControlType(cond.get('user_device_action_id')?.value)) {
-                @case ('onoff') {
-                  <mat-form-field appearance="outline" class="val-field">
-                    <mat-label>Value</mat-label>
-                    <mat-select formControlName="value">
-                      <mat-option value="on">On</mat-option>
-                      <mat-option value="off">Off</mat-option>
-                    </mat-select>
-                  </mat-form-field>
-                }
-                @case ('dial') {
-                  <mat-form-field appearance="outline" class="val-field">
-                    <mat-label>Value (0–100)</mat-label>
-                    <input matInput type="number" min="0" max="100" formControlName="value">
-                  </mat-form-field>
-                }
-                @default {
-                  <mat-form-field appearance="outline" class="val-field">
-                    <mat-label>Value</mat-label>
-                    <input matInput type="number" formControlName="value">
-                  </mat-form-field>
-                }
-              }
-            </div>
-          }
+      <button type="button" class="bcard"
+              [class.bad]="visibleErrors('timing').length > 0"
+              (click)="openPanel('timing')">
+        <div class="bhead">
+          <span class="dot sec-timing"></span>
+          <span class="btitle">Timing</span>
+          <span class="bsum">{{ timingSummary }}</span>
+          <mat-icon class="bedit">chevron_right</mat-icon>
+        </div>
+        <div class="kv">
+          <span class="k">Re-trigger cooldown</span>
+          <span class="v">{{ cooldownLabel }}</span>
+        </div>
+        <div class="kv">
+          <span class="k">Longest action delay</span>
+          <span class="v">{{ longestDelay }} s</span>
+        </div>
+        @for (e of visibleErrors('timing'); track e) {
+          <span class="cerr"><mat-icon>error_outline</mat-icon>{{ e }}</span>
+        }
+      </button>
 
-          @if (cond.get('condition_type')?.value === 'schedule') {
-            <div class="schedule-fields">
-              <mat-form-field appearance="outline" class="time-field">
-                <mat-label>{{ cond.get('until')?.value ? 'From' : 'At' }}</mat-label>
-                <input matInput type="time" formControlName="time">
-              </mat-form-field>
-              <!-- Leave these blank for a single firing. Filled, they repeat it through the day —
-                   how long the device then stays on is the action's own hold, not this. -->
-              <mat-form-field appearance="outline" class="time-field">
-                <mat-label>Until</mat-label>
-                <input matInput type="time" formControlName="until">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="time-field">
-                <mat-label>Every (min)</mat-label>
-                <input matInput type="number" min="1" placeholder="once" formControlName="everyMinutes">
-              </mat-form-field>
-              <div class="days-group" [formArrayName]="'days'">
-                @for (label of dayLabels; track $index; let d = $index) {
-                  <mat-checkbox [formControlName]="d" [matTooltip]="dayNames[d]">
-                    {{ label }}
-                  </mat-checkbox>
+      <button type="button" class="bcard" (click)="openPanel('priority')">
+        <div class="bhead">
+          <span class="dot sec-priority"></span>
+          <span class="btitle">Priority</span>
+          <span class="bsum">{{ prioritySummary }}</span>
+          <mat-icon class="bedit">chevron_right</mat-icon>
+        </div>
+        @if (isEmergency) {
+          <div class="kv"><span class="type-badge badge-emergency">Emergency</span></div>
+          <div class="quote">
+            Alerts as an emergency instead of a normal rule notification, and counts on the
+            dashboard's emergency tile.
+          </div>
+        } @else {
+          <div class="quote">Fires a normal rule notification.</div>
+        }
+      </button>
+
+    </div>
+
+    <!-- ── Focused editing surface: right drawer ≥600px, bottom sheet below ── -->
+    @if (openSection) {
+      <button type="button" class="panel-scrim" (click)="closePanel()" aria-label="Close panel"></button>
+
+      <section class="panel">
+        <div class="panel-grab"></div>
+
+        <div class="panel-head">
+          <span class="dot" [ngClass]="'sec-' + openSection"></span>
+          <span class="panel-title">{{ openSectionLabel }}</span>
+          <span class="spacer"></span>
+          <button mat-icon-button type="button" (click)="closePanel()" matTooltip="Close">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <div class="panel-body">
+          @switch (openSection) {
+
+            <!-- ── Conditions ───────────────────────────────────────────── -->
+            @case ('conditions') {
+              <!-- Match belongs to the conditions, so it lives at the top of their panel rather
+                   than floating in a form of its own. -->
+              <div class="panel-cap">Match</div>
+              <mat-button-toggle-group formControlName="condition_operator" class="match-toggle">
+                <mat-button-toggle value="AND">ALL (AND)</mat-button-toggle>
+                <mat-button-toggle value="OR">ANY (OR)</mat-button-toggle>
+              </mat-button-toggle-group>
+
+              <div class="panel-cap cap-spaced">Conditions</div>
+
+              <div formArrayName="conditions">
+                @for (cond of conditionsArray.controls; track cond; let i = $index) {
+                  <div [formGroupName]="i" class="item-card"
+                       [ngClass]="'cond-' + conditionKind(i).key"
+                       [class.bad]="revealed('conditions') && conditionHasError(i)">
+
+                    @if (expandedConditionIndex === i) {
+                      <div class="item-head">
+                        <span class="type-badge" [ngClass]="'badge-' + conditionKind(i).key">
+                          {{ conditionKind(i).label }}
+                        </span>
+                        <span class="spacer"></span>
+                        <button mat-icon-button type="button" class="remove-btn"
+                                matTooltip="Remove condition" (click)="removeCondition(i)">
+                          <mat-icon>remove_circle_outline</mat-icon>
+                        </button>
+                        <button mat-icon-button type="button" (click)="toggleCondition(i)"
+                                matTooltip="Collapse">
+                          <mat-icon>expand_less</mat-icon>
+                        </button>
+                      </div>
+
+                      <div class="item-body">
+
+                        @if (cond.get('condition_type')?.value === 'device_state') {
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Device</mat-label>
+                            <mat-select formControlName="device_id">
+                              @for (d of uniqueDevices; track d.id) {
+                                <mat-option [value]="d.id">{{ d.name }}</mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Is</mat-label>
+                            <mat-select formControlName="value">
+                              <mat-option value="online">Online</mat-option>
+                              <mat-option value="offline">Offline</mat-option>
+                            </mat-select>
+                          </mat-form-field>
+                        }
+
+                        @if (cond.get('condition_type')?.value === 'threshold') {
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Device</mat-label>
+                            <mat-select formControlName="device_id" (selectionChange)="onConditionDeviceChange(i)">
+                              @for (d of uniqueDevices; track d.id) {
+                                <mat-option [value]="d.id">{{ d.name }}</mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Action</mat-label>
+                            <mat-select formControlName="user_device_action_id"
+                                        (selectionChange)="onConditionActionChange(i)">
+                              @for (a of getActionsForDevice(cond.get('device_id')?.value); track a.id) {
+                                <mat-option [value]="a.id">{{ a.name }}</mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+                          <div class="field-pair">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="field-op">
+                              <mat-label>Is</mat-label>
+                              <mat-select formControlName="operator">
+                                @for (op of getConditionOperators(i); track op.value) {
+                                  <mat-option [value]="op.value">{{ op.label }}</mat-option>
+                                }
+                              </mat-select>
+                            </mat-form-field>
+                            @switch (getActionControlType(cond.get('user_device_action_id')?.value)) {
+                              @case ('onoff') {
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                                  <mat-label>Value</mat-label>
+                                  <mat-select formControlName="value">
+                                    <mat-option value="on">On</mat-option>
+                                    <mat-option value="off">Off</mat-option>
+                                  </mat-select>
+                                </mat-form-field>
+                              }
+                              @case ('dial') {
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                                  <mat-label>Value (0–100)</mat-label>
+                                  <input matInput type="number" min="0" max="100" formControlName="value" />
+                                </mat-form-field>
+                              }
+                              @default {
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                                  <mat-label>Value</mat-label>
+                                  <input matInput type="number" formControlName="value" />
+                                </mat-form-field>
+                              }
+                            }
+                          </div>
+                        }
+
+                        @if (cond.get('condition_type')?.value === 'schedule') {
+                          <div class="field-pair">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                              <mat-label>{{ cond.get('until')?.value ? 'From' : 'At' }}</mat-label>
+                              <input matInput type="time" formControlName="time" />
+                            </mat-form-field>
+                            <!-- Leave these blank for a single firing. Filled, they repeat it through
+                                 the day — how long the device then stays on is the action's own hold. -->
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                              <mat-label>Until</mat-label>
+                              <input matInput type="time" formControlName="until" />
+                            </mat-form-field>
+                          </div>
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Every (min)</mat-label>
+                            <input matInput type="number" min="1" placeholder="once" formControlName="everyMinutes" />
+                            <mat-hint>Needs an “Until” time to repeat</mat-hint>
+                          </mat-form-field>
+                          <div class="days-block">
+                            <span class="days-cap">Repeat on — none selected means every day</span>
+                            <div class="days">
+                              @for (label of dayLabels; track $index; let d = $index) {
+                                <button type="button" class="day"
+                                        [class.on]="getDaysArray(i).at(d).value"
+                                        [matTooltip]="dayNames[d]"
+                                        (click)="toggleDay(i, d)">{{ label }}</button>
+                              }
+                            </div>
+                          </div>
+                        }
+
+                      </div>
+                    } @else {
+                      <button type="button" class="item-collapsed" (click)="toggleCondition(i)">
+                        <span class="type-badge" [ngClass]="'badge-' + conditionKind(i).key">
+                          {{ conditionKind(i).label }}
+                        </span>
+                        <span class="item-name">{{ conditionDescription(i) }}</span>
+                        <span class="spacer"></span>
+                        @if (revealed('conditions') && conditionHasError(i)) {
+                          <mat-icon class="item-warn">error_outline</mat-icon>
+                        }
+                        <mat-icon class="chev">expand_more</mat-icon>
+                      </button>
+                    }
+
+                  </div>
                 }
               </div>
-            </div>
-          }
 
-        </div>
-      }
-    </div>
+              <button mat-stroked-button type="button" class="add-btn" [matMenuTriggerFor]="addCondMenu">
+                <mat-icon>add</mat-icon> Add condition
+              </button>
+              <mat-menu #addCondMenu="matMenu">
+                <button mat-menu-item (click)="addCondition('device_state')">
+                  <mat-icon>toggle_on</mat-icon> Device state
+                </button>
+                <button mat-menu-item (click)="addCondition('threshold')">
+                  <mat-icon>thermostat</mat-icon> Threshold (numeric)
+                </button>
+                <button mat-menu-item (click)="addCondition('schedule')">
+                  <mat-icon>schedule</mat-icon> Schedule
+                </button>
+              </mat-menu>
+            }
 
-    <button mat-stroked-button type="button" [matMenuTriggerFor]="addCondMenu" class="add-btn">
-      <mat-icon>add</mat-icon> Add Condition
-    </button>
-    <mat-menu #addCondMenu="matMenu">
-      <button mat-menu-item (click)="addCondition('device_state')">
-        <mat-icon>toggle_on</mat-icon> Device State
-      </button>
-      <button mat-menu-item (click)="addCondition('threshold')">
-        <mat-icon>thermostat</mat-icon> Threshold (numeric)
-      </button>
-<button mat-menu-item (click)="addCondition('schedule')">
-        <mat-icon>schedule</mat-icon> Schedule
-      </button>
-    </mat-menu>
-
-    <!-- Actions -->
-    <div class="section-label then">Then do</div>
-    <div formArrayName="actions">
-      @for (act of actionsArray.controls; track $index; let i = $index) {
-        <div [formGroupName]="i" class="action-row">
-          <div class="action-row-header">
-            <span class="header-spacer"></span>
-            <button mat-icon-button type="button" (click)="removeAction(i)"
-                    class="remove-btn" matTooltip="Remove">
-              <mat-icon>remove_circle_outline</mat-icon>
-            </button>
-          </div>
-
-          <!-- Target action selector -->
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Target action</mat-label>
-            <mat-select formControlName="user_device_action_id"
-                        (selectionChange)="onTargetActionChange(i)">
-              @for (a of data.actions; track a.id) {
-                <mat-option [value]="a.id">{{ actionLabel(a) }}</mat-option>
+            <!-- ── Actions ──────────────────────────────────────────────── -->
+            @case ('actions') {
+              @if (actionsArray.length === 0) {
+                <p class="panel-note">
+                  <mat-icon>bolt</mat-icon>
+                  Nothing happens yet — add what this rule should do when its conditions match.
+                </p>
               }
-            </mat-select>
-          </mat-form-field>
 
-          <!-- State input — switches based on action trait -->
-          @if (getActionControlType(act.get('user_device_action_id')?.value) !== 'sensor') {
-            <div class="action-fields">
-              @switch (getActionControlType(act.get('user_device_action_id')?.value)) {
-                @case ('onoff') {
-                  <mat-form-field appearance="outline">
-                    <mat-label>Set to</mat-label>
-                    <mat-select formControlName="target_state">
-                      <mat-option value="on">On</mat-option>
-                      <mat-option value="off">Off</mat-option>
-                    </mat-select>
-                  </mat-form-field>
+              <div formArrayName="actions">
+                @for (act of actionsArray.controls; track act; let i = $index) {
+                  <div [formGroupName]="i" class="item-card act-card"
+                       [class.bad]="revealed('actions') && actionHasError(i)">
+
+                    @if (expandedActionIndex === i) {
+                      <div class="item-head">
+                        <span class="type-badge badge-actions">Do</span>
+                        <span class="spacer"></span>
+                        <button mat-icon-button type="button" class="remove-btn"
+                                matTooltip="Remove action" (click)="removeAction(i)">
+                          <mat-icon>remove_circle_outline</mat-icon>
+                        </button>
+                        <button mat-icon-button type="button" (click)="toggleAction(i)"
+                                matTooltip="Collapse">
+                          <mat-icon>expand_less</mat-icon>
+                        </button>
+                      </div>
+
+                      <div class="item-body">
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                          <mat-label>Target action</mat-label>
+                          <mat-select formControlName="user_device_action_id"
+                                      (selectionChange)="onTargetActionChange(i)">
+                            @for (a of data.actions; track a.id) {
+                              <mat-option [value]="a.id">{{ actionLabel(a) }}</mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+
+                        @if (isSensorTarget(i)) {
+                          <p class="panel-note note-bad">
+                            <mat-icon>info_outline</mat-icon>
+                            Sensor readings are read-only and cannot be set — pick a controllable action.
+                          </p>
+                        } @else {
+                          <div class="field-pair">
+                            @switch (getActionControlType(act.get('user_device_action_id')?.value)) {
+                              @case ('onoff') {
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                                  <mat-label>Set to</mat-label>
+                                  <mat-select formControlName="target_state">
+                                    <mat-option value="on">On</mat-option>
+                                    <mat-option value="off">Off</mat-option>
+                                  </mat-select>
+                                </mat-form-field>
+                              }
+                              @case ('dial') {
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                                  <mat-label>Set value (0–100)</mat-label>
+                                  <input matInput type="number" min="0" max="100" formControlName="target_state" />
+                                  <span matSuffix>%</span>
+                                </mat-form-field>
+                              }
+                              @default {
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                                  <mat-label>Set state to</mat-label>
+                                  <input matInput formControlName="target_state" />
+                                </mat-form-field>
+                              }
+                            }
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="field-delay">
+                              <mat-label>Delay</mat-label>
+                              <input matInput type="number" min="0" formControlName="delay_seconds" />
+                              <span matSuffix>s</span>
+                            </mat-form-field>
+                          </div>
+                        }
+                      </div>
+                    } @else {
+                      <button type="button" class="item-collapsed" (click)="toggleAction(i)">
+                        <span class="type-badge badge-actions">Do</span>
+                        <span class="item-name">{{ actionDescription(i) }}</span>
+                        <span class="spacer"></span>
+                        @if (revealed('actions') && actionHasError(i)) {
+                          <mat-icon class="item-warn">error_outline</mat-icon>
+                        }
+                        <mat-icon class="chev">expand_more</mat-icon>
+                      </button>
+                    }
+
+                  </div>
                 }
-                @case ('dial') {
-                  <mat-form-field appearance="outline">
-                    <mat-label>Set value (0–100)</mat-label>
-                    <input matInput type="number" min="0" max="100" formControlName="target_state">
-                    <span matSuffix>%</span>
-                  </mat-form-field>
+              </div>
+
+              <button mat-stroked-button type="button" class="add-btn" (click)="addAction()">
+                <mat-icon>add</mat-icon> Add action
+              </button>
+            }
+
+            <!-- ── Timing ───────────────────────────────────────────────── -->
+            @case ('timing') {
+              <p class="panel-note">
+                <mat-icon>timer</mat-icon>
+                After firing, the rule ignores its conditions for the cooldown — this is what keeps
+                a flapping sensor from commanding the device over and over.
+              </p>
+
+              <div class="panel-cap">Re-trigger cooldown</div>
+              <div class="field-pair">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-grow">
+                  <mat-label>Cooldown</mat-label>
+                  <input matInput type="number" min="0" formControlName="cooldown_value" />
+                </mat-form-field>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="field-unit">
+                  <mat-label>Unit</mat-label>
+                  <mat-select formControlName="cooldown_unit">
+                    @for (u of cooldownUnits; track u.value) {
+                      <mat-option [value]="u.value">{{ u.label }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+
+              <div class="panel-cap cap-spaced">Action delays</div>
+              @if (actionsArray.length === 0) {
+                <p class="panel-note">No actions yet — delays are set per action.</p>
+              } @else {
+                @for (act of actionsArray.controls; track act; let i = $index) {
+                  <div class="delay-row">
+                    <span class="delay-name">{{ actionDescription(i) }}</span>
+                  </div>
                 }
-                @default {
-                  <mat-form-field appearance="outline">
-                    <mat-label>Set state to</mat-label>
-                    <input matInput formControlName="target_state">
-                  </mat-form-field>
-                }
+                <p class="panel-note">
+                  <mat-icon>info_outline</mat-icon>
+                  Each action's own delay is edited in the Actions panel.
+                </p>
               }
-              <mat-form-field appearance="outline" class="delay-field">
-                <mat-label>Delay</mat-label>
-                <input matInput type="number" formControlName="delay_seconds" min="0">
-                <span matSuffix>s</span>
-              </mat-form-field>
-            </div>
-          } @else {
-            <p class="sensor-note">
-              <mat-icon>info_outline</mat-icon>
-              Sensor actions are read-only and cannot be set.
-            </p>
+            }
+
+            <!-- ── Priority ─────────────────────────────────────────────── -->
+            @case ('priority') {
+              <div class="prio-row">
+                <mat-slide-toggle formControlName="is_emergency" labelPosition="before">
+                  Emergency rule
+                </mat-slide-toggle>
+              </div>
+              <p class="panel-note">
+                <mat-icon>warning</mat-icon>
+                An emergency rule alerts as an <b>emergency</b> instead of a normal rule
+                notification, and counts on the dashboard's emergency tile. It does not change how
+                or when the rule evaluates.
+              </p>
+            }
+
           }
-
         </div>
-      }
-    </div>
 
-    <button mat-stroked-button type="button" (click)="addAction()" class="add-btn">
-      <mat-icon>add</mat-icon> Add Action
+        <div class="panel-foot">
+          <span class="spacer"></span>
+          <button mat-flat-button color="primary" type="button" (click)="closePanel()">Done</button>
+        </div>
+      </section>
+    }
+
+  </div>
+
+  <!-- ── Mobile only: the rail's job, in the thumb zone ─────────────────── -->
+  @if (firstError) {
+    <button type="button" class="issue-bar" (click)="goToFirstError()">
+      <mat-icon>error_outline</mat-icon>
+      <span class="issue-bar-text">
+        <b>{{ ruleErrors.length }} issue{{ ruleErrors.length === 1 ? '' : 's' }} · {{ firstError.section }}</b>
+        <span class="issue-bar-sub">{{ firstError.message }}</span>
+      </span>
+      <mat-icon class="chev">chevron_right</mat-icon>
     </button>
+  }
 
-    <!-- Cooldown -->
-    <div class="cooldown-row">
-      <span class="cooldown-label">Re-trigger cooldown:</span>
-      <mat-form-field appearance="outline" class="cooldown-field">
-        <input matInput type="number" formControlName="cooldown_seconds" min="0">
-        <span matSuffix>sec</span>
-      </mat-form-field>
-    </div>
-
-  </form>
-</mat-dialog-content>
-
-<mat-dialog-actions align="end">
-  <button mat-button (click)="dialogRef.close()">Cancel</button>
-  <button mat-raised-button color="primary"
-    [disabled]="form.invalid || conditionsArray.length === 0 || actionsArray.length === 0"
-    (click)="save()">
-    {{ data.rule ? 'Save Changes' : 'Create Rule' }}
-  </button>
-</mat-dialog-actions>
+</div>

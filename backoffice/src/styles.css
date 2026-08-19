@@ -192,13 +192,16 @@ app-root {
   border-radius: 16px !important;
 }
 
-/* ── Pipeline editor ──────────────────────────────────────────────────── */
-/* The editor owns its own header/body/footer chrome (board + rail + drawer), so
+/* ── Pipeline / rule editor ───────────────────────────────────────────── */
+/* Both editors own their own header/body/footer chrome (board + rail + drawer), so
    the dialog surface must contribute no padding and must not scroll — each of
    the editor's three regions scrolls on its own. */
 .pipeline-editor-dialog .mat-mdc-dialog-container,
 .pipeline-editor-dialog .mat-mdc-dialog-surface,
-.pipeline-editor-dialog .mdc-dialog__surface {
+.pipeline-editor-dialog .mdc-dialog__surface,
+.rule-editor-dialog .mat-mdc-dialog-container,
+.rule-editor-dialog .mat-mdc-dialog-surface,
+.rule-editor-dialog .mdc-dialog__surface {
   padding: 0 !important;
   overflow: hidden !important;
 }
@@ -214,7 +217,8 @@ app-root {
    Desktop and emulated viewports have no dynamic toolbar, so this only shows on
    real hardware. */
 @media (max-width: 599px) {
-  .cdk-overlay-pane.pipeline-editor-dialog {
+  .cdk-overlay-pane.pipeline-editor-dialog,
+  .cdk-overlay-pane.rule-editor-dialog {
     position: absolute !important;
     inset: 0 !important;
     height: 100dvh !important;

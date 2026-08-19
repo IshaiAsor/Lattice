@@ -42,6 +42,14 @@ export interface UserRuleView extends CreateRuleDto {
   actions: (RuleActionDto & { id: number })[];
 }
 
+/** One recorded firing of a rule (UserRuleEvent), newest first from `GET /events`. */
+export interface RuleEventView {
+  id: number;
+  rule_id: number;
+  triggered_value: string | null;
+  fired_at: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class UserRulesService {
   private apiUrl = `${apiUrl()}/api/rules`;
@@ -49,6 +57,13 @@ export class UserRulesService {
 
   getRules(): Observable<UserRuleView[]> {
     return this.http.get<UserRuleView[]>(this.apiUrl);
+  }
+
+  /** Fire events across all the user's rules — the list's "Fired (24h)" stat and per-rule history. */
+  getEvents(limit = 200): Observable<RuleEventView[]> {
+    return this.http.get<RuleEventView[]>(`${this.apiUrl}/events`, {
+      params: { limit: String(limit) },
+    });
   }
 
   createRule(rule: CreateRuleDto): Observable<UserRuleView> {
