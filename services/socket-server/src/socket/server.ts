@@ -52,7 +52,18 @@ export async function initSocket(httpServer: http.Server, ch: Channel): Promise<
   await Promise.all([pubClient.connect(), subClient.connect()]);
   log.info('Valkey adapter clients connected');
 
-  const io = new Server(httpServer, { cors: { origin: '*' } });
+  const io = new Server(httpServer, {
+    cors: { origin: '*' },
+    // socket.io defaults maxHttpBufferSize to 1 MB, and camera frames are emitted through here
+    // as base64 `action_state_update` payloads (digest-service telemetry.consumer.ts). Base64
+    // costs 33%, so the default silently capped the platform at a ~750 KB JPEG: a 5 MP frame
+    // exceeded it, socket.io dropped the packet and closed the client connection, and the camera
+    // went blank in the UI while capture, upload, storage and the on-demand round-trip all kept
+    // working perfectly — no error anywhere on the path. Sized for a full QSXGA frame
+    // (~900 KB JPEG -> ~1.2 MB encoded) with room to spare; this is a per-message ceiling, not a
+    // per-connection allocation.
+    maxHttpBufferSize: 4 * 1024 * 1024,
+  });
   io.adapter(createAdapter(pubClient, subClient));
 
   // JWT handshake — app_usage tokens only. Reject the connection otherwise.
