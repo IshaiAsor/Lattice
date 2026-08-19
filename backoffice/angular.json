@@ -94,7 +94,8 @@
             },
             "tunnel": {
               "buildTarget": "backoffice:build:tunnel",
-              "proxyConfig": "proxy.conf.json"
+              "proxyConfig": "proxy.conf.json",
+              "allowedHosts": ["lattice-local.duckdns.org"]
             }
           },
           "defaultConfiguration": "development"
