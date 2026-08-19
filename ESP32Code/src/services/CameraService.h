@@ -10,6 +10,30 @@
 // All camera action classes call CameraService::init() and then use
 // esp_camera_fb_get() / esp_camera_fb_return() directly — those are thread-safe
 // in ESP-IDF and don't need additional wrapping.
+// Per-sensor JPEG quality (esp32-camera scale: LOWER number = less compression = BIGGER frame).
+// Frame size is the binding constraint on this platform's DMA path, so these are the primary
+// tuning knob and are overridable per board at build time, e.g.
+//     PLATFORMIO_BUILD_FLAGS='-D OV5640_JPEG_QUALITY=10'
+// Both defaults are measured on hardware by capturing frames and looking at them — see
+// applyTuning() for the evidence.
+// XCLK fed to the sensor. 10 MHz is measured-best on this board for both sensors tested, and
+// the obvious intuition — that a 5 MP sensor wants a faster clock — is wrong here: raising it to
+// 24 MHz for the OV5640 made the image visibly WORSE, heavy grain and a magenta cast, with the
+// JPEG inflating from 344 KB to 922 KB on the same scene purely from noise. That points at
+// signal integrity on the parallel bus rather than at the sensor.
+// Overridable per board, e.g. PLATFORMIO_BUILD_FLAGS='-D CAMERA_XCLK_HZ=20000000'.
+// NOTE 16000000 exactly is special and must be avoided — see pinConfig().
+#ifndef CAMERA_XCLK_HZ
+#define CAMERA_XCLK_HZ 10000000
+#endif
+
+#ifndef OV3660_JPEG_QUALITY
+#define OV3660_JPEG_QUALITY 14
+#endif
+#ifndef OV5640_JPEG_QUALITY
+#define OV5640_JPEG_QUALITY 12
+#endif
+
 class CameraService
 {
   public:
@@ -18,8 +42,9 @@ class CameraService
         if (_ready)
             return true;
 
-        _config = pinConfig();
-        if (psramFound())
+        _config          = pinConfig();
+        const bool psram = psramFound();
+        if (psram)
         {
             _config.frame_size   = FRAMESIZE_SVGA;
             _config.jpeg_quality = 10;
@@ -32,6 +57,15 @@ class CameraService
             _config.fb_count     = 1;
         }
 
+        // At INFO, not DEBUG: this branch decides frame size, buffer count and whether the driver
+        // can hold a full JPEG at all, so it is the first thing worth knowing when frames stop
+        // arriving. `psram=NO` on a board built with BOARD_HAS_PSRAM means the PSRAM mode is wrong
+        // (memory_type qio_opi assumes octal), and every later resolution grow is then allocating
+        // against internal DRAM.
+        LOG_I("Camera", "init: psram=%s frame=%ux%u quality=%d fb_count=%d xclk=%d Hz", psram ? "yes" : "NO",
+              (unsigned)resolution[_config.frame_size].width, (unsigned)resolution[_config.frame_size].height,
+              _config.jpeg_quality, _config.fb_count, _config.xclk_freq_hz);
+
         esp_err_t err = esp_camera_init(&_config);
         if (err != ESP_OK)
         {
@@ -42,7 +76,7 @@ class CameraService
 
         sensor_t* s = esp_camera_sensor_get();
         _sensorPid  = s ? s->id.PID : 0;
-        LOG_D("Camera", "sensor PID: 0x%04X", _sensorPid);
+        LOG_I("Camera", "sensor PID: 0x%04X", _sensorPid);
 
         // Per-sensor target resolutions may exceed the PSRAM-branch's SVGA init size — routed
         // through applyResolution() so it grows the driver's capture buffer via a real reinit
@@ -63,19 +97,44 @@ class CameraService
                 LOG_W("Camera", "OV5640: autofocus unavailable (no VCM lens?)");
         }
 
-        // Let AEC/AWB settle before the first real capture
-        for (int i = 0; i < 5; i++)
+        int captured = settle(5);
+
+        if (captured == 0)
         {
-            camera_fb_t* warmup = esp_camera_fb_get();
-            if (warmup)
-                esp_camera_fb_return(warmup);
+            // _ready deliberately stays true: the driver is up and a later capture may still
+            // succeed (AEC still settling, transient bus noise), so the read surface keeps trying
+            // and keeps reporting. The return value is what tells the caller this camera is suspect.
+            LOG_E("Camera", "init: driver up but 0/5 warmup frames captured — this camera will not "
+                            "produce images (check data-bus wiring, xclk_freq_hz, and whether the "
+                            "JPEG overruns the driver buffer)");
+            return false;
         }
 
-        LOG_I("Camera", "ready");
+        LOG_I("Camera", "ready (%d/5 warmup frames)", captured);
         return true;
     }
 
     static bool isReady() { return _ready; }
+
+    // Runs the sensor for a few frames and discards them so auto-exposure and auto-white-balance
+    // converge before anything real is captured. Returns how many actually arrived — the only
+    // signal available that the data path works, since the Arduino framework links a prebuilt
+    // libesp32-camera.a with every diagnostic string stripped.
+    static int settle(int frames)
+    {
+        int captured = 0;
+        for (int i = 0; i < frames; i++)
+        {
+            camera_fb_t* fb = esp_camera_fb_get();
+            if (fb)
+            {
+                captured++;
+                LOG_D("Camera", "settle frame %d: %u bytes", i, (unsigned)fb->len);
+                esp_camera_fb_return(fb);
+            }
+        }
+        return captured;
+    }
 
     // Applies a user-configured resolution override on top of init()'s PSRAM/sensor-PID
     // defaults. esp_camera_init() sizes its DMA/JPEG capture buffer once, from the frame_size
@@ -87,6 +146,20 @@ class CameraService
     {
         if (!_ready)
             return;
+
+        // Clamp to what the fitted sensor can actually produce. Overshooting is not a harmless
+        // no-op: the grow path below would deinit and reinit the driver for a frame size the
+        // sensor cannot deliver, and esp_camera_init() reports ESP_OK for it — the camera then
+        // simply never returns a frame, which is indistinguishable from dead hardware. The UI
+        // offers all 13 framesizes to every camera regardless of sensor (see F3.20).
+        const framesize_t cap = maxFramesize();
+        if (pixelCount(fs) > pixelCount(cap))
+        {
+            LOG_W("Camera", "requested %ux%u exceeds sensor 0x%04X maximum %ux%u — clamping",
+                  (unsigned)resolution[fs].width, (unsigned)resolution[fs].height, _sensorPid,
+                  (unsigned)resolution[cap].width, (unsigned)resolution[cap].height);
+            fs = cap;
+        }
 
         if (pixelCount(fs) > pixelCount(_config.frame_size))
         {
@@ -108,6 +181,13 @@ class CameraService
             }
             _config = grown;
             applyTuning(); // deinit/reinit resets sensor registers, incl. quality/sharpness
+
+            // A reinit restarts the sensor cold: AEC/AWB are back at their defaults, so the next
+            // frames come out underexposed and banded. init()'s warm-up ran before this point and
+            // cannot cover it — without re-settling here, any camera configured above the init
+            // default delivered dark, noisy images that still decoded as valid JPEG. More frames
+            // than at init because the larger readout takes longer to converge.
+            settle(8);
         }
 
         sensor_t* s = esp_camera_sensor_get();
@@ -194,6 +274,32 @@ class CameraService
 
     static uint32_t pixelCount(framesize_t fs) { return (uint32_t)resolution[fs].width * resolution[fs].height; }
 
+    // Largest frame each sensor can produce, by SCCB-reported PID. This is a sensor-capability
+    // ceiling; the *bandwidth* ceiling is handled by jpeg_quality in applyTuning(), not here.
+    //
+    // Those two were confused for a while and it cost a lot of debugging: at the old quality 8 the
+    // OV3660 banded at anything above SVGA, which looked exactly like a resolution limit. It was
+    // frame size. At quality 14 the same sensor is clean at its full QXGA, so the cap belongs
+    // where the datasheet puts it.
+    //
+    // Exceeding a sensor's real maximum is not a harmless overshoot: applyResolution() would
+    // deinit and reinit the driver for a size the sensor cannot deliver, esp_camera_init()
+    // returns ESP_OK for it, and captures then time out forever.
+    static framesize_t maxFramesize()
+    {
+        switch (_sensorPid)
+        {
+        case 0x2640:                // OV2640 — 2 MP
+            return FRAMESIZE_UXGA;  // 1600x1200
+        case 0x3660:                // OV3660 — 3 MP, verified clean to QXGA at quality 14
+            return FRAMESIZE_QXGA;  // 2048x1536
+        case 0x5640:                // OV5640 — 5 MP
+            return FRAMESIZE_QSXGA; // 2560x1920
+        default:
+            return FRAMESIZE_SVGA; // unknown sensor: stay at init()'s safe default
+        }
+    }
+
     static camera_config_t pinConfig()
     {
         camera_config_t config = {};
@@ -215,12 +321,32 @@ class CameraService
         config.pin_sccb_scl    = SIOC_GPIO_NUM;
         config.pin_pwdn        = PWDN_GPIO_NUM;
         config.pin_reset       = RESET_GPIO_NUM;
-        // Must be exactly 16MHz on ESP32-S3/S2: esp32-camera only enables its PSRAM/EDMA DMA
-        // path (cam_hal's psram_mode) at this exact frequency. Any other value — including the
-        // previous 20MHz — falls back to a small fixed internal-DRAM DMA ring (32KB by default,
-        // CONFIG_CAMERA_DMA_BUFFER_SIZE_MAX), which is too small for SVGA+ JPEG frames and
-        // produces both corrupted frames and esp_camera_fb_get() failures at higher resolutions.
-        config.xclk_freq_hz = 16000000;
+        // 10 MHz. Both of the obvious values are wrong on this board, in different ways, and the
+        // difference is invisible unless you decode the frame — a torn frame still has a length,
+        // and cam_take() already guarantees an EOI marker, so "got a frame" proves nothing.
+        //
+        // Measured on hardware (OV3660, pre-network sweep in CameraSelfTest.h, fb_count=2,
+        // frames per 4 attempts that fully decode via jpg2rgb565):
+        //
+        //     xclk    VGA   SVGA   XGA   UXGA   QXGA
+        //     16MHz   0/4   0/4    0/4   0/4    0/4
+        //     20MHz   4/4   4/4    4/4   2/4    corrupt
+        //     10MHz   4/4   4/4    4/4   4/4    4/4     <- 394,960 B at QXGA, clean
+        //
+        // 16 MHz is the exact value that enables cam_hal's psram_mode (cam_hal.c:369, exact
+        // equality). That path does not work on this board at all: every capture times out, while
+        // esp_camera_init() still returns ESP_OK and SCCB still reads the sensor PID — a camera
+        // that looks perfectly healthy and produces nothing.
+        //
+        // 20 MHz drops psram_mode and DMAs through the internal-DRAM ring instead. That works up
+        // to XGA, but above it the ring cannot keep up with the pixel rate: frames arrive with a
+        // valid EOI and corrupt scan data (green banding/tearing), which is exactly the failure
+        // the original 16 MHz comment predicted for this branch.
+        //
+        // 10 MHz uses the same non-PSRAM ring but halves the pixel rate, so the ring keeps up all
+        // the way to the sensor's QXGA maximum. Re-run the sweep before changing this again, and
+        // judge it on the DECODED column, never on byte counts.
+        config.xclk_freq_hz = CAMERA_XCLK_HZ;
         config.pixel_format = PIXFORMAT_JPEG;
         return config;
     }
@@ -232,19 +358,54 @@ class CameraService
             return;
         if (_sensorPid == 0x3660)
         { // OV3660
-            s->set_quality(s, 8);
+            // 14, not 8. jpeg_quality is inverted — a lower number means less compression and a
+            // BIGGER frame — and frame size is what this platform's DMA path runs out of. At 8 a
+            // QXGA frame is ~450 KB and arrives shredded with horizontal banding; at 14 the same
+            // scene is ~89 KB and is clean at every resolution the sensor offers. Measured by
+            // capturing and looking at frames: q8 banded above SVGA, q14 clean through QXGA.
+            // Raise this number (more compression) before lowering the resolution if banding
+            // ever returns; the two trade against each other and quality is the cheaper give.
+            s->set_quality(s, OV3660_JPEG_QUALITY);
             s->set_sharpness(s, 2);
             s->set_contrast(s, 1);
             s->set_saturation(s, 0);
-            LOG_I("Camera", "OV3660: SVGA q8");
+            LOG_I("Camera", "OV3660: q%d", OV3660_JPEG_QUALITY);
         }
         else if (_sensorPid == 0x5640)
         { // OV5640
-            s->set_quality(s, 6);
+            // 10, measured on an OV5640-AF at QSXGA (2560x1920), xclk 10 MHz, by capturing
+            // frames and looking at them:
+            //
+            //     q8   no frame at all — too large, the DMA path drops every one
+            //     q10  clean, 819-854 KB, 0 capture failures — but see the transport limit below
+            //     q12  clean, 344-671 KB, 0 capture failures      <- default
+            //
+            // The original 6 was never measured and sits below the q8 that fails outright, so it
+            // would have produced a camera that silently captured nothing.
+            //
+            // q10 is one step off the cliff, deliberately: frame size is scene-dependent (the
+            // same q12 measured 344 KB on a dim scene and 671 KB on a bright one), so a very
+            // detailed scene could push q10 into q8's failure mode. Drop to 12 if that shows up
+            // as intermittent missing frames — it costs little visible quality.
+            //
+            // Capture is NOT the binding constraint here — delivery is, in two separate ways.
+            //
+            // 1. The frame reaches the UI as a base64 string over socket.io
+            //    (digest-service telemetry.consumer.ts -> emitActionStateUpdate), and socket.io's
+            //    default maxHttpBufferSize is 1 MB. Base64 costs 33%, so the JPEG must stay under
+            //    ~750 KB or the packet is dropped and the client is disconnected. q10 at QSXGA
+            //    produces 819-854 KB — over the line, which silently breaks the camera in the UI
+            //    while capture, upload and storage all keep working perfectly. q12 stays under it.
+            //    Raise maxHttpBufferSize on socket-server if a bigger frame is ever wanted.
+            //
+            // 2. The frame rate at QSXGA is capped by the HTTPS upload, not the sensor: ~0.5 Hz
+            //    against a 1 s interval at both q10 and q12, with zero capture failures. Lower the
+            //    resolution for a sustained 1 Hz.
+            s->set_quality(s, OV5640_JPEG_QUALITY);
             s->set_sharpness(s, 2);
             s->set_contrast(s, 1);
             s->set_saturation(s, 1);
-            LOG_I("Camera", "OV5640: XGA q6");
+            LOG_I("Camera", "OV5640: q%d", OV5640_JPEG_QUALITY);
         }
         else
         {

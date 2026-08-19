@@ -88,7 +88,11 @@ class CameraAction : public BaseTelemetryAction
     CameraAction(String name, std::vector<ActionPinsSetup> pins, int readInterval)
         : BaseTelemetryAction(name, readInterval, pins)
     {
-        CameraService::init();
+        // init() reports whether the camera actually delivered a warm-up frame, not just whether
+        // the driver came up. Swallowing it is how a board that captures nothing still logged
+        // "ready" and looked healthy from the platform side.
+        if (!CameraService::init())
+            LOG_E("Camera", "action '%s' is bound to a camera that produced no frames at init", name.c_str());
     }
 
     // Applies per-instance config from the backend. Called once right after construction —
