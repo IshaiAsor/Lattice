@@ -2,6 +2,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <esp_heap_caps.h>
+#include <esp_log.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
@@ -26,6 +27,7 @@
 #include "services/ProvisioningBleService.h"
 #include "actions/DynamicDeviceActionsService.h"
 #ifdef HAS_CAMERA
+#include "services/CameraSelfTest.h"
 #include "services/LiveStreamService.h"
 #include "services/HttpFrameService.h"
 #endif
@@ -117,6 +119,19 @@ void setup()
     uint32_t t = millis();
     while (!Serial && (millis() - t) < 3000)
         delay(10);
+#endif
+
+    // CORE_DEBUG_LEVEL only sets the compile-time ceiling; ESP-IDF components still gate their
+    // own ESP_LOGx at runtime, and the default runtime level hides them. Opening it up here is
+    // what surfaced the gdma errors during camera bring-up instead of failing mutely. It cannot
+    // reach esp32-camera itself: the Arduino framework links a prebuilt libesp32-camera.a with
+    // every diagnostic string already stripped.
+    esp_log_level_set("*", ESP_LOG_VERBOSE);
+
+#if defined(HAS_CAMERA) && defined(CAMERA_SELFTEST)
+    // Deliberately the first thing after Serial: the whole point is to exercise the camera
+    // before WiFi, BLE, TLS or MQTT can contend for DMA, heap or GPIO.
+    CameraSelfTest::run();
 #endif
 
     LOG_I("Boot", "device starting — type=%s version=%s", DEVICE_TYPE, DEVICE_VERSION);
