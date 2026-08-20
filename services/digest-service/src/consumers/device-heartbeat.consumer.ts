@@ -1,9 +1,11 @@
+import type { Channel } from 'amqplib';
 import type { DeviceHeartbeatPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import { db } from '../db/client';
 import { valkey, keys } from '../cache/valkey';
 import { socket } from '../socket/emitter';
 import { recordReportedVersion } from '../device-version';
+import { resyncDeviceState } from '../services/state-resync';
 
 const log = createLogger('digest-service:device-heartbeat');
 
@@ -15,7 +17,7 @@ const LAST_SEEN_TTL_SECONDS = 200;
 // Heartbeats are liveness only — no DB write, no socket fan-out. We just refresh a hot cache
 // key with the last-seen timestamp + diagnostics; a failure is logged, not retried (the next
 // heartbeat re-establishes it), so we never nack a ping to the DLQ.
-export function deviceHeartbeatConsumer() {
+export function deviceHeartbeatConsumer(ch: Channel) {
   return async (payload: DeviceHeartbeatPayload): Promise<void> => {
     const { userId, deviceId, version, timestamp, uptimeMs, freeHeap, rssi } = payload;
     const userDeviceId = parseInt(deviceId, 10);
@@ -64,6 +66,10 @@ export function deviceHeartbeatConsumer() {
           'device was recorded offline but is heartbeating — liveness corrected to online',
         );
         socket.emitDeviceStatusChange(parseInt(userId, 10), userDeviceId, true);
+        // The device was away and is back: whatever its actions did in the meantime, nobody saw.
+        // updateMany's count is a true transition test, so this fires once per return, not per
+        // heartbeat (F23.4).
+        await resyncDeviceState(ch, userId, userDeviceId);
       }
     } catch (err) {
       log.error({ err, userDeviceId }, 'device liveness heal failed');

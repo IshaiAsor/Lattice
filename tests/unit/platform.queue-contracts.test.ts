@@ -101,6 +101,18 @@ const CASES: ContractCase[] = [
     broken: { userId: '1', deviceId: '42', command: { value: 'on' } }, // actionName missing
   },
   {
+    rk: RK.ACTION_READ_REQUESTED,
+    canonical: {
+      userId: '1',
+      deviceId: '42',
+      actionId: 5,
+      // Which trigger raised the read. Diagnostic only — it reaches the metrics label, not the
+      // dispatch, so every reason produces the same `read` verb on the wire.
+      reason: 'sweep',
+    },
+    broken: { userId: '1', deviceId: '42', actionId: 5, reason: 'because' }, // not in enum
+  },
+  {
     rk: RK.ACTION_RESULT,
     canonical: {
       userId: '1',

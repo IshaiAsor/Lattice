@@ -11,6 +11,11 @@ import { phaseAdvanceConsumer } from './consumers/phase-advance.consumer';
 import { rulesEngine } from './services/rules.engine';
 import { advanceDuePhases } from './services/phases.service';
 import { fireDueScheduleTriggers } from './services/pipeline-triggers';
+import {
+  sweepUnconfirmedActions,
+  sweepUnsettledCommands,
+  reapSilentDevices,
+} from './services/reconcile.service';
 import { healthRouter } from './routes/health.routes';
 
 const { metricsHandler } = initOTel('automation-worker');
@@ -45,6 +50,30 @@ async function main() {
   // keeps the 10s rules pass free of a second query it would almost never act on.
   cron.schedule('0 * * * * *', () => advanceDuePhases(ch));
   log.info('blueprint phase auto-advance cron started (every minute)');
+
+  // State reconciliation (F23). Slower than everything above by design: it exists to catch state
+  // the platform has quietly been wrong about, and being wrong for five more minutes costs
+  // nothing next to the message volume of asking constantly.
+  if (env.reconcile.enabled) {
+    cron.schedule(env.reconcile.cron, () => {
+      sweepUnconfirmedActions(ch).catch((err) =>
+        log.error({ err }, 'error sweeping unconfirmed actions'),
+      );
+      sweepUnsettledCommands(ch).catch((err) =>
+        log.error({ err }, 'error settling stranded commands'),
+      );
+    });
+    log.info({ cron: env.reconcile.cron }, 'state reconciliation cron started');
+  } else {
+    log.warn('state reconciliation disabled by RECONCILE_ENABLED=false');
+  }
+
+  // Liveness reaper. The Last-Will covers a disconnect the broker witnesses; this covers the one
+  // it does not — a device losing power, which otherwise reads online forever.
+  cron.schedule(env.liveness.cron, () => {
+    reapSilentDevices(ch).catch((err) => log.error({ err }, 'error reaping silent devices'));
+  });
+  log.info({ cron: env.liveness.cron }, 'device liveness reaper cron started');
 
   const app = express();
   app.use(createHttpLogger(log));

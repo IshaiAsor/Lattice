@@ -196,6 +196,8 @@ erDiagram
     string action_name
     string mqtt_action_name
     string current_state
+    datetime last_confirmed_at "nullable; last positive confirmation of current_state"
+    string state_source "nullable; command-ack/telemetry/reconcile/boot-restore"
     string status "active/staged_*/deprecated"
     int sort_order "position within group"
     int telemetry_interval_ms
@@ -896,14 +898,14 @@ falls outside the OTA window, after which the update is declared dead and can be
 | --- | ------- | ------------ | ---------- |
 | 1   | 2       | Greenhouse A | 0          |
 
-#### `user_device_actions` (`UserDeviceAction`) — an activated capability instance. Index `(user_device_id, mqtt_action_name)`. `sort_order` = position within group. `default_trait_id` (nullable FK → `google_device_traits`) = the user's chosen display trait; overrides the capability-level `is_default` when set. Resolution order: `default_trait_id` → catalog `is_default` trait → first trait. `camera_resolution`/`camera_transport` are only meaningful for a `CameraAction` instance (nullable, unused by every other implementation_type).
+#### `user_device_actions` (`UserDeviceAction`) — an activated capability instance. Index `(user_device_id, mqtt_action_name)`. `sort_order` = position within group. `default_trait_id` (nullable FK → `google_device_traits`) = the user's chosen display trait; overrides the capability-level `is_default` when set. Resolution order: `default_trait_id` → catalog `is_default` trait → first trait. `camera_resolution`/`camera_transport` are only meaningful for a `CameraAction` instance (nullable, unused by every other implementation_type). `last_confirmed_at`/`state_source` record when the platform last had positive confirmation that `current_state` is what the device holds, and from which path — NULL/NULL means never confirmed. A command action only ever gets confirmed by an ack or a reconcile read-back; a telemetry action self-confirms on every cyclic reading.
 
-| id  | user_device_id | capability_id | group_id | default_trait_id | action_name | mqtt_action_name | current_state | status | sort_order | camera_resolution | camera_transport |
-| --- | -------------- | ------------- | -------- | ---------------- | ----------- | ---------------- | ------------- | ------ | ---------- | ----------------- | ---------------- |
-| 100 | 7              | 10            | 1        | NULL             | Garage Temp | temperature      | "23.4"        | active | 0          | NULL              | NULL             |
-| 101 | 7              | 11            | 1        | 1                | Door Relay  | relay1           | "OFF"         | active | 1          | NULL              | NULL             |
-| 102 | 7              | 12            | 1        | NULL             | Door Camera | camera           | NULL          | active | 2          | SVGA              | http             |
-| 102 | 7              | 12            | 1        | NULL             | Garage Cam  | cam              | NULL          | active | 2          |
+| id  | user_device_id | capability_id | group_id | default_trait_id | action_name | mqtt_action_name | current_state | last_confirmed_at    | state_source | status | sort_order | camera_resolution | camera_transport |
+| --- | -------------- | ------------- | -------- | ---------------- | ----------- | ---------------- | ------------- | -------------------- | ------------ | ------ | ---------- | ----------------- | ---------------- |
+| 100 | 7              | 10            | 1        | NULL             | Garage Temp | temperature      | "23.4"        | 2026-08-19T10:42:03Z | telemetry    | active | 0          | NULL              | NULL             |
+| 101 | 7              | 11            | 1        | 1                | Door Relay  | relay1           | "OFF"         | 2026-08-19T10:15:00Z | reconcile    | active | 1          | NULL              | NULL             |
+| 102 | 7              | 12            | 1        | NULL             | Door Camera | camera           | NULL          | NULL                 | NULL         | active | 2          | SVGA              | http             |
+| 103 | 7              | 13            | 1        | NULL             | Garage Cam  | cam              | NULL          | NULL                 | NULL         | active | 3          | NULL              | NULL             |
 
 #### `user_device_action_pins` (`UserDeviceActionPin`) — per-instance GPIO assignment. `capability_pin_id` FK to the catalog slot (mode is read from there). Unique `(user_device_action_id, capability_pin_id)`.
 

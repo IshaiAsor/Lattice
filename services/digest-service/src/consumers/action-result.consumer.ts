@@ -2,10 +2,11 @@ import type { Channel } from 'amqplib';
 import type { ActionResultPayload } from '@lattice/queue';
 import { createLogger } from '@lattice/logger';
 import { resolveUserDeviceAction } from '../resolve';
-import { writeScalarState } from '../state-write';
+import { writeScalarState, reconcileState } from '../state-write';
 import { socket } from '../socket/emitter';
-import { takePending } from '../cache/pending';
-import type { PendingCommand } from '../cache/pending';
+import { takePending, takePendingRead } from '../cache/pending';
+import type { PendingCommand, PendingRead } from '../cache/pending';
+import { reconcileDivergences } from '../metrics';
 import * as timeout from '../pending-timeout';
 import { recordAck } from '../command-history';
 import { db } from '../db/client';
@@ -32,6 +33,11 @@ export function actionResultConsumer(ch: Channel) {
       timeout.clear(commandId);
       pending = await takePending(commandId);
     }
+
+    // Is this the answer to a read-back rather than to a command? Taken before recordAck, which
+    // has no row to settle for a read and would otherwise invent one (F23.1).
+    let pendingRead: PendingRead | null = null;
+    if (commandId) pendingRead = await takePendingRead(commandId);
 
     // The durable half of the same settlement (F11.12), and the only record of an ack that has no
     // command behind it — a duration releasing, or a boot restore. Written before the branches
@@ -122,6 +128,27 @@ export function actionResultConsumer(ch: Channel) {
       return;
     }
 
+    // A read-back answers with the device's own state rather than the result of a command, so it
+    // takes the divergence path: confirm quietly, or correct loudly (F23.3b).
+    //
+    // Addressed by the id the read was ISSUED for, never by re-resolving (deviceId, actionName).
+    // That pair is not unique — a device can carry several rows sharing one mqtt name (a
+    // re-provision leaves the old instance behind), and the resolver returns whichever it finds.
+    // Re-resolving would compare this row's expectedState against a different row and write the
+    // correction there: seen for real on the dev stack, where a read of action 51 corrected 84.
+    if (pendingRead !== null) {
+      const diverged = await reconcileState(ch, pendingRead.actionId, {
+        userId,
+        deviceId,
+        actionName,
+        value,
+        timestamp,
+        expectedState: pendingRead.expectedState,
+      });
+      if (diverged) reconcileDivergences.add(1, { reason: pendingRead.reason });
+      return;
+    }
+
     // status === 'ok' → write the device's observed state authoritatively.
     const resolved = await resolveUserDeviceAction(deviceId, actionName);
     if (resolved === null) {
@@ -137,6 +164,9 @@ export function actionResultConsumer(ch: Channel) {
       value,
       timestamp,
       commandId,
+      // An ack with no commandId is unsolicited: the device volunteering state after a reboot or
+      // a duration releasing itself, rather than answering anything we asked.
+      source: commandId ? 'command-ack' : 'boot-restore',
     });
     log.info(
       { userId, deviceId, actionName, commandId },

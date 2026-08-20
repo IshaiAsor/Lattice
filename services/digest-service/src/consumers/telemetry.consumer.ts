@@ -136,7 +136,14 @@ async function handleScalar(
     return;
   }
 
-  await writeScalarState(ch, userActionId, { userId, deviceId, actionName, value, timestamp });
+  await writeScalarState(ch, userActionId, {
+    userId,
+    deviceId,
+    actionName,
+    value,
+    timestamp,
+    source: 'telemetry',
+  });
 }
 
 // A fault reading is persisted to sensor_history as a structured error row (value NULL,

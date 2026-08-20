@@ -16,6 +16,11 @@ export const RK = {
   // digest resolves it (→ device/version/mqtt name), writes optimistic state + echoes,
   // then publishes ACTION_DISPATCH for the device.
   ACTION_REQUESTED: 'action.requested',
+  // A request to ask a device what state it is ACTUALLY in, rather than tell it to change.
+  // digest resolves it and dispatches the firmware's reserved `read` verb; the device answers
+  // on the ack topic and the reply corrects current_state if it diverged (F23). Never creates
+  // a device_commands row — a read has no target_state, so it is not a command.
+  ACTION_READ_REQUESTED: 'action.read.requested',
   ACTION_DISPATCH: 'action.dispatch',
   // A device's ack that it executed (or rejected) a command. digest writes the
   // authoritative current_state on success and resolves the in-flight pending request.
@@ -69,6 +74,7 @@ export const QUEUES = {
   DEVICE_STATE_CHANGED: 'q.device.state.changed',
   DEVICE_HEARTBEAT: 'q.device.heartbeat',
   ACTION_REQUESTED: 'q.action.requested',
+  ACTION_READ_REQUESTED: 'q.action.read.requested',
   ACTION_DISPATCH: 'q.action.dispatch',
   // Second consumer of action.dispatch: digest-service's command recorder. Dispatch is the single
   // point every command passes through — the UI's, a rule's, a scene's, a pipeline's — so one queue

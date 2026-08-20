@@ -87,6 +87,13 @@ export const actionRequestedSchema = z.object({
   source: commandSourceSchema.optional(),
 });
 
+export const actionReadRequestedSchema = z.object({
+  userId: z.string(),
+  deviceId: z.string(),
+  actionId: z.number(),
+  reason: z.enum(['sweep', 'reconnect', 'unsettled', 'manual']),
+});
+
 export const actionDispatchSchema = z.object({
   userId: z.string(),
   deviceId: z.string(),
@@ -98,6 +105,9 @@ export const actionDispatchSchema = z.object({
   // Resolved by whoever raised the command; the recorder would otherwise have to look it up from
   // (deviceId, actionName) on every dispatch just to write one row.
   actionId: z.number().optional(),
+  // This dispatch carries the `read` verb, not a command. The history recorder skips it: a read
+  // has no target_state, so a device_commands row for it would be a fabricated command (F23).
+  readback: z.boolean().optional(),
 });
 
 export const actionResultSchema = z.object({
@@ -215,6 +225,7 @@ export const EVENT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   [RK.DEVICE_STATE_CHANGED]: deviceStateChangedSchema,
   [RK.DEVICE_HEARTBEAT]: deviceHeartbeatSchema,
   [RK.ACTION_REQUESTED]: actionRequestedSchema,
+  [RK.ACTION_READ_REQUESTED]: actionReadRequestedSchema,
   [RK.ACTION_DISPATCH]: actionDispatchSchema,
   [RK.ACTION_RESULT]: actionResultSchema,
   [RK.PICTURE_REQUESTED]: pictureRequestedSchema,

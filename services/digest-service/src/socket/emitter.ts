@@ -23,6 +23,15 @@ export const socket = {
       commandId,
     });
   },
+  // A read-back found the stored state already correct. No state field on purpose: the value did
+  // not change, and sending it would invite the UI to re-render a card for a non-event. All this
+  // carries is freshness.
+  emitActionStateConfirmed(userId: number, userDeviceActionId: number, confirmedAt: string): void {
+    emitter.to(`user_${userId}`).emit(SOCKET_EVENTS.ACTION_STATE_CONFIRMED, {
+      actionId: userDeviceActionId,
+      confirmedAt,
+    });
+  },
   // A command was dispatched and is awaiting the device's ack. The UI shows the desired
   // value as pending until a confirming action_state_update (or a failed event) arrives.
   emitActionStatePending(

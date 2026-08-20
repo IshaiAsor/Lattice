@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { deriveValidParameters } from '@lattice/capability-validation';
-import { publish, RK, type PictureRequestedPayload } from '@lattice/queue';
+import {
+  publish,
+  RK,
+  type PictureRequestedPayload,
+  type ActionReadRequestedPayload,
+} from '@lattice/queue';
 import { db } from '../db';
 import { getChannel } from '../queue';
 import { env } from '../config/env.config';
@@ -34,6 +39,11 @@ export interface ActionView {
   googleTraits: GoogleTraitView[];
   defaultTraitId: number | null;
   state: string | null; // current_state
+  // When the platform last had positive confirmation that `state` is what the device holds, and
+  // which path confirmed it (F23). Null means never confirmed — the UI shows confidence rather
+  // than hiding it, so this is what separates "the pump is off" from "we last heard it was off".
+  lastConfirmedAt: Date | null;
+  stateSource: string | null;
   online: boolean;
   lastOnlineDate: Date | null;
   sortOrder: number;
@@ -64,6 +74,16 @@ export interface LastFrameView {
 export interface CaptureRequestView {
   commandId: string;
   /** How long the platform will wait for the frame — the client's cue to stop waiting too. */
+  timeoutMs: number;
+}
+
+export interface StateReadRequestView {
+  /**
+   * How long the platform will wait for the device to answer. No commandId: digest mints the
+   * read's own id, and the answer reaches the browser as an ordinary state update rather than
+   * as a correlated reply — deliberately, since a reconcile correction must not look like the
+   * echo of somebody's command.
+   */
   timeoutMs: number;
 }
 
@@ -120,6 +140,8 @@ class UserActionsService {
         googleTraits: traits,
         defaultTraitId: resolvedDefaultTraitId,
         state: a.current_state,
+        lastConfirmedAt: a.last_confirmed_at,
+        stateSource: a.state_source,
         online: a.user_device.online,
         lastOnlineDate: a.user_device.last_online_date,
         sortOrder: a.sort_order,
@@ -383,6 +405,46 @@ class UserActionsService {
     };
     publish(await getChannel(), RK.PICTURE_REQUESTED, payload);
     return { commandId, timeoutMs };
+  }
+
+  /**
+   * Ask a device what state an action is actually in, right now (F23.6).
+   *
+   * The counterpart to a command: it changes nothing and returns nothing but something to wait
+   * on. The device answers on the ack topic, digest compares that against what the row claims,
+   * and either refreshes the confirmation stamp or corrects the state — either way the browser
+   * hears about it as an ordinary `action_state_update`.
+   *
+   * Offline is rejected rather than dispatched, for the same reason a capture is: the read would
+   * be guaranteed to time out, and saying so immediately is the better answer.
+   */
+  async requestStateRead(userId: number, actionId: number): Promise<StateReadRequestView> {
+    const action = await db.userDeviceAction.findUnique({
+      where: { id: actionId },
+      select: {
+        user_device_id: true,
+        capability: { select: { mqtt_action_type: true } },
+        user_device: { select: { user_id: true, online: true } },
+      },
+    });
+    if (!action) throw Object.assign(new Error('Action not found'), { statusCode: 404 });
+    if (action.user_device.user_id !== userId)
+      throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
+    // A telemetry action has its own on-demand path (the camera's capture button, a cyclic
+    // reading); the read verb answers from NVS state, which only a command action has.
+    if (action.capability.mqtt_action_type !== 'command')
+      throw Object.assign(new Error('Action is not a command action'), { statusCode: 400 });
+    if (!action.user_device.online)
+      throw Object.assign(new Error('Device is offline'), { statusCode: 409 });
+
+    const payload: ActionReadRequestedPayload = {
+      userId: String(userId),
+      deviceId: String(action.user_device_id),
+      actionId,
+      reason: 'manual',
+    };
+    publish(await getChannel(), RK.ACTION_READ_REQUESTED, payload);
+    return { timeoutMs: env.actionReadTimeoutMs };
   }
 
   private async ensureOwned(userId: number, actionId: number) {

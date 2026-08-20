@@ -65,3 +65,34 @@ export async function takePendingPicture(commandId: string): Promise<PendingPict
     return null;
   }
 }
+
+// Context for an in-flight state read-back (F23). `expectedState` is what the DB believed when
+// the read was dispatched: carrying it here is what lets the ack decide "confirmed" vs "diverged"
+// without re-reading the row, and it compares against the value as of dispatch rather than as of
+// the ack — so a command that legitimately changed the state in between is not misread as drift.
+export interface PendingRead {
+  userId: string;
+  actionId: number;
+  deviceId: string;
+  actionName: string;
+  expectedState: string | null;
+  reason: string;
+}
+
+export async function setPendingRead(
+  commandId: string,
+  pending: PendingRead,
+  ttlSeconds: number,
+): Promise<void> {
+  await valkey.set(keys.pendingRead(commandId), JSON.stringify(pending), 'EX', ttlSeconds);
+}
+
+export async function takePendingRead(commandId: string): Promise<PendingRead | null> {
+  const raw = await valkey.getdel(keys.pendingRead(commandId));
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw) as PendingRead;
+  } catch {
+    return null;
+  }
+}

@@ -453,6 +453,13 @@ model UserDeviceAction {
   action_name           String   @db.VarChar(255)
   mqtt_action_name      String   @db.VarChar(64)
   current_state         String?  @db.Text
+  // When the platform last had POSITIVE confirmation that current_state is what the device
+  // actually holds — an ack, a reading, or a reconcile read-back. Null = never confirmed.
+  // Distinct from updated_at, which also moves on writes that are not confirmations.
+  last_confirmed_at     DateTime? @db.Timestamptz(6)
+  // Where that confirmation came from: command-ack | telemetry | reconcile | boot-restore.
+  // "boot-restore" is an unsolicited ack — the device volunteering its NVS state after a reboot.
+  state_source          String?  @db.VarChar(20)
   status                String   @default("active") @db.VarChar(20)
   sort_order            Int      @default(0)
   telemetry_interval_ms Int?

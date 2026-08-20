@@ -11,6 +11,10 @@ export const SOCKET_EVENTS = {
   ACTION_STATE_UPDATE: 'action_state_update',
   ACTION_STATE_PENDING: 'action_state_pending',
   ACTION_STATE_FAILED: 'action_state_failed',
+  // A read-back confirmed the stored state was already correct (F23). Carries no state, because
+  // nothing changed — only the fact that it was verified, so an open tab's "confirmed Xm ago"
+  // keeps telling the truth instead of ageing past a check that did happen.
+  ACTION_STATE_CONFIRMED: 'action_state_confirmed',
   DEVICE_STATUS_CHANGE: 'device_status_change',
   // A pending OTA settled — confirmed on the new version, or failed and rolled back. The UI
   // holds the Update control disabled from the moment it dispatches, so this is what releases

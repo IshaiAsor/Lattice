@@ -1,4 +1,4 @@
-import { Component, HostListener, inject, input, output } from '@angular/core';
+import { Component, HostListener, inject, input, output, signal } from '@angular/core';
 import { DeviceActionView } from 'src/app/services/device.mgmt.service';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
 import { UserActionsService } from 'src/app/services/user.actions.service';
@@ -67,8 +67,28 @@ export class ActionCardComponent {
 
   private dialDragging = false;
 
+  /** A read is in flight. Guards the menu entry so a stuck device can't be asked repeatedly. */
+  refreshing = signal(false);
+
   @HostListener('document:pointerup')
   onDocumentPointerUp() { this.dialDragging = false; }
+
+  /**
+   * Ask the device what state it is really in (F23.6).
+   *
+   * Nothing is applied here: the answer arrives the way every state change does, as an
+   * action_state_update the owning component folds into this action. The spinner is released on
+   * the server's own timeout budget rather than on a response, since a confirming read that found
+   * no change produces no state event to wait for.
+   */
+  refreshState(action: DeviceActionView) {
+    if (this.refreshing() || !action.online) return;
+    this.refreshing.set(true);
+    this.userActionsService.readStateNow(action.id).subscribe({
+      next: ({ timeoutMs }) => setTimeout(() => this.refreshing.set(false), timeoutMs),
+      error: () => this.refreshing.set(false),
+    });
+  }
 
   changeActionState(action: DeviceActionView, actionState: unknown) {
     this.socketService.publishActionState(action.id, String(actionState));

@@ -2,6 +2,7 @@ import type { ActionDispatchPayload, ActionResultPayload, CommandSource } from '
 import { createLogger } from '@lattice/logger';
 import { db } from './db/client';
 import { resolveUserDeviceAction } from './resolve';
+import { isReadCommandId } from './read-command';
 
 const log = createLogger('digest-service:command-history');
 
@@ -67,6 +68,10 @@ function sourceColumns(source: CommandSource | undefined) {
 /** One row per command, written as it goes out. */
 export async function recordDispatch(payload: ActionDispatchPayload): Promise<void> {
   if (NON_COMMAND_ACTIONS.has(payload.actionName)) return;
+  // A read-back asks the device what it is; it does not tell it to become anything. It has no
+  // target_state, so a row here would invent a command. Flagged on the payload rather than by
+  // action name, because a read and a real command address the SAME action (F23).
+  if (payload.readback) return;
   try {
     const { value, durationSeconds } = readCommand(payload.command);
     // The publisher usually knows the action id; when it doesn't, the same resolver the ack path
@@ -104,6 +109,11 @@ export async function recordDispatch(payload: ActionDispatchPayload): Promise<vo
  */
 export async function recordAck(payload: ActionResultPayload): Promise<void> {
   if (NON_COMMAND_ACTIONS.has(payload.actionName)) return;
+  // The answer to a read-back, which has no row to settle. Without this the no-open-row branch
+  // below would create a fresh `source: 'device'` row for every read — one per action, per sweep,
+  // per device. Keyed on the commandId prefix because that survives a restart and a cache expiry,
+  // unlike the pending_read entry the consumer normally correlates with.
+  if (isReadCommandId(payload.commandId)) return;
   const status = payload.status === 'ok' ? 'ok' : 'error';
   const value = textOf(payload.value);
   const at = new Date();

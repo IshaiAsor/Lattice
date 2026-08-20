@@ -55,6 +55,19 @@ userActionsRouter.post('/:id/capture', async (req, res, next) => {
   }
 });
 
+// Ask a device what state this action is really in: 202 {timeoutMs}. Like /capture, the answer
+// arrives over the socket as an ordinary state update — there is nothing to return but how long
+// to wait.
+userActionsRouter.post('/:id/read', async (req, res, next) => {
+  try {
+    res
+      .status(202)
+      .json(await userActionsService.requestStateRead(req.user!.id, Number(req.params.id)));
+  } catch (err) {
+    next(err);
+  }
+});
+
 userActionsRouter.patch('/:id', async (req, res, next) => {
   try {
     const { name, group_id, telemetry_interval_ms, default_trait_id } = req.body ?? {};

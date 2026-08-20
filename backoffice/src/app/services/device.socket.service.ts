@@ -16,6 +16,9 @@ export class DeviceSocketService {
   readonly deviceUpdateState$: Observable<{ deviceId: number, status: 'confirmed' | 'failed', version: string | null, detail?: string }>;
   readonly actionStatePending$: Observable<{ actionId: number, commandId: string, state: unknown }>;
   readonly actionStateFailed$: Observable<{ actionId: number, commandId: string, lastState?: unknown }>;
+  // A read-back verified the stored state was already right (F23). No state field — nothing
+  // changed, only our confidence in it, so consumers refresh the freshness stamp and nothing else.
+  readonly actionStateConfirmed$: Observable<{ actionId: number, confirmedAt: string }>;
   readonly pipelineRunUpdate$: Observable<{ runId: number, pipelineId: number, status: string, error?: string }>;
   readonly notification$: Observable<{ eventType: string, title: string, body: string, data?: unknown }>;
 
@@ -40,6 +43,7 @@ export class DeviceSocketService {
     this.deviceUpdateState$ = socketEvent('device_update_state');
     this.actionStatePending$ = socketEvent('action_state_pending');
     this.actionStateFailed$ = socketEvent('action_state_failed');
+    this.actionStateConfirmed$ = socketEvent('action_state_confirmed');
     this.pipelineRunUpdate$ = socketEvent('pipeline_run_update');
     this.notification$ = socketEvent('notification');
   }

@@ -358,6 +358,18 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
   - firmware subscribes on its own compile-time `DEVICE_VERSION`, so the target names a topic that
     does not exist until the update has already happened (the F3.16 "online but deaf" bug class)
 
+### Devices — `digest.read-command.test.ts` ✅
+
+- recognises a read-back id
+- does not claim an ordinary command id
+- treats an absent commandId as not-a-read
+  - an unsolicited ack (duration release, boot restore) has no commandId and DOES deserve its own
+    history row — claiming it as a read would erase the records the duration feature exists to show
+- keeps the prefix distinguishable from a UUID
+  - the wire-level half of the "a read is not a command" guard (F23.1): it is what still identifies
+    a read after a restart or a Valkey TTL expiry, when the pending_read correlation is gone and
+    recordAck would otherwise fabricate a `source: 'device'` row per read, per sweep, per device
+
 ### Devices — `digest.device-version.test.ts` ✅
 
 - records the first version ever observed for a device
@@ -548,6 +560,19 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 
 - read reports current state, and still does after a restart
   - reserved `read` verb answers from NVS-persisted state; survives a device restart
+
+### Commands — `state-reconcile.e2e.test.ts` ✅
+
+- a read-back refreshes the confirmation stamp and its source
+  - the read verb answers, digest records last_confirmed_at + state_source='reconcile' (F23.3)
+- a lost ack leaves stale state that a read-back heals
+  - the sim applies a command but suppresses its ack (`suppressAck`), so the DB keeps the old value
+    with nothing able to notice; a read-back then corrects it to what the device actually holds
+- an offline device is refused rather than dispatched to
+  - 409 instead of spending the full read timeout to reach the same conclusion
+- ⬜ a read leaves device_commands untouched
+  - needs either DB access in the suites or F18.7's command-history API; the wire-level guard is
+    covered by digest.read-command.test.ts in the meantime
 
 ### Commands — `ota-command.e2e.test.ts` ✅
 

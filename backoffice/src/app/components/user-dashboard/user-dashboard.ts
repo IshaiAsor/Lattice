@@ -134,6 +134,9 @@ export class UserDashboard implements OnInit {
         if (action) {
           action.state = data.state;
           action.receivedAt = Date.now();
+          // The server just confirmed this from the device, so its stamp moves too — otherwise a
+          // reconcile correction would refresh the value while the badge still read "40m ago".
+          action.lastConfirmedAt = new Date().toISOString();
           // Only clear pending when this is the latest in-flight commandId. A stale
           // concurrent ack for an older command must not clobber a newer command's pending.
           const isLatest = !data.commandId || this.latestCommandId.get(data.actionId) === data.commandId;
@@ -180,6 +183,15 @@ export class UserDashboard implements OnInit {
           action.pending = false;
         }
         this.snackBar.open('Device did not confirm the change', 'Close', { duration: 3000 });
+      });
+
+    // A read-back that found nothing wrong (F23). It carries no state — the value is unchanged —
+    // so all it does is stop the freshness badge ageing past a check that really did happen.
+    this.socketService.actionStateConfirmed$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(({ actionId, confirmedAt }) => {
+        const action = this.findAction(actionId);
+        if (action) action.lastConfirmedAt = confirmedAt;
       });
 
     this.socketService

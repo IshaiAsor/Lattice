@@ -41,6 +41,8 @@ interface ApiUserAction {
   areaId: number | null;
   areaName: string | null;
   telemetryIntervalMs: number | null;
+  lastConfirmedAt: string | null;
+  stateSource: string | null;
 }
 
 @Injectable({
@@ -81,6 +83,11 @@ export class UserActionsService {
       implementation_type: r.implementation_type,
       validParameters: r.validParameters,
       status: r.status === 'active' ? 'active' : 'deprecated',
+      // How fresh the state is, and which path confirmed it (F23). Server-side, so unlike
+      // receivedAt it survives a page load — which is the only reason the badge can say anything
+      // at all on a freshly-opened tab.
+      lastConfirmedAt: r.lastConfirmedAt,
+      stateSource: r.stateSource,
     };
   }
 
@@ -135,6 +142,16 @@ export class UserActionsService {
   captureNow(actionId: number): Observable<{ commandId: string; timeoutMs: number }> {
     return this.http.post<{ commandId: string; timeoutMs: number }>(
       `${this.apiUrl}/api/actions/${actionId}/capture`,
+      {},
+    );
+  }
+
+  // Asks a command action's device what state it is actually in (F23). Changes nothing: the
+  // device answers with what it holds, and if that differs from what we stored, the correction
+  // arrives over the socket as an ordinary action_state_update. 409 when the device is offline.
+  readStateNow(actionId: number): Observable<{ timeoutMs: number }> {
+    return this.http.post<{ timeoutMs: number }>(
+      `${this.apiUrl}/api/actions/${actionId}/read`,
       {},
     );
   }

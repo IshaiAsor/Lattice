@@ -8,6 +8,7 @@ import { valkey, keys } from '../cache/valkey';
 import { socket } from '../socket/emitter';
 import { confirmOtaIfPending } from '../ota-confirm';
 import { recordReportedVersion } from '../device-version';
+import { resyncDeviceState } from '../services/state-resync';
 
 const log = createLogger('digest-service:device-status');
 
@@ -60,6 +61,21 @@ export function deviceStatusConsumer(ch: Channel) {
     // can be applied last and strand a live device as offline until its next reconnect.
     // Writing only when we are not older makes the pair order-independent.
     const statusAt = new Date(timestamp);
+
+    // Was it actually away? Read before the write so the resync below can tell a real return from
+    // a redelivery. Devices publish status RETAINED, so every re-subscribe (a restart, a broker
+    // reconnect) replays an `online` for the whole fleet — firing a resync on those would turn
+    // one restart into a read storm across every device we own. Only asked when the message says
+    // the device is up; the offline direction has nothing to resync.
+    let wasOffline = false;
+    if (online) {
+      const prior = await db.userDevice.findUnique({
+        where: { id: userDeviceId },
+        select: { online: true },
+      });
+      wasOffline = prior?.online === false;
+    }
+
     const applied = await db.userDevice.updateMany({
       where: {
         id: userDeviceId,
@@ -103,6 +119,14 @@ export function deviceStatusConsumer(ch: Channel) {
       socket.emitDeviceStatusChange(parseInt(userId, 10), userDeviceId, online);
     } catch (err) {
       log.error({ err, userDeviceId }, 'socket emit failed');
+    }
+
+    // 3b. A genuine return from offline: re-read what its actions actually are, since anything
+    // that changed while it was gone went unwitnessed (F23.4). Gated on the transition captured
+    // above, and on the write having applied — a status the newest-wins guard rejected is not a
+    // return, it is an out-of-order replay.
+    if (online && wasOffline && applied.count > 0) {
+      await resyncDeviceState(ch, userId, userDeviceId);
     }
 
     // 4. Notify the owner when a device drops offline (best-effort; F15.4). dedupeKey is

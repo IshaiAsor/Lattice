@@ -31,6 +31,9 @@ export const keys = {
   pendingCommand: (commandId: string) => `pending_command:${commandId}`,
   // In-flight on-demand picture capture awaiting the device's uploaded frame.
   pendingPicture: (commandId: string) => `pending_picture:${commandId}`,
+  // In-flight state read-back awaiting the device's ack (F23). Holds the state the DB believed
+  // at dispatch time, so the ack can be compared without a second query.
+  pendingRead: (commandId: string) => `pending_read:${commandId}`,
 };
 
 // Whether a telemetry value is a scalar sensor reading or an image/camera frame.

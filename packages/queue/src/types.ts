@@ -91,6 +91,19 @@ export interface ActionRequestedPayload {
   source?: CommandSource;
 }
 
+// A request to ask the device what state it is actually in. The inverse of
+// ActionRequestedPayload: that one carries intent, this one carries none. digest resolves the
+// action, dispatches the firmware's reserved `read` verb, and lets the ack correct current_state
+// if it diverged. `reason` is diagnostic — it says which of the four triggers raised the read
+// (the periodic sweep, a device reconnecting, an unsettled command, or a user pressing refresh)
+// and is carried into the metrics label rather than changing any behaviour.
+export interface ActionReadRequestedPayload {
+  userId: string;
+  deviceId: string;
+  actionId: number;
+  reason: 'sweep' | 'reconnect' | 'unsettled' | 'manual';
+}
+
 export interface ActionDispatchPayload {
   userId: string;
   deviceId: string;
@@ -101,6 +114,11 @@ export interface ActionDispatchPayload {
   source?: CommandSource;
   /** The UserDeviceAction this addresses, when the publisher already knows it. */
   actionId?: number;
+  /**
+   * This dispatch carries the `read` verb rather than a command. The history recorder skips it:
+   * a read has no target_state, so recording one would fabricate a command that never happened.
+   */
+  readback?: boolean;
 }
 
 // A device's acknowledgement that it executed (or rejected) a command. Published by the

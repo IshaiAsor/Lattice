@@ -116,6 +116,12 @@ const DEFAULTS = {
   telemetryMs: 5000,
   heartbeatMs: 60000, // liveness ping cadence (firmware HEARTBEAT_INTERVAL_MS)
   failTelemetry: [], // action names whose reads emit a fault envelope instead of a value
+  // Action names whose acks are silently dropped (true = all of them). A TEST knob, not a device
+  // behaviour: no firmware does this, and it mirrors nothing in command-models.js. It exists
+  // because a lost ack is the exact failure state reconciliation is built for (F23), and without
+  // it the only way to produce one is to kill the device — which also stops it answering the
+  // read-back that is supposed to heal the state.
+  suppressAck: [],
 
   cameraMs: 2000,
   cameraResolution: 'SVGA', // sent when auto-activating a CameraAction capability
@@ -476,7 +482,15 @@ class SimDevice extends EventEmitter {
       if (meta.mqtt_action_type === 'command') {
         const value = this._lastState.get(action) ?? '';
         this._log(`⇐ read ${action} → state "${value}" (cmd ${cmd.commandId || ''})`);
-        this._publishAck(action, { status: 'ok', value, commandId: cmd.commandId });
+        // `stateReport: true` exempts this from suppressAck. Suppression models a COMMAND ack
+        // going missing; a read is a different exchange, and a device that answered neither would
+        // be a dead device, not a lost message.
+        this._publishAck(action, {
+          status: 'ok',
+          value,
+          commandId: cmd.commandId,
+          stateReport: true,
+        });
       } else if (meta.mqtt_action_type === 'telemetry' && !isCamera(meta.implementation_type)) {
         if (hasBehavior(meta, 'on_demand')) {
           const value = reading(meta.implementation_type, action.length, this._t);
@@ -966,7 +980,21 @@ class SimDevice extends EventEmitter {
   // await it: reboot() force-closes the client, which discards whatever is still queued. QoS stays
   // 0 — PubSubClient (the firmware's client) only publishes at QoS 0, so raising it here would be
   // a divergence, not a fidelity gain.
-  _publishAck(action, { status, value, commandId, unsolicited }) {
+  _publishAck(action, { status, value, commandId, unsolicited, stateReport }) {
+    // Drop the ack on the floor, but only the ack: the device still applied the command and still
+    // holds the new state, so a later read-back reports the truth the platform never heard. That
+    // asymmetry is the whole point — it reproduces a lost ack, not a broken device, which is why
+    // a state report (the answer to a read) is never suppressed.
+    const suppress = this.opts.suppressAck;
+    if (
+      !stateReport &&
+      (suppress === true || (Array.isArray(suppress) && suppress.includes(action)))
+    ) {
+      this._log(`⇐ ack ${action} SUPPRESSED (status ${status}, value "${value}")`);
+      this.emit('ack-suppressed', { action, status, value, commandId });
+      return Promise.resolve();
+    }
+
     const body = { status, value };
     if (commandId) body.commandId = commandId;
     const sent = this.client

@@ -24,6 +24,14 @@
                 <span>Remove from group</span>
             </button>
             }
+            <!-- Command actions only: a telemetry action re-confirms itself on its next reading,
+                 so asking it explicitly buys nothing the cycle isn't already doing. -->
+            @if (!isTelemetryAction(a) && !isCameraAction(a)) {
+            <button mat-menu-item (click)="refreshState(a)" [disabled]="!a.online || refreshing()">
+                <mat-icon>{{ refreshing() ? 'hourglass_empty' : 'sync' }}</mat-icon>
+                <span>{{ a.online ? 'Refresh from device' : 'Refresh (device offline)' }}</span>
+            </button>
+            }
         </mat-menu>
     </div>
 
@@ -162,12 +170,13 @@
             <span class="sensor-unit">ppm</span>
         </div>
         }
-        @if (isTelemetryAction(a) || isCameraAction(a)) {
+        <!-- Confidence, not just value (F23). A command action carries it too now: its state is
+             only ever as true as the last ack we saw, so how long ago that was is part of what the
+             reading means. -->
         <div class="sensor-received-badge" [class.on-frame]="isCameraAction(a)">
-            <app-received-badge [receivedAt]="a.receivedAt"
+            <app-received-badge [receivedAt]="a.receivedAt" [lastConfirmedAt]="a.lastConfirmedAt"
                 [variant]="isCameraAction(a) ? 'overlay' : 'inline'"></app-received-badge>
         </div>
-        }
 
         <!-- Camera / doorbell feeds -->
         @if (isCameraAction(a)) {

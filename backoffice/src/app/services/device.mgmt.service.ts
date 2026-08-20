@@ -243,6 +243,12 @@ export interface DeviceActionView {
   // Client-side wall-clock time (ms since epoch) this browser tab received the current `state`
   // via action_state_update. Local only — never persisted or sent by the server.
   receivedAt?: number;
+  // Server-side confirmation of the same thing, and the reason `receivedAt` is not enough: that
+  // one starts undefined on every page load, so a freshly-loaded tab could not say how old the
+  // state was. This survives the reload because the platform recorded it (F23).
+  lastConfirmedAt?: string | null;
+  // Which path confirmed it: command-ack | telemetry | reconcile | boot-restore.
+  stateSource?: string | null;
 }
 
 export interface DeviceActionPinView {
