@@ -4,7 +4,16 @@
 // path. Mutating (device state) — acceptance-safe as e2e-bot.
 
 import { io, Socket } from 'socket.io-client';
-import { SimDevice, itStack, stackUp, login, simOpts, SOCKET_URL, apiGet } from './helpers/stack';
+import {
+  SimDevice,
+  itStack,
+  stackUp,
+  login,
+  simOpts,
+  SOCKET_URL,
+  apiGet,
+  settleAfterStart,
+} from './helpers/stack';
 
 jest.setTimeout(60000);
 
@@ -36,6 +45,8 @@ describe('commands via socket e2e', () => {
       }),
     );
     await dev.start();
+    // Provisioning triggers a config-reload restart; let it land before commanding the device.
+    await settleAfterStart(dev);
 
     outlet = dev.actions.find((a: any) => a.implementation_type === 'OutletCommandAction');
     if (outlet) {

@@ -24,6 +24,7 @@ import {
   poll,
   login,
   apiGet,
+  settleAfterStart,
 } from './helpers/stack';
 import { connect, publish, QUEUES, RK } from '../../packages/queue/src';
 import type { OtaDispatchPayload } from '../../packages/queue/src';
@@ -87,6 +88,8 @@ describe('per-device OTA command e2e', () => {
       }),
     );
     await dev.start();
+    // Provisioning triggers a config-reload restart; let it land before commanding the device.
+    await settleAfterStart(dev);
     bystander = new SimDevice(
       simOpts({
         mac: BYSTANDER_MAC,

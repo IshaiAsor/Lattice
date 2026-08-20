@@ -150,6 +150,28 @@ export function simOpts(extra: Record<string, unknown> = {}): Record<string, unk
   };
 }
 
+/**
+ * Wait out the reboot that provisioning itself causes, before a suite starts commanding a device.
+ *
+ * `start()` provisions and activates capabilities, which changes the device's served config — and
+ * F3.11 answers a config change with a trailing-edge-debounced `restart` (~1.5s, see
+ * `api/src/services/config-reload.ts`). So a second or two after `start()` resolves, the device
+ * reboots on its own: MQTT drops, subscriptions go with it, and any command published in that
+ * window is silently lost. The device is online before and after, so nothing in the suite can see
+ * why its command vanished.
+ *
+ * That race is why the e2e failures moved between suites and between cases run to run — whichever
+ * assertion happened to be in flight when the restart landed was the one that failed. Waiting for
+ * the `reboot` the sim emits once it is back online removes it.
+ *
+ * Returns whether a reboot was observed. Resolves early on the reboot, and gives up quietly if
+ * none arrives (a device whose config did not change never gets one).
+ */
+export async function settleAfterStart(dev: any, windowMs = 8000): Promise<boolean> {
+  const rebooted = await dev.waitFor('reboot', () => true, windowMs).catch(() => null);
+  return rebooted !== null;
+}
+
 export async function login(user = TEST_USER, pass = TEST_PASS): Promise<string> {
   const r = await fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',

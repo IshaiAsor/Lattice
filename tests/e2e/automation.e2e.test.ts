@@ -14,6 +14,8 @@ import {
   apiPatch,
   apiDelete,
   simOpts,
+  poll,
+  settleAfterStart,
 } from './helpers/stack';
 
 jest.setTimeout(60000);
@@ -44,6 +46,8 @@ describe('automation e2e', () => {
       }),
     );
     await dev.start();
+    // Provisioning triggers a config-reload restart; let it land before commanding the device.
+    await settleAfterStart(dev);
 
     sensor = dev.actions.find(
       (a: any) =>
@@ -111,19 +115,29 @@ describe('automation e2e', () => {
       return;
     }
 
-    // Wait out the rule's 1s cooldown (a real product delay, not a synchronisation guess), then
-    // send a value under the threshold and assert no *new* command arrives in a bounded window.
-    // Matching on commandId is what makes this deterministic: the previous case's command can be
-    // redelivered or simply arrive late under load, and a match on action alone would read that
-    // as "the rule fired below its threshold" — the exact false positive this test exists to
-    // rule out.
+    // Drop the sensor first and wait for the platform to have RECORDED it, then open the
+    // observation window. Ordering matters: the rules engine also re-evaluates on a 10s cron
+    // against `current_state`, which is still the previous above-threshold value until this write
+    // lands. Publishing the low value and watching at the same time leaves a window where the
+    // cooldown has expired but the stored value is still 150 — the cron then fires for an entirely
+    // correct reason, and this test reads it as "fired below its threshold".
+    dev.publishTelemetry(sensor.mqtt_action_name, 50);
+    await poll(
+      () => apiGet('/api/actions', token),
+      (all: any[]) => Number(all.find((a) => a.id === sensorActionId)?.state) === 50,
+      { timeoutMs: 15000 },
+    );
+
+    // Now wait out the rule's 1s cooldown (a real product delay, not a synchronisation guess) and
+    // assert no *new* command arrives. Matching on commandId is what makes this deterministic: the
+    // previous case's command can be redelivered or arrive late under load, and a match on action
+    // alone would read that as a below-threshold fire.
     await new Promise((r) => setTimeout(r, 1500));
     const commandP = dev.waitFor(
       'command',
       (c: any) => c.action === outlet.mqtt_action_name && c.commandId !== lastCommandId,
       5000,
     );
-    dev.publishTelemetry(sensor.mqtt_action_name, 50);
     await expect(commandP).rejects.toThrow(/timed out/);
   });
 

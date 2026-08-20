@@ -22,9 +22,18 @@ const BG = 0x1e2836ff;
 
 // loadFont reads/parses the bundled font atlas — do it once and reuse across frames rather than
 // on every makeFrame() call.
+//
+// Resolves to null when the atlas cannot be loaded, and the timestamp overlay is then skipped. The
+// case that matters is Jest: loadFont reaches the atlas through a dynamic import(), which Jest's
+// CommonJS VM refuses ("A dynamic import callback was invoked without --experimental-vm-modules").
+// Without this fallback that rejection propagates out of makeFrame and no frame is ever sent, so
+// every e2e assertion about camera DELIVERY fails over a detail that only exists to be looked at
+// by a human. The bytes are the contract; the burned-in stamp is a visual aid (see the header).
 let fontPromise = null;
 function getFont() {
-  if (!fontPromise) fontPromise = loadFont(SANS_16_WHITE);
+  if (!fontPromise) {
+    fontPromise = loadFont(SANS_16_WHITE).catch(() => null);
+  }
   return fontPromise;
 }
 
@@ -67,7 +76,7 @@ async function makeFrame() {
   const img = new Jimp({ width: WIDTH, height: HEIGHT, color: BG });
   darkenBottomBar(img);
   const font = await getFont();
-  img.print({ font, x: 8, y: HEIGHT - BAR_HEIGHT + 6, text: stamp });
+  if (font) img.print({ font, x: 8, y: HEIGHT - BAR_HEIGHT + 6, text: stamp });
   return img.getBuffer(JimpMime.jpeg, { quality: 70 });
 }
 

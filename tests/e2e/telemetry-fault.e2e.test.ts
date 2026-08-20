@@ -3,7 +3,16 @@
 // record it (history) but NOT overwrite the action's current_state — the last good value
 // stays authoritative. Mutating (telemetry history) — acceptance-safe as e2e-bot.
 
-import { SimDevice, itStack, stackUp, login, apiGet, poll, simOpts } from './helpers/stack';
+import {
+  SimDevice,
+  itStack,
+  stackUp,
+  login,
+  apiGet,
+  poll,
+  simOpts,
+  settleAfterStart,
+} from './helpers/stack';
 
 jest.setTimeout(60000);
 
@@ -24,6 +33,8 @@ describe('fault telemetry e2e', () => {
       }),
     );
     await dev.start();
+    // Provisioning triggers a config-reload restart; let it land before commanding the device.
+    await settleAfterStart(dev);
   });
 
   afterAll(async () => {

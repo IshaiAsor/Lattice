@@ -14,6 +14,7 @@ import {
   backendPublisher,
   publishCommand,
   simOpts,
+  settleAfterStart,
 } from './helpers/stack';
 import type { MqttClient } from 'mqtt';
 
@@ -37,6 +38,8 @@ describe('device-sim e2e', () => {
       }),
     );
     await dev.start();
+    // Provisioning triggers a config-reload restart; let it land before commanding the device.
+    await settleAfterStart(dev);
     pub = backendPublisher();
   });
 

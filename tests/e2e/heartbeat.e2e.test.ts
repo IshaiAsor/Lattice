@@ -4,7 +4,7 @@
 // forwards it so digest sets the last-seen cache key. Read-only w.r.t. app state.
 
 import * as mqtt from 'mqtt';
-import { SimDevice, itStack, stackUp, simOpts, MQTT_URL } from './helpers/stack';
+import { SimDevice, itStack, stackUp, simOpts, MQTT_URL, settleAfterStart } from './helpers/stack';
 
 jest.setTimeout(60000);
 
@@ -34,6 +34,8 @@ describe('device heartbeat e2e', () => {
       }),
     );
     await dev.start();
+    // Provisioning triggers a config-reload restart; let it land before commanding the device.
+    await settleAfterStart(dev);
   });
 
   afterAll(async () => {
