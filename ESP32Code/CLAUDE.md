@@ -5,7 +5,7 @@ PlatformIO / Arduino firmware for Lattice devices. Monorepo conventions in the p
 
 ## Build environments (`platformio.ini`)
 
-Three boards × test/prod (`ENV_TEST` / `ENV_PROD` flags), each with `DEVICE_TYPE_STR` +
+Four boards × test/prod (`ENV_TEST` / `ENV_PROD` flags), each with `DEVICE_TYPE_STR` +
 `DEVICE_VERSION_STR` baked in. Shared on-device options live in the `[hw]` section, which each
 hardware env `extends`; identity flags stay per-env (two CI parsers read them line-by-line — see
 the header comment in `platformio.ini`). `[hw]` is deliberately **not** `[env]` so the host
@@ -15,10 +15,11 @@ the header comment in `platformio.ini`). `[hw]` is deliberately **not** `[env]` 
 |---|---|---|---|
 | `esp32s3_mini-*` | esp32-s3-devkitc-1 (4MB) | `ota_partitions.csv` | **0x1E0000 (1.92 MB) — the binding size constraint** |
 | `4d_systems_esp32s3_gen4_r8n16-*` | 4D Systems Gen4 | default | — |
+| `esp32_wroom32e-*`, `esp32_wroom32d-*` | esp32dev — classic ESP32-D0WD (4MB). Same board/flags for both; separate envs only to give WROOM-32E and WROOM-32D their own catalog identity | `ota_partitions.csv` | 0x1E0000 (1.92 MB) |
 | `esp32s3_cam-*` | esp32-s3-devkitc-1 (8MB, `HAS_CAMERA`, pin map in flags) | `s3_cam_partitions.csv` | 3 MB |
 
 ```bash
-pio run                                        # build all 6 default (hardware) envs
+pio run                                        # build all 18 default (hardware) envs
 pio run -e esp32s3_mini-test                   # build one
 pio run -e esp32s3_mini-test --target upload   # flash
 pio device monitor                             # 115200 baud

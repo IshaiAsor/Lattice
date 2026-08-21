@@ -352,8 +352,9 @@ export class MgmtDeviceRegisterComponent implements OnInit, OnDestroy {
    * Watch the platform, not the Bluetooth link, for the end of registration.
    *
    * Firmware built with FREE_BLE_BEFORE_TLS — the classic-ESP32 types (ESP32_WROOM32E,
-   * MULTI_SOCKET_8_CH) — releases the entire BLE stack at TESTING_MQTT, because that board cannot
-   * hold BLE and mbedTLS's record buffers at once and the provisioning TLS handshakes come next.
+   * ESP32_WROOM32D, MULTI_SOCKET_8_CH) — releases the entire BLE stack at TESTING_MQTT, because
+   * that board cannot hold BLE and mbedTLS's record buffers at once and the provisioning TLS
+   * handshakes come next.
    * So on those boards PROVISIONING_SUCCESSFUL is a notification the browser can never receive:
    * the device registers, reboots, comes back online, and this dialog sits on "Registered with
    * Lattice" forever. A BLE link that simply drops mid-provision looks identical. Rather than

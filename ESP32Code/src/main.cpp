@@ -123,9 +123,8 @@ void setup()
 
     // CORE_DEBUG_LEVEL only sets the compile-time ceiling; ESP-IDF components still gate their
     // own ESP_LOGx at runtime, and the default runtime level hides them. Opening it up here is
-    // what surfaced the gdma errors during camera bring-up instead of failing mutely. It cannot
-    // reach esp32-camera itself: the Arduino framework links a prebuilt libesp32-camera.a with
-    // every diagnostic string already stripped.
+    // what makes the esp32-camera driver say *why* esp_camera_fb_get() returned null (FB-OVF,
+    // "Failed to get the frame on time!", DMA alloc failures) instead of failing mutely.
     esp_log_level_set("*", ESP_LOG_VERBOSE);
 
 #if defined(HAS_CAMERA) && defined(CAMERA_SELFTEST)
