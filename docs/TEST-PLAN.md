@@ -311,6 +311,16 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - reads a single time
 - reads a window
 - says so when there is no schedule
+- AND fires only when every condition is met
+- OR fires when any condition is met
+- records the reading from the condition that passed
+- ignores readings from conditions that did not pass
+- reports no value when the passing conditions observed nothing
+- takes the first passing condition that observed something
+- does not fire a rule that has no conditions at all
+  - the fold behind `user_rule_events.triggered_value`. The table, its index, `listEvents`,
+    `GET /api/rules/events` and the backoffice client all shipped with no writer anywhere, so the
+    rule-history panel read "has not fired yet" however often a rule fired
 
 ### Provisioning — `provisioning.action-compatibility.test.ts` ✅
 

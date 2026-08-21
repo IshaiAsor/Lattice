@@ -15,7 +15,13 @@ import {
   EMPTY_PARAM_CONTEXT,
   type ParamContext,
 } from '@lattice/params';
-import { compare, isCooldownExpired } from './rules-logic';
+import {
+  compare,
+  isCooldownExpired,
+  combineConditionOutcomes,
+  type ConditionOutcome,
+  type RuleOutcome,
+} from './rules-logic';
 import { loadParamContexts, contextKey } from './param-context';
 import { advanceSetupPhase, advanceBindingPhase } from './phases.service';
 import type {
@@ -48,6 +54,10 @@ type UserDeviceActionFull = UserDeviceAction & {
   capability: DeviceCapability;
   user_device: UserDevice & { device: Device };
 };
+
+/** Condition verdicts with nothing meaningful to report — the overwhelmingly common case. */
+const MET: ConditionOutcome = { met: true, observed: null };
+const NOT_MET: ConditionOutcome = { met: false, observed: null };
 
 // A rule derived from a blueprint stores references (`@phase.level.min`) where a hand-written
 // rule stores literals, and they are resolved here rather than at write time — that is what lets
@@ -118,7 +128,7 @@ class RulesEngine {
           );
           continue;
         }
-        const triggered = await this.evaluateRule(rule, ctx, timeZone);
+        const { triggered, triggeredValue } = await this.evaluateRule(rule, ctx, timeZone);
         if (triggered) {
           // Claim the minute BEFORE acting, and let the database arbitrate. Two evaluators run
           // concurrently — the 10s schedule scan and the telemetry-driven pass — and both read
@@ -136,6 +146,7 @@ class RulesEngine {
               data: { last_triggered: new Date(), updated_at: new Date() },
             });
           }
+          await this.recordRuleEvent(rule, triggeredValue);
           this.notifyRuleFired(ch, userId, rule, areaById.get(rule.id) ?? null);
           await this.maybeAdvancePhase(ch, rule);
         }
@@ -217,6 +228,36 @@ class RulesEngine {
     }
   }
 
+  /**
+   * Record the fire on `user_rule_events`.
+   *
+   * The table, its index, `rules.service.listEvents`, `GET /api/rules/events` and the backoffice
+   * client all shipped without this — nothing in the repo ever wrote a row, so the rule history
+   * panel read "this rule has not fired yet" no matter how often it fired, and the "Fired (24h)"
+   * stat was permanently zero.
+   *
+   * Best-effort on purpose, same contract as `notifyRuleFired` below and digest's command-history:
+   * a rule that fired must not be undone by a history write that failed.
+   */
+  private async recordRuleEvent(
+    rule: UserRuleWithDetails,
+    triggeredValue: string | null,
+  ): Promise<void> {
+    try {
+      await db.userRuleEvent.create({
+        data: {
+          rule_id: rule.id,
+          // VarChar(255) — a camera action's state would blow past it, and truncating beats
+          // losing the whole event to a write error.
+          triggered_value: triggeredValue === null ? null : triggeredValue.slice(0, 255),
+          fired_at: new Date(),
+        },
+      });
+    } catch (err) {
+      log.warn({ err, rule: rule.name }, 'failed to record rule fire event — skipped');
+    }
+  }
+
   // Best-effort user notification when a rule fires (F15.4). Emergency rules use the `emergency`
   // event; the rest use `rule_fired`. dedupeKey is rule-scoped so distinct rules aren't
   // cross-suppressed and a flapping rule collapses within the notification dedupe window.
@@ -250,11 +291,11 @@ class RulesEngine {
     rule: UserRuleWithDetails,
     ctx: ParamContext,
     timeZone: string | null,
-  ): Promise<boolean> {
+  ): Promise<RuleOutcome> {
     const results = await Promise.all(
       rule.conditions.map((c) => this.evaluateCondition(c, ctx, rule, timeZone)),
     );
-    return rule.condition_operator === 'AND' ? results.every(Boolean) : results.some(Boolean);
+    return combineConditionOutcomes(rule.condition_operator, results);
   }
 
   private async evaluateCondition(
@@ -262,7 +303,7 @@ class RulesEngine {
     ctx: ParamContext,
     rule: UserRuleWithDetails,
     timeZone: string | null,
-  ): Promise<boolean> {
+  ): Promise<ConditionOutcome> {
     if (condition.condition_type === 'schedule') {
       // A window (until + every) makes this repeat inside its hours; without one it is the same
       // exact-minute match it always was. Evaluated in the OWNER's zone: "06:00" is a statement
@@ -278,9 +319,9 @@ class RulesEngine {
           { rule: rule.name, schedule_time: condition.schedule_time },
           'rule schedule time references something unresolvable — condition treated as false',
         );
-        return false;
+        return NOT_MET;
       }
-      return matchesSchedule(
+      const matched = matchesSchedule(
         {
           time,
           until: resolveClock(condition.schedule_until, ctx),
@@ -290,20 +331,22 @@ class RulesEngine {
         new Date(),
         timeZone,
       );
+      return matched ? MET : NOT_MET;
     }
 
     if (
       condition.condition_type === 'device_state' ||
       condition.condition_type === 'device_status'
     ) {
-      if (!condition.user_device_id || !condition.status_value) return false;
+      if (!condition.user_device_id || !condition.status_value) return NOT_MET;
       try {
         const device = await db.userDevice.findUniqueOrThrow({
           where: { id: condition.user_device_id },
         });
-        return condition.status_value === 'online' ? !!device.online : !device.online;
+        const met = condition.status_value === 'online' ? !!device.online : !device.online;
+        return { met, observed: device.online ? 'online' : 'offline' };
       } catch {
-        return false;
+        return NOT_MET;
       }
     }
 
@@ -312,7 +355,7 @@ class RulesEngine {
         { condition_type: condition.condition_type },
         'vlm conditions not yet supported — F8 pending',
       );
-      return false;
+      return NOT_MET;
     }
 
     if (condition.condition_type === 'threshold') {
@@ -321,7 +364,7 @@ class RulesEngine {
         !condition.operator ||
         condition.threshold_value == null
       )
-        return false;
+        return NOT_MET;
       // Fail closed: an unresolvable reference means the rule does not fire, and says so once —
       // silently comparing against NaN would look identical to "the threshold was never crossed".
       const resolved = resolveParam(condition.threshold_value, ctx);
@@ -336,13 +379,13 @@ class RulesEngine {
           { rule: rule.name, threshold: condition.threshold_value },
           'rule threshold references an unresolvable parameter — condition treated as false',
         );
-        return false;
+        return NOT_MET;
       }
       const action = await db.userDeviceAction.findUnique({
         where: { id: condition.user_device_action_id },
         include: { capability: true },
       });
-      if (!action) return false;
+      if (!action) return NOT_MET;
       const current = parseFloat(action.current_state ?? '');
       const target = parseFloat(resolved);
       if (isNaN(current) || isNaN(target)) {
@@ -350,17 +393,20 @@ class RulesEngine {
           { rule: rule.name, current_state: action.current_state, resolved },
           'threshold condition skipped — current state or threshold is not numeric',
         );
-        return false;
+        return NOT_MET;
       }
       const met = compare(current, condition.operator, target);
       log.debug(
         { rule: rule.name, actionId: action.id, current, op: condition.operator, target, met },
         'threshold condition evaluated',
       );
-      return met;
+      // The reading that crossed the threshold — this is what `user_rule_events.triggered_value`
+      // is for. Recorded as the device reported it rather than the parsed float, so a value the
+      // capability formats itself ("21.50") survives into the history verbatim.
+      return { met, observed: action.current_state };
     }
 
-    return false;
+    return NOT_MET;
   }
 
   private async executeRule(

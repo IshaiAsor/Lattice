@@ -5,6 +5,7 @@
 import {
   compare,
   isCooldownExpired,
+  combineConditionOutcomes,
 } from '../../services/automation-worker/src/services/rules-logic';
 import {
   describeSchedule,
@@ -288,5 +289,43 @@ describe('describeSchedule', () => {
 
   it('says so when there is no schedule', () => {
     expect(describeSchedule({ time: null, days: [] })).toBe('no schedule set');
+  });
+});
+
+describe('combineConditionOutcomes', () => {
+  const met = (observed: string | null = null) => ({ met: true, observed });
+  const notMet = (observed: string | null = null) => ({ met: false, observed });
+
+  it('AND fires only when every condition is met', () => {
+    expect(combineConditionOutcomes('AND', [met(), met()]).triggered).toBe(true);
+    expect(combineConditionOutcomes('AND', [met(), notMet()]).triggered).toBe(false);
+  });
+
+  it('OR fires when any condition is met', () => {
+    expect(combineConditionOutcomes('OR', [notMet(), met()]).triggered).toBe(true);
+    expect(combineConditionOutcomes('OR', [notMet(), notMet()]).triggered).toBe(false);
+  });
+
+  it('records the reading from the condition that passed', () => {
+    // The whole point of the value: it must explain why THIS rule fired.
+    expect(combineConditionOutcomes('OR', [notMet('99'), met('21.5')]).triggeredValue).toBe('21.5');
+  });
+
+  it('ignores readings from conditions that did not pass', () => {
+    expect(combineConditionOutcomes('AND', [met('21.5'), notMet('99')]).triggeredValue).toBe(null);
+  });
+
+  it('reports no value when the passing conditions observed nothing', () => {
+    // A schedule rule fires on a clock, not a reading — there is no honest value to record.
+    expect(combineConditionOutcomes('AND', [met(), met()]).triggeredValue).toBe(null);
+  });
+
+  it('takes the first passing condition that observed something', () => {
+    expect(combineConditionOutcomes('AND', [met(), met('7'), met('9')]).triggeredValue).toBe('7');
+  });
+
+  it('does not fire a rule that has no conditions at all', () => {
+    // `[].every()` is true, so without this guard a conditionless AND rule fires every pass.
+    expect(combineConditionOutcomes('AND', []).triggered).toBe(false);
   });
 });
