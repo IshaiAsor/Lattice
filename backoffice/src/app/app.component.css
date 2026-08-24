@@ -168,6 +168,19 @@
   text-align: center;
 }
 
+/* Section heading inside the profile menu. Styled here and not in styles.css because mat-menu
+   content is declared in THIS template, so it carries this component's encapsulation attribute
+   into the overlay — what does not survive is a selector anchored outside the component. */
+.menu-section-label {
+  display: block;
+  padding: 10px 16px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
 .menu-badge {
   /* Fixed gap keeps the count next to its label. margin-left:auto (the old
      value) only right-aligns when the menu is wider than this row — and the

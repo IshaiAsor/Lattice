@@ -232,6 +232,23 @@
         </div>
       }
 
+      <!-- Actions | Health. MatTabsModule is not in SHARED_MATERIAL, so this is a plain
+           two-button strip reusing the .tab classes the rest of the app already styles —
+           one less Material module for two tabs. -->
+      <div class="dc-tabs">
+        <button type="button" class="tab" [class.on]="tab === 'actions'" (click)="tab = 'actions'">
+          Actions
+        </button>
+        <button type="button" class="tab" [class.on]="tab === 'health'" (click)="tab = 'health'">
+          Health
+        </button>
+      </div>
+
+      @if (tab === 'health') {
+        <app-device-health [deviceId]="selectedDevice.id" />
+      }
+
+      @if (tab === 'actions') {
       @if (capabilities.length > 0) {
 
         <!-- Active Actions -->
@@ -470,6 +487,7 @@
         }
       }
     }
+      }
   </main>
 
 </div>

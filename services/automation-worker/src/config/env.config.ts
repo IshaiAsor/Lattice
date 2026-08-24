@@ -22,6 +22,26 @@ export const env = {
     // its action re-read. Comfortably past digest's own ack budget so the two never race.
     settleWindowMs: parseInt(process.env['RECONCILE_SETTLE_WINDOW_MS'] ?? '120000', 10),
   },
+  // Nightly history pass (F18.1): roll raw readings into hour/day buckets, then prune whatever is
+  // past each user's own window. Windows themselves are NOT here — they live in retention_policy
+  // and user_retention_preferences, so an owner changes them in the UI and the next pass picks it
+  // up without a redeploy. What stays here is the shape of the job, not the policy it enforces.
+  retention: {
+    enabled: process.env['RETENTION_ENABLED'] !== 'false',
+    // 03:00. Deliberately the quietest hour: this is the one job that holds locks over the
+    // biggest tables in the system.
+    cron: process.env['RETENTION_CRON'] ?? '0 0 3 * * *',
+    // How far back a single pass will look for buckets to build. Bounds a first run against years
+    // of accumulated history; because the upserts are idempotent, successive nights walk backward
+    // on their own rather than needing one heroic pass.
+    lookbackDays: parseInt(process.env['RETENTION_LOOKBACK_DAYS'] ?? '3', 10),
+    // Ceiling on raw rows read per action per pass, so one chatty sensor cannot make the rollup
+    // unbounded.
+    rowsPerAction: parseInt(process.env['RETENTION_ROWS_PER_ACTION'] ?? '20000', 10),
+    // Ceiling on rows deleted per kind per pass. The remainder goes tomorrow — being a night late
+    // costs nothing next to holding a lock over a million rows while rules are evaluating.
+    deleteBatch: parseInt(process.env['RETENTION_DELETE_BATCH'] ?? '50000', 10),
+  },
   // Liveness reaper: mark a device offline once it has missed enough heartbeats. The LWT covers a
   // clean disconnect; this covers power loss, where no will is ever delivered.
   liveness: {

@@ -14,6 +14,7 @@ import { MgmtDeviceEdit } from '../mgmt-device-edit/mgmt-device-edit';
 import { DeviceUpdateDialogComponent } from '../device-update-dialog/device-update-dialog.component';
 import { ConfirmDialogComponent } from '../admin-device-config/confirm-dialog.component';
 import { AreaAssignDialogComponent } from '../area-assign-dialog/area-assign-dialog.component';
+import { DeviceHealthComponent } from '../device-health/device-health.component';
 
 export interface ActiveInstance {
   cap: CapabilityView;
@@ -22,7 +23,7 @@ export interface ActiveInstance {
 
 @Component({
   selector: 'app-device-config',
-  imports: [SHARED_MATERIAL],
+  imports: [SHARED_MATERIAL, DeviceHealthComponent],
   templateUrl: './device-config.component.html',
   styleUrls: ['./device-config.component.css'],
 })
@@ -40,6 +41,9 @@ export class DeviceConfigComponent implements OnInit {
 
   devices: DeviceView[] = [];
   selectedDevice: DeviceView | null = null;
+  /** Which half of the device panel is showing. Actions is what was always here; Health is
+   *  F18.3 — availability, the device's own timeline, and the commands it received. */
+  tab: 'actions' | 'health' = 'actions';
   capabilities: CapabilityView[] = [];
   areas: AreaView[] = [];
   loadingDevices = false;

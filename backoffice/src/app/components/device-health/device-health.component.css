@@ -1,0 +1,246 @@
+/* Health tab. Reuses the app's card, chip and empty-state vocabulary rather than inventing one —
+   the same .lattice-card / color-mix chip recipe used by rules and pipelines. */
+
+.dh-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.rng {
+  display: flex;
+  gap: 6px;
+}
+.rng button {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+.rng button.on {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+.dh-loading {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.dh-card {
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.dh-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dh-title {
+  font-size: 13.5px;
+  font-weight: 650;
+}
+.dh-sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.dh-metric {
+  text-align: right;
+  flex-shrink: 0;
+}
+.dh-value {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dh-value-muted {
+  color: var(--text-dim);
+}
+.dh-unit {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.dh-caption {
+  font-size: 9.5px;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
+/* Availability strip */
+.dh-bar {
+  position: relative;
+  height: 30px;
+  border-radius: 5px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin: 12px 0 8px;
+}
+.dh-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--online);
+  opacity: 0.78;
+}
+.dh-band.off {
+  background: var(--offline);
+  opacity: 0.9;
+}
+
+.dh-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+.dh-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dh-legend .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  opacity: 0.85;
+}
+.dh-legend .dot.on {
+  background: var(--online);
+}
+.dh-legend .dot.off {
+  background: var(--offline);
+}
+.dh-legend .dot.err {
+  background: var(--error);
+}
+
+/* Rows */
+.dh-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+.dh-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  min-width: 0;
+}
+.dh-row:last-child {
+  border-bottom: none;
+}
+.dh-when {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  width: 82px;
+  flex-shrink: 0;
+}
+.dh-row mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.dh-row-title {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.dh-row-detail {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+.dh-action {
+  font-weight: 600;
+  width: 84px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dh-target {
+  font-size: 11.5px;
+  color: var(--text);
+  padding: 1px 7px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  flex-shrink: 0;
+}
+.dh-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  flex-shrink: 0;
+}
+.dh-status {
+  margin-left: auto;
+}
+
+.dh-link {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+/* Empty states — same 48px / .4 opacity recipe as the rest of the app */
+.dh-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.dh-empty mat-icon {
+  font-size: 40px;
+  width: 40px;
+  height: 40px;
+  opacity: 0.4;
+}
+.dh-empty-inline {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 14px 0 4px;
+}
+
+@media (max-width: 599px) {
+  .dh-card {
+    padding: 12px;
+  }
+  .dh-when {
+    width: 62px;
+  }
+  .dh-row-detail {
+    display: none;
+  }
+}

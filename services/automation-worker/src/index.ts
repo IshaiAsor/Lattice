@@ -16,6 +16,7 @@ import {
   sweepUnsettledCommands,
   reapSilentDevices,
 } from './services/reconcile.service';
+import { runRetentionPass } from './services/retention.service';
 import { healthRouter } from './routes/health.routes';
 
 const { metricsHandler } = initOTel('automation-worker');
@@ -74,6 +75,18 @@ async function main() {
     reapSilentDevices(ch).catch((err) => log.error({ err }, 'error reaping silent devices'));
   });
   log.info({ cron: env.liveness.cron }, 'device liveness reaper cron started');
+
+  // History rollup + retention (F18.1). Nightly and slow by design: it is the only job here that
+  // touches the biggest tables in the system, and everything it does is idempotent, so a missed
+  // night self-heals on the next pass rather than needing a catch-up run.
+  if (env.retention.enabled) {
+    cron.schedule(env.retention.cron, () => {
+      runRetentionPass().catch((err) => log.error({ err }, 'error running retention pass'));
+    });
+    log.info({ cron: env.retention.cron }, 'history retention cron started');
+  } else {
+    log.warn('history retention disabled by RETENTION_ENABLED=false');
+  }
 
   const app = express();
   app.use(createHttpLogger(log));

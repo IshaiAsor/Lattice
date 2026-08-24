@@ -18,6 +18,9 @@ export function deviceStatusHandler(ch: Channel): MqttHandler {
         state,
         timestamp: new Date().toISOString(),
         version: parsed.version,
+        // The broker delivered this one, Last-Will included — as opposed to the liveness reaper
+        // inferring it. The device timeline records the difference (F18.1).
+        source: 'broker',
       };
       publish(ch, RK.DEVICE_STATE_CHANGED, msg);
       log.info({ topic: parsed, msg }, 'device status received and forwarded');

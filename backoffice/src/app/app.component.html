@@ -147,6 +147,18 @@
               <span>Blueprints</span>
             }
           </a>
+          <a
+            class="sidebar-link"
+            routerLink="/admin/retention"
+            routerLinkActive="active"
+            [matTooltip]="sidebarCollapsed() ? 'Data Retention' : ''"
+            matTooltipPosition="right"
+          >
+            <mat-icon>storage</mat-icon>
+            @if (!sidebarCollapsed()) {
+              <span>Data Retention</span>
+            }
+          </a>
         }
       </nav>
 
@@ -265,6 +277,10 @@
     <span>Ask AI</span>
   </button>
   <mat-divider></mat-divider>
+  <a mat-menu-item routerLink="/settings">
+    <mat-icon>storage</mat-icon>
+    <span>Data &amp; storage</span>
+  </a>
   <button mat-menu-item (click)="openTimezone()">
     <mat-icon>schedule</mat-icon>
     <span>Timezone</span>
@@ -274,6 +290,32 @@
     <mat-icon>{{ themeService.theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
     <span>{{ themeService.theme() === 'dark' ? 'Light mode' : 'Dark mode' }}</span>
   </button>
+  <!-- Admin, on mobile only in the sense that this menu IS the mobile navigation: the sidebar
+       that normally carries these is display:none below the breakpoint and all five bottom-bar
+       slots are user-facing, so without this block an admin could not reach a single admin page
+       on a phone except by typing the URL. Same routes, same icons, same order as the sidebar. -->
+  <!-- Read from the service, not the `@let user` above: that binding is scoped to the bottom-bar
+       block it was declared in, and this menu sits outside it. -->
+  @if (authService.getCurrentUser()?.role === 'admin') {
+    <mat-divider></mat-divider>
+    <span class="menu-section-label">Admin</span>
+    <a mat-menu-item routerLink="/admin/templates">
+      <mat-icon>build</mat-icon>
+      <span>Device Catalog</span>
+    </a>
+    <a mat-menu-item routerLink="/admin/sealed-templates">
+      <mat-icon>lock</mat-icon>
+      <span>Sealed Device Template</span>
+    </a>
+    <a mat-menu-item routerLink="/admin/blueprints">
+      <mat-icon>architecture</mat-icon>
+      <span>Blueprints</span>
+    </a>
+    <a mat-menu-item routerLink="/admin/retention">
+      <mat-icon>storage</mat-icon>
+      <span>Data Retention</span>
+    </a>
+  }
   <mat-divider></mat-divider>
   <button mat-menu-item (click)="logout()">
     <mat-icon>logout</mat-icon>

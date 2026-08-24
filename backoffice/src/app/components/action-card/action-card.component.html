@@ -1,15 +1,24 @@
 @let a = action();
 
-<div class="device-card" [ngClass]="(a.online && a.status === 'active') ? 'card-enabled' : 'card-disabled'">
+<div class="device-card" [attr.data-density]="effectiveDensity()"
+     [ngClass]="(a.online && a.status === 'active') ? 'card-enabled' : 'card-disabled'">
+    <!-- F21.2/F21.3 — the name is no longer squeezed into the header row between an icon, a dot
+         and a menu button (about 8-12 characters on a phone). The header keeps only the icon and
+         the menu; the name moves below it, full width and two lines. The status dot is gone as a
+         separate element: it is now a ring on the icon itself, which says the same thing and
+         gives its 8px + gap back to the name. -->
     <div class="card-header">
-        <span class="material-symbols-outlined device-icon">{{ iconForAction(a) }}</span>
+        <span
+            class="icon-wrap"
+            [class.is-online]="a.online"
+            [matTooltip]="a.online ? 'Online' : 'Offline'"
+        >
+            <span class="material-symbols-outlined device-icon">{{ iconForAction(a) }}</span>
+        </span>
         @if (a.status === 'deprecated') {
         <span class="deprecated-badge" matTooltip="This action is incompatible with the current firmware version">deprecated</span>
         }
-        <span class="card-name">{{ a.name }}</span>
         <span class="header-spacer"></span>
-        <span class="status-dot" [class.online]="a.online" [class.offline]="!a.online"
-            [matTooltip]="a.online ? 'Online' : 'Offline'"></span>
         <button mat-icon-button [matMenuTriggerFor]="actionMenu" class="card-menu-btn">
             <mat-icon>more_vert</mat-icon>
         </button>
@@ -33,6 +42,15 @@
             </button>
             }
         </mat-menu>
+    </div>
+
+    <!-- Full-width, up to two lines. title/aria-label keep the untruncated text so a name that
+         still overflows is reachable (F21.2). -->
+    <div class="card-name-band">
+        @if (showDeviceName()) {
+        <span class="card-device">{{ a.deviceName }}</span>
+        }
+        <span class="card-name" [title]="a.name" [attr.aria-label]="a.name">{{ a.name }}</span>
     </div>
 
     <div class="card-content" [class.pending]="a.pending">
@@ -170,6 +188,41 @@
             <span class="sensor-unit">ppm</span>
         </div>
         }
+        <!-- Trend (F18.3 / F21.4). Sits below the value and above the badge, so the tile reads
+             top-down: what it is, what it says now, where it has been, when we last heard.
+             Rendered only when the density asks for it — a Compact dashboard shows none, and the
+             card does not even fetch the series in that case. -->
+        @if (showTrendSlot() && !isCameraAction(a)) {
+        <div class="card-trend" [class.is-chart]="showChart()">
+            @if (hasTrendData()) {
+            <!-- Deferred on purpose. Chart.js is ~250 kB and this app has no lazy routes, so an
+                 eager import lands it in main.js — it broke the 2 MB initial budget outright. The
+                 slot is sized by .card-trend, not by the canvas, so the chart drops into a box
+                 that already has its final geometry and nothing reflows when it arrives. -->
+            @defer {
+            <app-series-chart
+                [points]="points()"
+                [compact]="!showChart()"
+                [height]="trendHeight()"
+            />
+            }
+            }
+        </div>
+        }
+
+        <!-- What the `Last command` field toggle renders: who last drove this action, to what, and
+             how long ago. Answers "did something change this, or did the device?" without leaving
+             the tile — the same question the activity feed answers for the whole home. -->
+        @if (showLastCmdSlot() && !isCameraAction(a)) {
+        <div class="card-lastcmd" [title]="lastCommandTitle()">
+            @if (lastCommand(); as cmd) {
+            <span class="lc-source" [class.lc-err]="cmd.status === 'error' || cmd.status === 'timeout'">{{ cmd.source }}</span>
+            <span class="lc-target">{{ cmd.target }}</span>
+            <span class="lc-age">{{ commandAge(cmd.dispatchedAt) }}</span>
+            }
+        </div>
+        }
+
         <!-- Confidence, not just value (F23). A command action carries it too now: its state is
              only ever as true as the last ack we saw, so how long ago that was is part of what the
              reading means. -->

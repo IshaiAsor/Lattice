@@ -2,11 +2,20 @@ import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { DeviceActionView, DeviceMgmtService } from 'src/app/services/device.mgmt.service';
 import { isTelemetryAction, isCameraAction } from 'src/app/utils/device-type.utils';
 import { DeviceSocketService } from 'src/app/services/device.socket.service';
-import { ActionGroupView, DashboardItem, UserActionsService } from 'src/app/services/user.actions.service';
+import {
+  ActionGroupView,
+  DashboardItem,
+  UserActionsService,
+} from 'src/app/services/user.actions.service';
 import { AreasService, AreaView } from 'src/app/services/areas.service';
 import { AreaManageDialogComponent } from '../area-manage-dialog/area-manage-dialog.component';
 import { UserRulesService } from 'src/app/services/user.rules.service';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
+import { ActivityFeedComponent } from '../activity-feed/activity-feed.component';
+import { DisplayPickerComponent } from '../display-picker/display-picker.component';
+import { RangePickerComponent } from '../range-picker/range-picker.component';
+import { ChartRangeService } from '../../services/chart-range.service';
+import { TileDensityService } from '../../services/tile-density.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -47,6 +56,9 @@ interface AreaSection {
     SceneTileComponent,
     SetupTileComponent,
     ActionCardComponent,
+    ActivityFeedComponent,
+    DisplayPickerComponent,
+    RangePickerComponent,
   ],
   templateUrl: './user-dashboard.html',
   styleUrl: './user-dashboard.css',
@@ -60,6 +72,10 @@ export class UserDashboard implements OnInit {
   bottomSheet = inject(MatBottomSheet);
   private deviceMgmtService = inject(DeviceMgmtService);
   private areasService = inject(AreasService);
+  // Public: the actions bar binds the range picker straight to it.
+  chartRange = inject(ChartRangeService);
+  // Public: the grid stamps the density so the breakpoint rules can branch on it.
+  tiles = inject(TileDensityService);
   private rulesService = inject(UserRulesService);
   private scenesService = inject(ScenesService);
   private blueprintsService = inject(BlueprintsService);
@@ -139,11 +155,12 @@ export class UserDashboard implements OnInit {
           action.lastConfirmedAt = new Date().toISOString();
           // Only clear pending when this is the latest in-flight commandId. A stale
           // concurrent ack for an older command must not clobber a newer command's pending.
-          const isLatest = !data.commandId || this.latestCommandId.get(data.actionId) === data.commandId;
+          const isLatest =
+            !data.commandId || this.latestCommandId.get(data.actionId) === data.commandId;
           if (isLatest) {
             action.pending = false;
             this.latestCommandId.delete(data.actionId);
-            this.pendingPrevState.delete(data.actionId);        
+            this.pendingPrevState.delete(data.actionId);
           }
         }
       });
@@ -199,8 +216,8 @@ export class UserDashboard implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ deviceId, online }) => {
         this.allActions
-          .filter(a => a.deviceId === deviceId)
-          .forEach(a => {
+          .filter((a) => a.deviceId === deviceId)
+          .forEach((a) => {
             if (a.online && !online) a.lastOnlineDate = new Date();
             a.online = online;
           });
@@ -214,30 +231,37 @@ export class UserDashboard implements OnInit {
   }
 
   private loadStats() {
-    this.deviceMgmtService.getDevices().subscribe(devices => {
+    this.deviceMgmtService.getDevices().subscribe((devices) => {
       this.devicesTotal = devices.length;
-      this.devicesOnline = devices.filter(d => d.online).length;
-      this.firmwareUpdates = devices.filter(d => d.update_available).length;
+      this.devicesOnline = devices.filter((d) => d.online).length;
+      this.firmwareUpdates = devices.filter((d) => d.update_available).length;
       for (const d of devices) this.deviceOnlineState.set(d.id, d.online);
     });
 
-    this.rulesService.getRules().subscribe(rules => {
-      this.activeRules = rules.filter(r => r.enabled).length;
+    this.rulesService.getRules().subscribe((rules) => {
+      this.activeRules = rules.filter((r) => r.enabled).length;
     });
 
-    this.http.get<{ id: number }[]>(`${apiUrl()}/api/rules/events?limit=50&emergency=true`)
-      .subscribe({ next: events => { this.emergencyAlerts = events.length; } });
+    this.http
+      .get<{ id: number }[]>(`${apiUrl()}/api/rules/events?limit=50&emergency=true`)
+      .subscribe({
+        next: (events) => {
+          this.emergencyAlerts = events.length;
+        },
+      });
   }
 
   private loadActions() {
     this.userActionsService
       .getUserActions()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((actions) => { this.setActions(actions); });
+      .subscribe((actions) => {
+        this.setActions(actions);
+      });
   }
 
   private reloadActions() {
-    this.userActionsService.getUserActions().subscribe(actions => {
+    this.userActionsService.getUserActions().subscribe((actions) => {
       this.setActions(actions);
     });
   }
@@ -304,18 +328,24 @@ export class UserDashboard implements OnInit {
 
   private loadAreas() {
     this.areasService.list().subscribe({
-      next: areas => {
+      next: (areas) => {
         this.allAreas = areas;
         this.rebuildSections(); // sort_order may have changed the section order
       },
-      error: () => { /* non-critical: sections fall back to alphabetical order */ },
+      error: () => {
+        /* non-critical: sections fall back to alphabetical order */
+      },
     });
   }
 
   // Reorder / rename / delete areas. Areas are created by assigning a device on the device page;
   // this dialog is where their order and names live.
   openManageAreas() {
-    this.dialog.open(AreaManageDialogComponent, { width: '440px', panelClass: ['glass-dialog', 'compact-dialog'] })
+    this.dialog
+      .open(AreaManageDialogComponent, {
+        width: '440px',
+        panelClass: ['glass-dialog', 'compact-dialog'],
+      })
       .afterClosed()
       .subscribe((changed: boolean) => {
         if (!changed) return;
@@ -336,14 +366,14 @@ export class UserDashboard implements OnInit {
       .listInstances()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: setups => {
+        next: (setups) => {
           this.setups = setups;
-          this.setupsRunning = setups.filter(s => s.lifecycle_state === 'running').length;
+          this.setupsRunning = setups.filter((s) => s.lifecycle_state === 'running').length;
           this.setupsLoadedAt = Date.now();
           this.setupsTick = 0;
           // Which devices belong to a setup only becomes knowable here, and the actions may
           // already have landed — so the split is redone rather than assumed to have happened.
-          if (this.expandedSetupId !== null && !setups.some(s => s.id === this.expandedSetupId)) {
+          if (this.expandedSetupId !== null && !setups.some((s) => s.id === this.expandedSetupId)) {
             this.expandedSetupId = null;
           }
           this.rebuildLayout();
@@ -351,7 +381,11 @@ export class UserDashboard implements OnInit {
         // A dashboard is a summary: if setups cannot be read the strip stays empty rather than
         // taking the whole page down with an error nobody can act on from here. Every action then
         // falls back to the grid, which is where they all were before setups had a live surface.
-        error: () => { this.setups = []; this.expandedSetupId = null; this.rebuildLayout(); },
+        error: () => {
+          this.setups = [];
+          this.expandedSetupId = null;
+          this.rebuildLayout();
+        },
       });
   }
 
@@ -360,7 +394,11 @@ export class UserDashboard implements OnInit {
   }
 
   pauseSetup(setup: InstanceSummary) {
-    this.actOnSetup(this.setupLifecycle.stop(setup.id), `Paused: ${setup.name}`, 'Could not pause this setup');
+    this.actOnSetup(
+      this.setupLifecycle.stop(setup.id),
+      `Paused: ${setup.name}`,
+      'Could not pause this setup',
+    );
   }
 
   resumeSetup(setup: InstanceSummary) {
@@ -375,7 +413,11 @@ export class UserDashboard implements OnInit {
   }
 
   resetSetup(setup: InstanceSummary) {
-    this.actOnSetup(this.setupLifecycle.reset(setup.id), `Lifecycle reset: ${setup.name}`, 'Could not reset');
+    this.actOnSetup(
+      this.setupLifecycle.reset(setup.id),
+      `Lifecycle reset: ${setup.name}`,
+      'Could not reset',
+    );
   }
 
   /** Each action resolves to null when the user backs out of its confirm — not an error. */
@@ -383,7 +425,7 @@ export class UserDashboard implements OnInit {
     if (this.setupsBusy) return;
     this.setupsBusy = true;
     action.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: updated => {
+      next: (updated) => {
         this.setupsBusy = false;
         if (!updated) return;
         this.loadSetups();
@@ -402,7 +444,9 @@ export class UserDashboard implements OnInit {
     this.scenesService
       .getScenes()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(scenes => { this.scenes = scenes; });
+      .subscribe((scenes) => {
+        this.scenes = scenes;
+      });
   }
 
   // Fire-and-forget: the 202 only means "queued". Each device's real state lands via the
@@ -411,9 +455,11 @@ export class UserDashboard implements OnInit {
     if (this.runningSceneIds.has(scene.id)) return;
     this.runningSceneIds.add(scene.id);
     this.scenesService.execute(scene.id).subscribe({
-      next: res => {
+      next: (res) => {
         this.runningSceneIds.delete(scene.id);
-        this.snackBar.open(`${scene.name} — ${res.queued} command(s) sent`, 'Close', { duration: 2500 });
+        this.snackBar.open(`${scene.name} — ${res.queued} command(s) sent`, 'Close', {
+          duration: 2500,
+        });
       },
       error: () => {
         this.runningSceneIds.delete(scene.id);
@@ -433,7 +479,7 @@ export class UserDashboard implements OnInit {
   private openSceneEditor(scene: SceneView | null) {
     // Every action, not just the grid's: a setup's devices are as valid a scene member as any
     // other, and they stopped being in `items` when the setup tiles took them over.
-    const actions = this.allActions.filter(a => !isTelemetryAction(a) && !isCameraAction(a));
+    const actions = this.allActions.filter((a) => !isTelemetryAction(a) && !isCameraAction(a));
 
     const ref = this.dialog.open(SceneEditorDialogComponent, {
       data: { scene, actions },
@@ -449,7 +495,7 @@ export class UserDashboard implements OnInit {
   deleteScene(scene: SceneView) {
     this.scenesService.deleteScene(scene.id).subscribe({
       next: () => {
-        this.scenes = this.scenes.filter(s => s.id !== scene.id);
+        this.scenes = this.scenes.filter((s) => s.id !== scene.id);
         this.snackBar.open(`Deleted ${scene.name}`, 'Close', { duration: 2500 });
       },
       error: () => this.snackBar.open('Failed to delete scene', 'Close', { duration: 3000 }),
@@ -473,11 +519,11 @@ export class UserDashboard implements OnInit {
     for (const [name, members] of groupMap) {
       result.push({
         kind: 'group',
-        sortOrder: Math.min(...members.map(m => m.sortOrder ?? 0)),
+        sortOrder: Math.min(...members.map((m) => m.sortOrder ?? 0)),
         group: {
           id: members[0].groupId!,
           name,
-          previewTypes: members.slice(0, 4).map(m => m.googleType?.value ?? null),
+          previewTypes: members.slice(0, 4).map((m) => m.googleType?.value ?? null),
           actions: members,
         },
       });
@@ -492,7 +538,7 @@ export class UserDashboard implements OnInit {
   // the same area — otherwise it falls into "Unassigned" (a mixed-area group has no single home).
   private itemAreaId(item: DashboardItem): number | null {
     if (item.kind === 'action') return item.action!.areaId ?? null;
-    const ids = new Set(item.group!.actions.map(a => a.areaId ?? null));
+    const ids = new Set(item.group!.actions.map((a) => a.areaId ?? null));
     return ids.size === 1 ? [...ids][0] : null;
   }
 
@@ -500,11 +546,13 @@ export class UserDashboard implements OnInit {
     if (item.kind === 'action') return item.action!.areaName ?? null;
     const areaId = this.itemAreaId(item);
     if (areaId === null) return null;
-    return item.group!.actions.find(a => a.areaId === areaId)?.areaName ?? null;
+    return item.group!.actions.find((a) => a.areaId === areaId)?.areaName ?? null;
   }
 
   private itemOnline(item: DashboardItem): boolean {
-    return item.kind === 'action' ? !!item.action!.online : item.group!.actions.some(a => a.online);
+    return item.kind === 'action'
+      ? !!item.action!.online
+      : item.group!.actions.some((a) => a.online);
   }
 
   // Buckets the flat item list into per-area sections (named areas first, alphabetical, then the
@@ -526,9 +574,9 @@ export class UserDashboard implements OnInit {
 
     // Named sections follow the user's own order (areas.sort_order, set in Manage areas); areas
     // not in the loaded list yet fall to the end, tie-broken by name so the order stays stable.
-    const orderOf = new Map(this.allAreas.map(a => [a.id, a.sort_order]));
+    const orderOf = new Map(this.allAreas.map((a) => [a.id, a.sort_order]));
     const named = [...byKey.values()]
-      .filter(s => s.areaId !== null)
+      .filter((s) => s.areaId !== null)
       .sort((a, b) => {
         const oa = orderOf.get(a.areaId!) ?? Number.MAX_SAFE_INTEGER;
         const ob = orderOf.get(b.areaId!) ?? Number.MAX_SAFE_INTEGER;
@@ -546,14 +594,14 @@ export class UserDashboard implements OnInit {
   // Sections actually shown, after the filter chips (B). 'all' shows everything.
   get visibleSections(): AreaSection[] {
     if (this.activeAreaFilter === 'all') return this.sections;
-    return this.sections.filter(s => s.key === this.activeAreaFilter);
+    return this.sections.filter((s) => s.key === this.activeAreaFilter);
   }
 
   // Filter chips: All + one per section (with card counts). Only rendered when the user actually
   // has areas in play — a flat single-bucket dashboard shows no chips at all.
   get areaChips(): { key: string; label: string; count: number }[] {
     if (this.sections.length <= 1) return [];
-    const chips = this.sections.map(s => ({
+    const chips = this.sections.map((s) => ({
       key: s.key,
       label: s.areaName ?? 'Unassigned',
       count: s.entries.length,
@@ -565,16 +613,20 @@ export class UserDashboard implements OnInit {
     this.activeAreaFilter = key;
   }
 
+  // What the actions bar counts. Follows the area filter, so the number always describes the tiles
+  // actually on screen rather than everything the page loaded.
+  get visibleActionCount(): number {
+    return this.visibleSections.reduce((n, s) => n + s.entries.length, 0);
+  }
+
   // Over every action the page loaded, not just the grid's top-level ones: a setup's actions are
   // no longer in `items` at all, and a grouped action never was — both still get socket updates.
   private findAction(actionId: number): DeviceActionView | undefined {
-    return this.allActions.find(a => a.id === actionId);
+    return this.allActions.find((a) => a.id === actionId);
   }
 
   itemTrackId(item: DashboardItem): string {
-    return item.kind === 'action'
-      ? `action-${item.action!.id}`
-      : `group-${item.group!.name}`;
+    return item.kind === 'action' ? `action-${item.action!.id}` : `group-${item.group!.name}`;
   }
 
   // ── Drag lifecycle ───────────────────────────────────────────────
@@ -628,7 +680,9 @@ export class UserDashboard implements OnInit {
   // it is back in the DOM at its original slot with a real rect and any index-based flag is
   // already cleared — hit-testing it would make a card its own drop target (self-group).
   private cardIndexAtPoint(px: number, py: number, dragged: HTMLElement): number | null {
-    const wrappers = document.querySelectorAll<HTMLElement>('.device-card-wrapper[data-item-index]');
+    const wrappers = document.querySelectorAll<HTMLElement>(
+      '.device-card-wrapper[data-item-index]',
+    );
     for (const w of Array.from(wrappers)) {
       if (w === dragged || w.classList.contains('cdk-drag-preview')) continue;
       const idx = +w.getAttribute('data-item-index')!;
@@ -644,18 +698,17 @@ export class UserDashboard implements OnInit {
   private reorderIndex(px: number, py: number, draggedIdx: number): number {
     const cards: { idx: number; cx: number; cy: number }[] = [];
 
-    document.querySelectorAll<HTMLElement>('.device-card-wrapper[data-item-index]')
-      .forEach(w => {
-        if (w.classList.contains('cdk-drag-preview')) return;
-        const idx = +w.getAttribute('data-item-index')!;
-        if (idx === draggedIdx) return;
-        const r = w.getBoundingClientRect();
-        if (r.width === 0) return;
-        cards.push({ idx, cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
-      });
+    document.querySelectorAll<HTMLElement>('.device-card-wrapper[data-item-index]').forEach((w) => {
+      if (w.classList.contains('cdk-drag-preview')) return;
+      const idx = +w.getAttribute('data-item-index')!;
+      if (idx === draggedIdx) return;
+      const r = w.getBoundingClientRect();
+      if (r.width === 0) return;
+      cards.push({ idx, cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
+    });
 
     // Sort into reading order (top→bottom, left→right within a row)
-    cards.sort((a, b) => Math.abs(a.cy - b.cy) < 155 ? a.cx - b.cx : a.cy - b.cy);
+    cards.sort((a, b) => (Math.abs(a.cy - b.cy) < 155 ? a.cx - b.cx : a.cy - b.cy));
 
     for (const c of cards) {
       const sameRow = Math.abs(py - c.cy) < 155;
@@ -686,7 +739,10 @@ export class UserDashboard implements OnInit {
       this.lastPointerPos.y,
       event.item.element.nativeElement,
     );
-    const bandKey = targetIdx === null ? this.areaBandAtPoint(this.lastPointerPos.x, this.lastPointerPos.y) : null;
+    const bandKey =
+      targetIdx === null
+        ? this.areaBandAtPoint(this.lastPointerPos.x, this.lastPointerPos.y)
+        : null;
     this.groupDropTargetIndex = null;
     this.areaDropTargetKey = null;
 
@@ -716,11 +772,11 @@ export class UserDashboard implements OnInit {
       ...new Set(
         item.kind === 'action'
           ? [item.action!.deviceId]
-          : item.group!.actions.map(a => a.deviceId),
+          : item.group!.actions.map((a) => a.deviceId),
       ),
     ];
     const label = item.kind === 'action' ? item.action!.name : item.group!.name;
-    const areaName = this.sections.find(s => s.key === bandKey)?.areaName ?? 'Unassigned';
+    const areaName = this.sections.find((s) => s.key === bandKey)?.areaName ?? 'Unassigned';
 
     this.areasService.assignDevices(targetAreaId, deviceIds).subscribe({
       next: () => {
@@ -739,7 +795,7 @@ export class UserDashboard implements OnInit {
       groupName = targetItem.group!.name;
     } else {
       const existingNames = new Set(
-        this.items.filter(i => i.kind === 'group').map(i => i.group!.name)
+        this.items.filter((i) => i.kind === 'group').map((i) => i.group!.name),
       );
       groupName = 'Group';
       let n = 2;
@@ -748,7 +804,7 @@ export class UserDashboard implements OnInit {
     }
 
     this.userActionsService.assignActionsToGroup(groupName, actionIds).subscribe(() => {
-      this.userActionsService.getUserActions().subscribe(actions => {
+      this.userActionsService.getUserActions().subscribe((actions) => {
         this.setItems(this.buildItems(actions));
         this.saveOrder();
       });
@@ -759,7 +815,7 @@ export class UserDashboard implements OnInit {
     const orderedIds: number[] = [];
     for (const item of this.items) {
       if (item.kind === 'action') orderedIds.push(item.action!.id);
-      else orderedIds.push(...item.group!.actions.map(a => a.id));
+      else orderedIds.push(...item.group!.actions.map((a) => a.id));
     }
     this.userActionsService.reorderActions(orderedIds).subscribe();
   }
@@ -768,7 +824,7 @@ export class UserDashboard implements OnInit {
 
   get allGroupTargetIds(): string[] {
     return this.items
-      .map((item, i) => item.kind === 'group' ? `group-drop-${i}` : null)
+      .map((item, i) => (item.kind === 'group' ? `group-drop-${i}` : null))
       .filter((id): id is string => id !== null);
   }
 
@@ -783,7 +839,16 @@ export class UserDashboard implements OnInit {
   // ── Group actions ────────────────────────────────────────────────
 
   openGroup(group: ActionGroupView) {
-    const ref = this.bottomSheet.open(GroupBottomSheetComponent, { data: { group }, panelClass: 'glass-bottom-sheet' });
+    // autoFocus: 'dialog' — Material's default ('first-tabbable') focused the close button the
+    // instant the sheet opened, and CDK marks that `cdk-program-focused`, which paints the icon
+    // button's state layer. The result was a large dark disc sitting in the sheet's top-right
+    // corner every time it opened, as though the X had been pressed. Focus still moves into the
+    // sheet (so the trap and screen readers behave), just onto the container rather than a control.
+    const ref = this.bottomSheet.open(GroupBottomSheetComponent, {
+      data: { group },
+      panelClass: 'glass-bottom-sheet',
+      autoFocus: 'dialog',
+    });
     ref.afterDismissed().subscribe((needsReload: boolean) => {
       if (needsReload) this.reloadActions();
     });
@@ -791,7 +856,9 @@ export class UserDashboard implements OnInit {
 
   renameGroup(group: ActionGroupView) {
     const existingNames = new Set(
-      this.items.filter(i => i.kind === 'group' && i.group!.name !== group.name).map(i => i.group!.name)
+      this.items
+        .filter((i) => i.kind === 'group' && i.group!.name !== group.name)
+        .map((i) => i.group!.name),
     );
     const ref = this.dialog.open(RenameActionDialogComponent, {
       width: '320px',

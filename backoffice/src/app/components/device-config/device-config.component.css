@@ -726,3 +726,29 @@
     width: 100%;
   }
 }
+
+/* ── Actions | Health tabs (F18.3) ─────────────────────────────────────── */
+/* Deliberately buttons rather than mat-tab-group: two tabs do not justify pulling MatTabsModule
+   into this component, and the .tab visual language already exists elsewhere in the app. */
+.dc-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin: 4px 0 16px;
+}
+.dc-tabs .tab {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 18px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.dc-tabs .tab.on {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}

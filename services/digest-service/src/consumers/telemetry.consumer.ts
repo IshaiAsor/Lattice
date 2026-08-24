@@ -10,6 +10,7 @@ import { socket } from '../socket/emitter';
 import { writeScalarState } from '../state-write';
 import { takePendingPicture } from '../cache/pending';
 import { recordCaptureArrived } from '../command-history';
+import { recordFaultReading } from '../device-events';
 import * as timeout from '../pending-timeout';
 import { isErrorReading, type ErrorReading } from '@lattice/params';
 
@@ -46,9 +47,13 @@ export function telemetryConsumer(ch: Channel) {
   };
 }
 
-// Camera-frame telemetry. Every frame is persisted to sensor_history (the value column
-// is TEXT) — full image history is intentional; retention/cleanup is a roadmap item.
-// The frame never goes to current_state or rules.evaluate.
+// Camera-frame telemetry. Every frame is persisted — full image history is intentional and is a
+// product decision, not an oversight. The frame never goes to current_state or rules.evaluate.
+//
+// Frames live in their own table since F18.1. They used to share sensor_history with scalar
+// readings, which meant every scalar series query walked a table whose image rows are ~40 KB of
+// base64 each. Splitting them is what makes keeping every frame affordable; how long they are kept
+// is a separate question, answered by retention_policy (which ships `frame` at forever).
 async function handleImage(
   ch: Channel,
   userActionId: number,
@@ -59,10 +64,14 @@ async function handleImage(
   const frame = asString(value);
 
   // 1. Authoritative history write — failure nacks → DLQ.
-  await db.sensorHistory.create({
+  //
+  // byte_size is the DECODED size, stored so the storage panel can total what frames actually cost
+  // without measuring every TEXT column.
+  await db.cameraFrameHistory.create({
     data: {
       user_device_action_id: userActionId,
       value: frame,
+      byte_size: Buffer.byteLength(frame, 'base64'),
       recorded_at: new Date(timestamp),
     },
   });
@@ -132,7 +141,14 @@ async function handleScalar(
   // the basis for the roadmapped sensor_error_duration trigger) but never touch current_state.
   // The last good value stays authoritative.
   if (isErrorReading(value)) {
-    await recordErrorReading(userActionId, value, timestamp);
+    await recordErrorReading(
+      userActionId,
+      value,
+      timestamp,
+      userId,
+      parseInt(deviceId, 10),
+      actionName,
+    );
     return;
   }
 
@@ -155,6 +171,9 @@ async function recordErrorReading(
   userActionId: number,
   reading: ErrorReading,
   timestamp: string,
+  userId: string,
+  userDeviceId: number,
+  actionName: string,
 ): Promise<void> {
   log.warn(
     { userActionId, errorCode: reading.error },
@@ -169,4 +188,9 @@ async function recordErrorReading(
       recorded_at: new Date(timestamp),
     },
   });
+  // Mirror it onto the device's own timeline (best-effort; F18.1). Not a second copy of the
+  // reading — the row above is that — but an entry on the list the device page reads, so "it went
+  // quiet at 03:12 and started failing reads at 11:02" is one ordered story rather than two
+  // queries the UI has to interleave.
+  await recordFaultReading(parseInt(userId, 10), userDeviceId, actionName, reading.error);
 }

@@ -91,6 +91,25 @@
   }
 </div>
 
+<!-- The actions area. The Display picker lives HERE rather than in the page header because it
+     governs these tiles and nothing else on the page — and it sticks to the top of this region so
+     it is still reachable once you have scrolled past the header into a long grid. -->
+<section class="actions-area">
+<div class="actions-bar">
+    <span class="actions-bar-label">Devices</span>
+    <span class="actions-bar-count">{{ visibleActionCount }} {{ visibleActionCount === 1 ? 'action' : 'actions' }}</span>
+    <span class="actions-bar-spacer"></span>
+    <!-- The window every tile's trend is drawn over (F18.3). Shared across the grid on purpose:
+         thirty sparklines on thirty different x-axes cannot be read against each other. -->
+    <app-range-picker
+        [value]="chartRange.range()"
+        (valueChange)="chartRange.set($event)"
+    />
+    <!-- Tile size + what each tile renders (F21.1). Writes --tile-w/--tile-h/--tile-gap; the
+         breakpoints still clamp it, so a phone never gets a tile it cannot fit. -->
+    <app-display-picker />
+</div>
+
 <!-- Areas toolbar (F10.0): filter chips (shown once there's more than one bucket) + the entry
      point for reordering/renaming/deleting areas. -->
 @if (allAreas.length) {
@@ -113,7 +132,8 @@
 </div>
 }
 
-<div class="card-grid" cdkDropList cdkDropListOrientation="mixed" cdkDropListSortingDisabled
+<div class="card-grid" [attr.data-density]="tiles.density()"
+     cdkDropList cdkDropListOrientation="mixed" cdkDropListSortingDisabled
      (cdkDropListDropped)="drop($event)">
     @for (section of visibleSections; track section.key) {
     <!-- Area band (F10.0, option A): section header + a drop target for drag-to-reassign (C). -->
@@ -172,4 +192,12 @@
     </div>
     }
     }
+</div>
+
+</section>
+
+<!-- Whole-home command history (F18.7). Lives here rather than on a device page because "why did
+     the pump run at 3am" is asked before you know which device to open. -->
+<div class="lattice-card dash-activity">
+  <app-activity-feed />
 </div>

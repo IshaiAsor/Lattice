@@ -18,6 +18,8 @@ import { rulesRouter } from './routes/rules.routes';
 import { scenesRouter } from './routes/scenes.routes';
 import { pipelinesRouter } from './routes/pipelines.routes';
 import { notificationsRouter } from './routes/notifications.routes';
+import { historyRouter } from './routes/history.routes';
+import { retentionRouter, adminRetentionRouter } from './routes/retention.routes';
 import { getChannel } from './queue';
 
 // OTel must be initialised before any other imports that could create spans.
@@ -64,6 +66,9 @@ function main() {
   app.use('/api/scenes', scenesRouter);
   app.use('/api/pipelines', pipelinesRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/history', historyRouter);
+  app.use('/api/retention', retentionRouter);
+  app.use('/api/admin/retention', adminRetentionRouter);
 
   app.use(exceptionMiddleware);
 

@@ -405,6 +405,71 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - reloads again after the previous one has fired
 - swallows a failed dispatch — the config write has already committed
 
+### History — `history.bucket-select.test.ts` ✅ (F18.2 series query planning)
+
+- reads raw rows for a short range
+- reads hourly buckets for a range of weeks
+- reads daily buckets for a range of months
+- honours an explicit hourly request on a short range
+- refuses raw for a range wider than raw retention
+- allows raw when it was asked for and the range is narrow
+- ignores an unrecognised bucket and picks automatically
+  - the driver is how many points the client would receive, not how old the data is; and raw is
+    refused over wide ranges because pruning may have removed those rows entirely
+- defaults to the last seven days
+- takes an explicit range
+- swaps a reversed range rather than returning nothing
+- falls back to the default window on an unparseable date
+- defaults when the limit is missing
+- caps at the maximum
+- rejects zero and negatives
+- ignores a non-numeric limit
+
+### History — `history.retention-logic.test.ts` ✅ (F18.1 retention arithmetic)
+
+- takes the platform default when the user has chosen nothing
+- takes the user choice over the default
+- leaves a choice alone when there is no ceiling
+- clamps a choice that exceeds the ceiling
+- leaves a choice below the ceiling alone
+- clamps forever to the ceiling
+- keeps forever when no ceiling is set
+- passes a null tier through as null
+  - two encodings meet here and they are deliberately different: on a `*_days` column `0` means
+    KEEP FOREVER, while on a `max_*` ceiling NULL means UNCAPPED. `Math.min` would have read
+    forever as the smallest value and silently defeated every cap
+- follows the platform default when the user has no preference row
+- applies a user override
+- binds a user override to the admin ceiling
+- carries the platform enabled switch through
+- returns a cutoff that many days back
+- deletes nothing when the window is forever
+- deletes nothing when the kind is disabled
+- deletes nothing for a null tier
+- truncates to the start of the UTC hour
+- truncates to midnight UTC
+- aggregates a numeric series
+- counts a non-numeric series without inventing an average
+- counts a fault as a sample but not as a value
+- does not treat an empty reading as zero
+- mixes numeric and non-numeric without corrupting the average
+  - `sensor_history.value` is TEXT and under no obligation to be numeric — a switch's history is
+    "on"/"off". Those still get a bucket (count, error count, last value) with the numeric
+    aggregates left NULL rather than a NaN forced through min/max/avg
+- lets any default through when the ceiling is uncapped
+- treats forever as above every finite ceiling
+- allows a default at or under the ceiling
+- rejects a default over the ceiling
+- is silent on a valid pair
+- throws a 400 naming both numbers
+- says "forever" rather than 0 when that is the breach
+- does not write "1 days"
+  - the admin page's half of the same two encodings (`api/src/services/retention-rules.ts`). The
+    worker clamps a default that sits above its ceiling, so nothing is lost — but the page then
+    states a window nobody gets ("every user starts on 14 days" beside "users may not exceed 7").
+    The API refuses the pair so the number shown is the number applied, and `0` (forever) counts
+    as above every finite ceiling however small the number reads
+
 ### Commands — `commands.command-models.test.js` ✅
 
 - OutletCommandAction accepts on/off/1/0 and rejects others

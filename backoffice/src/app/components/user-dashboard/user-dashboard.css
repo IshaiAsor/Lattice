@@ -292,10 +292,18 @@
 
 /* ── Card grid layout ────────────────────────────────────────────── */
 .card-grid {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  display: grid;
+  /* `min(...)` guards the narrow case: a 330px Detailed tile must not force a horizontal scroll
+     on a 360px phone. `1fr` is what makes tiles fill the row instead of leaving a dead gutter. */
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--tile-w), 100%), 1fr));
+  align-items: start;
+  gap: var(--tile-gap);
   padding: 20px 14px 24px;
+}
+
+/* List is one full-width row per action; auto-fill would otherwise try to pack several. */
+.card-grid[data-density='list'] {
+  grid-template-columns: 1fr;
 }
 
 /* ── Card wrapper (drag target) ──────────────────────────────────── */
@@ -305,16 +313,22 @@
   flex-direction: row;
   border-radius: var(--radius-card);
   overflow: hidden;
-  margin: 9px;
-  width: 216px;
-  height: 188px;
+  /* THE F21.1 fix. These were `216px`/`188px` literals, so TileDensityService wrote
+     --tile-w/--tile-h to :root and nothing ever read them — every density rendered an identical
+     216x188 tile and the picker's whole "Tile size" section was decorative. */
+  /* Width comes from the grid track, so a tile stretches to fill its column instead of sitting at
+     a fixed size with empty space beside it. */
+  height: var(--tile-h);
+  min-width: 0;
   box-shadow: var(--card-shadow);
-  transition: box-shadow 0.15s;
+  transition:
+    box-shadow 0.15s,
+    width 0.18s ease,
+    height 0.18s ease;
 }
 
 /* Tablet: narrower cards so 3 fit per row in the 64px-offset content area */
 @media (max-width: 1024px) {
-  .device-card-wrapper { width: 186px; height: 178px; margin: 8px; }
   .card-grid { padding: 16px 10px 20px; }
 }
 
@@ -324,12 +338,7 @@
   /* Two columns on a phone leave ~119px of body at the desktop height — not enough for a dial
      plus its trait switcher, which then got clipped. Taller cards + a smaller dial cap so the
      richest card (dial + switcher) fits with room to spare. */
-  .device-card-wrapper {
-    width: calc(50% - 12px);
-    height: 200px;
-    margin: 6px;
-  }
-  .drag-placeholder { width: calc(50% - 12px); height: 200px; margin: 6px; }
+  .drag-placeholder { width: var(--tile-w); height: var(--tile-h); }
   .stat-value { font-size: 18px; }
   .stat-icon { width: 28px; height: 28px; border-radius: 8px; }
   .stat-icon mat-icon { font-size: 16px; width: 16px; height: 16px; }
@@ -344,7 +353,8 @@
     gap: 6px;
     padding: 16px 14px 0;
   }
-  .area-manage-btn { align-self: flex-end; }
+  /* Left, with the chips it belongs to — flex-end detached it to the far right. */
+  .area-manage-btn { align-self: flex-start; }
 }
 
 /* ── Left drag rail ──────────────────────────────────────────────── */
@@ -385,17 +395,14 @@
 
 /* ── CDK drag states ─────────────────────────────────────────────── */
 .drag-placeholder {
-  width: 216px;
-  height: 188px;
+  /* Same tokens as the wrapper — a placeholder that is not the size of the tile it replaces makes
+     every other tile jump while you drag. */
+  height: var(--tile-h);
+  min-width: 0;
   border: 2px dashed var(--border-strong);
   border-radius: var(--radius-card);
   background: var(--surface-alt);
-  margin: 9px;
   box-sizing: border-box;
-}
-
-@media (max-width: 1024px) {
-  .drag-placeholder { width: 186px; height: 178px; margin: 8px; }
 }
 
 .cdk-drag-animating {
@@ -495,12 +502,12 @@
 
 /* Full-width row break inside the flex card-grid → a visual section divider. */
 .area-band {
-  flex: 0 0 100%;
+  grid-column: 1 / -1;
   width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 18px 10px 4px;
+  margin: 8px 2px 0;
   padding: 4px 2px;
   border-radius: 8px;
   transition: background 0.15s ease, box-shadow 0.15s ease;
@@ -540,4 +547,100 @@
 }
 .area-drop-tag mat-icon {
   font-size: 15px; width: 15px; height: 15px;
+}
+
+/* ── Tile geometry tokens (F21.1) ──────────────────────────────────────── */
+/* The six hard-coded wrapper sizes are replaced by three custom properties written by
+   TileDensityService. Defaults live here so the grid still renders before the service has run
+   (and if localStorage is unavailable). Media queries below clamp the user's preference rather
+   than restating geometry: the picker sets what they want, the breakpoint sets what fits. */
+:root {
+  --tile-w: 216px;
+  --tile-h: 150px;
+  --tile-gap: 12px;
+}
+
+.dash-activity {
+  padding: 14px 16px 6px;
+  margin-top: 18px;
+}
+
+/* NOTE: clamping the tokens under `:root` in a media query does NOT work — TileDensityService
+   writes them as inline styles on <html>, which outrank every stylesheet rule. Anything that has
+   to vary by breakpoint is set on .card-grid instead, where there is no inline style to lose to. */
+@media (max-width: 1024px) {
+  .card-grid {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 599px) {
+  /* A phone cannot fit a 330px Detailed tile beside anything, so the preference is clamped here —
+     on the grid, not on :root (see the note above). Compact and Standard go two-up; the two wide
+     densities take the full width rather than leaving a gutter. */
+  .card-grid {
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .card-grid[data-density='detailed'],
+  .card-grid[data-density='list'] {
+    grid-template-columns: 1fr;
+  }
+  .dash-activity {
+    padding: 12px 12px 4px;
+    margin-top: 14px;
+  }
+}
+
+/* ── Actions area (F21.1) ────────────────────────────────────────── */
+/* The Display picker governs these tiles and nothing else on the page, so it belongs to this
+   region rather than to the page header. Sticky because a long grid scrolls the header away, and
+   the whole point of a density control is changing your mind while you are looking at the result. */
+.actions-area {
+  position: relative;
+}
+
+.actions-bar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 10px 18px;
+  margin-top: 18px;
+  /* Opaque, not glass: tiles scroll UNDER this, and a translucent bar over moving cards is
+     unreadable. The blur is what keeps it from looking like a seam. */
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+
+.actions-bar-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.actions-bar-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.actions-bar-spacer {
+  flex: 1;
+}
+
+@media (max-width: 599px) {
+  .actions-bar {
+    padding: 8px 10px;
+    margin-top: 12px;
+  }
+  .actions-bar-count {
+    display: none;
+  }
 }

@@ -1,0 +1,21 @@
+<!-- Two shapes for one control. On a phone the menu form covers the very tiles it describes and
+     dismisses on a stray tap, so there it opens as a bottom sheet like every other mobile popup
+     in the app; `openMenu` decides which at click time, so a rotation picks the right one. -->
+<button
+  type="button"
+  class="dp-trigger"
+  [matMenuTriggerFor]="menu"
+  #trigger="matMenuTrigger"
+  (click)="openSheetIfMobile(trigger, $event)"
+>
+  <mat-icon>grid_view</mat-icon>
+  <span class="dp-trigger-text">Display: {{ currentLabel }}</span>
+  <mat-icon class="dp-caret">expand_more</mat-icon>
+</button>
+
+<mat-menu #menu="matMenu" class="dp-menu">
+  <!-- No stopPropagation needed: MatMenu closes on backdrop, ESC or a mat-menu-item click,
+       and every control in here is a plain button, so the panel stays open while you
+       flip toggles. -->
+  <app-display-panel />
+</mat-menu>

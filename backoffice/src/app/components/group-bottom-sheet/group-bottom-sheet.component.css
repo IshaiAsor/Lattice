@@ -1,5 +1,5 @@
-/* Card internals live in app-action-card (variant="sheet") — this file only styles the
-   sheet chrome: header, the drag-up remove zone, and the card slots the cards drop into. */
+/* Card internals live in app-action-card — this file only styles the sheet chrome: header, the
+   drag-up remove zone, and the slots the cards drop into. */
 
 .sheet-header {
   display: flex;
@@ -102,26 +102,33 @@
 .drag-rail:hover .drag-rail-dots span { background: var(--text-muted); }
 
 .sheet-cards {
-  display: flex;
-  flex-wrap: wrap;
-  padding: 12px 6px;
-  gap: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--tile-w), 100%), 1fr));
+  align-items: start;
+  gap: var(--tile-gap);
+  padding: 12px 14px;
   max-height: 60vh;
   overflow-y: auto;
 }
 
 /* ── Card slot ──────────────────────────────────────────────────── */
-/* Same geometry as the dashboard grid (see user-dashboard.css): a card in a group is a
-   dashboard card that happens to be inside a sheet, so the two must not drift again. */
+/* A card in a group IS a dashboard card, so the sheet reads the same --tile-* tokens the grid
+   does and a Display-picker change reaches both. These were 216x188 literals, which is how the
+   two drifted: picking List reflowed the card to a row inside a box still sized for a tile, and
+   the names truncated to two characters. */
+.sheet-cards[data-density='list'] {
+  grid-template-columns: 1fr;
+}
+
 .device-card-wrapper {
   position: relative;
   display: flex;
   flex-direction: row;
   border-radius: var(--radius-card);
   overflow: hidden;
-  margin: 9px;
-  width: 216px;
-  height: 188px;
+  /* Width comes from the grid track; only the height is the density's to state. */
+  height: var(--tile-h);
+  min-width: 0;
   box-shadow: var(--card-shadow);
   transition: box-shadow 0.15s;
 }
@@ -132,23 +139,14 @@
 
 /* ── CDK placeholder inside sheet ───────────────────────────────── */
 .drag-placeholder-sheet {
-  width: 216px;
-  height: 188px;
+  height: var(--tile-h);
+  min-width: 0;
   border: 2px dashed var(--border-strong);
   border-radius: var(--radius-card);
-  margin: 9px;
   background: transparent;
   box-sizing: border-box;
 }
 
-@media (max-width: 1024px) {
-  .device-card-wrapper { width: 186px; height: 178px; margin: 8px; }
-  .drag-placeholder-sheet { width: 186px; height: 178px; margin: 8px; }
-}
-
-/* Phone: 2 columns, taller cards — the dial + trait switcher need the extra height. */
 @media (max-width: 599px) {
-  .sheet-cards { padding: 12px 6px; }
-  .device-card-wrapper { width: calc(50% - 12px); height: 200px; margin: 6px; }
-  .drag-placeholder-sheet { width: calc(50% - 12px); height: 200px; margin: 6px; }
+  .sheet-cards { padding: 10px 8px; }
 }

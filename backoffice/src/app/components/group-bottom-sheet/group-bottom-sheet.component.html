@@ -17,7 +17,8 @@
     <span>Release to remove from group</span>
 </div>
 
-<div class="sheet-cards" cdkDropList id="group-cards" cdkDropListOrientation="mixed"
+<div class="sheet-cards" [attr.data-density]="tiles.density()"
+     cdkDropList id="group-cards" cdkDropListOrientation="mixed"
      [cdkDropListConnectedTo]="['group-remove-zone']"
      (cdkDropListDropped)="drop($event)">
     @for (action of actions; track action.id) {

@@ -71,6 +71,28 @@ const CASES: ContractCase[] = [
     broken: { userId: '1', deviceId: '42', actionName: 'outlet', state: 'on' }, // timestamp missing
   },
   {
+    // F18.1 added `source`, which tells the device timeline whether the broker witnessed the
+    // change or the liveness reaper inferred it. Optional on purpose — an older publisher must
+    // still validate — so the canonical case carries it and the broken one proves the enum holds.
+    rk: RK.DEVICE_STATE_CHANGED,
+    canonical: {
+      userId: '1',
+      deviceId: '42',
+      actionName: 'status',
+      state: false,
+      timestamp: new Date().toISOString(),
+      source: 'reaper',
+    },
+    broken: {
+      userId: '1',
+      deviceId: '42',
+      actionName: 'status',
+      state: false,
+      timestamp: new Date().toISOString(),
+      source: 'guessed',
+    }, // not in the source enum
+  },
+  {
     rk: RK.DEVICE_HEARTBEAT,
     canonical: {
       userId: '1',

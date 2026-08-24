@@ -32,6 +32,10 @@
   --border:        rgba(99, 102, 241, 0.12);
   --border-strong: rgba(99, 102, 241, 0.25);
 
+  /* The hairline inside a card (name band -> body, trait switcher). Deliberately not --border:
+     at --border's dark value the same rule is 8% white on a near-black card and vanishes, so
+     the divider between a name and its readings existed in light and not in dark. */
+  --card-divider:  rgba(99, 102, 241, 0.14);
   /* Cards */
   --card-bg:       rgba(255, 255, 255, 0.78);
   /* Dialogs sit over a dimmed backdrop, so they need more fill than a card sitting on the page —
@@ -86,6 +90,7 @@
   --border:        rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.15);
 
+  --card-divider:  rgba(255, 255, 255, 0.18);
   --card-bg:       rgba(255, 255, 255, 0.08);
   --dialog-bg:     rgba(255, 255, 255, 0.08);
   --card-shadow:   0 8px 40px rgba(0, 0, 0, 0.55);
@@ -493,3 +498,16 @@ app-root {
 
 /* Divider between menu groups */
 .mat-mdc-menu-panel .mat-divider { border-top-color: var(--border) !important; }
+
+/* The Display picker is a control panel, not a list of commands: size options carrying their
+   pixel dimensions, plus a column of slide toggles. Material caps every menu panel at 280px,
+   which clipped the toggles off the right edge and left a horizontal scrollbar. Widen this
+   one panel — and only this one — while staying inside narrow viewports. */
+.dp-menu.mat-mdc-menu-panel {
+  max-width: min(336px, calc(100vw - 24px));
+}
+
+/* Same 280px cap, same reason: the range picker holds a chip grid and two date inputs. */
+.rp-menu.mat-mdc-menu-panel {
+  max-width: min(296px, calc(100vw - 24px));
+}

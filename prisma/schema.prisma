@@ -278,6 +278,9 @@ model User {
   push_subscriptions   PushSubscription[]
   blueprint_instances  BlueprintInstance[]
   device_commands      DeviceCommand[]
+  device_events        DeviceEvent[]
+  retention_updates    RetentionPolicy[]
+  retention_prefs      UserRetentionPreference[]
 
   @@map("users")
 }
@@ -390,14 +393,16 @@ model UserDevice {
   created_at               DateTime  @default(now()) @db.Timestamp(6)
   updated_at               DateTime  @default(now()) @db.Timestamp(6)
 
-  device              Device                 @relation("CurrentDevice", fields: [device_type_id], references: [id], onDelete: Cascade)
-  pending_device      Device?                @relation("PendingDevice", fields: [pending_device_type_id], references: [id], onDelete: SetNull)
-  user                User                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  area                Area?                  @relation(fields: [area_id], references: [id], onDelete: SetNull)
+  device              Device                    @relation("CurrentDevice", fields: [device_type_id], references: [id], onDelete: Cascade)
+  pending_device      Device?                   @relation("PendingDevice", fields: [pending_device_type_id], references: [id], onDelete: SetNull)
+  user                User                      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  area                Area?                     @relation(fields: [area_id], references: [id], onDelete: SetNull)
   user_device_actions UserDeviceAction[]
   rule_conditions     UserRuleCondition[]
   blueprint_bindings  BlueprintSlotBinding[]
   commands            DeviceCommand[]
+  events              DeviceEvent[]
+  availability_daily  DeviceAvailabilityDaily[]
 
   @@index([area_id])
   @@map("user_devices")
@@ -445,28 +450,28 @@ model Area {
 }
 
 model UserDeviceAction {
-  id                    Int      @id @default(autoincrement())
+  id                    Int       @id @default(autoincrement())
   user_device_id        Int
   capability_id         Int
   group_id              Int?
   default_trait_id      Int?
-  action_name           String   @db.VarChar(255)
-  mqtt_action_name      String   @db.VarChar(64)
-  current_state         String?  @db.Text
+  action_name           String    @db.VarChar(255)
+  mqtt_action_name      String    @db.VarChar(64)
+  current_state         String?   @db.Text
   // When the platform last had POSITIVE confirmation that current_state is what the device
   // actually holds — an ack, a reading, or a reconcile read-back. Null = never confirmed.
   // Distinct from updated_at, which also moves on writes that are not confirmations.
   last_confirmed_at     DateTime? @db.Timestamptz(6)
   // Where that confirmation came from: command-ack | telemetry | reconcile | boot-restore.
   // "boot-restore" is an unsolicited ack — the device volunteering its NVS state after a reboot.
-  state_source          String?  @db.VarChar(20)
-  status                String   @default("active") @db.VarChar(20)
-  sort_order            Int      @default(0)
+  state_source          String?   @db.VarChar(20)
+  status                String    @default("active") @db.VarChar(20)
+  sort_order            Int       @default(0)
   telemetry_interval_ms Int?
-  camera_resolution     String?  @db.VarChar(20)
-  camera_transport      String?  @db.VarChar(10)
-  created_at            DateTime @default(now()) @db.Timestamp(6)
-  updated_at            DateTime @default(now()) @db.Timestamp(6)
+  camera_resolution     String?   @db.VarChar(20)
+  camera_transport      String?   @db.VarChar(10)
+  created_at            DateTime  @default(now()) @db.Timestamp(6)
+  updated_at            DateTime  @default(now()) @db.Timestamp(6)
 
   user_device       UserDevice                @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
   capability        DeviceCapability          @relation(fields: [capability_id], references: [id], onDelete: Cascade)
@@ -478,6 +483,9 @@ model UserDeviceAction {
   rule_conditions   UserRuleCondition[]
   scene_members     SceneMember[]
   sensor_history    SensorHistory[]
+  sensor_rollups    SensorRollup[]
+  camera_frames     CameraFrameHistory[]
+  command_rollups   CommandRollupDaily[]
   pipeline_sensors  PipelineSensor[]
   pipeline_triggers PipelineTrigger[]         @relation("PipelineTrig")
   commands          DeviceCommand[]
@@ -587,16 +595,15 @@ model UserRuleCondition {
   // schedule: time-of-day + days-of-week (0=Sun … 6=Sat)
   // HH:MM literal OR a reference (`@phase.light.on_time`) — see user_rule_actions.duration_seconds
   // for why these widened from VarChar(5) in F11.14. Resolved by `resolveClock` at match time.
-  schedule_time String? @db.VarChar(100)
-  schedule_days Int[]   @default([])
+  schedule_time          String? @db.VarChar(100)
+  schedule_days          Int[]   @default([])
   // A schedule is one minute a day unless a WINDOW is given, in which case it repeats:
   // `schedule_time` opens it, `schedule_until` closes it (inclusive) and `schedule_every_minutes`
   // is the step — "06:00 to 17:30, every 10 minutes". Both window columns null = the single-time
   // shape every schedule had before, unchanged. How long the device then holds the state is the
   // action's own duration_seconds, not this: this says WHEN, that says HOW LONG.
-  schedule_until  String? @db.VarChar(100)
+  schedule_until         String? @db.VarChar(100)
   schedule_every_minutes Int?
-
 
   rule               UserRule          @relation(fields: [rule_id], references: [id], onDelete: Cascade)
   user_device_action UserDeviceAction? @relation(fields: [user_device_action_id], references: [id], onDelete: SetNull)
@@ -606,7 +613,7 @@ model UserRuleCondition {
 }
 
 model UserRuleAction {
-  id                    Int    @id @default(autoincrement())
+  id                    Int     @id @default(autoincrement())
   rule_id               Int
   user_device_action_id Int
   target_state          String  @db.VarChar(255)
@@ -683,7 +690,7 @@ model Scene {
 }
 
 model SceneMember {
-  id                    Int    @id @default(autoincrement())
+  id                    Int     @id @default(autoincrement())
   scene_id              Int
   user_device_action_id Int
   target_state          String  @db.VarChar(255)
@@ -785,24 +792,24 @@ model PipelineStage {
 }
 
 model PipelineTrigger {
-  id                    Int       @id @default(autoincrement())
-  pipeline_id           Int
-  trigger_type          String    @db.VarChar(20)
-  user_device_action_id Int?
-  operator              String?   @db.VarChar(5)
-  threshold_value       String?   @db.VarChar(100)
+  id                     Int       @id @default(autoincrement())
+  pipeline_id            Int
+  trigger_type           String    @db.VarChar(20)
+  user_device_action_id  Int?
+  operator               String?   @db.VarChar(5)
+  threshold_value        String?   @db.VarChar(100)
   // A schedule trigger, in the same shape a rule condition uses (see user_rule_conditions).
   // Replaces `schedule_cron`, which was stored, validated and NEVER evaluated — a pipeline with a
   // schedule trigger simply never ran. One shape for both, so there is one thing to learn and one
   // evaluator to keep correct. HH:MM literal OR a reference, resolved per run (F11.14).
-  schedule_time         String? @db.VarChar(100)
-  schedule_until         String? @db.VarChar(100)
+  schedule_time          String?   @db.VarChar(100)
+  schedule_until         String?   @db.VarChar(100)
   schedule_every_minutes Int?
-  schedule_days          Int[]   @default([])
-  min_interval_sec      Int?
+  schedule_days          Int[]     @default([])
+  min_interval_sec       Int?
   // Last time this trigger fired, used by automation-worker to enforce min_interval_sec.
   // Persisted here (not in Valkey) so cooldowns survive a restart and cannot double-fire.
-  last_fired_at         DateTime? @db.Timestamp(6)
+  last_fired_at          DateTime? @db.Timestamp(6)
 
   pipeline           Pipeline          @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
   user_device_action UserDeviceAction? @relation("PipelineTrig", fields: [user_device_action_id], references: [id], onDelete: Cascade)
@@ -876,30 +883,30 @@ model SensorHistory {
 // commands routed through digest's pending tracking are armed with a timeout, so a rule-issued
 // command whose device is offline settles nowhere. Read it as "sent, unconfirmed".
 model DeviceCommand {
-  id                    Int      @id @default(autoincrement())
+  id                    Int       @id @default(autoincrement())
   user_id               Int
   // Resolved where known. A dispatch addresses a device + mqtt action name, and the id behind that
   // pair is looked up at write time; both are nullable so an unresolvable command is still recorded
   // rather than lost — that is exactly the case worth having history for.
   user_device_id        Int?
   user_device_action_id Int?
-  action_name           String   @db.VarChar(64)
-  target_state          String   @db.VarChar(255)
+  action_name           String    @db.VarChar(64)
+  target_state          String    @db.VarChar(255)
   // Seconds the DEVICE was told to hold the state before releasing it itself. Null = indefinitely.
   duration_seconds      Int?
   // Who raised it: manual | rule | scene | pipeline | phase | system. `source_ref_id` is that
   // thing's row id and `source_label` its name at dispatch time — kept as text on purpose, so the
   // history still reads correctly after the rule is renamed or deleted.
-  source                String   @default("system") @db.VarChar(20)
+  source                String    @default("system") @db.VarChar(20)
   source_ref_id         Int?
-  source_label          String?  @db.VarChar(255)
+  source_label          String?   @db.VarChar(255)
   // sent → ok | error | timeout. Never starts at "pending": by the time this row is written the
   // command is on its way to the broker.
-  status                String   @default("sent") @db.VarChar(20)
-  command_id            String?  @unique @db.VarChar(64)
+  status                String    @default("sent") @db.VarChar(20)
+  command_id            String?   @unique @db.VarChar(64)
   // The state the device reported back, which is not always the state it was asked for.
-  result_value          String?  @db.VarChar(255)
-  dispatched_at         DateTime @default(now()) @db.Timestamptz(6)
+  result_value          String?   @db.VarChar(255)
+  dispatched_at         DateTime  @default(now()) @db.Timestamptz(6)
   settled_at            DateTime? @db.Timestamptz(6)
 
   user               User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -910,6 +917,199 @@ model DeviceCommand {
   @@index([user_id, dispatched_at])
   @@index([user_device_action_id, dispatched_at])
   @@map("device_commands")
+}
+
+// ── F18 history — rollups, lifecycle events and the retention policy ──────────
+//
+// `sensor_history` and `device_commands` above are the RAW tiers. They answer "what exactly
+// happened at 03:12" but cannot answer "what did last quarter look like" without scanning
+// everything, and nothing prunes them. The models below are the other half: pre-aggregated
+// buckets that stay cheap forever, plus the policy row that says how long each raw tier lives.
+//
+// Everything here is derived. A rollup row can be deleted and recomputed from the raw rows while
+// they still exist — which is why the nightly job rolls up BEFORE it prunes, never after.
+
+// Downsampled scalar readings. One row per (action, granularity, bucket).
+//
+// `sample_count` counts every reading in the bucket; `numeric_count` counts only those that
+// parsed as a number. They differ because `sensor_history.value` is TEXT and is not required to
+// be numeric — a switch's history is "on"/"off", an enum sensor's is a word. For those,
+// min/max/avg are null and `last_value` is the only meaningful summary, which is why it is
+// stored rather than derived.
+model SensorRollup {
+  id                    Int      @id @default(autoincrement())
+  user_device_action_id Int
+  // "hour" | "day". Two granularities, not a continuum: the API picks one from the range asked
+  // for, and a third would cost storage without changing any answer.
+  bucket                String   @db.VarChar(8)
+  // Start of the bucket, UTC, truncated to the granularity. The unique key below is what makes
+  // the nightly upsert idempotent, so a re-run or a missed night self-heals.
+  bucket_start          DateTime @db.Timestamptz(6)
+  sample_count          Int      @default(0)
+  numeric_count         Int      @default(0)
+  error_count           Int      @default(0)
+  min_value             Float?
+  max_value             Float?
+  avg_value             Float?
+  last_value            String?  @db.VarChar(255)
+
+  user_device_action UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_device_action_id, bucket, bucket_start])
+  @@index([user_device_action_id, bucket, bucket_start])
+  @@map("sensor_rollup")
+}
+
+// Everything that happened *to* a device, as opposed to what a device was told to do.
+//
+// Before this, an online/offline transition overwrote `user_devices.online` and left no trace:
+// "how often does this thing actually drop" was unanswerable, and the only durable evidence a
+// device had ever been offline was a notification row. Written by digest-service on a REAL
+// transition only — the previous value is read first, or a chatty device writes a row per status
+// message rather than per change.
+//
+// `kind`: online | offline | firmware | fault | config. `firmware` exists because device_commands
+// deliberately excludes the `ota` action ("it has its own audit trail") — this is that trail.
+model DeviceEvent {
+  id             Int      @id @default(autoincrement())
+  user_id        Int
+  user_device_id Int
+  kind           String   @db.VarChar(16)
+  // What it moved between, as text: "false"→"true" for availability, a version pair for firmware,
+  // an error code for a fault. Text because the meaning is per-kind and a typed column per kind
+  // would be four mostly-null columns.
+  from_value     String?  @db.VarChar(255)
+  to_value       String?  @db.VarChar(255)
+  detail         Json?
+  recorded_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_device UserDevice @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+
+  // "what happened to this device" and "what happened across my home".
+  @@index([user_device_id, recorded_at])
+  @@index([user_id, recorded_at])
+  @@map("device_events")
+}
+
+// Daily uptime per device, folded from consecutive DeviceEvent rows plus the day boundary.
+//
+// Derived rather than counted live because the question ("what % of yesterday was this up")
+// needs the span BETWEEN events, and the events alone make the UI compute that on every render.
+model DeviceAvailabilityDaily {
+  id              Int      @id @default(autoincrement())
+  user_device_id  Int
+  // Midnight UTC of the day being summarised.
+  day             DateTime @db.Date
+  online_seconds  Int      @default(0)
+  offline_seconds Int      @default(0)
+  transitions     Int      @default(0)
+
+  user_device UserDevice @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_device_id, day])
+  @@index([user_device_id, day])
+  @@map("device_availability_daily")
+}
+
+// Camera frames, split out of sensor_history.
+//
+// They were in the same TEXT column as scalar readings, which meant every series query walked a
+// table whose rows are ~40 KB of base64 rather than ~6 bytes. Splitting them is a read-performance
+// change, not a retention one: full frame history is kept on purpose (retention_policy.frame
+// ships with raw_days = 0 = unlimited), and this is the table that makes keeping it affordable.
+//
+// `byte_size` is stored so the admin storage panel can total it without measuring the TEXT.
+model CameraFrameHistory {
+  id                    Int      @id @default(autoincrement())
+  user_device_action_id Int
+  value                 String   @db.Text
+  byte_size             Int      @default(0)
+  recorded_at           DateTime @default(now()) @db.Timestamptz(6)
+
+  user_device_action UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
+
+  @@index([user_device_action_id, recorded_at])
+  @@map("camera_frame_history")
+}
+
+// Daily command counts per (action, source, outcome) — "how often does this actually run, and how
+// often does it fail". Lets the raw device_commands rows age out without losing the shape.
+model CommandRollupDaily {
+  id                    Int      @id @default(autoincrement())
+  user_device_action_id Int
+  day                   DateTime @db.Date
+  source                String   @db.VarChar(20)
+  status                String   @db.VarChar(20)
+  count                 Int      @default(0)
+
+  user_device_action UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_device_action_id, day, source, status])
+  @@index([user_device_action_id, day])
+  @@map("command_rollup_daily")
+}
+
+// How long each kind of history is kept. Platform-wide, admin-edited in the UI.
+//
+// Deliberately a table and not env vars: retention is a product decision an owner makes and
+// changes, and an env var means a redeploy plus no record of what the policy was. Env vars seed
+// the defaults on first migrate; after that this table is authoritative and the nightly job reads
+// it every pass, so a change takes effect the same night without a restart.
+//
+// `0` means KEEP FOREVER everywhere, rather than "delete immediately" — the safe reading for a
+// column that drives deletes, and the default for anything not explicitly capped.
+model RetentionPolicy {
+  id                  Int      @id @default(autoincrement())
+  // scalar | frame | command | device_event
+  data_kind           String   @unique @db.VarChar(20)
+  // What a user gets before they choose anything. Changing a default moves every user who never
+  // customised this kind — which is the point of storing the default rather than copying it into
+  // a row per user at signup.
+  default_raw_days    Int      @default(0)
+  default_hourly_days Int?
+  default_daily_days  Int?
+  // The ceiling. NULL = uncapped, which is NOT the same as 0: on these columns NULL means "no
+  // limit imposed", while 0 on a *_days column means "keep forever". Both spellings are needed
+  // because a ceiling of 0 would otherwise read as "cap everyone at forever", i.e. no cap at all.
+  //
+  // Ships NULL on every kind, so behaviour matches the decision that full frame history is kept.
+  // The mechanism exists so that a volume with no headroom can be defended later without a
+  // schema change.
+  max_raw_days        Int?
+  max_hourly_days     Int?
+  max_daily_days      Int?
+  // Master switch for the whole kind. Off means it is never pruned OR rolled up — an escape hatch
+  // for "stop touching my data" that does not require setting every window to 0. Platform-level
+  // only: a user turning off their own pruning is just retention 0.
+  enabled             Boolean  @default(true)
+  updated_by_user_id  Int?
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  updated_by User? @relation(fields: [updated_by_user_id], references: [id], onDelete: SetNull)
+
+  @@map("retention_policy")
+}
+
+// One user's override of a platform default. Same shape as NotificationPreference: a row exists
+// only once the user has actually chosen something, so a new account needs no seeding and the
+// absence of a row is a meaningful "use the default".
+//
+// The effective window is min(user_choice, ceiling) with 0 read as infinity — see
+// `resolveRetention` in the retention worker, which is the single place that arithmetic lives.
+model UserRetentionPreference {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  data_kind   String   @db.VarChar(20)
+  raw_days    Int      @default(0)
+  hourly_days Int?
+  daily_days  Int?
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, data_kind])
+  @@map("user_retention_preferences")
 }
 
 // ═══ Tier 7 — Blueprints (F10) ══════════════════════════════════════════════════
@@ -1092,11 +1292,11 @@ model BlueprintProfile {
 // different targets in two profiles, and a phase_scope naming it matches whichever profile the
 // binding follows.
 model BlueprintPhase {
-  id             Int     @id @default(autoincrement())
-  profile_id     Int
-  key            String  @db.VarChar(64)
-  name           String  @db.VarChar(255)
-  ordinal        Int
+  id              Int     @id @default(autoincrement())
+  profile_id      Int
+  key             String  @db.VarChar(64)
+  name            String  @db.VarChar(255)
+  ordinal         Int
   // A literal ("7") OR a reference resolved against the owner's context — `@param.seedling.days`,
   // `@field.x` (F11.13). A reference is what lets ONE lifecycle hold devices whose phases run for
   // different lengths: two pots follow the same three phases, and the pot that needs a shorter
@@ -1105,8 +1305,8 @@ model BlueprintPhase {
   //
   // Text rather than Int for the same reason every other value position is text: the reference must
   // survive to evaluation time, because that is the only moment the answer is known.
-  duration_value String? @db.VarChar(100)
-  duration_unit  String? @db.VarChar(10) // seconds | minutes | hours | days | weeks | months
+  duration_value  String? @db.VarChar(100)
+  duration_unit   String? @db.VarChar(10) // seconds | minutes | hours | days | weeks | months
   // What ends this phase (F11.x). One trigger per phase; the phase owns the target, the referenced
   // automation only supplies the *decision*.
   //   manual    only a person advances it (start / setPhase).
@@ -1119,7 +1319,7 @@ model BlueprintPhase {
   advance_mode    String  @default("manual") @db.VarChar(20)
   advance_ref_key String? @db.VarChar(64) // rule/pipeline template key, for modes rule|pipeline
   advance_to_key  String? @db.VarChar(64) // target phase key in THIS profile; null = next by ordinal
-  context_notes  String? // resolved by @phase.context_notes, e.g. into an LLM prompt
+  context_notes   String? // resolved by @phase.context_notes, e.g. into an LLM prompt
 
   profile   BlueprintProfile       @relation(fields: [profile_id], references: [id], onDelete: Cascade)
   targets   BlueprintPhaseTarget[]
@@ -1174,13 +1374,13 @@ model BlueprintSceneTemplate {
 }
 
 model BlueprintSceneTemplateMember {
-  id            Int    @id @default(autoincrement())
-  template_id   Int
-  slot_key      String @db.VarChar(64) // ← together these replace user_device_action_id
-  action_name   String @db.VarChar(64) // ← the slot's sealed template entry mqtt_action_name
-  target_state  String  @db.VarChar(255) // literal OR "@param.pump_speed"
-  sort_order    Int     @default(0)
-  delay_seconds String? @db.VarChar(100) // literal OR a reference (F11.14)
+  id               Int     @id @default(autoincrement())
+  template_id      Int
+  slot_key         String  @db.VarChar(64) // ← together these replace user_device_action_id
+  action_name      String  @db.VarChar(64) // ← the slot's sealed template entry mqtt_action_name
+  target_state     String  @db.VarChar(255) // literal OR "@param.pump_speed"
+  sort_order       Int     @default(0)
+  delay_seconds    String? @db.VarChar(100) // literal OR a reference (F11.14)
   // Held for this long by the DEVICE itself, then released — see user_rule_actions.duration_seconds.
   duration_seconds String? @db.VarChar(100) // literal OR "@phase.water.seconds"
 
@@ -1221,24 +1421,23 @@ model BlueprintRuleTemplate {
 }
 
 model BlueprintRuleTemplateCondition {
-  id              Int     @id @default(autoincrement())
-  template_id     Int
-  condition_type  String  @db.VarChar(20) // threshold | device_status | schedule
-  slot_key        String? @db.VarChar(64)
-  action_name     String? @db.VarChar(64)
-  operator        String? @db.VarChar(5)
-  threshold_value String? @db.VarChar(100) // literal OR "@phase.humidity.min"
-  status_value    String? @db.VarChar(20)
-  schedule_time   String? @db.VarChar(100) // HH:MM literal OR "@phase.light.on_time" (F11.14)
-  schedule_days   Int[]   @default([])
+  id                     Int     @id @default(autoincrement())
+  template_id            Int
+  condition_type         String  @db.VarChar(20) // threshold | device_status | schedule
+  slot_key               String? @db.VarChar(64)
+  action_name            String? @db.VarChar(64)
+  operator               String? @db.VarChar(5)
+  threshold_value        String? @db.VarChar(100) // literal OR "@phase.humidity.min"
+  status_value           String? @db.VarChar(20)
+  schedule_time          String? @db.VarChar(100) // HH:MM literal OR "@phase.light.on_time" (F11.14)
+  schedule_days          Int[]   @default([])
   // A schedule is one minute a day unless a WINDOW is given, in which case it repeats:
   // `schedule_time` opens it, `schedule_until` closes it (inclusive) and `schedule_every_minutes`
   // is the step — "06:00 to 17:30, every 10 minutes". Both window columns null = the single-time
   // shape every schedule had before, unchanged. How long the device then holds the state is the
   // action's own duration_seconds, not this: this says WHEN, that says HOW LONG.
-  schedule_until    String? @db.VarChar(100)
-  schedule_every_minutes   Int?
-
+  schedule_until         String? @db.VarChar(100)
+  schedule_every_minutes Int?
 
   template BlueprintRuleTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
 
@@ -1246,12 +1445,12 @@ model BlueprintRuleTemplateCondition {
 }
 
 model BlueprintRuleTemplateAction {
-  id            Int    @id @default(autoincrement())
-  template_id   Int
-  slot_key      String @db.VarChar(64)
-  action_name   String @db.VarChar(64)
-  target_state  String  @db.VarChar(255) // literal OR "@param.pump_speed"
-  delay_seconds String? @db.VarChar(100) // literal OR a reference (F11.14)
+  id               Int     @id @default(autoincrement())
+  template_id      Int
+  slot_key         String  @db.VarChar(64)
+  action_name      String  @db.VarChar(64)
+  target_state     String  @db.VarChar(255) // literal OR "@param.pump_speed"
+  delay_seconds    String? @db.VarChar(100) // literal OR a reference (F11.14)
   // Held for this long by the DEVICE itself, then released — see user_rule_actions.duration_seconds.
   duration_seconds String? @db.VarChar(100) // literal OR "@phase.water.seconds"
 
@@ -1330,22 +1529,22 @@ model BlueprintPipelineTemplateStage {
 }
 
 model BlueprintPipelineTemplateTrigger {
-  id               Int     @id @default(autoincrement())
-  template_id      Int
-  trigger_type     String  @db.VarChar(20)
-  slot_key         String? @db.VarChar(64)
-  action_name      String? @db.VarChar(64)
-  operator         String? @db.VarChar(5)
-  threshold_value  String? @db.VarChar(100) // literal OR a reference
+  id                     Int     @id @default(autoincrement())
+  template_id            Int
+  trigger_type           String  @db.VarChar(20)
+  slot_key               String? @db.VarChar(64)
+  action_name            String? @db.VarChar(64)
+  operator               String? @db.VarChar(5)
+  threshold_value        String? @db.VarChar(100) // literal OR a reference
   // A schedule trigger, in the same shape a rule condition uses (see user_rule_conditions).
   // Replaces `schedule_cron`, which was stored, validated and NEVER evaluated — a pipeline with a
   // schedule trigger simply never ran. One shape for both, so there is one thing to learn and one
   // evaluator to keep correct. HH:MM literal OR a reference, resolved per run (F11.14).
-  schedule_time    String? @db.VarChar(100)
-  schedule_until    String? @db.VarChar(100)
+  schedule_time          String? @db.VarChar(100)
+  schedule_until         String? @db.VarChar(100)
   schedule_every_minutes Int?
-  schedule_days     Int[]   @default([])
-  min_interval_sec Int?
+  schedule_days          Int[]   @default([])
+  min_interval_sec       Int?
 
   template BlueprintPipelineTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
 

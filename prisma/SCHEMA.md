@@ -11,7 +11,7 @@ change** (mermaid ERD + per-table examples). 54 tables, ordered by dependency ti
 | 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`, `sensor_rollup`, `camera_frame_history`, `command_rollup_daily`, `device_events`, `device_availability_daily`, `retention_policy`, `user_retention_preferences`                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | 7    | Blueprints (F10 — admin definition + user instance)                                  | `blueprints`, `blueprint_slots`, `blueprint_params`, `blueprint_profiles`, `blueprint_phases`, `blueprint_phase_targets`, `blueprint_scene_templates`, `blueprint_scene_template_members`, `blueprint_rule_templates`, `blueprint_rule_template_conditions`, `blueprint_rule_template_actions`, `blueprint_pipeline_templates`, `blueprint_pipeline_template_sensors`, `blueprint_pipeline_template_stages`, `blueprint_pipeline_template_triggers`, `blueprint_instances`, `blueprint_slot_bindings`, `blueprint_param_overrides`, `blueprint_instance_phase_state`, `blueprint_binding_phase_state`, `blueprint_binding_param_overrides` |
 
 ---
@@ -350,6 +350,82 @@ erDiagram
   }
 
   %% ── Tier 6: telemetry ──
+  %% Raw tiers (SensorHistory, DeviceCommand) + the derived rollups and the retention policy.
+  SensorRollup {
+    int id PK
+    int user_device_action_id FK
+    string bucket "hour|day"
+    datetime bucket_start "UTC, truncated to the bucket"
+    int sample_count "every reading"
+    int numeric_count "those that parsed as a number"
+    int error_count
+    float min_value "null when nothing numeric"
+    float max_value
+    float avg_value
+    string last_value "the only summary a non-numeric series has"
+  }
+
+  DeviceEvent {
+    int id PK
+    int user_id FK
+    int user_device_id FK
+    string kind "online|offline|firmware|fault|config"
+    string from_value "nullable"
+    string to_value "nullable"
+    json detail "nullable"
+    datetime recorded_at
+  }
+
+  DeviceAvailabilityDaily {
+    int id PK
+    int user_device_id FK
+    date day
+    int online_seconds
+    int offline_seconds
+    int transitions
+  }
+
+  CameraFrameHistory {
+    int id PK
+    int user_device_action_id FK
+    string value "base64 jpeg"
+    int byte_size "decoded size, for the storage panel"
+    datetime recorded_at
+  }
+
+  CommandRollupDaily {
+    int id PK
+    int user_device_action_id FK
+    date day
+    string source
+    string status
+    int count
+  }
+
+  RetentionPolicy {
+    int id PK
+    string data_kind UK "scalar|frame|command|device_event"
+    int default_raw_days "0 = forever"
+    int default_hourly_days "nullable"
+    int default_daily_days "nullable"
+    int max_raw_days "ceiling; NULL = uncapped"
+    int max_hourly_days
+    int max_daily_days
+    boolean enabled
+    int updated_by_user_id FK "nullable"
+    datetime updated_at
+  }
+
+  UserRetentionPreference {
+    int id PK
+    int user_id FK
+    string data_kind
+    int raw_days "0 = forever"
+    int hourly_days "nullable"
+    int daily_days "nullable"
+    datetime updated_at
+  }
+
   SensorHistory {
     int id PK
     int user_device_action_id FK
@@ -1066,6 +1142,60 @@ delayed member cannot silently act on a phase that advanced while it waited. Row
 | 502 | 100                   | socket      | "off"        | NULL             | device   | NULL            | ok      | "off"        | 2026-08-06T09:10:30Z | 2026-08-06T09:10:30Z |
 | 503 | 104                   | valve       | "on"         | NULL             | manual   | NULL            | timeout | NULL         | 2026-08-06T09:12:00Z | 2026-08-06T09:12:10Z |
 | 504 | 108                   | light       | "on"         | NULL             | pipeline | "Light decider" | error   | NULL         | 2026-08-06T09:15:00Z | 2026-08-06T09:15:01Z |
+
+#### `sensor_rollup` (`SensorRollup`) — downsampled scalar readings, one row per (action, granularity, bucket). Written nightly by automation-worker's retention pass, which rolls up **before** it prunes so a bucket is never built from already-deleted rows. `sample_count` counts every reading; `numeric_count` only those that parsed as a number — they differ because `sensor_history.value` is TEXT and a switch's history is `"on"`/`"off"`. For a non-numeric series min/max/avg stay NULL and `last_value` is the only meaningful summary. The unique key `(user_device_action_id, bucket, bucket_start)` makes the upsert idempotent, so a re-run or a missed night self-heals.
+
+| id   | user_device_action_id | bucket | bucket_start         | sample_count | numeric_count | error_count | min_value | max_value | avg_value | last_value |
+| ---- | --------------------- | ------ | -------------------- | ------------ | ------------- | ----------- | --------- | --------- | --------- | ---------- |
+| 7001 | 100                   | hour   | 2026-08-20T14:00:00Z | 60           | 59            | 1           | 21.1      | 23.8      | 22.4      | "23.1"     |
+| 7002 | 100                   | day    | 2026-08-20T00:00:00Z | 1440         | 1436          | 4           | 18.2      | 26.9      | 22.1      | "21.7"     |
+| 7003 | 106                   | day    | 2026-08-20T00:00:00Z | 96           | 0             | 0           | NULL      | NULL      | NULL      | "on"       |
+
+#### `device_events` (`DeviceEvent`) — everything that happened **to** a device, as opposed to what it was told to do. Written by digest-service on a **real transition only**: the previous `online` value is read first, or a chatty device writes a row per status message rather than per change. Every online/offline transition funnels through `RK.DEVICE_STATE_CHANGED` (the broker's Last-Will _and_ automation-worker's liveness reaper both publish it), so there is exactly one hook. `kind='firmware'` exists because `device_commands` deliberately excludes the `ota` action — this is that audit trail. Indexes `(user_device_id, recorded_at)` and `(user_id, recorded_at)`.
+
+| id  | user_id | user_device_id | kind     | from_value | to_value   | detail                                  | recorded_at          |
+| --- | ------- | -------------- | -------- | ---------- | ---------- | --------------------------------------- | -------------------- |
+| 301 | 1       | 12             | offline  | "true"     | "false"    | {"reason":"reaper"}                     | 2026-08-19T03:12:00Z |
+| 302 | 1       | 12             | online   | "false"    | "true"     | NULL                                    | 2026-08-19T04:31:00Z |
+| 303 | 1       | 12             | firmware | "v2.0.438" | "v2.0.459" | NULL                                    | 2026-08-20T09:47:00Z |
+| 304 | 1       | 12             | fault    | NULL       | NULL       | {"action":"level","code":"read_failed"} | 2026-08-20T11:02:00Z |
+
+#### `device_availability_daily` (`DeviceAvailabilityDaily`) — daily uptime per device, folded from consecutive `device_events` plus the day boundary. Derived rather than counted live because the question ("what % of yesterday was this up") needs the span _between_ events, which would otherwise be recomputed on every render. Unique `(user_device_id, day)`.
+
+| id  | user_device_id | day        | online_seconds | offline_seconds | transitions |
+| --- | -------------- | ---------- | -------------- | --------------- | ----------- |
+| 210 | 12             | 2026-08-19 | 81660          | 4740            | 2           |
+| 211 | 12             | 2026-08-20 | 86400          | 0               | 0           |
+
+#### `camera_frame_history` (`CameraFrameHistory`) — camera frames, split out of `sensor_history`. A **read-performance** change, not a retention one: full frame history is kept on purpose (`retention_policy.frame` ships `default_raw_days = 0` = forever), and this split is what makes keeping it affordable — every scalar series query was otherwise walking a table whose image rows are ~40 KB of base64 each. `byte_size` is the decoded size, stored so the storage panel can total it without measuring the TEXT. Fault rows for a camera action stay in `sensor_history` (they carry `value = NULL` and belong to the error timeline). Index `(user_device_action_id, recorded_at)`.
+
+| id    | user_device_action_id | value                | byte_size | recorded_at          |
+| ----- | --------------------- | -------------------- | --------- | -------------------- |
+| 44001 | 102                   | "/9j/4AAQSk…" (jpeg) | 41216     | 2026-08-20T18:04:12Z |
+| 44002 | 102                   | "/9j/4AAQSk…" (jpeg) | 39880     | 2026-08-20T18:04:42Z |
+
+#### `command_rollup_daily` (`CommandRollupDaily`) — daily command counts per (action, source, outcome): "how often does this actually run, and how often does it fail". Lets the raw `device_commands` rows age out without losing the shape. Unique `(user_device_action_id, day, source, status)`.
+
+| id  | user_device_action_id | day        | source | status  | count |
+| --- | --------------------- | ---------- | ------ | ------- | ----- |
+| 880 | 100                   | 2026-08-20 | rule   | ok      | 14    |
+| 881 | 100                   | 2026-08-20 | rule   | timeout | 1     |
+| 882 | 100                   | 2026-08-20 | device | ok      | 14    |
+
+#### `retention_policy` (`RetentionPolicy`) — the platform default each user starts on, plus the ceiling they may not exceed. Admin-owned, one row per `data_kind`. Deliberately a table and not env vars: retention is a product decision an owner changes, and an env var means a redeploy plus no record of what the policy was. Env vars seed these rows on first migrate; afterwards this table is authoritative and the nightly job re-reads it every pass, so a change takes effect the same night without a restart. **On `*_days` columns `0` means KEEP FOREVER** (the safe reading for a column driving deletes); **on `max_*` ceilings NULL means UNCAPPED** — a different spelling on purpose, since a ceiling of `0` would otherwise read as "cap everyone at forever". All ceilings ship NULL.
+
+| id  | data_kind    | default_raw_days | default_hourly_days | default_daily_days | max_raw_days | enabled |
+| --- | ------------ | ---------------- | ------------------- | ------------------ | ------------ | ------- |
+| 1   | scalar       | 14               | 90                  | 0                  | NULL         | true    |
+| 2   | command      | 365              | NULL                | 0                  | NULL         | true    |
+| 3   | device_event | 0                | NULL                | 0                  | NULL         | true    |
+| 4   | frame        | 0                | NULL                | NULL               | NULL         | true    |
+
+#### `user_retention_preferences` (`UserRetentionPreference`) — one user's override of a platform default. Same shape as `notification_preferences`: **a row exists only once the user has actually chosen something**, so a new account needs no seeding, the absence of a row is a meaningful "use the default", and changing a default moves every user who never customised. "Reset to default" deletes the row rather than writing the default into it. The effective window is `min(user_choice, ceiling)` with `0` read as infinity — that arithmetic lives in exactly one place, `resolveRetention` in the retention worker. Two tables rather than one with a nullable `user_id` because Postgres treats NULLs as **distinct** in a unique index, so `UNIQUE(user_id, data_kind)` would happily allow two platform rows for the same kind. Unique `(user_id, data_kind)`.
+
+| id  | user_id | data_kind | raw_days | hourly_days | daily_days | updated_at           |
+| --- | ------- | --------- | -------- | ----------- | ---------- | -------------------- |
+| 31  | 1       | scalar    | 0        | 90          | 0          | 2026-08-21T10:00:00Z |
 
 ### Tier 7 — Blueprints (F10)
 

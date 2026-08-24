@@ -190,6 +190,9 @@ export async function reapSilentDevices(ch: Channel): Promise<number> {
         actionName: 'status',
         state: false,
         timestamp: new Date().toISOString(),
+        // Inferred from missed heartbeats, not witnessed by the broker. Kept on the payload so the
+        // device timeline can say so rather than implying a clean disconnect (F18.1).
+        source: 'reaper',
       };
       publish(ch, RK.DEVICE_STATE_CHANGED, payload);
       log.warn(

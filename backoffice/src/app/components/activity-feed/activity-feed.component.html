@@ -1,0 +1,88 @@
+<div class="af-head">
+  <div class="af-titles">
+    <div class="af-title">
+      Recent activity
+      <!-- Follows the socket, so it is worth saying so — a feed that silently updates and one that
+           is stale look identical until you already distrust it. -->
+      <span class="af-live" [class.pulse]="live()" title="Updating live as commands land">
+        <span class="af-live-dot"></span>live
+      </span>
+    </div>
+    <div class="af-sub">
+      Every command across every device — who raised it and whether it landed
+    </div>
+  </div>
+
+  <div class="af-controls">
+    <div class="rng">
+      @for (r of ['24h', '7d', '30d']; track r) {
+        <button type="button" [class.on]="range() === r" (click)="setRange($any(r))">{{ r }}</button>
+      }
+    </div>
+
+    <button type="button" class="af-filter" [matMenuTriggerFor]="sourceMenu">
+      <mat-icon>filter_list</mat-icon>
+      {{ source() ?? 'Any source' }}
+      <mat-icon class="af-caret">expand_more</mat-icon>
+    </button>
+    <mat-menu #sourceMenu="matMenu">
+      <button mat-menu-item (click)="setSource(undefined)">Any source</button>
+      @for (s of sources; track s) {
+        <button mat-menu-item (click)="setSource(s)">{{ s }}</button>
+      }
+    </mat-menu>
+
+    <button type="button" class="af-filter" [matMenuTriggerFor]="statusMenu">
+      {{ status() ?? 'Any outcome' }}
+      <mat-icon class="af-caret">expand_more</mat-icon>
+    </button>
+    <mat-menu #statusMenu="matMenu">
+      <button mat-menu-item (click)="setStatus(undefined)">Any outcome</button>
+      @for (s of statuses; track s) {
+        <button mat-menu-item (click)="setStatus(s)">{{ s }}</button>
+      }
+    </mat-menu>
+  </div>
+</div>
+
+@if (commands().length > 0) {
+  <div class="af-rows">
+    @for (c of commands(); track c.id) {
+      <div class="af-row">
+        <span class="af-when">{{ c.dispatchedAt | date: 'EEE HH:mm' }}</span>
+        @if (!deviceId()) {
+          <span class="af-device">{{ c.deviceName ?? '—' }}</span>
+        }
+        <span class="af-action">{{ c.actionName }}</span>
+        <span class="af-target">{{ c.target || '—' }}</span>
+        @if (hold(c)) {
+          <span class="af-hold">for {{ hold(c) }}</span>
+        }
+        <span class="af-chip" [style.color]="sourceColor(c.source)">{{ c.source }}</span>
+        <span class="af-label">{{ describe(c) }}</span>
+        <span class="af-chip af-status" [style.color]="statusColor(c.status)">{{ c.status }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="af-foot">
+    @if (nextBefore() !== null) {
+      <button type="button" class="af-more" (click)="loadMore()" [disabled]="loading()">
+        {{ loading() ? 'Loading…' : 'Load more' }}
+      </button>
+    } @else {
+      <span class="af-end">That's everything in this range.</span>
+    }
+  </div>
+} @else {
+  <div class="af-empty">
+    <mat-icon>bolt</mat-icon>
+    <span>
+      @if (source() || status()) {
+        No commands match these filters.
+      } @else {
+        No commands in this range yet.
+      }
+    </span>
+  </div>
+}

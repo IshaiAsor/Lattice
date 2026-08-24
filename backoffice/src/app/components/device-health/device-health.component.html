@@ -1,0 +1,107 @@
+<!-- Range picker -->
+<div class="dh-toolbar">
+  <div class="rng">
+    @for (r of ['24h', '7d', '30d']; track r) {
+      <button type="button" [class.on]="range() === r" (click)="setRange($any(r))">{{ r }}</button>
+    }
+  </div>
+  @if (loading()) {
+    <span class="dh-loading">Loading…</span>
+  }
+</div>
+
+<!-- Availability -->
+<div class="lattice-card dh-card">
+  <div class="dh-head">
+    <div>
+      <div class="dh-title">Availability</div>
+      <div class="dh-sub">Online / offline, from this device's own lifecycle events</div>
+    </div>
+    <div class="dh-metric">
+      @if (availability()?.uptimePercent !== null && availability()?.uptimePercent !== undefined) {
+        <span class="dh-value" style="color: var(--online)">{{ availability()!.uptimePercent }}</span>
+        <span class="dh-unit">%</span>
+        <div class="dh-caption">uptime</div>
+      } @else {
+        <!-- Not 0%: "nothing recorded yet" and "down all week" must not look the same. -->
+        <span class="dh-value dh-value-muted">—</span>
+        <div class="dh-caption">no data yet</div>
+      }
+    </div>
+  </div>
+
+  @if (bands().length > 0) {
+    <div class="dh-bar">
+      @for (b of bands(); track $index) {
+        <span
+          class="dh-band"
+          [class.off]="b.kind === 'off'"
+          [style.left.%]="b.left"
+          [style.width.%]="b.width"
+        ></span>
+      }
+    </div>
+    <div class="dh-legend">
+      <span><i class="dot on"></i>Online</span>
+      <span><i class="dot off"></i>Offline</span>
+      <span><i class="dot err"></i>Fault</span>
+    </div>
+  } @else {
+    <div class="dh-empty-inline">No availability recorded in this range.</div>
+  }
+</div>
+
+<!-- Device timeline -->
+<div class="lattice-card dh-card">
+  <div class="dh-title">Device timeline</div>
+  <div class="dh-sub">
+    Online / offline, firmware and faults — everything that happened <em>to</em> this device
+  </div>
+  @if (events().length > 0) {
+    <div class="dh-rows">
+      @for (e of events(); track e.id) {
+        <div class="dh-row">
+          <span class="dh-when">{{ e.at | date: 'EEE HH:mm' }}</span>
+          <mat-icon [style.color]="eventColor(e.kind)">{{ eventIcon(e.kind) }}</mat-icon>
+          <span class="dh-row-title">{{ eventTitle(e) }}</span>
+          <span class="dh-row-detail">{{ eventDetail(e) }}</span>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="dh-empty">
+      <mat-icon>history</mat-icon>
+      <span>Nothing recorded for this device yet.</span>
+    </div>
+  }
+</div>
+
+<!-- Recent commands: the dashboard feed, filtered to this device -->
+<div class="lattice-card dh-card">
+  <div class="dh-head">
+    <div>
+      <div class="dh-title">Recent commands</div>
+      <div class="dh-sub">The last few this device received</div>
+    </div>
+    <a class="dh-link" routerLink="/dashboard">See all in Activity</a>
+  </div>
+  @if (commands().length > 0) {
+    <div class="dh-rows">
+      @for (c of commands(); track c.id) {
+        <div class="dh-row">
+          <span class="dh-when">{{ c.dispatchedAt | date: 'EEE HH:mm' }}</span>
+          <span class="dh-action">{{ c.actionName }}</span>
+          <span class="dh-target">{{ c.target || '—' }}</span>
+          <span class="dh-chip" [style.color]="sourceColor(c.source)">{{ c.source }}</span>
+          <span class="dh-row-detail">{{ c.sourceLabel }}</span>
+          <span class="dh-chip dh-status" [style.color]="statusColor(c.status)">{{ c.status }}</span>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="dh-empty">
+      <mat-icon>bolt</mat-icon>
+      <span>No commands sent to this device in this range.</span>
+    </div>
+  }
+</div>

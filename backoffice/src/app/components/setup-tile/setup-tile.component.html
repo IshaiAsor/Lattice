@@ -174,7 +174,7 @@
         <div class="panel-grid">
             @for (pill of readings(); track pill.action.id) {
             <div class="panel-slot">
-                <app-action-card [action]="pill.action" (rename)="renameAction.emit($event)"></app-action-card>
+                <app-action-card density="standard" [action]="pill.action" (rename)="renameAction.emit($event)"></app-action-card>
             </div>
             }
         </div>
@@ -189,7 +189,7 @@
         <div class="panel-grid">
             @for (control of controls(); track control.id) {
             <div class="panel-slot">
-                <app-action-card [action]="control" (rename)="renameAction.emit($event)"></app-action-card>
+                <app-action-card density="standard" [action]="control" (rename)="renameAction.emit($event)"></app-action-card>
             </div>
             }
         </div>

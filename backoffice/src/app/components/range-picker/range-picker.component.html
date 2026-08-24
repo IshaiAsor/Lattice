@@ -1,0 +1,65 @@
+<button
+  type="button"
+  class="rp-trigger"
+  [matMenuTriggerFor]="menu"
+  (menuOpened)="openCustom()"
+  [matTooltip]="'Range the charts are drawn over'"
+>
+  <mat-icon>date_range</mat-icon>
+  @if (label()) {
+    <span class="rp-label">{{ label() }}</span>
+  }
+  <span class="rp-summary">{{ summary() }}</span>
+  <mat-icon class="rp-caret">expand_more</mat-icon>
+</button>
+
+<mat-menu #menu="matMenu" class="rp-menu">
+  <div class="rp-panel">
+    <div class="rp-section">Last</div>
+    <div class="rp-presets">
+      @for (p of presets; track p) {
+        <button
+          type="button"
+          class="rp-chip"
+          [class.on]="value().preset === p"
+          (click)="pick(p)"
+        >
+          {{ labels[p] }}
+        </button>
+      }
+    </div>
+
+    <div class="rp-divider"></div>
+    <div class="rp-section">Between two dates</div>
+
+    <!-- Native date inputs: no MatDatepicker anywhere in this app yet, and the module plus its
+         date adapter is a lot of bundle for two dates in a menu. -->
+    <div class="rp-dates">
+      <label class="rp-field">
+        <span>From</span>
+        <input type="date" [value]="draftFrom()" [max]="today" (input)="onFrom($event)" />
+      </label>
+      <label class="rp-field">
+        <span>To</span>
+        <input type="date" [value]="draftTo()" [max]="today" (input)="onTo($event)" />
+      </label>
+    </div>
+
+    @if (customInvalid()) {
+      <div class="rp-warn">
+        <mat-icon>error_outline</mat-icon>
+        <span>The start date is after the end date.</span>
+      </div>
+    }
+
+    <button
+      type="button"
+      class="rp-apply"
+      [class.on]="isCustom()"
+      [disabled]="customInvalid()"
+      (click)="applyCustom()"
+    >
+      Apply date range
+    </button>
+  </div>
+</mat-menu>

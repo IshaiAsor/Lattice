@@ -59,6 +59,7 @@ export const deviceStateChangedSchema = z.object({
   state: z.unknown(),
   timestamp: z.string(),
   version: z.string().optional(),
+  source: z.enum(['broker', 'reaper']).optional(),
 });
 
 export const deviceHeartbeatSchema = z.object({

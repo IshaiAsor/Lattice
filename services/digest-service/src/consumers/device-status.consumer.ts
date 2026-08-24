@@ -9,6 +9,7 @@ import { socket } from '../socket/emitter';
 import { confirmOtaIfPending } from '../ota-confirm';
 import { recordReportedVersion } from '../device-version';
 import { resyncDeviceState } from '../services/state-resync';
+import { recordAvailabilityChange, recordFirmwareChange } from '../device-events';
 
 const log = createLogger('digest-service:device-status');
 
@@ -65,16 +66,17 @@ export function deviceStatusConsumer(ch: Channel) {
     // Was it actually away? Read before the write so the resync below can tell a real return from
     // a redelivery. Devices publish status RETAINED, so every re-subscribe (a restart, a broker
     // reconnect) replays an `online` for the whole fleet — firing a resync on those would turn
-    // one restart into a read storm across every device we own. Only asked when the message says
-    // the device is up; the offline direction has nothing to resync.
-    let wasOffline = false;
-    if (online) {
-      const prior = await db.userDevice.findUnique({
-        where: { id: userDeviceId },
-        select: { online: true },
-      });
-      wasOffline = prior?.online === false;
-    }
+    // one restart into a read storm across every device we own.
+    //
+    // Read in BOTH directions since F18.1: the availability history writes a row per *transition*,
+    // which needs the previous value whichever way the device moved. Null means we have never seen
+    // this device's state, which is not a transition and must not produce an event.
+    const prior = await db.userDevice.findUnique({
+      where: { id: userDeviceId },
+      select: { online: true },
+    });
+    const wasOnline: boolean | null = prior?.online ?? null;
+    const wasOffline = online && wasOnline === false;
 
     const applied = await db.userDevice.updateMany({
       where: {
@@ -94,6 +96,14 @@ export function deviceStatusConsumer(ch: Channel) {
 
     // 2. OTA confirmation: device reconnected on the expected new-version topic path.
     if (online && version) {
+      // The version the platform believed BEFORE this message, so the timeline can show the
+      // move rather than just the destination. Read here because confirmOtaIfPending repoints the
+      // catalog row and recordReportedVersion overwrites the column — after either, the old value
+      // is gone.
+      const priorVersion = await db.userDevice.findUnique({
+        where: { id: userDeviceId },
+        select: { current_firmware_version: true },
+      });
       await confirmOtaIfPending(userDeviceId, version);
       // Then record the version regardless of whether an OTA was pending (F3.16). Runs after the
       // confirm so a genuine OTA still gets its transactional promote (staged actions + catalog
@@ -101,7 +111,30 @@ export function deviceStatusConsumer(ch: Channel) {
       // device that changed firmware by some route the platform did not initiate. Safe here
       // because section 0 has already rejected the stale retained replays this topic is prone to.
       await recordReportedVersion(userDeviceId, version, 'status');
+      // The OTA audit trail device_commands deliberately leaves out (F18.1). recordFirmwareChange
+      // is a no-op when the version has not actually moved, which is the overwhelmingly common
+      // case — every status message from a device carries its version.
+      await recordFirmwareChange(
+        parseInt(userId, 10),
+        userDeviceId,
+        priorVersion?.current_firmware_version ?? null,
+        version,
+      );
     }
+
+    // 2b. The device's own timeline (best-effort; F18.1). Only a real transition writes a row —
+    // `wasOnline` was read before the write above, and the newest-wins guard has already returned
+    // for anything out of order, so reaching here means the state genuinely moved.
+    await recordAvailabilityChange(
+      parseInt(userId, 10),
+      userDeviceId,
+      wasOnline,
+      online,
+      // The reaper publishes on the device's behalf when the broker never saw it go. Worth keeping,
+      // because "we inferred this from missed heartbeats" and "the broker told us" are different
+      // levels of confidence — and only the first means the device died without warning.
+      payload.source === 'reaper' ? 'no-last-will' : undefined,
+    );
 
     // 2. Hot cache (best-effort).
     try {

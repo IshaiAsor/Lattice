@@ -1,0 +1,22 @@
+.dp-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+.dp-trigger mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+.dp-caret {
+  opacity: 0.75;
+}

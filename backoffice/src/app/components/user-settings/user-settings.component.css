@@ -1,0 +1,313 @@
+.us-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 3px;
+}
+.us-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+}
+
+.us-layout {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+
+.us-nav {
+  width: 216px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.us-nav-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 12px 8px;
+}
+.us-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.us-nav-item mat-icon {
+  font-size: 17px;
+  width: 17px;
+  height: 17px;
+}
+.us-nav-item.on {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  font-weight: 600;
+}
+/* Listed so the page has its real shape; building them is F5.10 proper. */
+.us-nav-item.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.us-main {
+  flex: 1;
+  min-width: 0;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.us-card {
+  padding: 15px 17px;
+}
+.us-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.us-card-title {
+  font-size: 14px;
+  font-weight: 650;
+}
+.us-card-sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.us-metric {
+  text-align: right;
+  flex-shrink: 0;
+}
+.us-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.us-usage {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.us-caption {
+  font-size: 9.5px;
+  color: var(--text-dim);
+}
+
+.us-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  margin-top: 11px;
+}
+.us-seg {
+  height: 100%;
+  opacity: 0.85;
+}
+.us-key {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+}
+.us-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.us-key-item i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+.us-key-item b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.us-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.us-note {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.us-kind {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-width: 0;
+}
+.us-kind mat-icon {
+  font-size: 19px;
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+}
+.us-kind-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.us-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.us-chip.custom {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  border-color: transparent;
+}
+
+.us-controls {
+  margin-top: 12px;
+}
+.us-choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.us-choices button {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.us-choices button.on {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+.us-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.us-hint b {
+  color: var(--text);
+}
+.us-cap {
+  color: var(--warning);
+}
+.us-reset {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.us-clamped,
+.us-warn {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 11px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.us-clamped {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+}
+.us-warn {
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+}
+.us-clamped mat-icon,
+.us-warn mat-icon {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.us-clamped mat-icon {
+  color: var(--primary);
+}
+.us-warn mat-icon {
+  color: var(--warning);
+}
+
+.us-empty-inline {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 12px 0 2px;
+}
+
+@media (max-width: 860px) {
+  .us-layout {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .us-nav {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 6px;
+  }
+  .us-nav-label {
+    display: none;
+  }
+  .us-nav-item {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+  }
+  .us-nav-item span {
+    white-space: nowrap;
+  }
+}
+
+/* A choice an administrator's ceiling puts out of reach. Struck through rather than merely faded:
+   at a glance "disabled" and "unselected" look the same on a chip row. */
+.us-choices button.capped {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.us-choices button.capped:hover {
+  background: transparent;
+}

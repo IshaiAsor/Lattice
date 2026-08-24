@@ -1,0 +1,124 @@
+.dp-panel {
+  padding: 10px;
+  /* width, not min-width: min-width fights the panel's max-width and overflows it instead of
+     losing to it. max-width: 100% keeps this honest on a phone, where the panel is narrower. */
+  width: 316px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.dp-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 10px 8px;
+}
+.dp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dp-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  color: var(--text);
+}
+.dp-option:hover {
+  background: var(--nav-hover-bg);
+}
+.dp-option.on {
+  background: var(--nav-active-bg);
+}
+.dp-option.on .dp-option-name {
+  color: var(--nav-active-text);
+}
+.dp-check {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.dp-option-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.dp-option-name {
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.dp-option-desc {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.dp-option-size {
+  font-size: 9.5px;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.dp-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 9px 0 2px;
+}
+.dp-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+/* ── Bottom-sheet variant (mobile) ───────────────────────────────── */
+/* A menu anchored to a button in a sticky bar is the wrong shape on a phone: it covers the tiles
+   it is describing and dismisses on the first stray tap. As a sheet it matches every other mobile
+   popup in the app and stays put until it is dismissed. */
+.dp-panel.as-sheet {
+  width: 100%;
+  /* The sheet is an overlay, so it renders OVER the bottom nav rather than above it — without
+     this the Done button sits under the tab bar and cannot be tapped. The shell already defines
+     the height; the fallback covers the case where it has not been set yet. */
+  padding: 4px 4px calc(var(--bottom-bar-height, 56px) + 10px);
+}
+.dp-grip {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  margin: 2px auto 10px;
+}
+.dp-panel.as-sheet .dp-option {
+  padding: 12px 10px;
+}
+.dp-panel.as-sheet .dp-field {
+  padding: 10px;
+}
+.dp-done {
+  width: 100%;
+  margin-top: 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 11px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  cursor: pointer;
+}

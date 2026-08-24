@@ -51,6 +51,12 @@ export interface DeviceStateChangedPayload {
   state: unknown;
   timestamp: string;
   version?: string;
+  // Who observed the change. 'broker' is a status message the broker delivered (including its
+  // Last-Will); 'reaper' is automation-worker inferring death from missed heartbeats, which is the
+  // case the broker never witnesses. Optional so an older publisher still validates — absent reads
+  // as 'broker', the only source that existed before. Consumed by the device timeline (F18.1),
+  // where "we inferred this" and "the broker told us" are different levels of confidence.
+  source?: 'broker' | 'reaper';
 }
 
 // A device's periodic liveness ping, forwarded by mqtt-service off the .../heartbeat topic.

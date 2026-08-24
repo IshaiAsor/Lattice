@@ -13,6 +13,8 @@ import { BlueprintInstanceComponent } from './components/blueprint-instance/blue
 import { DeviceConfigComponent } from './components/device-config/device-config.component';
 import { AutomationsComponent } from './components/automations/automations.component';
 import { NotificationsComponent } from './components/notifications/notifications.component';
+import { UserSettingsComponent } from './components/user-settings/user-settings.component';
+import { AdminRetentionComponent } from './components/admin-retention/admin-retention.component';
 import { VerifyEmailComponent } from './components/verify-email/verify-email.component';
 import { ForgotPasswordComponent } from './components/forgot-password/forgot-password.component';
 import { ResetPasswordComponent } from './components/reset-password/reset-password.component';
@@ -74,6 +76,12 @@ export const routes: Routes = [
     canActivate: [authGuard],
   },
   {
+    // F5.10 shell, scoped to Data & storage: a user's own retention window plus their usage.
+    path: 'settings',
+    component: UserSettingsComponent,
+    canActivate: [authGuard],
+  },
+  {
     path: 'admin/templates',
     component: AdminDeviceConfigComponent,
     canActivate: [authGuard, adminGuard],
@@ -98,6 +106,12 @@ export const routes: Routes = [
   {
     path: 'admin/blueprints',
     component: AdminBlueprintsComponent,
+    canActivate: [authGuard, adminGuard],
+  },
+  {
+    // Platform defaults + the ceiling users may not exceed. A user's own window is /settings.
+    path: 'admin/retention',
+    component: AdminRetentionComponent,
     canActivate: [authGuard, adminGuard],
   },
   {

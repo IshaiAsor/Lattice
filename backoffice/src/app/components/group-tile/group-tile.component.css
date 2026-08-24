@@ -29,14 +29,29 @@
   border-radius: 0 12px 12px 0;
 }
 
-.group-tile:hover { background: var(--surface); }
+.group-tile:hover {
+  background: var(--surface);
+}
+
+/* The tile is a real button (tabindex + role), so a click focused it and the UA painted its
+   default outline. Clipped by the wrapper's overflow, all that survived was a bright vertical
+   bar down the left edge — the "white line on click". Keyboard focus still gets a ring, but an
+   INSET one, which cannot be clipped away. */
+.group-tile:focus {
+  outline: none;
+}
+
+.group-tile:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
 
 .group-header {
   display: flex;
   align-items: center;
   padding: 10px 6px 8px 12px;
   gap: 6px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--card-divider);
 }
 
 .group-folder-icon {
@@ -57,7 +72,9 @@
   min-width: 0;
 }
 
-.header-spacer { flex: 1; }
+.header-spacer {
+  flex: 1;
+}
 
 .group-count {
   font-size: 11px;
@@ -70,9 +87,11 @@
 }
 
 .card-menu-btn {
-  width: 28px !important;
-  height: 28px !important;
-  line-height: 28px !important;
+  --mat-icon-button-state-layer-size: 28px;
+  --mat-icon-button-icon-size: 16px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   flex-shrink: 0;
 }
 
@@ -83,6 +102,8 @@
 
 .icon-grid {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -111,4 +132,124 @@
 .icon-cell .material-symbols-outlined {
   font-size: 28px;
   color: var(--primary);
+}
+
+/* ── Density (F21.1) ─────────────────────────────────────────────────────────
+   A group tile shares the grid's slot with the action cards, so it answers to the same picker.
+   The base sizes above are Detailed's; each block below is what the smaller boxes can afford. */
+
+/* Compact: 104px tall, of which the header takes ~26 — two rows of small cells is the budget. */
+.group-tile[data-density='compact'] .group-header {
+  padding: 6px 4px 4px 9px;
+  gap: 4px;
+}
+.group-tile[data-density='compact'] .group-folder-icon {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+}
+.group-tile[data-density='compact'] .group-name {
+  font-size: 11.5px;
+}
+.group-tile[data-density='compact'] .group-count {
+  font-size: 9.5px;
+  line-height: 15px;
+  padding: 0 5px;
+}
+.group-tile[data-density='compact'] .card-menu-btn {
+  --mat-icon-button-state-layer-size: 22px;
+  --mat-icon-button-icon-size: 14px;
+  width: 22px;
+  height: 22px;
+}
+.group-tile[data-density='compact'] .card-menu-btn mat-icon {
+  font-size: 14px;
+}
+.group-tile[data-density='compact'] .icon-grid {
+  padding: 6px;
+  gap: 6px;
+}
+.group-tile[data-density='compact'] .icon-cell {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.group-tile[data-density='compact'] .icon-cell .material-symbols-outlined {
+  font-size: 17px;
+}
+.group-tile[data-density='compact'] .icon-cell.empty {
+  width: 34px;
+  height: 34px;
+}
+
+/* Standard: 164px. Room for the real cells, not the Detailed ones. */
+.group-tile[data-density='standard'] .icon-grid {
+  padding: 12px;
+  gap: 8px;
+}
+.group-tile[data-density='standard'] .icon-cell {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+.group-tile[data-density='standard'] .icon-cell .material-symbols-outlined {
+  font-size: 22px;
+}
+.group-tile[data-density='standard'] .icon-cell.empty {
+  width: 52px;
+  height: 52px;
+}
+
+/* List: a 56px row, so the header stops being a band and the icons become a trailing cluster.
+   `display: contents` for the same reason as the action card — `order` only sorts siblings. */
+.group-tile[data-density='list'] {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 0 8px;
+}
+.group-tile[data-density='list'] .group-header {
+  display: contents;
+}
+.group-tile[data-density='list'] .header-spacer {
+  display: none;
+}
+.group-tile[data-density='list'] .group-folder-icon {
+  order: 0;
+}
+.group-tile[data-density='list'] .group-name {
+  order: 1;
+  flex: 1 1 auto;
+}
+.group-tile[data-density='list'] .group-count {
+  order: 2;
+}
+.group-tile[data-density='list'] .card-menu-btn {
+  order: 9;
+}
+.group-tile[data-density='list'] .icon-grid {
+  order: 3;
+  flex: 0 0 auto;
+  padding: 0;
+  gap: 5px;
+  flex-wrap: nowrap;
+}
+.group-tile[data-density='list'] .icon-cell {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+.group-tile[data-density='list'] .icon-cell .material-symbols-outlined {
+  font-size: 15px;
+}
+.group-tile[data-density='list'] .icon-cell.empty {
+  width: 26px;
+  height: 26px;
+}
+
+@media (max-width: 599px) {
+  /* Same trade as the action row: on a phone the name is what the row is for. */
+  .group-tile[data-density='list'] .icon-grid {
+    display: none;
+  }
 }

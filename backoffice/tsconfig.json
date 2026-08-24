@@ -2,6 +2,14 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
+    // ng2-charts' own .d.ts imports "chart.js/dist/types/utils", a subpath chart.js does not
+    // list in its exports map — so moduleResolution "bundler" refuses it and tsc fails on a
+    // file we do not own. The bundler resolves it fine at build time; this maps the one
+    // broken specifier for the typechecker rather than turning on skipLibCheck, which would
+    // hide real type errors across every dependency.
+    "paths": {
+      "chart.js/dist/types/utils": ["./node_modules/chart.js/dist/types/utils.d.ts"]
+    },
     "baseUrl": "./",
     "outDir": "./dist/out-tsc",
     "forceConsistentCasingInFileNames": true,

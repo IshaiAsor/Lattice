@@ -12,6 +12,7 @@ import { ActionCardComponent } from '../action-card/action-card.component';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
+import { TileDensityService } from 'src/app/services/tile-density.service';
 
 @Component({
   selector: 'app-group-bottom-sheet',
@@ -28,6 +29,8 @@ export class GroupBottomSheetComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
   private snackBar = inject(MatSnackBar);
   dialog = inject(MatDialog);
+  /** The dashboard's Display picker drives these cards too — a group card is a dashboard card. */
+  tiles = inject(TileDensityService);
 
   actions: DeviceActionView[] = [];
   dragging = false;

@@ -335,10 +335,10 @@ class UserActionsService {
   // (action_state_update keyed by actionId), but current_state is deliberately NOT written for
   // images — per-frame base64 would churn the DB — so a freshly loaded camera card stays blank
   // until the next live frame arrives (noticeable for on-demand captures). This serves the most
-  // recent frame from sensor_history, the authoritative per-action image store, so the card
+  // recent frame from camera_frame_history, the authoritative per-action image store, so the card
   // paints immediately. Read-only: no per-frame DB writes are reintroduced. (The digest
   // camera_frame:{deviceId} Valkey cache is intentionally not used here — it's keyed per device,
-  // so it's lossy for a device with multiple cameras, whereas sensor_history is per action.)
+  // so it's lossy for a device with multiple cameras, whereas the history table is per action.)
   async getLastFrame(userId: number, actionId: number): Promise<LastFrameView | null> {
     const action = await db.userDeviceAction.findUnique({
       where: { id: actionId },
@@ -353,8 +353,11 @@ class UserActionsService {
     if (!IMAGE_IMPL_TYPES.has(action.capability.implementation_type))
       throw Object.assign(new Error('Action is not a camera action'), { statusCode: 400 });
 
-    const latest = await db.sensorHistory.findFirst({
-      where: { user_device_action_id: actionId, is_error: false, value: { not: null } },
+    // Frames moved out of sensor_history at F18.1; fault rows for a camera action stayed behind
+    // (they carry value NULL), which is why this no longer needs an is_error filter — the table
+    // only holds frames.
+    const latest = await db.cameraFrameHistory.findFirst({
+      where: { user_device_action_id: actionId },
       orderBy: { recorded_at: 'desc' },
       select: { value: true, recorded_at: true },
     });

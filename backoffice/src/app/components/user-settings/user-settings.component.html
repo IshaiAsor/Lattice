@@ -1,0 +1,134 @@
+<div class="page-container">
+  <h1 class="us-title">Settings</h1>
+  <p class="us-sub">Your account and how your data is handled</p>
+
+  <div class="us-layout">
+    <!-- Only Data & storage is built in this pass; the rest is F5.10 proper. -->
+    <nav class="us-nav">
+      <div class="us-nav-label">Settings</div>
+      <div class="us-nav-item disabled"><mat-icon>person</mat-icon><span>Account</span></div>
+      <div class="us-nav-item on"><mat-icon>storage</mat-icon><span>Data &amp; storage</span></div>
+      <div class="us-nav-item disabled"><mat-icon>notifications</mat-icon><span>Notifications</span></div>
+      <div class="us-nav-item disabled"><mat-icon>palette</mat-icon><span>Appearance</span></div>
+    </nav>
+
+    <div class="us-main">
+      <!-- Your storage -->
+      <div class="lattice-card us-card">
+        <div class="us-head">
+          <div>
+            <div class="us-card-title">Your storage</div>
+            <div class="us-card-sub">What your devices have accumulated</div>
+          </div>
+          <div class="us-metric">
+            <span class="us-value">{{ formatBytes(totalBytes()) }}</span>
+          </div>
+        </div>
+
+        @if (totalBytes() > 0) {
+          <div class="us-bar">
+            @for (k of kinds; track k.kind) {
+              @if (share(k.kind) > 0) {
+                <span class="us-seg" [style.width.%]="share(k.kind)" [style.background]="k.color"></span>
+              }
+            }
+          </div>
+          <div class="us-key">
+            @for (k of kinds; track k.kind) {
+              @if (usageFor(k.kind) > 0) {
+                <span class="us-key-item">
+                  <i [style.background]="k.color"></i>{{ k.label }}
+                  <b>{{ formatBytes(usageFor(k.kind)) }}</b>
+                </span>
+              }
+            }
+          </div>
+        } @else if (!loading()) {
+          <div class="us-empty-inline">Nothing stored yet.</div>
+        }
+      </div>
+
+      <div class="us-section">
+        <span class="section-label">How long we keep your data</span>
+        <span class="us-note">swept nightly at 03:00</span>
+      </div>
+
+      @for (k of kinds; track k.kind) {
+        @if (for(k.kind); as p) {
+          <div class="lattice-card us-card">
+            <div class="us-head">
+              <div class="us-kind">
+                <mat-icon [style.color]="k.color">{{ k.icon }}</mat-icon>
+                <div>
+                  <div class="us-kind-title">
+                    {{ k.label }}
+                    @if (p.overridden) {
+                      <span class="us-chip custom">Custom</span>
+                    } @else {
+                      <span class="us-chip">Default</span>
+                    }
+                  </div>
+                  <div class="us-card-sub">{{ k.blurb }}</div>
+                </div>
+              </div>
+              <div class="us-metric">
+                <span class="us-usage">{{ formatBytes(usageFor(k.kind)) }}</span>
+                <div class="us-caption">stored</div>
+              </div>
+            </div>
+
+            <div class="us-controls">
+              <div class="us-choices">
+                @for (c of choices; track c) {
+                  <button
+                    type="button"
+                    [class.on]="p.rawDays === c"
+                    [class.capped]="exceedsCap(c, p.maxRawDays)"
+                    [disabled]="exceedsCap(c, p.maxRawDays)"
+                    [title]="exceedsCap(c, p.maxRawDays)
+                      ? 'An administrator caps this at ' + formatDays(p.maxRawDays)
+                      : ''"
+                    (click)="set(k.kind, c)"
+                  >{{ formatDays(c) }}</button>
+                }
+              </div>
+              <div class="us-hint">
+                <span>
+                  Default is <b>{{ formatDays(p.defaultRawDays) }}</b>
+                  @if (p.maxRawDays !== null) {
+                    · <span class="us-cap">max {{ formatDays(p.maxRawDays) }}</span>
+                  } @else {
+                    · no limit
+                  }
+                </span>
+                @if (p.overridden) {
+                  <button type="button" class="us-reset" (click)="reset(k.kind)">Reset to default</button>
+                }
+              </div>
+            </div>
+
+            @if (p.maxRawDays !== null && p.effectiveRawDays !== p.rawDays) {
+              <div class="us-clamped">
+                <mat-icon>info</mat-icon>
+                <span>
+                  Capped by an administrator — this is kept for
+                  <b>{{ formatDays(p.effectiveRawDays) }}</b>, not {{ formatDays(p.rawDays) }}.
+                </span>
+              </div>
+            }
+
+            @if (k.kind === 'frame' && share('frame') > 60) {
+              <div class="us-warn">
+                <mat-icon>warning</mat-icon>
+                <span>
+                  Frames are <b>{{ share('frame') | number: '1.0-0' }}% of everything you store</b>.
+                  Keeping them forever is fine — this is just the dial that matters if space runs short.
+                </span>
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+  </div>
+</div>

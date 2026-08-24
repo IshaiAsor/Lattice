@@ -7,7 +7,11 @@
 }
 
 .material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
 }
 
 /* ── Card shell ──────────────────────────────────────────────────── */
@@ -25,54 +29,103 @@
   box-sizing: border-box;
 }
 
-.card-disabled { opacity: 0.6; filter: grayscale(30%); }
+.card-disabled {
+  opacity: 0.6;
+  filter: grayscale(30%);
+}
 
-/* ── Card header ─────────────────────────────────────────────────── */
+/* ── Card header (F21.2 / F21.3) ─────────────────────────────────── */
+/* The header no longer carries the name. It holds the icon (which now also carries status) and
+   the menu, and nothing else — everything it gives up goes to the name band below. */
 .card-header {
   display: flex;
   align-items: center;
-  padding: 10px 6px 8px 12px;
+  padding: 6px 4px 2px 9px;
   gap: 6px;
-  border-bottom: 1px solid var(--border);
+}
+
+/* Status as a ring on the icon rather than a separate 8px dot plus its gap. Same information,
+   ~16px of header width returned to the name. */
+.icon-wrap {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--surface-alt);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--offline) 45%, transparent);
+}
+
+.icon-wrap.is-online {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--online) 55%, transparent);
 }
 
 .device-icon {
-  font-size: 18px;
+  font-size: 17px;
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
-.card-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.icon-wrap.is-online .device-icon {
+  color: var(--primary);
+}
+
+/* ── Name band ───────────────────────────────────────────────────── */
+/* The tile's full width, up to two lines. This is the whole point of F21: a derived scene name
+   like "Tank A — Fill Cycle" was unreadable at ~10 characters on one line. */
+.card-name-band {
+  padding: 0 12px 6px;
+  border-bottom: 1px solid var(--card-divider);
   min-width: 0;
 }
 
-.header-spacer { flex: 1; }
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.card-device {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.status-dot.online {
-  background: var(--online);
-  box-shadow: 0 0 5px var(--online-glow);
+.card-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--text);
+  min-width: 0;
 }
 
-.status-dot.offline { background: var(--offline); }
+/* Compact has no room for two lines of name plus a body — one line, and the device name is off. */
+.device-card[data-density='compact'] .card-name {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+.header-spacer {
+  flex: 1;
+}
 
 .card-menu-btn {
   width: 28px !important;
   height: 28px !important;
   line-height: 28px !important;
   flex-shrink: 0;
+  /* Material derives the button's box from its state-layer token, so setting width/height alone
+     left a 40px layer inflating the header to 41px. */
+  --mat-icon-button-state-layer-size: 28px;
+  --mat-icon-button-icon-size: 16px;
+  padding: 0;
 }
 
 .card-menu-btn mat-icon {
@@ -102,7 +155,7 @@
   min-height: 0;
   position: relative;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   align-content: center;
   justify-items: center;
   gap: 6px;
@@ -115,8 +168,13 @@
 }
 
 @keyframes card-pending-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .sensor-received-badge {
@@ -180,6 +238,14 @@
 }
 
 .power-btn {
+  /* The "on" glow is a box-shadow, which paints OUTSIDE the border box and reserves no layout
+     space — so every clipping ancestor (.card-content and .device-card-wrapper both set
+     overflow: hidden) sheared it off, worst at the small densities where the button sits near an
+     edge. The margin reserves the largest ring the button can ever paint, so the glow always has
+     room to land inside the box that clips it. */
+  --pb-glow: 4px;
+  --pb-glow-max: 6px;
+  margin: var(--pb-glow-max);
   width: 52px;
   height: 52px;
   border-radius: 50%;
@@ -190,7 +256,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+  flex-shrink: 0;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s,
+    box-shadow 0.2s;
   outline: none;
 }
 
@@ -210,14 +281,16 @@
     color: var(--primary);
   }
 
-  .power-btn.on:hover { box-shadow: 0 0 0 6px var(--primary-glow); }
+  .power-btn.on:hover {
+    box-shadow: 0 0 0 var(--pb-glow-max) var(--primary-glow);
+  }
 }
 
 .power-btn.on {
   background: var(--nav-active-bg);
   border-color: var(--primary);
   color: var(--primary);
-  box-shadow: 0 0 0 4px var(--primary-glow);
+  box-shadow: 0 0 0 var(--pb-glow) var(--primary-glow);
 }
 
 .power-btn:disabled {
@@ -240,13 +313,19 @@
 
 /* Tablet: 129px of body — the dial has to stay under (129 - 39 switcher - 6 gap). */
 @media (max-width: 1024px) {
-  .speed-dial { max-height: 78px; }
+  .speed-dial {
+    max-height: 78px;
+  }
 }
 
 /* Phone: taller cards, smaller dial cap so dial + switcher fit with room to spare. */
 @media (max-width: 599px) {
-  .speed-dial { max-height: 92px; }
-  .sensor-value { font-size: 1.75rem; }
+  .speed-dial {
+    max-height: 92px;
+  }
+  .sensor-value {
+    font-size: 1.75rem;
+  }
 }
 
 .dial-track {
@@ -276,7 +355,9 @@
   fill: var(--text);
 }
 
-.dial-pct-unit { fill: var(--text-muted); }
+.dial-pct-unit {
+  fill: var(--text-muted);
+}
 
 .dial-unit {
   font-size: 10px;
@@ -304,7 +385,13 @@
   color: var(--text-muted);
 }
 
-.sensor-icon { font-size: 18px; height: 18px; width: 18px; vertical-align: middle; margin-right: 2px; }
+.sensor-icon {
+  font-size: 18px;
+  height: 18px;
+  width: 18px;
+  vertical-align: middle;
+  margin-right: 2px;
+}
 
 /* ── Color controls ──────────────────────────────────────────────── */
 .color-controls {
@@ -321,19 +408,36 @@
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s;
+  transition:
+    transform 0.15s,
+    border-color 0.15s;
 }
 
 @media (hover: hover) {
-  .color-chip:hover { transform: scale(1.15); }
+  .color-chip:hover {
+    transform: scale(1.15);
+  }
 }
-.color-chip.active { border-color: var(--text); transform: scale(1.1); }
+.color-chip.active {
+  border-color: var(--text);
+  transform: scale(1.1);
+}
 
-.color-chip.color-red    { background: #e53935; }
-.color-chip.color-green  { background: #43a047; }
-.color-chip.color-blue   { background: #1e88e5; }
-.color-chip.color-orange { background: #fb8c00; }
-.color-chip.color-off    { background: var(--offline); }
+.color-chip.color-red {
+  background: #e53935;
+}
+.color-chip.color-green {
+  background: #43a047;
+}
+.color-chip.color-blue {
+  background: #1e88e5;
+}
+.color-chip.color-orange {
+  background: #fb8c00;
+}
+.color-chip.color-off {
+  background: var(--offline);
+}
 
 /* ── Trait switcher strip ────────────────────────────────────────── */
 .trait-switcher {
@@ -341,7 +445,7 @@
   justify-content: center;
   gap: 2px;
   padding-top: 6px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--card-divider);
   margin-top: auto;
 }
 
@@ -350,7 +454,9 @@
   height: 32px !important;
   line-height: 32px !important;
   color: var(--text-muted);
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    background 0.15s;
 }
 
 .trait-chip mat-icon {
@@ -366,3 +472,558 @@
   border-radius: 8px;
 }
 
+/* ── Trend (F18.3 / F21.4) ───────────────────────────────────────── */
+/* The art that funds the name. At Standard this is a 30px sparkline where a 88-92px dial used to
+   be; at Detailed it grows into a real chart with axes. Both are smaller than the dial they
+   replace, which is how the second line of name costs no extra tile height. */
+.card-trend {
+  /* Bottom padding reserves the strip the received-badge occupies. The badge is absolutely
+     positioned at bottom:6px inside .card-content, so without this the sparkline runs underneath
+     it and the two are unreadable on top of each other. */
+  padding: 0 2px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  align-self: end;
+}
+
+.card-trend.is-chart {
+  padding: 0 2px 17px;
+}
+
+/* Chart.js falls back to a 300px canvas when it renders before its container has a resolvable
+   width, and `responsive` never shrinks it back once the blown-out track "fits". Cap it here so
+   the canvas can only ever follow the tile, never lead it. */
+.card-trend canvas {
+  max-width: 100%;
+}
+
+/* .card-content centres its children and clips overflow, which is right for a lone dial but wrong
+   once a trend is stacked under a value.
+   Flex-wrap rather than the default grid column, because a sensor reporting temperature AND
+   humidity produced two stacked rows that, with a sparkline under them, came to 100px of content
+   in a 62px body. Side by side they are one row, and the trend takes the line below. */
+.card-content:has(.card-trend) {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  justify-content: center;
+  gap: 0 8px;
+}
+.card-content:has(.card-trend) .card-trend {
+  flex: 0 0 100%;
+}
+
+/* The dial is decorative and repeats the number beside it. Once a real trend is on the tile it
+   has nothing left to say, so it yields rather than fighting for the same 90px. */
+.card-content:has(.card-trend) .speed-dial {
+  display: none;
+}
+
+/* A 2rem read-out was sized for a tile whose body held nothing else. An action that reports two
+   readings (temperature AND humidity from one sensor) plus a trend does not fit at that size —
+   the pair overflowed the fixed tile height and the sparkline was clipped at the card edge.
+   Scaled down only when a trend is actually present, so a lone read-out keeps its weight. */
+.card-content:has(.card-trend) .sensor-value {
+  font-size: 1.5rem;
+  line-height: 1.15;
+}
+.card-content:has(.card-trend) .sensor-unit {
+  font-size: 0.8rem;
+}
+.card-content:has(.card-trend) .sensor-display {
+  gap: 2px;
+}
+
+/* ── Last command (F18.7 / F21) ──────────────────────────────────── */
+/* One line, monospaced numerals, muted: it is provenance, not the reading. The tile's own value
+   stays the loudest thing on the card. */
+.card-lastcmd {
+  /* Absolute, sharing the bottom strip with the freshness badge rather than taking a row of its
+     own: in flow it added ~14px to a body that was already exactly full, and Standard tiles
+     overflowed by up to 44px. `right` clears the badge's corner. */
+  position: absolute;
+  left: 8px;
+  right: 86px;
+  bottom: 5px;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Give the strip back to the layout so a centred read-out does not sit on top of it. */
+.card-content:has(.card-lastcmd) {
+  padding-bottom: 13px;
+}
+.lc-source {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 8.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.lc-source.lc-err {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 40%, transparent);
+}
+.lc-target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
+}
+.lc-age {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+/* ── Compact density ─────────────────────────────────────────────── */
+/*
+ * 168x104, and the promise is "name and state only". The budget is tight enough that it has to be
+ * spent deliberately: header 26 + name 16 + state ~34 + a badge strip ~15 = 91, inside 104.
+ *
+ * The shape is four stacked bands, each with a job:
+ *   icon + menu | name (one line) | THE STATE, centred and on one line | freshness, bottom-right
+ *
+ * What "state" means depends on the action, and getting that wrong is what made this density look
+ * broken: a sensor's state is its reading, a switch's is its control, and a CAMERA'S IS ITS FRAME.
+ * Hiding the frame left camera tiles completely blank — a worse answer than a small picture.
+ */
+
+/* The band (header + name) was taking 50px of 104 bare and 61px with the device name shown,
+   leaving the body 41px — which is why everything below it kept getting clipped no matter how
+   small it was made. The body is the point of the tile; the band gets what is left, not first
+   claim on it. */
+.device-card[data-density='compact'] .card-header {
+  padding: 3px 2px 0 7px;
+  min-height: 0;
+}
+.device-card[data-density='compact'] .card-menu-btn {
+  --mat-icon-button-state-layer-size: 22px;
+  --mat-icon-button-icon-size: 15px;
+  width: 22px !important;
+  height: 22px !important;
+  line-height: 22px !important;
+}
+.device-card[data-density='compact'] .card-menu-btn mat-icon {
+  font-size: 15px;
+}
+.device-card[data-density='compact'] .icon-wrap {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+.device-card[data-density='compact'] .icon-wrap .device-icon {
+  font-size: 14px;
+}
+.device-card[data-density='compact'] .card-menu-btn {
+  width: 26px;
+  height: 26px;
+  line-height: 26px;
+}
+.device-card[data-density='compact'] .card-name-band {
+  padding: 0 8px 2px;
+  border-bottom: none;
+}
+.device-card[data-density='compact'] .card-device {
+  font-size: 8.5px;
+  line-height: 1.2;
+}
+.device-card[data-density='compact'] .card-name {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+
+/* One centred line, full width. The previous version reserved 60px on the right for the badge on
+   EVERY tile, which both shoved the value off-centre and squeezed a two-reading sensor into two
+   wrapped lines. The badge gets a bottom strip instead, so the state keeps the whole width. */
+.device-card[data-density='compact'] .card-content {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 8px 13px;
+  overflow: hidden;
+}
+
+.device-card[data-density='compact'] .sensor-display {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 1px;
+  min-width: 0;
+}
+.device-card[data-density='compact'] .sensor-value {
+  font-size: 1.15rem;
+  line-height: 1.1;
+}
+.device-card[data-density='compact'] .sensor-unit {
+  font-size: 0.62rem;
+}
+.device-card[data-density='compact'] .sensor-icon {
+  display: none;
+}
+
+.device-card[data-density='compact'] .control-onoff {
+  padding: 0;
+}
+.device-card[data-density='compact'] .power-btn {
+  width: 30px;
+  height: 30px;
+  border-width: 1px;
+  --pb-glow: 2px;
+  --pb-glow-max: 3px;
+}
+.device-card[data-density='compact'] .power-btn mat-icon {
+  font-size: 17px;
+  width: 17px;
+  height: 17px;
+}
+
+/* Decorative and redundant next to the number they repeat — they lose the tie for this space. */
+.device-card[data-density='compact'] .speed-dial,
+.device-card[data-density='compact'] .trait-switcher,
+.device-card[data-density='compact'] .color-controls {
+  display: none;
+}
+
+/* A camera's state IS the frame, so it fills the body rather than being hidden. Its own badge
+   variant already sits over the image, so the tile keeps its timestamp. */
+.device-card[data-density='compact'] app-camera-display {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+}
+.device-card[data-density='compact'] .card-content:has(app-camera-display) {
+  padding: 0;
+  /* Its own tokens, read inside the encapsulated camera component. */
+  --cam-placeholder-icon: 22px;
+  --cam-placeholder-text: 8px;
+  --cam-placeholder-gap: 2px;
+}
+
+/* An offline camera keeps showing its last frame, and OFFLINE over arbitrary photo content is
+   unreadable without something behind it — this is the one compact case that still needs a scrim. */
+.device-card[data-density='compact'] .card-content:has(app-camera-display) .offline-overlay {
+  background: var(--offline-overlay-bg);
+}
+
+/* Shrunk rather than restyled: received-badge is its own component with encapsulated styles, and
+   a transform needs no reach inside it. Anchored so it stays in the corner as it scales. */
+.device-card[data-density='compact'] .sensor-received-badge {
+  bottom: 3px;
+  right: 5px;
+  transform: scale(0.82);
+  transform-origin: bottom right;
+}
+.device-card[data-density='compact'] .sensor-received-badge.on-frame {
+  top: 3px;
+  bottom: auto;
+  left: 4px;
+  right: auto;
+  transform-origin: top left;
+}
+
+/* No dark band. The overlay covered only the short body, so it read as a stray strip across the
+   middle of the tile rather than as a state; the card is already dimmed by .card-disabled.
+   Dropping the scrim means the control behind it shows THROUGH, and at this size the wifi glyph
+   landed directly on the power button with OFFLINE across it — so the body's own content is
+   hidden rather than painted over. `visibility` and not `display`, so the box the overlay is
+   centred against does not collapse to nothing. */
+.device-card[data-density='compact'] .offline-overlay {
+  background: transparent;
+  gap: 3px;
+}
+.device-card[data-density='compact'] .card-content:has(.offline-overlay) > *:not(.offline-overlay) {
+  visibility: hidden;
+}
+.device-card[data-density='compact'] .offline-overlay mat-icon {
+  font-size: 19px;
+  width: 19px;
+  height: 19px;
+}
+.device-card[data-density='compact'] .offline-overlay span {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+.device-card[data-density='compact'] .offline-overlay .offline-last-seen {
+  display: none;
+}
+
+/* Compact turns the sparkline off by default, but the field toggles let a viewer put it back —
+   so it has to have somewhere to go: its own line under the value.
+   The body is ~46px once the badge strip is reserved. A 30px sparkline plus a read-out overflowed
+   it and `align-content: center` split the overflow across both edges, shaving the tops off the
+   digits. The chart is 16px at this density (see trendHeight) and the numbers step down to match. */
+.device-card[data-density='compact'] .card-content:has(.card-trend) {
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 0 6px;
+  padding-bottom: 13px;
+}
+.device-card[data-density='compact'] .card-trend {
+  flex: 0 0 100%;
+  padding: 0;
+  line-height: 0;
+}
+.device-card[data-density='compact'] .card-content:has(.card-trend) .sensor-value {
+  font-size: 0.92rem;
+  line-height: 1.05;
+}
+.device-card[data-density='compact'] .card-content:has(.card-trend) .sensor-unit {
+  font-size: 0.56rem;
+}
+
+/* Provenance does not fit beside a reading in a 168px tile. */
+.device-card[data-density='compact'] .card-lastcmd {
+  display: none;
+}
+.device-card[data-density='compact'] .card-content:has(.card-lastcmd) {
+  padding-bottom: 13px;
+}
+
+/* ── List density (F21.1) ────────────────────────────────────────── */
+/* The one density whose tile is not a box: a full-width row where the card reads left-to-right
+   instead of top-down. Everything below re-flows the SAME markup — no alternate template, so a
+   fix to the card is a fix in every density. */
+.device-card[data-density='list'] {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 0 8px;
+}
+
+/* `display: contents` dissolves the header box so its children become direct flex items of the
+   card. Without it the menu button can never leave the header, and `order` on it does nothing —
+   `order` only sorts siblings, so the ⋮ stayed pinned beside the icon it was grouped with. */
+.device-card[data-density='list'] .card-header {
+  display: contents;
+}
+.device-card[data-density='list'] .icon-wrap {
+  order: 0;
+}
+.device-card[data-density='list'] .deprecated-badge {
+  order: 3;
+}
+.device-card[data-density='list'] .header-spacer {
+  display: none;
+}
+.device-card[data-density='list'] .card-menu-btn {
+  order: 9;
+}
+
+/* Name and device on one line each, taking the slack — this is the column that should absorb a
+   wide viewport, not the readings. */
+/* The divider is a horizontal rule between a stacked name and the body below it. In a row the
+   band is a COLUMN, so the same rule renders as a hairline running the whole width of the row
+   from the name to the read-outs — a line that separates nothing. */
+.device-card[data-density='list'] .card-name-band {
+  border-bottom: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  order: 1;
+}
+.device-card[data-density='list'] .card-name {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  font-size: 13px;
+}
+.device-card[data-density='list'] .card-device {
+  font-size: 9.5px;
+}
+
+/* The body stops being a centred stack and becomes a right-aligned inline cluster. */
+.device-card[data-density='list'] .card-content {
+  flex: 0 1 auto;
+  line-height: 1.2;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 0;
+  min-width: 0;
+  order: 2;
+}
+.device-card[data-density='list'] .card-content:has(.card-trend) {
+  align-content: unset;
+}
+
+/* A row is too short for a 52px dial or a stacked read-out. */
+.device-card[data-density='list'] .power-btn {
+  width: 34px;
+  height: 34px;
+  border-width: 1px;
+  --pb-glow: 3px;
+  --pb-glow-max: 4px;
+}
+.device-card[data-density='list'] .power-btn mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+.device-card[data-density='list'] .control-onoff {
+  padding: 0;
+}
+.device-card[data-density='list'] .speed-dial {
+  display: none;
+}
+.device-card[data-density='list'] .sensor-display {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 2px;
+}
+.device-card[data-density='list'] .card-content:has(.card-trend) .sensor-value,
+.device-card[data-density='list'] .sensor-value {
+  font-size: 1.05rem;
+}
+.device-card[data-density='list'] .sensor-unit {
+  font-size: 0.7rem;
+}
+
+/* The trend gets a fixed slice rather than the leftover: in a row, "leftover" swings wildly with
+   the name length, and a sparkline that changes width per row reads as noise. */
+.device-card[data-density='list'] .card-trend {
+  flex: 0 0 140px;
+  width: 140px;
+  padding: 0;
+  align-self: center;
+}
+
+/* The badge was absolutely positioned against the tile's bottom-right corner. In a row it goes
+   back in the flow, at the end of the cluster — and holds a FIXED cell. It renders nothing at all
+   for an offline device, and a cell that collapses to 0 walks every row that has one 70px out of
+   line with every row that does not. */
+.device-card[data-density='list'] .sensor-received-badge {
+  position: static;
+  flex: 0 0 76px;
+  width: 76px;
+  display: flex;
+  justify-content: flex-end;
+  order: 8;
+}
+
+/* No room for a second control strip in a row. */
+.device-card[data-density='list'] .trait-switcher {
+  display: none;
+}
+
+/* The overlay is absolute over .card-content, which in a row is a narrow right-hand cluster — the
+   stacked column layout wrapped "Last seen Aug 19, 21:38" into an unreadable three-line block.
+   Inline, nowrap, and given room to sit in. */
+.device-card[data-density='list'] .card-content:has(.offline-overlay) {
+  min-width: 210px;
+}
+.device-card[data-density='list'] .offline-overlay {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+.device-card[data-density='list'] .offline-overlay mat-icon {
+  font-size: 17px;
+  width: 17px;
+  height: 17px;
+}
+.device-card[data-density='list'] .offline-overlay span {
+  font-size: 10px;
+}
+.device-card[data-density='list'] .offline-overlay .offline-last-seen {
+  font-size: 9.5px;
+  opacity: 0.85;
+}
+
+/* A camera row without its frame is a row that tells you nothing — the frame IS the state. It
+   gets a fixed thumbnail slot rather than the leftover space, so every row keeps the same rhythm
+   whatever the name length. `position: relative` because .camera-display is absolutely positioned
+   against its nearest positioned ancestor, which would otherwise be the whole content cluster. */
+.device-card[data-density='list'] app-camera-display {
+  display: block;
+  position: relative;
+  flex: 0 0 78px;
+  height: 42px;
+  border-radius: 6px;
+  overflow: hidden;
+  order: 4;
+  --cam-placeholder-icon: 17px;
+  --cam-placeholder-text: 0px;
+  --cam-placeholder-gap: 0px;
+  /* Fill the slot rather than letterbox into it, and drop the capture button — it would cover most
+     of a 78px thumbnail. Both are custom properties because this component's styles are
+     encapsulated: a rule here written against `.camera-img` would never match. */
+  --cam-fit: cover;
+  --cam-capture-display: none;
+}
+/* In a row there is no bottom strip to share — it is just another cell in the cluster, and a
+   FIXED one. Sized by content it varied with the wording ("RULE off 3d" against "MANUAL on now"),
+   which walked every cell to its right along with it. */
+.device-card[data-density='list'] .card-lastcmd {
+  position: static;
+  order: 5;
+  flex: 0 0 132px;
+  width: 132px;
+  max-width: 132px;
+  justify-content: flex-end;
+  bottom: auto;
+  left: auto;
+  right: auto;
+}
+.device-card[data-density='list'] .card-content:has(.card-lastcmd) {
+  padding-bottom: 0;
+}
+
+/* Its overlay variant is anchored to a frame corner; in a row it belongs with the other cells. */
+.device-card[data-density='list'] .sensor-received-badge.on-frame {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+}
+
+@media (max-width: 599px) {
+  /* A phone row has no width to spare. Measured at 390px, the reserved cells left the name band
+     53px — "Temperature Sensor" was clipped to about four characters, which is the one thing a
+     row must never lose. Column alignment is what those cells buy, and it is worth far less here:
+     there is a single column of rows and nothing beside them to line up against. So the sparkline
+     goes first, then the last-command cell, and the offline pill drops its timestamp. */
+  .device-card[data-density='list'] .card-trend,
+  .device-card[data-density='list'] .card-lastcmd {
+    display: none;
+  }
+  .device-card[data-density='list'] {
+    gap: 8px;
+  }
+  .device-card[data-density='list'] .card-content {
+    gap: 8px;
+  }
+  /* Was 210px to fit "Last seen Aug 19, 21:38" on one line; without that line it is just a pill. */
+  .device-card[data-density='list'] .card-content:has(.offline-overlay) {
+    min-width: 0;
+  }
+  .device-card[data-density='list'] .offline-overlay .offline-last-seen {
+    display: none;
+  }
+}

@@ -346,8 +346,9 @@ async function buildImageContext(channel: Channel, run: Run): Promise<Record<str
 async function imageFallbackFromHistory(
   sensor: PipelineSensorPlan,
 ): Promise<Record<string, unknown>> {
-  const row = await db.sensorHistory.findFirst({
-    where: { user_device_action_id: sensor.user_device_action_id, is_error: false },
+  // camera_frame_history since F18.1 — frames no longer share a table with scalar readings.
+  const row = await db.cameraFrameHistory.findFirst({
+    where: { user_device_action_id: sensor.user_device_action_id },
     orderBy: { recorded_at: 'desc' },
     select: { value: true, recorded_at: true },
   });
