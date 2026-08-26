@@ -1,5 +1,8 @@
 import { db } from '../db';
-import { selectBucket, resolveRange, clampLimit, type Bucket } from './history-bucket';
+import { resolveRange, clampLimit } from './history-bucket';
+import { RAW_BUCKET, RAW_SECONDS, selectTier } from '@lattice/retention';
+import { ensureActionOwned, ensureDeviceOwned } from './ownership';
+import { retentionTiersService } from './retention-tiers.service';
 
 // Read side of F18. Every query here is owner-scoped: history is the most personal data the
 // platform holds, and an id in a URL is not proof of ownership.
@@ -15,10 +18,21 @@ export interface SeriesPoint {
 }
 
 export interface SeriesView {
-  bucket: Bucket;
+  /**
+   * The `retention_buckets.code` that answered — `raw`, `1h`, a user's custom `90m`, whatever is
+   * configured. Surfaced so the chart can label a wide range as averaged rather than sampled.
+   */
+  bucket: string;
   from: string;
   to: string;
   points: SeriesPoint[];
+  /**
+   * Why this tier and not a finer one. `auto` is the normal ladder; `fallback` means everything
+   * that could have answered has been pruned past this range, which is the difference between "the
+   * device was off" and "those rows are gone" — and the chart has no way to tell them apart
+   * otherwise.
+   */
+  reason: 'requested' | 'auto' | 'fallback';
 }
 
 /**
@@ -36,26 +50,6 @@ export interface DeviceEventView {
   at: string;
 }
 
-/** 403 unless this action belongs to this user. Mirrors the ensureOwned pattern used elsewhere. */
-async function ensureActionOwned(userId: number, actionId: number): Promise<void> {
-  const row = await db.userDeviceAction.findUnique({
-    where: { id: actionId },
-    select: { user_device: { select: { user_id: true } } },
-  });
-  if (!row) throw Object.assign(new Error('Action not found'), { statusCode: 404 });
-  if (row.user_device.user_id !== userId)
-    throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
-}
-
-async function ensureDeviceOwned(userId: number, deviceId: number): Promise<void> {
-  const row = await db.userDevice.findUnique({
-    where: { id: deviceId },
-    select: { user_id: true },
-  });
-  if (!row) throw Object.assign(new Error('Device not found'), { statusCode: 404 });
-  if (row.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
-}
-
 export const historyService = {
   /**
    * A reading series over a range.
@@ -71,13 +65,21 @@ export const historyService = {
   ): Promise<SeriesView> {
     await ensureActionOwned(userId, actionId);
     const { from, to } = resolveRange(query.from, query.to);
-    const bucket = selectBucket(
-      from,
-      to,
-      typeof query.bucket === 'string' ? query.bucket : undefined,
-    );
 
-    if (bucket === 'raw') {
+    // The candidate set is DATA (F18.9): whatever tiers actually resolve for this action, at
+    // whichever scope configured them. That is what makes "an admin adds a 15m tier and the chart
+    // uses it" true without a release — and, just as importantly, stops the chart asking for a
+    // bucket the orphan sweep has legitimately removed because nobody configures it any more.
+    const { tiers } = await retentionTiersService.effectiveForAction(userId, actionId, 'scalar');
+    const picked = selectTier(tiers, from, to, {
+      requested: typeof query.bucket === 'string' ? query.bucket : null,
+    });
+    // No tiers configured anywhere means nothing is pruned either, so raw is both available and
+    // the only honest answer.
+    const bucket = picked?.bucket ?? RAW_BUCKET;
+    const reason = picked?.source ?? 'auto';
+
+    if (picked === null || picked.seconds === RAW_SECONDS) {
       const rows = await db.sensorHistory.findMany({
         where: { user_device_action_id: actionId, recorded_at: { gte: from, lte: to } },
         orderBy: { recorded_at: 'asc' },
@@ -88,6 +90,7 @@ export const historyService = {
       });
       return {
         bucket,
+        reason,
         from: from.toISOString(),
         to: to.toISOString(),
         points: rows.map((r) => {
@@ -125,6 +128,7 @@ export const historyService = {
     });
     return {
       bucket,
+      reason,
       from: from.toISOString(),
       to: to.toISOString(),
       points: rows.map((r) => ({

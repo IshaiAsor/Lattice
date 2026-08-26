@@ -1,0 +1,151 @@
+.cb-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.cb-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 6px !important;
+}
+
+.cb-lead {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.cb-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* `color-scheme` so the native spinner arrows are painted for the theme they sit in. */
+.cb-value {
+  color-scheme: var(--native-scheme);
+  width: 96px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--card-divider);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.cb-value:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.cb-units {
+  display: flex;
+  gap: 4px;
+}
+.cb-unit {
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--card-divider);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cb-unit.on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.cb-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  color: var(--warning);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.cb-problem mat-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 18px;
+}
+
+.cb-ok {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 11px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-divider);
+}
+.cb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.cb-label {
+  flex: 0 0 84px;
+  color: var(--text-muted);
+}
+.cb-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+.cb-reuse {
+  color: var(--primary);
+  /* This note wraps to two lines, so a centred icon drifts to the middle of the block and away
+     from the sentence it belongs to. Pin it to the first line. */
+  align-items: flex-start;
+}
+.cb-reuse mat-icon {
+  font-size: 16px;
+  line-height: 16px;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.cb-actions {
+  gap: 8px;
+  /* No horizontal override. This used to be `padding: 8px 0 0 !important`, which cancelled the
+     20px the glass-dialog gives its content and actions alike — so the buttons hung 20px further
+     right than the panel above them and read as stuck to the edge. Only the top is adjusted. */
+  padding-top: 8px !important;
+}
+.cb-btn {
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--card-divider);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.cb-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--primary);
+}
+.cb-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.cb-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

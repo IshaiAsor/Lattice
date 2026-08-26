@@ -1,33 +1,13 @@
 // Pure query-planning logic for the history API — extracted so it is unit-testable
 // (tests/unit/history.bucket-select.test.ts) without a DB or a transport.
 
-/** Which table a series query should read from. */
-export type Bucket = 'raw' | 'hour' | 'day';
-
-/** How wide a range has to get before raw rows stop being a sensible answer. */
-const RAW_MAX_HOURS = 48;
-const HOUR_MAX_DAYS = 60;
-
-/**
- * Pick the granularity for a range.
- *
- * The driver is how many points the client would receive, not how old the data is. A sensor
- * reading every 60s is 1,440 raw rows a day: fine for two days, absurd for two months, and no
- * chart can draw more points than it has pixels. So the range picks the table, and the caller does
- * not get to ask for raw over a year.
- *
- * `requested` lets a caller force a granularity — useful for "show me the actual readings" on a
- * narrow range — but it is a request, not a command: raw is refused for wide ranges because the
- * rows may not exist at all once retention has pruned them.
- */
-export function selectBucket(from: Date, to: Date, requested?: string): Bucket {
-  const hours = (to.getTime() - from.getTime()) / 3_600_000;
-  const auto: Bucket =
-    hours <= RAW_MAX_HOURS ? 'raw' : hours <= HOUR_MAX_DAYS * 24 ? 'hour' : 'day';
-  if (requested === 'hour' || requested === 'day') return requested;
-  if (requested === 'raw') return hours <= RAW_MAX_HOURS ? 'raw' : auto;
-  return auto;
-}
+// `selectBucket` and its `'raw' | '1h' | '1d'` union used to live here — three hard-coded rungs,
+// chosen by range width alone. They are gone: F18.9 made the candidate set DATA, and the
+// replacement is `selectTier` in @lattice/retention, which picks from the tiers actually configured
+// for the action and refuses one whose rows have been pruned past the requested range.
+//
+// What is left here is the two helpers that were never about the vocabulary: parsing a range off a
+// query string, and clamping a page size.
 
 /**
  * Clamp a requested range to something answerable, defaulting to the last 7 days.

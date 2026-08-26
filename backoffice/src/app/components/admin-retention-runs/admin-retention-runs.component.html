@@ -1,0 +1,89 @@
+<div class="page-container">
+  <div class="rr-header">
+    <div>
+      <h1 class="rr-title">Cleanup history</h1>
+      <p class="rr-sub">
+        Every retention pass — the nightly one, and every "Clean up now". A failed run shows why
+        here rather than only in a log.
+      </p>
+    </div>
+    <button type="button" class="rr-refresh" (click)="load()" title="Refresh">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="rr-empty">Loading…</div>
+  } @else if (runs().length === 0) {
+    <div class="rr-empty">No cleanup has run yet.</div>
+  } @else {
+    <div class="lattice-card rr-card">
+      @for (r of runs(); track r.id) {
+        <div
+          class="rr-row"
+          role="button"
+          tabindex="0"
+          [attr.aria-expanded]="expanded() === r.id"
+          [class.expanded]="expanded() === r.id"
+          (click)="toggle(r.id)"
+          (keyup.enter)="toggle(r.id)"
+          (keyup.space)="toggle(r.id)"
+        >
+          <mat-icon class="rr-status" [attr.data-status]="r.status">{{ statusIcon(r) }}</mat-icon>
+
+          <div class="rr-when">
+            <span class="rr-date">{{ r.queuedAt | date: 'MMM d, HH:mm' }}</span>
+            <span class="rr-trigger">
+              {{ triggerLabel(r) }}@if (r.requestedBy) { · {{ r.requestedBy }} }
+              @if (r.scoped) { · one user }
+            </span>
+          </div>
+
+          <div class="rr-nums">
+            <span class="rr-num"><b>{{ r.rowsDeleted | number }}</b> removed</span>
+            <span class="rr-num rr-dim">{{ formatBytes(r.bytesReclaimed) }}</span>
+            <span class="rr-num rr-dim">{{ duration(r) }}</span>
+          </div>
+
+          <mat-icon class="rr-chev">{{ expanded() === r.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </div>
+
+        @if (expanded() === r.id) {
+          <div class="rr-detail">
+            @if (r.error) {
+              <div class="rr-error">
+                <mat-icon>error_outline</mat-icon>
+                <span>{{ r.error }}</span>
+              </div>
+            }
+            @if (activeKinds(r).length === 0) {
+              <div class="rr-none">Nothing was past its window — no rows removed.</div>
+            } @else {
+              <div class="rr-kinds">
+                @for (k of activeKinds(r); track k.dataKind) {
+                  <div class="rr-kind">
+                    <span class="rr-kind-name">{{ kindLabels[k.dataKind] }}</span>
+                    <span class="rr-kind-n">{{ k.bucketsWritten | number }} summarised</span>
+                    <span class="rr-kind-n">{{ k.rowsDeleted | number }} removed</span>
+                    <span class="rr-kind-n rr-dim">
+                      {{ formatBytes(k.bytesReclaimed) }}
+                      <!-- Only frames store a real byte_size; everything else is the same per-row
+                           constant the storage panel uses, and is labelled rather than implied. -->
+                      <em>{{ k.bytesEstimated ? 'estimated' : 'measured' }}</em>
+                    </span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+  }
+
+  <!-- The runs above say what the sweeps DID. This says who changed the policy they enforced —
+       the half nothing recorded before F18.19. -->
+  <section class="rr-activity">
+    <app-retention-activity [admin]="true" />
+  </section>
+</div>

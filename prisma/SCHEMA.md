@@ -1,17 +1,17 @@
 # Lattice v2.2 — Database Schema Review
 
 Single source of truth is `prisma/schema.prisma`. **Keep this file in sync with every schema
-change** (mermaid ERD + per-table examples). 54 tables, ordered by dependency tier 0 → 7.
+change** (mermaid ERD + per-table examples). 63 tables, ordered by dependency tier 0 → 7.
 
 | Tier | Theme                                                                                | Tables                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ---- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0    | External catalog                                                                     | `google_action_types`, `google_device_traits`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 0    | External catalog                                                                     | `google_action_types`, `google_device_traits`, `retention_buckets`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 1    | Device & ML catalog                                                                  | `devices`, `device_capabilities`, `device_capability_traits`, `device_capability_pins`, `capability_configurations`, `ml_models`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 2    | Identity                                                                             | `users`, `mqtt_user`, `user_login_audit`, `push_subscriptions`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`, `sensor_rollup`, `camera_frame_history`, `command_rollup_daily`, `device_events`, `device_availability_daily`, `retention_policy`, `user_retention_preferences`                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`, `sensor_rollup`, `camera_frame_history`, `command_rollup_daily`, `device_events`, `device_availability_daily`, `retention_policy`, `user_retention_preferences`, `retention_policy_tiers`, `user_retention_tiers`, `device_retention_tiers`, `action_retention_tiers`, `blueprint_retention_tiers`, `retention_runs`, `retention_run_kinds`, `retention_activity`                                                                                                                                                                                                                                     |
 | 7    | Blueprints (F10 — admin definition + user instance)                                  | `blueprints`, `blueprint_slots`, `blueprint_params`, `blueprint_profiles`, `blueprint_phases`, `blueprint_phase_targets`, `blueprint_scene_templates`, `blueprint_scene_template_members`, `blueprint_rule_templates`, `blueprint_rule_template_conditions`, `blueprint_rule_template_actions`, `blueprint_pipeline_templates`, `blueprint_pipeline_template_sensors`, `blueprint_pipeline_template_stages`, `blueprint_pipeline_template_triggers`, `blueprint_instances`, `blueprint_slot_bindings`, `blueprint_param_overrides`, `blueprint_instance_phase_state`, `blueprint_binding_phase_state`, `blueprint_binding_param_overrides` |
 
 ---
@@ -29,6 +29,15 @@ erDiagram
     int id PK
     string value UK "action.devices.traits.*"
     json valid_parameters "external Google contract"
+  }
+  RetentionBucket {
+    string code PK "raw|5m|15m|1h|1d|1w|… user-added"
+    int seconds "0 = the raw sentinel, which is not a duration"
+    string label
+    int anchor_offset_seconds "1w carries 345600 — the epoch is a Thursday"
+    bool is_builtin "seeded; undeletable"
+    int created_by_user_id FK "nullable; any user may add a size"
+    datetime created_at
   }
 
   %% ── Tier 1: device & ML catalog ──
@@ -354,7 +363,7 @@ erDiagram
   SensorRollup {
     int id PK
     int user_device_action_id FK
-    string bucket "hour|day"
+    string bucket FK "retention_buckets.code — was hour|day in Phase 1"
     datetime bucket_start "UTC, truncated to the bucket"
     int sample_count "every reading"
     int numeric_count "those that parsed as a number"
@@ -412,6 +421,7 @@ erDiagram
     int max_hourly_days
     int max_daily_days
     boolean enabled
+    string min_bucket FK "finest SUMMARY allowed; never binds raw"
     int updated_by_user_id FK "nullable"
     datetime updated_at
   }
@@ -424,6 +434,105 @@ erDiagram
     int hourly_days "nullable"
     int daily_days "nullable"
     datetime updated_at
+  }
+
+  %% ── Tier 6: retention tiers (F18.9). The tier list IS the configuration for one
+  %% (scope, data_kind); raw is position 0 of it, not a separate window. Resolution runs
+  %% action → device → blueprint → user → platform and THE WHOLE LIST WINS.
+  RetentionPolicyTier {
+    int id PK
+    string data_kind FK
+    string bucket FK
+    int keep_days "0 = forever"
+    int max_keep_days "the ceiling; NULL = uncapped. Platform only"
+    int position
+    int updated_by_user_id FK "nullable"
+    datetime updated_at
+  }
+
+  UserRetentionTier {
+    int id PK
+    int user_id FK
+    string data_kind
+    string bucket FK
+    int keep_days "0 = forever"
+    int position
+    datetime updated_at
+  }
+
+  DeviceRetentionTier {
+    int id PK
+    int user_device_id FK
+    string data_kind
+    string bucket FK
+    int keep_days
+    int position
+    datetime updated_at
+  }
+
+  ActionRetentionTier {
+    int id PK
+    int user_device_action_id FK
+    string data_kind
+    string bucket FK
+    int keep_days
+    int position
+    datetime updated_at
+  }
+
+  BlueprintRetentionTier {
+    int id PK
+    int blueprint_id FK
+    string slot_key "plain string; survives a v2 publish"
+    string action_name "mqtt_action_name"
+    string data_kind
+    string bucket FK
+    int keep_days
+    int position
+    datetime updated_at
+  }
+
+  RetentionRun {
+    int id PK
+    string trigger "cron|admin|user"
+    string status "queued|running|ok|failed"
+    string phase "rollup:scalar | prune:frame — live progress"
+    int requested_by_user_id FK "nullable"
+    int scope_user_id "non-null = a user-scoped sweep; read from HERE, not the queue payload"
+    string lock_key UK "global | user:<id>; NULL once terminal"
+    datetime queued_at
+    datetime started_at "nullable"
+    datetime finished_at "nullable"
+    int duration_ms "nullable"
+    string error "nullable"
+  }
+
+  RetentionRunKind {
+    int id PK
+    int run_id FK
+    string data_kind
+    int buckets_written
+    int rows_deleted
+    bigint bytes_reclaimed
+    bool bytes_estimated "false only for frames, which sum byte_size"
+  }
+
+  RetentionActivity {
+    int id PK
+    datetime at
+    string action "tiers_changed|policy_changed|bucket_created|sweep_finished|data_trimmed|..."
+    string scope "platform|user|device|action|blueprint|catalog"
+    string actor_kind "user|admin|cron|system"
+    int actor_user_id FK "nullable — SetNull, so closing an account cannot erase who acted"
+    string actor_name "denormalized: the id goes, the name stays"
+    int subject_user_id FK "nullable — whose data it concerned"
+    int subject_ref_id "nullable — device / action / blueprint id"
+    string subject_label "its name AT THE TIME, so a rename does not rewrite history"
+    string data_kind "nullable"
+    string summary "the human line: raw 30d → 7d, added 15m kept 90d"
+    json before "nullable"
+    json after "nullable"
+    int run_id FK "nullable — the sweep this entry belongs to"
   }
 
   SensorHistory {
@@ -751,6 +860,24 @@ erDiagram
   UserDevice            |o--o{ DeviceCommand          : "commands sent to"
   User                  ||--o{ DeviceCommand          : "issued"
 
+  RetentionBucket       ||--o{ SensorRollup           : "granularity of"
+  RetentionBucket       ||--o{ RetentionPolicy        : "finest summary allowed"
+  RetentionBucket       ||--o{ RetentionPolicyTier    : "sized by"
+  RetentionBucket       ||--o{ UserRetentionTier      : "sized by"
+  RetentionBucket       ||--o{ DeviceRetentionTier    : "sized by"
+  RetentionBucket       ||--o{ ActionRetentionTier    : "sized by"
+  RetentionBucket       ||--o{ BlueprintRetentionTier : "sized by"
+  User                  |o--o{ RetentionBucket        : "added custom size"
+  RetentionPolicy       ||--o{ RetentionPolicyTier    : "platform tier list"
+  User                  ||--o{ UserRetentionTier      : "my tier list"
+  UserDevice            ||--o{ DeviceRetentionTier    : "this device's tier list"
+  UserDeviceAction      ||--o{ ActionRetentionTier    : "this sensor's tier list"
+  Blueprint             ||--o{ BlueprintRetentionTier : "ships tiers for its slots"
+  User                  |o--o{ RetentionRun           : "requested sweep"
+  RetentionRun          ||--o{ RetentionRunKind       : "per-kind counters"
+  RetentionRun          |o--o{ RetentionActivity      : "entries about this sweep"
+  User                  |o--o{ RetentionActivity      : "acted / was subject"
+
   Blueprint             ||--o{ BlueprintSlot          : "requires devices"
   Blueprint             ||--o{ BlueprintParam         : "declares tuning surface"
   Blueprint             ||--o{ BlueprintProfile       : "lifecycles offered"
@@ -812,6 +939,20 @@ erDiagram
 | --- | ---------- | ---------------------------------- | --------------------------------------------- |
 | 1   | On / Off   | `action.devices.traits.OnOff`      | `{"type":"enum","values":["on","off"]}`       |
 | 2   | Brightness | `action.devices.traits.Brightness` | `{"type":"range","min":0,"max":100,"step":1}` |
+
+#### `retention_buckets` (`RetentionBucket`) — the bucket vocabulary, and **the only Tier 0 table users write to**. Seeded with nine codes (`raw`, `5m`, `15m`, `30m`, `1h`, `6h`, `12h`, `1d`, `1w`); **any user may add a size** — `90m`, `45m`, `4h` — with no release. It sits in Tier 0 rather than Tier 6 because it is what everything else FKs into: `sensor_rollup.bucket`, `retention_policy.min_bucket`, and the `bucket` column of all five tier tables, every one of them `ON DELETE RESTRICT` so removing a size can never cascade into deleting the history stored under it.
+
+**One shared catalog, not one per user.** A bucket size is a unit, not personal data: two users who both want 90 minutes want the same 5400 seconds, so they share a row and adding an existing code reuses it. A per-user catalog would need either a second table (and then `sensor_rollup.bucket` could not FK to both) or a nullable owner in the unique key, which Postgres's NULL-distinct rule makes unsafe. What stays private is the part that actually is private: **which** buckets you keep and for how long, in your own tier list.
+
+Flooring is generic — `floor((epoch − anchor) / seconds) * seconds + anchor` — so a size the catalog has never seen floors correctly the first time it is used. `anchor_offset_seconds` exists for the one seeded row where the epoch grid is wrong: `1w` floored on multiples of 604 800 lands on a **Thursday** (1 Jan 1970 was one), so it carries 345 600 to move the grid to Monday. What code keeps is only what a row cannot express — the admission rules (≥ 60 s, and either divides a day evenly or is whole days), the chain-divisibility rule, and the per-kind limits. All of it lives in `@lattice/retention`. **`seconds` is frozen once any `sensor_rollup` row uses the code** (existing rows were aggregated at the old width, and changing it would silently reinterpret them), so the API offers no `PATCH` of it at all. Calendar buckets (`1mo`) are **not expressible** — a month is not a fixed number of seconds.
+
+| code | seconds | label        | anchor_offset_seconds | is_builtin | created_by_user_id |
+| ---- | ------- | ------------ | --------------------- | ---------- | ------------------ |
+| raw  | 0       | Raw readings | 0                     | true       | NULL               |
+| 15m  | 900     | 15 minutes   | 0                     | true       | NULL               |
+| 1d   | 86400   | 1 day        | 0                     | true       | NULL               |
+| 1w   | 604800  | 1 week       | 345600                | true       | NULL               |
+| 90m  | 5400    | 90 minutes   | 0                     | false      | 1                  |
 
 ### Tier 1 — Device & ML catalog
 
@@ -1145,11 +1286,14 @@ delayed member cannot silently act on a phase that advanced while it waited. Row
 
 #### `sensor_rollup` (`SensorRollup`) — downsampled scalar readings, one row per (action, granularity, bucket). Written nightly by automation-worker's retention pass, which rolls up **before** it prunes so a bucket is never built from already-deleted rows. `sample_count` counts every reading; `numeric_count` only those that parsed as a number — they differ because `sensor_history.value` is TEXT and a switch's history is `"on"`/`"off"`. For a non-numeric series min/max/avg stay NULL and `last_value` is the only meaningful summary. The unique key `(user_device_action_id, bucket, bucket_start)` makes the upsert idempotent, so a re-run or a missed night self-heals.
 
+`bucket` is a **`retention_buckets.code`**, FK'd `ON DELETE RESTRICT` (F18.9). Phase 1 wrote the literals `"hour"`/`"day"` from code and typed them there; the vocabulary is now data, and the `retention_tiers` migration rewrote every existing row to `1h`/`1d`. That FK is what makes the rewrite _checked_: Postgres validates the whole table as it adds the constraint, so a partial rewrite aborts the migration naming the offending value instead of silently orphaning every bucket ever written. Only the **finest** rollup tier is built from `sensor_history`; every coarser tier is folded from its predecessor, or a weekly rollup would re-read a week of 10-second readings per action per night.
+
 | id   | user_device_action_id | bucket | bucket_start         | sample_count | numeric_count | error_count | min_value | max_value | avg_value | last_value |
 | ---- | --------------------- | ------ | -------------------- | ------------ | ------------- | ----------- | --------- | --------- | --------- | ---------- |
-| 7001 | 100                   | hour   | 2026-08-20T14:00:00Z | 60           | 59            | 1           | 21.1      | 23.8      | 22.4      | "23.1"     |
-| 7002 | 100                   | day    | 2026-08-20T00:00:00Z | 1440         | 1436          | 4           | 18.2      | 26.9      | 22.1      | "21.7"     |
-| 7003 | 106                   | day    | 2026-08-20T00:00:00Z | 96           | 0             | 0           | NULL      | NULL      | NULL      | "on"       |
+| 7001 | 100                   | 1h     | 2026-08-20T14:00:00Z | 60           | 59            | 1           | 21.1      | 23.8      | 22.4      | "23.1"     |
+| 7002 | 100                   | 1d     | 2026-08-20T00:00:00Z | 1440         | 1436          | 4           | 18.2      | 26.9      | 22.1      | "21.7"     |
+| 7003 | 106                   | 1d     | 2026-08-20T00:00:00Z | 96           | 0             | 0           | NULL      | NULL      | NULL      | "on"       |
+| 7004 | 100                   | 90m    | 2026-08-20T13:30:00Z | 90           | 90            | 0           | 21.4      | 22.9      | 22.2      | "22.5"     |
 
 #### `device_events` (`DeviceEvent`) — everything that happened **to** a device, as opposed to what it was told to do. Written by digest-service on a **real transition only**: the previous `online` value is read first, or a chatty device writes a row per status message rather than per change. Every online/offline transition funnels through `RK.DEVICE_STATE_CHANGED` (the broker's Last-Will _and_ automation-worker's liveness reaper both publish it), so there is exactly one hook. `kind='firmware'` exists because `device_commands` deliberately excludes the `ota` action — this is that audit trail. Indexes `(user_device_id, recorded_at)` and `(user_id, recorded_at)`.
 
@@ -1184,18 +1328,94 @@ delayed member cannot silently act on a phase that advanced while it waited. Row
 
 #### `retention_policy` (`RetentionPolicy`) — the platform default each user starts on, plus the ceiling they may not exceed. Admin-owned, one row per `data_kind`. Deliberately a table and not env vars: retention is a product decision an owner changes, and an env var means a redeploy plus no record of what the policy was. Env vars seed these rows on first migrate; afterwards this table is authoritative and the nightly job re-reads it every pass, so a change takes effect the same night without a restart. **On `*_days` columns `0` means KEEP FOREVER** (the safe reading for a column driving deletes); **on `max_*` ceilings NULL means UNCAPPED** — a different spelling on purpose, since a ceiling of `0` would otherwise read as "cap everyone at forever". All ceilings ship NULL.
 
-| id  | data_kind    | default_raw_days | default_hourly_days | default_daily_days | max_raw_days | enabled |
-| --- | ------------ | ---------------- | ------------------- | ------------------ | ------------ | ------- |
-| 1   | scalar       | 14               | 90                  | 0                  | NULL         | true    |
-| 2   | command      | 365              | NULL                | 0                  | NULL         | true    |
-| 3   | device_event | 0                | NULL                | 0                  | NULL         | true    |
-| 4   | frame        | 0                | NULL                | NULL               | NULL         | true    |
+**F18.9 added one knob and began retiring six columns.** `min_bucket` is the finest _summary_ anyone may configure for this kind; it never binds `raw`, because the floor is about how fine a rollup may be and raw is not a rollup — a `min_bucket` of `15m` still keeps the readings themselves for as long as the raw tier says. It ships as `raw` (no floor), so it changes nobody's options; it exists so a volume with no headroom can be defended later without a schema change, exactly as `max_raw_days` already does.
 
-#### `user_retention_preferences` (`UserRetentionPreference`) — one user's override of a platform default. Same shape as `notification_preferences`: **a row exists only once the user has actually chosen something**, so a new account needs no seeding, the absence of a row is a meaningful "use the default", and changing a default moves every user who never customised. "Reset to default" deletes the row rather than writing the default into it. The effective window is `min(user_choice, ceiling)` with `0` read as infinity — that arithmetic lives in exactly one place, `resolveRetention` in the retention worker. Two tables rather than one with a nullable `user_id` because Postgres treats NULLs as **distinct** in a unique index, so `UNIQUE(user_id, data_kind)` would happily allow two platform rows for the same kind. Unique `(user_id, data_kind)`.
+F18.9 also shipped a `max_tiers` column — a per-kind cap on how many tiers a list could hold — which was **dropped again on 2026-08-26**. The count was the wrong axis to limit: a tier list costs what its _finest_ bucket costs, so a `30m` tier writes 48 rollup rows per sensor per day while every coarser tier above it together writes about one. The cap therefore blocked the nearly-free additions and permitted the expensive one. `min_bucket` bounds the axis that actually costs, and the chain rule (each tier a whole multiple of the one below) bounds length on its own. Per-kind bucket _eligibility_ is unchanged and still lives in code, because it is a property of where the rows go rather than a policy an admin could raise: `command_rollup_daily` and `device_availability_daily` are `DATE`-keyed, so those kinds take whole-day buckets only, and a camera frame is an image that does not average.
+
+⚠️ The six `default_*_days` / `max_*_days` columns are **superseded by `retention_policy_tiers`** and have been copied across. They are still present only so the API and worker keep compiling while their call sites move; they are dropped, with `user_retention_preferences`, once the last reader is gone. **Do not add a reader.**
+
+| id  | data_kind    | default_raw_days | default_hourly_days | default_daily_days | max_raw_days | min_bucket | enabled |
+| --- | ------------ | ---------------- | ------------------- | ------------------ | ------------ | ---------- | ------- |
+| 1   | scalar       | 14               | 90                  | 0                  | NULL         | raw        | true    |
+| 2   | command      | 365              | NULL                | 0                  | NULL         | raw        | true    |
+| 3   | device_event | 0                | NULL                | 0                  | NULL         | raw        | true    |
+| 4   | frame        | 0                | NULL                | NULL               | NULL         | raw        | 1       | true |
+
+#### `user_retention_preferences` (`UserRetentionPreference`) — one user's override of a platform default. Same shape as `notification_preferences`: **a row exists only once the user has actually chosen something**, so a new account needs no seeding, the absence of a row is a meaningful "use the default", and changing a default moves every user who never customised. "Reset to default" deletes the row rather than writing the default into it. The effective window is `min(user_choice, ceiling)` with `0` read as infinity — that arithmetic lives in exactly one place, `clampKeepDays` in `@lattice/retention`. Two tables rather than one with a nullable `user_id` because Postgres treats NULLs as **distinct** in a unique index, so `UNIQUE(user_id, data_kind)` would happily allow two platform rows for the same kind. Unique `(user_id, data_kind)`.
+
+⚠️ **SUPERSEDED by `user_retention_tiers`** (F18.9). Every row here was copied across by the `retention_tiers` migration, and the two are **not kept in sync** — this is read-only legacy, present only so the API and worker keep compiling while their call sites move one at a time. It is dropped, with the six `retention_policy` day columns, once the last reader is gone. **Do not add a reader.**
 
 | id  | user_id | data_kind | raw_days | hourly_days | daily_days | updated_at           |
 | --- | ------- | --------- | -------- | ----------- | ---------- | -------------------- |
 | 31  | 1       | scalar    | 0        | 90          | 0          | 2026-08-21T10:00:00Z |
+
+#### The five tier tables — `retention_policy_tiers`, `user_retention_tiers`, `device_retention_tiers`, `action_retention_tiers`, `blueprint_retention_tiers`
+
+A **tier list** is the complete retention configuration for one `(scope, data_kind)`: an ordered set of buckets, each with a keep window. **`raw` is position 0 of that list**, not a separate kind-level window — which is what makes a per-sensor raw window fall out for free, and is why the six `retention_policy` day columns above are on their way out.
+
+**Five tables, not one with a nullable owner.** Postgres treats NULLs as _distinct_ in a unique index, so a nullable-owner key would admit two platform rows for the same `(data_kind, bucket)`; a partial unique index would fix that but cannot be expressed in `schema.prisma`, so the schema would stop describing the database — the same reasoning already recorded on `blueprint_binding_phase_state` and on `user_retention_preferences` itself. One table per scope also buys real FKs and real cascades: deleting an action takes its tiers with it.
+
+Resolution runs **action → device → blueprint → user → platform**, and **the whole list wins**: the most specific scope with _any_ rows for a kind supplies every tier, and the scopes below it are not consulted. Merging tier-by-tier would leave "removing the action's tier falls back to the device's" without a single answer, and a half-inherited list composes differently depending on which half you remove. Clamping is per bucket against the platform row for the _same_ bucket; a scope that keeps a bucket the platform does not configure is uncapped for it, because the platform expresses a ceiling by carrying the bucket rather than by omitting it.
+
+Only `retention_policy_tiers` carries `max_keep_days` — the ceiling, mirroring the `default_* / max_*` pairing Phase 1 used. `blueprint_retention_tiers` addresses `(blueprint_id, slot_key, action_name)` so a blueprint can single out a known-noisy sensor without changing the switches beside it; `slot_key` and `action_name` are plain strings for the same reason `blueprint_slot_bindings.slot_key` is one — they survive a v2 publish recreating the slot rows. Blueprint tiers are **admin-only**: a user cannot edit the definition their instance inherits, they override it at their own device or action scope, which sits above it in the order.
+
+Two invariants live in `@lattice/retention`, not in the schema, because no column can express them:
+
+- **Chain divisibility.** Each rollup tier's `seconds` must be a whole multiple of its predecessor's, since a coarse bucket is folded from the next finer one. This constrains the **list**, not the size — `90m` is legal, it simply cannot sit directly above `1h` (5400 / 3600 = 1.5).
+- **The raw floor.** `raw.keep_days` must be at least `max(RETENTION_LOOKBACK_DAYS, 2)` while any rollup tier exists, unless it is `0`. Rollups are built by reading raw rows, so a shorter window deletes readings before they were ever summarised — and the loss is invisible, because the rollup rows that would have shown it were never written.
+
+`retention_policy_tiers` — unique `(data_kind, bucket)`:
+
+| id  | data_kind | bucket | keep_days | max_keep_days | position |
+| --- | --------- | ------ | --------- | ------------- | -------- |
+| 1   | scalar    | raw    | 14        | 30            | 0        |
+| 2   | scalar    | 1h     | 90        | NULL          | 1        |
+| 3   | scalar    | 1d     | 0         | NULL          | 2        |
+| 4   | frame     | raw    | 0         | NULL          | 0        |
+
+`action_retention_tiers` — the finest scope, and the reason F18.12 exists: a tank-level sensor worth 5-minute buckets no longer forces every switch in the house to the same shape. Unique `(user_device_action_id, data_kind, bucket)`:
+
+| id  | user_device_action_id | data_kind | bucket | keep_days | position |
+| --- | --------------------- | --------- | ------ | --------- | -------- |
+| 12  | 100                   | scalar    | raw    | 3         | 0        |
+| 13  | 100                   | scalar    | 90m    | 60        | 1        |
+| 14  | 100                   | scalar    | 1d     | 0         | 2        |
+
+`user_retention_tiers`, `device_retention_tiers` and `blueprint_retention_tiers` have the same shape minus `max_keep_days`, keyed on `(user_id, …)`, `(user_device_id, …)` and `(blueprint_id, slot_key, action_name, …)` respectively. As with the table it replaces, a `user_retention_tiers` row exists only once the user has chosen something, so the **absence** of rows means "follow the platform" — which is what makes changing a platform default move everyone who never customised.
+
+#### `retention_runs` (`RetentionRun`) — one execution of the retention pass: the nightly cron, an admin's "Apply now", or a user's (F18.13–F18.15). `phase` is written as each stage completes (`rollup:scalar`, `prune:frame`), so the page shows real progress rather than a spinner.
+
+`lock_key` is the single-flight mechanism: `'global'` for a platform sweep, `'user:<id>'` for a user sweep, `UNIQUE` and nullable, held from `queued` until terminal and then set NULL. Postgres's NULL-distinct rule is documented as a trap everywhere else in this file; **here it is the feature** — any number of finished rows carry NULL, and exactly one live run can hold each key.
+
+The key alone is not enough, because a user sweep and a platform sweep would still overlap on the same rows while holding _different_ keys. So every claim runs inside a transaction guarded by `pg_advisory_xact_lock`: a global claim is refused while **any** run is active; `user:N` is refused while global or `user:N` is, but **not** while `user:M` is — those touch disjoint, ownership-scoped rows, and serialising them would make one user's Apply wait on a stranger's. A global claim that loses inserts as `queued` anyway, which blocks new user claims, and waits for in-flight user runs before going `running` — writer preference, so the nightly pass cannot be starved by a stream of Applies.
+
+`scope_user_id` is **read from this row by the worker, never from the queue payload**: the message is a wake-up, not an authority.
+
+| id  | trigger | status  | phase        | requested_by_user_id | scope_user_id | lock_key | queued_at            | duration_ms | error |
+| --- | ------- | ------- | ------------ | -------------------- | ------------- | -------- | -------------------- | ----------- | ----- |
+| 40  | cron    | ok      | NULL         | NULL                 | NULL          | NULL     | 2026-08-24T03:00:00Z | 41200       | NULL  |
+| 41  | user    | running | prune:scalar | 1                    | 1             | user:1   | 2026-08-24T09:14:02Z | NULL        | NULL  |
+
+#### `retention_run_kinds` (`RetentionRunKind`) — what one run did to one data kind. Relational children rather than a JSON counters blob, for the same reason the tiers are five tables: the job-history page sorts and totals by kind, and a blob can be neither indexed nor summed. `bytes_estimated` is `false` **only for frames**, where `byte_size` is summed off the rows before they are deleted; everywhere else the figure comes from the same per-row constants the storage panel uses and is labelled an estimate in the UI rather than presented as a measurement. Unique `(run_id, data_kind)`.
+
+| id  | run_id | data_kind | buckets_written | rows_deleted | bytes_reclaimed | bytes_estimated |
+| --- | ------ | --------- | --------------- | ------------ | --------------- | --------------- |
+| 91  | 40     | scalar    | 274             | 18420        | 884160          | true            |
+| 92  | 40     | frame     | 0               | 96           | 3842560         | false           |
+
+#### `retention_activity` (`RetentionActivity`) — every retention event, append-only: **when, who, what changed, and how** (F18.19). `retention_runs` records what a _sweep_ did; this records everything else, and in particular the entire configuration half, which nothing recorded before. A tier row's `updated_at` is current state, not history — it can say a list changed this morning, but never who changed it, from what, or in which direction. For a feature whose whole purpose is deleting data irreversibly, that was the wrong side of the line.
+
+**Append-only.** Nothing updates a row here and nothing deletes one — that is what keeps it separate from `retention_runs`, whose `phase` and `lock_key` are mutated throughout a run. The two are linked by `run_id` rather than merged, so the log never has to carry live state.
+
+**`actor_name` and `subject_label` are denormalized on purpose.** Both user FKs are `ON DELETE SET NULL`, because deleting a user must neither be blocked by an audit row nor cascade one away — so the ids go and the names stay. A log that forgets who did something the moment their account closes is not an audit trail. `subject_label` captures the device / action / blueprint name **at the time**, so a later rename does not silently rewrite what the entry says happened.
+
+`summary` is the line the page shows; `before`/`after` keep the machine-readable pair so a question the summary did not anticipate is still answerable years later. Writes go through `retentionActivityService.record`, which takes the **transaction handle** — a config change and its log entry commit together or not at all. The worker's own writer is the one exception and never throws: a sweep that successfully deleted rows must not be reported as failed because its log line did not write.
+
+| id  | at                   | action         | scope    | actor_kind | actor_name | subject_user_id | data_kind | summary                                                 | run_id |
+| --- | -------------------- | -------------- | -------- | ---------- | ---------- | --------------- | --------- | ------------------------------------------------------- | ------ |
+| 118 | 2026-08-26T10:27:27Z | tiers_changed  | user     | user       | admin      | 1               | scalar    | removed 90m, raw 14d → 7d, added 6h kept 90d            | NULL   |
+| 119 | 2026-08-26T10:31:02Z | sweep_finished | user     | user       | admin      | 1               | NULL      | 36,031 rows deleted, 659 buckets built                  | 7      |
+| 120 | 2026-08-26T11:04:55Z | policy_changed | platform | admin      | admin      | NULL            | frame     | 1d ceiling uncapped → 30d; 2 users over the new ceiling | NULL   |
 
 ### Tier 7 — Blueprints (F10)
 

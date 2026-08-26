@@ -24,6 +24,14 @@
   justify-content: space-between;
   gap: 14px;
 }
+/* A custom element is `display: inline` by default, so a margin on it is silently dropped -- the
+   header and the first tier row ended up touching. 11px is the same step the storage card puts
+   between its own header and the bar beneath it. */
+app-tier-editor {
+  display: block;
+  margin-top: 11px;
+}
+
 .ar-card-title {
   font-size: 14px;
   font-weight: 650;
@@ -86,6 +94,7 @@
 }
 .ar-kind mat-icon {
   font-size: 19px;
+  flex: 0 0 19px;
   width: 19px;
   height: 19px;
   margin-top: 1px;
@@ -97,7 +106,9 @@
 .ar-table {
   font-size: 10px;
   color: var(--text-muted);
-  margin-top: 1px;
+  /* Same 2px the storage card puts under its own subtitle -- these are the same relationship
+     (a heading and the line naming what it covers) and were reading differently. */
+  margin-top: 2px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .ar-kind-right {
@@ -151,7 +162,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-muted);
   margin-bottom: 7px;
 }
 .ar-divider {
@@ -198,7 +209,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-size: 9.5px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 .ar-over b {
   color: var(--text);
@@ -266,4 +277,112 @@
 
 .ar-choices button:disabled:hover {
   background: transparent;
+}
+
+/* ── Phase 2: tier lists, ceilings and the run action ─────────────────────── */
+
+.ar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  /* The actions sit under the description, so they need room off it — without this the buttons
+     crowd the sentence and the two read as one block. */
+  margin-top: 12px;
+}
+
+.ar-link-btn,
+.ar-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--card-divider);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ar-link-btn:hover,
+.ar-run-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.ar-run-btn {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.ar-run-btn:hover {
+  color: #fff;
+  filter: brightness(1.08);
+}
+.ar-link-btn mat-icon,
+.ar-run-btn mat-icon {
+  font-size: 17px;
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
+}
+
+.ar-save-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ar-discard,
+.ar-save {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--card-divider);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ar-discard:hover {
+  color: var(--text);
+}
+.ar-save {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.ar-save:hover {
+  filter: brightness(1.08);
+}
+
+.ar-ceilings {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ar-ceiling-row {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.ar-ceiling-bucket {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+@media (max-width: 599px) {
+  .ar-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ar-ceiling-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
 }

@@ -10,6 +10,7 @@ COPY packages/otel          packages/otel
 COPY packages/queue         packages/queue
 COPY packages/prisma-client packages/prisma-client
 COPY packages/params        packages/params
+COPY packages/retention     packages/retention
 COPY services/automation-worker services/automation-worker
 COPY prisma prisma
 COPY tsconfig.base.json ./
@@ -20,6 +21,7 @@ RUN npm run build -w @lattice/otel \
  && npm run build -w @lattice/queue \
  && npm run build -w @lattice/prisma-client \
  && npm run build -w @lattice/params \
+ && npm run build -w @lattice/retention \
  && npm run build -w @lattice/automation-worker
 
 FROM node:22-slim
@@ -44,6 +46,8 @@ COPY --from=builder /workspace/packages/prisma-client/dist          ./node_modul
 COPY --from=builder /workspace/packages/prisma-client/node_modules  ./node_modules/@lattice/prisma-client/node_modules
 COPY --from=builder /workspace/packages/params/package.json ./node_modules/@lattice/params/package.json
 COPY --from=builder /workspace/packages/params/dist         ./node_modules/@lattice/params/dist
+COPY --from=builder /workspace/packages/retention/package.json ./node_modules/@lattice/retention/package.json
+COPY --from=builder /workspace/packages/retention/dist         ./node_modules/@lattice/retention/dist
 
 COPY --from=builder /workspace/services/automation-worker/dist ./dist
 

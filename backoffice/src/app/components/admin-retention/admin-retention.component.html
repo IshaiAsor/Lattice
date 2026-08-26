@@ -3,9 +3,17 @@
     <div>
       <h1 class="ar-title">Data Retention</h1>
       <p class="ar-sub">
-        Platform defaults and the limits users may not exceed. Each user sets their own window in
-        Settings &rarr; Data &amp; storage.
+        The tier list every user starts on, and the limits none of them may exceed. Each user sets
+        their own list in Settings &rarr; Data &amp; storage.
       </p>
+    </div>
+    <div class="ar-header-actions">
+      <a class="ar-link-btn" routerLink="/admin/retention/runs">
+        <mat-icon>history</mat-icon><span>Cleanup history</span>
+      </a>
+      <button type="button" class="ar-run-btn" (click)="cleanUpNow()">
+        <mat-icon>cleaning_services</mat-icon><span>Clean up now</span>
+      </button>
     </div>
   </div>
 
@@ -43,7 +51,7 @@
     }
   </div>
 
-  <span class="section-label">Defaults &amp; limits per data kind</span>
+  <span class="section-label">Tier list per data kind</span>
 
   @for (k of kinds; track k.kind) {
     @if (for(k.kind); as p) {
@@ -69,68 +77,42 @@
           </div>
         </div>
 
-        <div class="ar-split">
-          <div class="ar-col">
-            <div class="ar-col-label">Default every user starts on</div>
-            <!-- Anything above the ceiling is disabled rather than hidden: the ceiling is the
-                 reason it cannot be picked, and a choice that vanishes teaches nobody that. -->
-            <div class="ar-choices">
-              @for (c of choices; track c) {
-                <button
-                  type="button"
-                  [class.on]="p.defaultRawDays === c"
-                  [disabled]="aboveCeiling(k.kind, c)"
-                  [title]="aboveCeiling(k.kind, c) ? 'Above the ceiling of ' + formatDays(p.maxRawDays) : ''"
-                  (click)="setDefault(k.kind, c)"
-                >
-                  {{ formatDays(c) }}
-                </button>
-              }
-            </div>
+        <app-tier-editor
+          [tiers]="tiersFor(k.kind)"
+          [buckets]="buckets()"
+          [kind]="k.kind"
+          [minBucket]="p.minBucket"
+          (changed)="onTiersChanged(k.kind, $event)"
+        />
+
+        @if (dirty(k.kind)) {
+          <div class="ar-save-row">
+            <button type="button" class="ar-discard" (click)="discard(k.kind)">Discard</button>
+            <button type="button" class="ar-save" (click)="save(k.kind)">Save tier list</button>
           </div>
+        }
 
-          <div class="ar-divider"></div>
-
-          <div class="ar-col">
-            <div class="ar-col-label">Ceiling &mdash; users may not exceed</div>
-            <div class="ar-choices">
-              <!-- Uncapped is null, deliberately NOT 0: a ceiling of 0 would read as "cap everyone
-                   at forever", which is no cap at all. -->
-              <button type="button" [class.on]="p.maxRawDays === null" (click)="setCeiling(k.kind, null)">
-                Uncapped
-              </button>
-              @for (c of choices; track c) {
-                @if (c > 0) {
-                  <button type="button" [class.on]="p.maxRawDays === c" (click)="setCeiling(k.kind, c)">
-                    {{ formatDays(c) }}
+        <div class="ar-ceilings">
+          <span class="ar-col-label">Ceilings &mdash; users may not exceed</span>
+          @for (t of p.tiers; track t.bucket) {
+            <div class="ar-ceiling-row">
+              <span class="ar-ceiling-bucket">{{ t.bucket }}</span>
+              <div class="ar-choices">
+                <!-- Uncapped is null, deliberately NOT 0: a ceiling of 0 would read as "cap
+                     everyone at forever", which is no cap at all. -->
+                @for (c of ceilingChoices; track c) {
+                  <button
+                    type="button"
+                    [class.on]="t.maxKeepDays === c"
+                    (click)="setCeiling(k.kind, t.bucket, c)"
+                  >
+                    {{ c === null ? 'Uncapped' : formatDays(c) }}
                   </button>
                 }
-              }
+              </div>
             </div>
-          </div>
+          }
         </div>
-
-        <!-- Reachable from data that predates the guard, or by lowering the ceiling elsewhere.
-             Says what is actually applied rather than leaving two numbers that contradict. -->
-        @if (aboveCeiling(k.kind, p.defaultRawDays)) {
-          <div class="ar-warn">
-            <mat-icon>warning</mat-icon>
-            <span>
-              This default is above the ceiling, so every user is really kept at
-              <b>{{ formatDays(p.maxRawDays) }}</b>. Pick a default at or below the ceiling so the
-              page states what happens.
-            </span>
-          </div>
-        }
-
-        @if (overridesFor(k.kind).length > 0) {
-          <div class="ar-overrides">
-            <span class="ar-over-label">Overridden by</span>
-            @for (o of overridesFor(k.kind); track o.userId) {
-              <span class="ar-over">{{ o.userName }} &middot; <b>{{ formatDays(o.rawDays) }}</b></span>
-            }
-          </div>
-        }
 
         @if (!p.enabled) {
           <div class="ar-warn">
@@ -143,15 +125,5 @@
         }
       </div>
     }
-  }
-
-  @if (overrides().length === 0 && !loading()) {
-    <div class="lattice-card ar-card ar-note">
-      <mat-icon>info</mat-icon>
-      <span>
-        No user has overridden a default yet &mdash; everyone follows the values above, so changing
-        one moves all of them.
-      </span>
-    </div>
   }
 </div>

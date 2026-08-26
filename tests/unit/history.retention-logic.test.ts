@@ -1,104 +1,21 @@
-// Unit: history domain — the pure retention arithmetic
-// (automation-worker/src/services/retention-logic.ts). Two encodings meet in this file and they
-// are deliberately different: on a *_days column 0 means KEEP FOREVER, while on a max_* ceiling
-// NULL means UNCAPPED. Getting that backwards deletes people's history, so it is pinned here.
+// Unit: history domain — the pure retention arithmetic that survived Phase 2 (@lattice/retention).
+//
+// The `0 = forever` encoding still runs through all of it, and getting that backwards deletes
+// people's history, so it stays pinned here. What LEFT this file is the three-column ceiling
+// arithmetic — `clampDays`, `resolveRetention`, `defaultAboveCeiling`,
+// `assertDefaultWithinCeiling`. Those were superseded by `assertTierList`, which enforces a ceiling
+// per tier rather than per fixed column, and by then they had no production caller at all: this
+// suite was the only thing keeping them compiled. The equivalent cases now live in
+// history.retention-tiers.test.ts and history.retention-activity.test.ts.
 
 import {
-  clampDays,
-  resolveRetention,
   pruneCutoff,
   hourStart,
   dayStart,
   emptyBucket,
   foldReading,
   bucketAvg,
-  type PlatformPolicy,
-} from '../../services/automation-worker/src/services/retention-logic';
-import {
-  defaultAboveCeiling,
-  assertDefaultWithinCeiling,
-} from '../../services/api/src/services/retention-rules';
-
-const policy = (over: Partial<PlatformPolicy> = {}): PlatformPolicy => ({
-  data_kind: 'scalar',
-  default_raw_days: 14,
-  default_hourly_days: 90,
-  default_daily_days: 0,
-  max_raw_days: null,
-  max_hourly_days: null,
-  max_daily_days: null,
-  enabled: true,
-  ...over,
-});
-
-describe('clampDays', () => {
-  it('takes the platform default when the user has chosen nothing', () => {
-    expect(clampDays(undefined, 14, null)).toBe(14);
-  });
-
-  it('takes the user choice over the default', () => {
-    expect(clampDays(30, 14, null)).toBe(30);
-  });
-
-  it('leaves a choice alone when there is no ceiling', () => {
-    expect(clampDays(3650, 14, null)).toBe(3650);
-  });
-
-  it('clamps a choice that exceeds the ceiling', () => {
-    expect(clampDays(365, 14, 90)).toBe(90);
-  });
-
-  it('leaves a choice below the ceiling alone', () => {
-    expect(clampDays(30, 14, 90)).toBe(30);
-  });
-
-  it('clamps forever to the ceiling', () => {
-    // 0 is the LARGEST value even though it is numerically the smallest — Math.min would have
-    // returned 0 here and kept everything forever, which is the exact opposite of a cap.
-    expect(clampDays(0, 14, 90)).toBe(90);
-  });
-
-  it('keeps forever when no ceiling is set', () => {
-    expect(clampDays(0, 14, null)).toBe(0);
-  });
-
-  it('passes a null tier through as null', () => {
-    expect(clampDays(null, null, null)).toBe(null);
-  });
-});
-
-describe('resolveRetention', () => {
-  it('follows the platform default when the user has no preference row', () => {
-    const w = resolveRetention(policy(), undefined);
-    expect(w.raw_days).toBe(14);
-    expect(w.hourly_days).toBe(90);
-    expect(w.daily_days).toBe(0);
-  });
-
-  it('applies a user override', () => {
-    const w = resolveRetention(policy(), {
-      data_kind: 'scalar',
-      raw_days: 30,
-      hourly_days: null,
-      daily_days: null,
-    });
-    expect(w.raw_days).toBe(30);
-  });
-
-  it('binds a user override to the admin ceiling', () => {
-    const w = resolveRetention(policy({ max_raw_days: 21 }), {
-      data_kind: 'scalar',
-      raw_days: 0,
-      hourly_days: null,
-      daily_days: null,
-    });
-    expect(w.raw_days).toBe(21);
-  });
-
-  it('carries the platform enabled switch through', () => {
-    expect(resolveRetention(policy({ enabled: false }), undefined).enabled).toBe(false);
-  });
-});
+} from '../../packages/retention/src';
 
 describe('pruneCutoff', () => {
   const now = new Date('2026-08-21T12:00:00Z');
@@ -191,47 +108,3 @@ describe('foldReading', () => {
 
 // The admin page's half of the same encoding: what the worker silently clamps, the API refuses to
 // store, so the number an admin reads is the number their users get.
-describe('defaultAboveCeiling', () => {
-  it('lets any default through when the ceiling is uncapped', () => {
-    expect(defaultAboveCeiling(365, null)).toBe(false);
-    expect(defaultAboveCeiling(0, null)).toBe(false);
-  });
-
-  it('treats forever as above every finite ceiling', () => {
-    expect(defaultAboveCeiling(0, 7)).toBe(true);
-    expect(defaultAboveCeiling(0, 3650)).toBe(true);
-  });
-
-  it('allows a default at or under the ceiling', () => {
-    expect(defaultAboveCeiling(7, 7)).toBe(false);
-    expect(defaultAboveCeiling(6, 7)).toBe(false);
-  });
-
-  it('rejects a default over the ceiling', () => {
-    expect(defaultAboveCeiling(14, 7)).toBe(true);
-  });
-});
-
-describe('assertDefaultWithinCeiling', () => {
-  it('is silent on a valid pair', () => {
-    expect(() => assertDefaultWithinCeiling(7, 7)).not.toThrow();
-    expect(() => assertDefaultWithinCeiling(0, null)).not.toThrow();
-  });
-
-  it('throws a 400 naming both numbers', () => {
-    expect(() => assertDefaultWithinCeiling(14, 7)).toThrow(/14 days.*ceiling of 7 days/);
-    try {
-      assertDefaultWithinCeiling(14, 7);
-    } catch (e) {
-      expect((e as { statusCode?: number }).statusCode).toBe(400);
-    }
-  });
-
-  it('says "forever" rather than 0 when that is the breach', () => {
-    expect(() => assertDefaultWithinCeiling(0, 30)).toThrow(/forever/);
-  });
-
-  it('does not write "1 days"', () => {
-    expect(() => assertDefaultWithinCeiling(7, 1)).toThrow('ceiling of 1 day —');
-  });
-});

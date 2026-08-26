@@ -52,6 +52,15 @@ export const RK = {
   // or the pot named by `bindingId`. Rule-driven advances stay in-process in automation-worker and
   // never touch this key.
   BLUEPRINT_PHASE_ADVANCE: 'blueprint.phase.advance',
+  // An out-of-band retention sweep was asked for (F18.13/F18.15) — an admin's "Apply now" or a
+  // user's. NEVER run inline in the request: it deletes millions of rows (no HTTP timeout survives
+  // that, and a client retry would try to start a second sweep), `api` is the request-serving
+  // process whose connection pool every user shares, and automation-worker already owns the pass,
+  // its batching and its cron.
+  //
+  // The payload is a WAKE-UP, NOT AN AUTHORITY: it names a `retention_runs` row, and the worker
+  // re-reads the scope from that row. Nothing a request body can reach decides whose data is swept.
+  RETENTION_SWEEP_REQUESTED: 'retention.sweep.requested',
 } as const;
 
 export type RoutingKey = (typeof RK)[keyof typeof RK];
@@ -93,6 +102,7 @@ export const QUEUES = {
   NOTIFICATION_PUBLISH: 'q.notification.publish',
   NOTIFICATION_SEND: 'q.notification.send',
   BLUEPRINT_PHASE_ADVANCE: 'q.blueprint.phase.advance',
+  RETENTION_SWEEP: 'q.retention.sweep',
   DLQ: 'q.dlq',
 } as const;
 

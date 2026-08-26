@@ -35,6 +35,10 @@ const RENDERERS: Record<string, Renderer> = {
     title: 'Setup moved to a new phase',
     body: `"${str(d, 'instanceName', 'Your setup')}" moved from ${str(d, 'fromPhase', 'its previous phase')} to ${str(d, 'toPhase', 'the next phase')}. Its automations now use the new phase's targets.`,
   }),
+  retention_trimmed: (d) => ({
+    title: 'Your history settings were adjusted',
+    body: `An administrator lowered the maximum ${str(d, 'dataKindLabel', 'history')} retention to ${str(d, 'ceiling')} days. Your ${str(d, 'bucketLabel', 'setting')} was ${str(d, 'previous')} and has been reduced to fit. Anything past the new limit is removed on the next cleanup.`,
+  }),
   device_offline: (d) => ({
     title: 'Device offline',
     body: `${str(d, 'deviceName', 'A device')} went offline.`,

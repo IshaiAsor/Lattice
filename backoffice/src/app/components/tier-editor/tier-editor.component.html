@@ -1,0 +1,108 @@
+<div class="te">
+  @if (chainBreak(); as broken) {
+    <!-- Shown as you build the list, not on Save: the rule is not obvious from the numbers, and
+         discovering it after pressing Save means re-deriving what you just did. -->
+    <div class="te-warn">
+      <mat-icon>link_off</mat-icon>
+      <span>{{ broken }}</span>
+    </div>
+  }
+
+  <div class="te-rows">
+    @for (t of sorted(); track t.bucket) {
+      <div class="te-row" [class.is-raw]="isRaw(t)" [class.over]="aboveCeiling(t)">
+        <div class="te-bucket">
+          <span class="te-code">{{ bucketFor(t.bucket)?.label ?? t.bucket }}</span>
+          @if (isRaw(t)) {
+            <span class="te-tag">every reading</span>
+          } @else if (bucketFor(t.bucket); as b) {
+            <span class="te-cost">{{ bucketCost(b) }}</span>
+          }
+          @if (bucketFor(t.bucket)?.isBuiltin === false) {
+            <span class="te-tag te-custom">custom</span>
+          }
+        </div>
+
+        <div class="te-choices">
+          @for (d of choices; track d) {
+            <button
+              type="button"
+              class="te-chip"
+              [class.on]="t.keepDays === d"
+              [disabled]="disabled()"
+              [class.blocked]="ceilingFor(t.bucket) !== null && (d === 0 || d > ceilingFor(t.bucket)!)"
+              [title]="
+                ceilingFor(t.bucket) !== null && (d === 0 || d > ceilingFor(t.bucket)!)
+                  ? 'Above the platform limit of ' + formatDays(ceilingFor(t.bucket))
+                  : ''
+              "
+              (click)="setKeep(t.bucket, d)"
+            >
+              {{ formatDays(d) }}
+            </button>
+          }
+        </div>
+
+        <div class="te-actions">
+          @if (ceilingFor(t.bucket) !== null) {
+            <span class="te-ceiling">max {{ formatDays(ceilingFor(t.bucket)) }}</span>
+          }
+          @if (!isRaw(t)) {
+            <button
+              type="button"
+              class="te-remove"
+              [disabled]="disabled()"
+              title="Remove this tier. Its stored rollups are cleared by the next cleanup."
+              (click)="remove(t.bucket)"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          } @else {
+            <!-- Raw is never removable: it is what says how long the readings themselves are kept,
+                 and the rollups are built from them. -->
+            <mat-icon class="te-lock" title="Raw is always kept — the rollups are built from it"
+              >lock</mat-icon
+            >
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="te-foot">
+    <div class="te-add">
+      @if (kind() === 'frame') {
+        <!-- Not a policy limit and not removable by raising one: a frame is an image, and there is
+             no average of two images. Camera history is kept or it is not. -->
+        <span class="te-limit">Camera frames are images — there is nothing to summarise</span>
+      } @else {
+        @for (b of available(); track b.code) {
+          <button type="button" class="te-add-btn" [disabled]="disabled()" (click)="add(b.code)">
+            + {{ b.label }}
+          </button>
+        }
+        <!-- Offered for every kind that can hold a summary at all. Commands and device events are
+             stored in DATE-keyed tables, so the dialog refuses anything that is not a whole number
+             of days -- a constraint of where the rows live, not a cap on how many tiers you get. -->
+        <button
+          type="button"
+          class="te-add-btn te-add-custom"
+          [disabled]="disabled()"
+          (click)="addCustom()"
+        >
+          + Custom size…
+        </button>
+      }
+    </div>
+
+    @if (totalRowsPerDay() > 0) {
+      <!-- The cost line. A 5m tier on a 10-second sensor produces more rollup rows than some raw
+           windows keep, and that is not obvious until it is counted. -->
+      <div class="te-cost-total">
+        <mat-icon>storage</mat-icon>
+        ~{{ totalRowsPerDay() }} rollup {{ totalRowsPerDay() === 1 ? 'row' : 'rows' }} per sensor per
+        day
+      </div>
+    }
+  </div>
+</div>

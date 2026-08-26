@@ -62,16 +62,18 @@ src/
 
 ## Shared packages (`packages/`, scoped `@lattice/*`)
 
-| Package                          | Purpose                                                                                           |
-| -------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `@lattice/logger`                | pino logger + pino-http factories                                                                 |
-| `@lattice/otel`                  | OpenTelemetry init, Prometheus metrics handler, trace-id log mixin                                |
-| `@lattice/queue`                 | RabbitMQ layer: `connect`/`publish`/`consume`, **the `RK`/`QUEUES` event contract**, DLQ topology |
-| `@lattice/prisma-client`         | shared Prisma client wrapper                                                                      |
-| `@lattice/jwt`                   | JWT signing/verification (purposes: `app_usage`, `device_usage`, `provisioning`)                  |
-| `@lattice/ioredis`               | Valkey/Redis client + types                                                                       |
-| `@lattice/ml`                    | ML types/helpers                                                                                  |
-| `@lattice/capability-validation` | device capability validation                                                                      |
+| Package                          | Purpose                                                                                                                          |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `@lattice/logger`                | pino logger + pino-http factories                                                                                                |
+| `@lattice/otel`                  | OpenTelemetry init, Prometheus metrics handler, trace-id log mixin                                                               |
+| `@lattice/queue`                 | RabbitMQ layer: `connect`/`publish`/`consume`, **the `RK`/`QUEUES` event contract**, DLQ topology                                |
+| `@lattice/prisma-client`         | shared Prisma client wrapper                                                                                                     |
+| `@lattice/jwt`                   | JWT signing/verification (purposes: `app_usage`, `device_usage`, `provisioning`)                                                 |
+| `@lattice/ioredis`               | Valkey/Redis client + types                                                                                                      |
+| `@lattice/ml`                    | ML types/helpers                                                                                                                 |
+| `@lattice/capability-validation` | device capability validation                                                                                                     |
+| `@lattice/params`                | blueprint parameter refs, resolution, schedules, thresholds                                                                      |
+| `@lattice/retention`             | retention arithmetic: bucket flooring, tier resolution across scopes, keep-window clamping, rollup folding, query-tier selection |
 
 Rules:
 
@@ -79,6 +81,11 @@ Rules:
 - Services depend via `"@lattice/x": "*"` and import bare specifiers.
 - Packages build to `dist/`; `npm run build:libs` builds them in dependency order — keep
   that script's order correct when adding a package.
+- **A new package is four edits, not one.** `build:libs`, the root `tsconfig.json` references, the
+  consuming service's `package.json`, **and that service's `Dockerfile`** — which enumerates every
+  `@lattice` package by hand in both stages (`COPY packages/x`, the `npm run build -w` chain, and
+  the runtime `package.json` + `dist` copy). Miss the Dockerfile and everything passes locally while
+  the image build fails in CI.
 - Cross-service event changes (new routing key, payload shape) happen in `@lattice/queue`
   (`RK`, `QUEUES`, `src/types.ts`) first; consumers/producers reference the constants.
 

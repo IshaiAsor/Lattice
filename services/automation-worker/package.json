@@ -12,6 +12,7 @@
     "@lattice/logger": "*",
     "@lattice/otel": "*",
     "@lattice/params": "*",
+    "@lattice/retention": "*",
     "@lattice/prisma-client": "*",
     "@lattice/queue": "*",
     "express": "^4.21.2",

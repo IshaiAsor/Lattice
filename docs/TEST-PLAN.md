@@ -405,17 +405,8 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - reloads again after the previous one has fired
 - swallows a failed dispatch — the config write has already committed
 
-### History — `history.bucket-select.test.ts` ✅ (F18.2 series query planning)
+### History — `history.bucket-select.test.ts` ✅ (F18.2/F18.9 series query planning)
 
-- reads raw rows for a short range
-- reads hourly buckets for a range of weeks
-- reads daily buckets for a range of months
-- honours an explicit hourly request on a short range
-- refuses raw for a range wider than raw retention
-- allows raw when it was asked for and the range is narrow
-- ignores an unrecognised bucket and picks automatically
-  - the driver is how many points the client would receive, not how old the data is; and raw is
-    refused over wide ranges because pruning may have removed those rows entirely
 - defaults to the last seven days
 - takes an explicit range
 - swaps a reversed range rather than returning nothing
@@ -424,26 +415,32 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - caps at the maximum
 - rejects zero and negatives
 - ignores a non-numeric limit
+- reads raw rows for a single day
+- steps up to hourly buckets once raw has been pruned
+- steps up to daily buckets for a range of months
+- picks a 15-minute tier once one is added, with no code change
+- uses a custom 90-minute tier the same way as a seeded one
+- skips a tier whose window no longer reaches the range
+- honours an explicit request for a tier that is still available
+- ignores a request for a tier that has been pruned
+- falls back to the coarsest tier when every window has been outrun
+- answers from raw alone when nothing else is configured
+- returns null when there are no tiers at all
+  - `selectBucket` above answers with one of three hard-coded names; `selectTier`
+    (`@lattice/retention`) answers from the tier list that is actually configured, which is what
+    makes "an admin adds a 15m tier and the chart uses it" true with no release. The decisive
+    filter is the keep window, not the range width — a range older than a tier's retention would
+    draw an empty chart, and an empty chart reads as "the device was off"
 
 ### History — `history.retention-logic.test.ts` ✅ (F18.1 retention arithmetic)
 
-- takes the platform default when the user has chosen nothing
-- takes the user choice over the default
-- leaves a choice alone when there is no ceiling
-- clamps a choice that exceeds the ceiling
-- leaves a choice below the ceiling alone
-- clamps forever to the ceiling
-- keeps forever when no ceiling is set
-- passes a null tier through as null
-  - two encodings meet here and they are deliberately different: on a `*_days` column `0` means
-    KEEP FOREVER, while on a `max_*` ceiling NULL means UNCAPPED. `Math.min` would have read
-    forever as the smallest value and silently defeated every cap
-- follows the platform default when the user has no preference row
-- applies a user override
-- binds a user override to the admin ceiling
-- carries the platform enabled switch through
 - returns a cutoff that many days back
 - deletes nothing when the window is forever
+  - The `0` here is the feature's first counterintuitive encoding: on a `*_days` value `0` means
+    KEEP FOREVER, so it is the largest window while being the smallest number, and a `Math.min`
+    would read it as the smallest and silently defeat every cap. The ceiling half of that pair
+    (`NULL` = UNCAPPED) moved to `history.retention-tiers.test.ts` with `assertTierList`, and the
+    direction-of-change half to `history.retention-activity.test.ts`.
 - deletes nothing when the kind is disabled
 - deletes nothing for a null tier
 - truncates to the start of the UTC hour
@@ -456,19 +453,118 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
   - `sensor_history.value` is TEXT and under no obligation to be numeric — a switch's history is
     "on"/"off". Those still get a bucket (count, error count, last value) with the numeric
     aggregates left NULL rather than a NaN forced through min/max/avg
-- lets any default through when the ceiling is uncapped
-- treats forever as above every finite ceiling
-- allows a default at or under the ceiling
-- rejects a default over the ceiling
-- is silent on a valid pair
-- throws a 400 naming both numbers
-- says "forever" rather than 0 when that is the breach
-- does not write "1 days"
   - the admin page's half of the same two encodings (`api/src/services/retention-rules.ts`). The
     worker clamps a default that sits above its ceiling, so nothing is lost — but the page then
     states a window nobody gets ("every user starts on 14 days" beside "users may not exceed 7").
     The API refuses the pair so the number shown is the number applied, and `0` (forever) counts
     as above every finite ceiling however small the number reads
+
+### History — `history.retention-activity.test.ts` ✅ (F18.19 the audit trail's "how")
+
+- reports an added tier, a removed tier and a changed window
+- ignores a reordering that leaves every window untouched
+- treats forever → a finite window as destructive, and the reverse as not
+- leads the summary with the destructive changes
+- counts the remainder instead of truncating a phrase mid-word
+- describes a ceiling move using uncapped rather than null
+- recognises uncapped → capped and forever → capped as lowerings
+- does not treat raising or removing a ceiling as a lowering
+- formats windows in the vocabulary the rest of the feature uses
+- phrases each kind of change as its own clause
+  - Worth its own file because this is where the feature's two counterintuitive encodings meet a
+    comparison operator: on a keep window `0` is FOREVER (the largest value, the smallest number),
+    and on a ceiling `null` is UNCAPPED (larger than any number). A naive `<` gets both backwards,
+    and the result is an audit entry describing a change in the wrong direction — worse than no
+    entry at all, because it will be believed.
+
+### History — `history.retention-tiers.test.ts` ✅ (F18.9/F18.12 the N-tier retention core)
+
+- reproduces the UTC hour and UTC midnight for the hour and day sizes
+- floors a 90-minute bucket onto its own grid
+- starts every day of a 90-minute grid at midnight
+- truncates a week to Monday rather than the epoch Thursday
+- refuses to floor onto the raw tier, which has no grid
+- accepts 90 minutes, which divides a day sixteen times
+- accepts a whole number of days
+- refuses seven hours and suggests six or eight
+- refuses anything finer than a minute
+- refuses a fractional size
+- names a size the way a human would type it
+- lets a scalar use any bucket
+- restricts command and event history to whole days
+- gives camera frames raw and nothing else
+- lets every kind keep raw rows
+- accepts a chain that folds evenly at every step
+- refuses a bucket that is not a whole multiple of the one below it
+- names both sizes and suggests a predecessor that would work
+- sorts before checking the chain, so the stored order cannot hide a break
+- requires a raw tier
+- refuses an empty list
+- refuses the same bucket twice
+- does not cap how many tiers a kind may hold
+- refuses a bucket finer than the platform minimum
+- never treats raw as below the platform minimum
+- refuses a bucket the kind cannot roll up
+- refuses a tier above its platform ceiling
+- treats a forever tier as above every finite ceiling
+- refuses a raw window shorter than the rollup lookback
+- keeps a two-day floor under raw even when the lookback is shorter
+- lets a forever raw window through under any lookback
+- applies no raw floor when the list has no rollup tier
+- refuses a negative or fractional keep window
+- refuses a keep window past a decade
+  - everything here constrains the tier **list**, never a size. `90m` is a perfectly legal
+    bucket; it simply cannot sit directly above `1h`, because 5400/3600 is 1.5 and half a
+    bucket cannot be folded. That distinction is what lets the catalog stay open to any
+    admissible size while the chain stays sound.
+  - the raw floor is the most important new invariant in Phase 2: rollups are built by reading
+    raw rows, so a raw window below the lookback deletes readings before they were ever
+    summarised — and the loss is invisible, because the rollup rows that would have shown it
+    were never written
+- falls back to the platform list when nothing else is configured
+- takes the user list over the platform list
+- takes the blueprint list over the user list
+- takes the device list over the blueprint list
+- takes the action list over the device list
+- takes the whole list from one scope rather than merging tiers
+- falls back to the device list when the action rows are removed
+- clamps each tier against the platform ceiling for the same bucket
+- clamps a forever tier down to the ceiling
+- leaves a bucket the platform does not configure uncapped
+- rejects a bucket that is not in the catalog, with a reason
+- rejects a bucket the kind cannot roll up, with a reason
+- rejects a bucket finer than the platform minimum but keeps raw
+- rejects the same bucket listed twice rather than folding it in once
+- sorts the tiers by size and renumbers their positions
+- carries each bucket size and anchor through to the caller
+- returns nothing to prune with when no scope is configured at all
+  - the whole list wins, not tier by tier. Merging would leave F18.12's own acceptance criterion
+    ("removing the action's tier falls back to the device's") without a single answer, and a
+    half-inherited list composes differently depending on which half you remove
+- averages from counts rather than averaging averages
+- carries min and max up from the children
+- counts a child with no numeric readings without inventing an average
+- sums fault counts across the children
+- takes the last value from the last child that has one
+- produces the same average as folding the raw readings would have
+  - a coarse tier is folded from the next finer one rather than from raw — a `1w` tier built
+    from raw would read a week of 10-second readings per action per night. That only works if
+    the average is reconstructed from counts: 24 hourly averages averaged together weights an
+    hour with two readings the same as an hour with three hundred
+- names the lock key a scope would hold
+- lets a sweep start when nothing is running
+- refuses a platform sweep while any run is active
+- refuses a user sweep while the platform sweep is running
+- refuses a second sweep for the same user
+- lets two different users sweep at once
+- takes the oldest conflicting run, so the refusal names the one actually running
+  - the two-level lock (F18.13/F18.15). `lock_key` UNIQUE stops two runs with the SAME key;
+    an advisory lock around the claim stops runs with DIFFERENT keys that still overlap — a
+    global sweep and `user:7`'s hold different keys yet touch the same rows. The rule lives
+    in `@lattice/retention` because BOTH `api` (which must answer 409 in the request) and
+    automation-worker (the cron) claim, and two copies could disagree
+- ⬜ a duplicate bucket code resolves to the catalog row that already exists
+- ⬜ a custom bucket cannot be deleted while any rollup row still uses it
 
 ### Commands — `commands.command-models.test.js` ✅
 

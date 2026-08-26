@@ -13,6 +13,12 @@ export const NOTIFICATION_EVENT_TYPES = [
   'ota_available',
   'email_verification',
   'password_reset',
+  // An admin lowered a ceiling below what this user had chosen, and their window was trimmed to
+  // fit (F18.16). Sent because the alternative is silence: the sweep quietly deletes history the
+  // user believed they had asked to keep, and nothing in the UI would ever say why. There is no
+  // grace period by design — a grace period means knowingly storing data above the platform's own
+  // stated ceiling.
+  'retention_trimmed',
 ] as const;
 export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
 

@@ -43,6 +43,7 @@
 }
 .us-nav-item mat-icon {
   font-size: 17px;
+  flex: 0 0 17px;
   width: 17px;
   height: 17px;
 }
@@ -158,6 +159,7 @@
 }
 .us-kind mat-icon {
   font-size: 19px;
+  flex: 0 0 19px;
   width: 19px;
   height: 19px;
   margin-top: 1px;
@@ -310,4 +312,71 @@
 }
 .us-choices button.capped:hover {
   background: transparent;
+}
+
+/* ── Phase 2: tier lists ──────────────────────────────────────────────────── */
+
+.us-cleanup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-alt);
+  /* This is the user's primary action on the storage card — it starts an irreversible delete. It
+     was --text-dim (#3a4f68 in dark), which made the one button on the panel the least readable
+     thing on it. */
+  color: var(--text);
+  font-weight: 500;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.us-cleanup:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.us-cleanup:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.us-cleanup mat-icon {
+  font-size: 16px;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.us-hint-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+.us-save {
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.us-save:hover {
+  filter: brightness(1.08);
+}
+
+.us-activity {
+  margin-top: 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--card-divider);
+}
+
+/* A custom element is `display: inline` by default, so a margin on it is silently dropped -- the
+   header and the first tier row ended up touching. 11px is the same step the storage card puts
+   between its own header and the bar beneath it. */
+app-tier-editor {
+  display: block;
+  margin-top: 11px;
 }

@@ -2,6 +2,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import {
@@ -9,9 +10,17 @@ import {
   formatBytes,
   formatDays,
   type DataKind,
-  type MyRetentionView,
   type UsageView,
 } from '../../services/retention.service';
+import {
+  RetentionTiersService,
+  type BucketView,
+  type MyTiersView,
+  type TierView,
+} from '../../services/retention-tiers.service';
+import { TierEditorComponent } from '../tier-editor/tier-editor.component';
+import { RetentionApplyDialogComponent } from '../retention-apply-dialog/retention-apply-dialog.component';
+import { RetentionActivityComponent } from '../retention-activity/retention-activity.component';
 
 // Settings → Data & storage (the F5.10 shell, scoped).
 //
@@ -57,56 +66,50 @@ const KINDS: KindMeta[] = [
   },
 ];
 
-/** The choices offered in the UI. 0 is Forever — never "delete immediately". */
-const CHOICES = [0, 7, 14, 30, 90, 180, 365];
 
 @Component({
   selector: 'app-user-settings',
   standalone: true,
-  imports: [CommonModule, MatIconModule],
+  imports: [CommonModule, MatIconModule, TierEditorComponent, RetentionActivityComponent],
   templateUrl: './user-settings.component.html',
   styleUrls: ['./user-settings.component.css'],
 })
 export class UserSettingsComponent {
   private retention = inject(RetentionService);
+  private tiersApi = inject(RetentionTiersService);
+  private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
   private destroyRef = inject(DestroyRef);
 
   readonly kinds = KINDS;
-  readonly choices = CHOICES;
 
-  /**
-   * Whether a choice is above the admin's ceiling for this kind.
-   *
-   * The window was already clamped at prune time and the page said so afterwards — but an
-   * over-ceiling chip still rendered as selected, so the page read as though the ceiling had been
-   * overridden. Offering only what can actually take effect is the honest version.
-   *
-   * `0` is Forever, which is the LARGEST value despite being numerically the smallest — so it is
-   * blocked by any ceiling at all, the same rule the worker's clampDays applies.
-   */
-  exceedsCap(days: number, maxDays: number | null): boolean {
-    if (maxDays === null) return false;
-    return days === 0 || days > maxDays;
-  }
   readonly formatBytes = formatBytes;
   readonly formatDays = formatDays;
 
-  policies = signal<MyRetentionView[]>([]);
+  policies = signal<MyTiersView[]>([]);
+  buckets = signal<BucketView[]>([]);
   usage = signal<UsageView | null>(null);
   loading = signal(true);
+  /** Pending per-kind edits, so a half-built list is not saved on every chip press. */
+  drafts = signal<Record<string, TierView[]>>({});
 
   constructor() {
     this.load();
   }
 
-  private load(): void {
-    forkJoin({ mine: this.retention.mine(), usage: this.retention.myUsage() })
+  load(): void {
+    forkJoin({
+      mine: this.tiersApi.mine(),
+      buckets: this.tiersApi.buckets(),
+      usage: this.retention.myUsage(),
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (r) => {
           this.policies.set(r.mine);
+          this.buckets.set(r.buckets);
           this.usage.set(r.usage);
+          this.drafts.set({});
           this.loading.set(false);
         },
         error: () => {
@@ -116,7 +119,7 @@ export class UserSettingsComponent {
       });
   }
 
-  for(kind: DataKind): MyRetentionView | undefined {
+  for(kind: DataKind): MyTiersView | undefined {
     return this.policies().find((p) => p.dataKind === kind);
   }
 
@@ -147,28 +150,75 @@ export class UserSettingsComponent {
     return total === 0 ? 0 : (this.usageFor(kind) / total) * 100;
   }
 
-  set(kind: DataKind, rawDays: number): void {
-    this.retention
-      .setMine(kind, { rawDays })
+  tiersFor(kind: DataKind): TierView[] {
+    return this.drafts()[kind] ?? this.for(kind)?.tiers ?? [];
+  }
+
+  /** Ceilings per bucket, so the editor can strike through a choice the platform will refuse. */
+  ceilingsFor(kind: DataKind): Record<string, number | null> {
+    const out: Record<string, number | null> = {};
+    for (const t of this.for(kind)?.platformTiers ?? []) out[t.bucket] = t.maxKeepDays;
+    return out;
+  }
+
+  dirty(kind: DataKind): boolean {
+    return this.drafts()[kind] !== undefined;
+  }
+
+  onTiersChanged(kind: DataKind, tiers: TierView[]): void {
+    this.drafts.update((d) => ({ ...d, [kind]: tiers }));
+  }
+
+  discard(kind: DataKind): void {
+    this.drafts.update((d) => {
+      const next = { ...d };
+      delete next[kind];
+      return next;
+    });
+  }
+
+  save(kind: DataKind): void {
+    this.tiersApi
+      .setMine(kind, this.tiersFor(kind))
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (rows) => {
           this.policies.set(rows);
+          this.discard(kind);
           this.snack.open('Saved', undefined, { duration: 1500 });
         },
+        // The refusal text is the useful part — "the 90m tier cannot fold from 1h; use 30m or 45m
+        // below it" says what to do next, which a generic "could not save" never does.
         error: (e: { error?: { error?: string } }) =>
-          this.snack.open(e.error?.error ?? 'Could not save', 'Dismiss', { duration: 4000 }),
+          this.snack.open(e.error?.error ?? 'Could not save', 'Dismiss', { duration: 6000 }),
       });
   }
 
-  /** Reset DELETES the override, so this user follows future changes to the default too. */
+  /** Counts first, then runs — the dialog never offers a confirm above an unknown number. */
+  cleanUpNow(): void {
+    this.dialog
+      .open(RetentionApplyDialogComponent, {
+        width: '520px',
+        panelClass: ['glass-dialog', 'solid-dialog'],
+        // Focus the panel, not a button: an auto-focused Cancel next to a destructive action reads as
+        // a choice already made, and its ring makes the two buttons look mismatched.
+        autoFocus: 'dialog',
+        data: { scope: 'user' },
+      })
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.load());
+  }
+
+  /** Reset DELETES the rows, so this user follows future changes to the platform list too. */
   reset(kind: DataKind): void {
-    this.retention
+    this.tiersApi
       .resetMine(kind)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (rows) => {
           this.policies.set(rows);
+          this.discard(kind);
           this.snack.open('Back to the platform default', undefined, { duration: 1800 });
         },
         error: () => this.snack.open('Could not reset', 'Dismiss', { duration: 4000 }),

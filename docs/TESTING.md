@@ -150,6 +150,28 @@ Test files are named `<domain>.<subject>.<tier-suffix>` — one file per domain 
 | UI e2e       | device toggle round-trip (against SimDevice) | ⬜     |
 | UI e2e       | provisioning wizard smoke; chat send/receive | ⬜     |
 
+### History & retention (F18)
+
+| Tier        | Test                                                                                                                               | Status                               |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Unit        | keep-window arithmetic: the two encodings (`0` = forever, `NULL` = uncapped) and the clamp that binds them                         | ✅ `history.retention-logic.test.ts` |
+| Unit        | bucket flooring (generic + the `1w` Monday anchor), admission rules, per-kind limits                                               | ✅ `history.retention-tiers.test.ts` |
+| Unit        | tier lists: chain divisibility, the mandatory raw tier, **the raw floor**, `min_bucket`, ceilings, and that tier COUNT is uncapped | ✅ `history.retention-tiers.test.ts` |
+| Unit        | five-scope resolution, whole-list inheritance, per-bucket clamping, rejection reasons                                              | ✅ `history.retention-tiers.test.ts` |
+| Unit        | `foldRollup` — a parent folded from children equals the parent folded from the readings                                            | ✅ `history.retention-tiers.test.ts` |
+| Unit        | the two-level sweep lock: who may sweep while who else is sweeping                                                                 | ✅ `history.retention-tiers.test.ts` |
+| Unit        | query planning: the three-rung ladder and the data-driven `selectTier`                                                             | ✅ `history.bucket-select.test.ts`   |
+| E2E         | ⬜ admin lowers a ceiling → Apply → run reaches `ok`, over-limit rows gone, affected user notified                                 | ⬜                                   |
+| E2E         | ⬜ a second press while running returns 409; a user sweep leaves another user's rows untouched                                     | ⬜                                   |
+| Integration | ⬜ worker: rollup chain builds each tier from its predecessor; orphan sweep clears an unconfigured bucket                          | ⬜                                   |
+
+The three ⬜ rows are the Phase 2 gap and are deliberate, not an oversight. They were **verified by hand
+against the dev stack** on 2026-08-25 — a custom `90m` tier folded on the correct grid, the orphan
+sweep removed 428 rows, a `1d` bucket matched its `90m` children to 8 decimal places, and the lock
+refused every conflicting claim — but hand-verification is not a regression test. Writing them needs
+the ephemeral test stack (`npm run test:e2e:up`); the integration row additionally needs
+`automation-worker` added to the services this document permits integration suites for.
+
 ### Platform (queues, DLQ, migrations)
 
 | Tier        | Test                                                                                                           | Status                                  |

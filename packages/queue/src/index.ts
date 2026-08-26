@@ -44,6 +44,7 @@ const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.OTA_DISPATCH, RK.OTA_DISPATCH],
   [QUEUES.SEALED_TEMPLATE_APPLIED, RK.SEALED_TEMPLATE_APPLIED],
   [QUEUES.BLUEPRINT_PHASE_ADVANCE, RK.BLUEPRINT_PHASE_ADVANCE],
+  [QUEUES.RETENTION_SWEEP, RK.RETENTION_SWEEP_REQUESTED],
 ];
 
 function withHeartbeat(url: string, seconds = 60): string {
@@ -170,11 +171,24 @@ export function publish<T>(ch: Channel, routingKey: string, payload: T): void {
   }
 }
 
+/**
+ * Default in-flight bound per consumer. Without a prefetch, RabbitMQ pushes every ready message
+ * at once and `consume()` dispatches the handlers concurrently — so a queue backlog becomes that
+ * many simultaneous handlers. In prod this OOMKilled google-home 584 times in four days: each
+ * handler held a DB query plus an outbound HomeGraph call, and the whole backlog ran at once.
+ * Ten keeps throughput well above our message rates while capping the blast radius of a backlog.
+ */
+export const DEFAULT_PREFETCH = 10;
+
 export async function consume<T>(
   ch: Channel,
   queue: string,
   handler: (payload: T, msg: ConsumeMessage) => Promise<void>,
+  prefetch = DEFAULT_PREFETCH,
 ): Promise<void> {
+  // global=false (amqplib's default) — the bound applies per consumer, not to the whole channel,
+  // so services that call consume() several times on the one shared channel each get their own.
+  await ch.prefetch(prefetch);
   await ch.consume(queue, async (msg) => {
     if (!msg) return;
     try {

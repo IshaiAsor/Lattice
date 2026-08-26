@@ -1,0 +1,20 @@
+-- F18.9 shipped `retention_policy.max_tiers`: a per-kind cap on how many tiers a data kind's list
+-- may hold, seeded 5 / 2 / 1. Removed on the user's call (2026-08-26).
+--
+-- The cap limited the wrong axis. What a tier list costs is dominated by its FINEST bucket, not by
+-- how many buckets it has: a 30m tier writes 48 rollup rows per sensor per day, while every coarser
+-- tier stacked above it together writes about one. So the count cap blocked the additions that are
+-- nearly free and permitted the one that is expensive, and a list could sit at the limit while
+-- costing far more than a longer, coarser one.
+--
+-- Two constraints already bound a list, and both survive:
+--   * `min_bucket` bounds the axis that actually costs -- how fine any summary may be.
+--   * The chain rule (each tier a whole multiple of the one below it) bounds LENGTH on its own:
+--     between the 60-second floor and the 3650-day ceiling a strictly-multiplying chain cannot
+--     hold much more than twenty entries.
+--
+-- Per-kind bucket ELIGIBILITY is unaffected and still enforced in code, because it is a property of
+-- where the rows live rather than a policy choice: `command` and `device_event` roll up into
+-- DATE-keyed tables and so take whole-day buckets only, and `frame` takes none -- an image has no
+-- average. Those are not limits an admin can raise.
+ALTER TABLE "retention_policy" DROP COLUMN IF EXISTS "max_tiers";

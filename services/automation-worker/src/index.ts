@@ -16,7 +16,8 @@ import {
   sweepUnsettledCommands,
   reapSilentDevices,
 } from './services/reconcile.service';
-import { runRetentionPass } from './services/retention.service';
+import { runNightlySweep, reapStale } from './services/retention-run';
+import { retentionSweepConsumer } from './consumers/retention-sweep.consumer';
 import { healthRouter } from './routes/health.routes';
 
 const { metricsHandler } = initOTel('automation-worker');
@@ -32,7 +33,12 @@ async function main() {
   await consume(ch, QUEUES.RULES_EVALUATE, rulesEvaluateConsumer(ch));
   await consume(ch, QUEUES.TELEMETRY_ARRIVED_AUTOMATION, telemetryTriggerConsumer(ch));
   await consume(ch, QUEUES.BLUEPRINT_PHASE_ADVANCE, phaseAdvanceConsumer(ch));
-  log.info('consumers started (rules-evaluate, telemetry-trigger, phase-advance)');
+  await consume(ch, QUEUES.RETENTION_SWEEP, retentionSweepConsumer());
+  log.info('consumers started (rules-evaluate, telemetry-trigger, phase-advance, retention-sweep)');
+
+  // Release any run a previous process died holding. Until this runs, a crash mid-sweep leaves
+  // `lock_key` held and nothing — not the cron, not an Apply — can ever claim again.
+  await reapStale().catch((err) => log.error({ err }, 'error reaping stale retention runs'));
 
   cron.schedule('*/10 * * * * *', () => rulesEngine.evaluateScheduledRules(ch));
   log.info('scheduled rules cron started (every 10 seconds)');
@@ -76,12 +82,16 @@ async function main() {
   });
   log.info({ cron: env.liveness.cron }, 'device liveness reaper cron started');
 
-  // History rollup + retention (F18.1). Nightly and slow by design: it is the only job here that
-  // touches the biggest tables in the system, and everything it does is idempotent, so a missed
-  // night self-heals on the next pass rather than needing a catch-up run.
+  // History rollup + retention (F18.1/F18.9). Nightly and slow by design: it is the only job here
+  // that touches the biggest tables in the system, and everything it does is idempotent, so a
+  // missed night self-heals on the next pass rather than needing a catch-up run.
+  //
+  // It claims through the same lock an Apply does, so the cron and a user's sweep can never
+  // overlap. A cron that loses the claim skips the night rather than queuing — every window is
+  // computed from `now`, so tomorrow's pass does whatever tonight's would have.
   if (env.retention.enabled) {
     cron.schedule(env.retention.cron, () => {
-      runRetentionPass().catch((err) => log.error({ err }, 'error running retention pass'));
+      runNightlySweep().catch((err) => log.error({ err }, 'error running retention pass'));
     });
     log.info({ cron: env.retention.cron }, 'history retention cron started');
   } else {

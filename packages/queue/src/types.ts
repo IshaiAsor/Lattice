@@ -283,6 +283,22 @@ export interface NotificationSendPayload {
 // consumed by automation-worker — the single writer of phase columns. It advances exactly ONE
 // owner: the setup when `bindingId` is null, otherwise the one pot with that binding id. The target
 // phase is not carried — the worker reads the current phase's `advance_to_key` (null ⇒ next).
+/**
+ * A request to run the retention sweep out of band (F18.13/F18.15).
+ *
+ * Deliberately almost empty. `runId` names a `retention_runs` row that the API has already
+ * inserted, holding the trigger, who asked, and — critically — `scope_user_id`. The worker reads
+ * the scope from THAT ROW, never from this message: a payload that carried a user id would be a
+ * request body deciding whose data gets deleted.
+ *
+ * `trigger` rides along only so the consumer can log what it picked up before it touches the
+ * database; it is re-read from the row too.
+ */
+export interface RetentionSweepRequestedPayload {
+  runId: number;
+  trigger: 'cron' | 'admin' | 'user';
+}
+
 export interface BlueprintPhaseAdvancePayload {
   userId: string;
   instanceId: number;

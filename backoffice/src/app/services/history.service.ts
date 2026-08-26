@@ -19,8 +19,14 @@ export interface SeriesPoint {
 }
 
 export interface SeriesView {
-  /** Which table answered — surfaced so the chart can label wide ranges as averaged, not sampled. */
-  bucket: 'raw' | 'hour' | 'day';
+  /**
+   * Which tier answered, as a `retention_buckets.code` — `raw`, `1h`, a custom `90m`, whatever is
+   * configured. NOT a fixed union: the vocabulary is data (F18.9), so a closed type here would go
+   * stale the first time anyone adds a size.
+   */
+  bucket: string;
+  /** `fallback` means everything finer has been pruned past this range, not that the device was off. */
+  reason: 'requested' | 'auto' | 'fallback';
   from: string;
   to: string;
   points: SeriesPoint[];

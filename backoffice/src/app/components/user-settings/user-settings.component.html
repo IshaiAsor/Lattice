@@ -22,6 +22,13 @@
           </div>
           <div class="us-metric">
             <span class="us-value">{{ formatBytes(totalBytes()) }}</span>
+            @if (totalBytes() > 0) {
+              <!-- Applying immediately rather than waiting for tonight's pass: someone who has just
+                   shortened a window wants the space back now, not tomorrow. -->
+              <button type="button" class="us-cleanup" (click)="cleanUpNow()">
+                <mat-icon>cleaning_services</mat-icon><span>Clean up now</span>
+              </button>
+            }
           </div>
         </div>
 
@@ -77,42 +84,47 @@
               </div>
             </div>
 
-            <div class="us-controls">
-              <div class="us-choices">
-                @for (c of choices; track c) {
-                  <button
-                    type="button"
-                    [class.on]="p.rawDays === c"
-                    [class.capped]="exceedsCap(c, p.maxRawDays)"
-                    [disabled]="exceedsCap(c, p.maxRawDays)"
-                    [title]="exceedsCap(c, p.maxRawDays)
-                      ? 'An administrator caps this at ' + formatDays(p.maxRawDays)
-                      : ''"
-                    (click)="set(k.kind, c)"
-                  >{{ formatDays(c) }}</button>
+            <app-tier-editor
+              [tiers]="tiersFor(k.kind)"
+              [buckets]="buckets()"
+              [kind]="k.kind"
+              [minBucket]="p.minBucket"
+              [ceilings]="ceilingsFor(k.kind)"
+              (changed)="onTiersChanged(k.kind, $event)"
+            />
+
+            <div class="us-hint">
+              <span>
+                @if (p.source === 'platform') {
+                  Following the platform list
+                } @else {
+                  Your own list
                 }
-              </div>
-              <div class="us-hint">
-                <span>
-                  Default is <b>{{ formatDays(p.defaultRawDays) }}</b>
-                  @if (p.maxRawDays !== null) {
-                    · <span class="us-cap">max {{ formatDays(p.maxRawDays) }}</span>
-                  } @else {
-                    · no limit
-                  }
-                </span>
-                @if (p.overridden) {
-                  <button type="button" class="us-reset" (click)="reset(k.kind)">Reset to default</button>
+                @if (!p.enabled) {
+                  · <span class="us-cap">cleanup is switched off for this kind</span>
                 }
-              </div>
+              </span>
+              <span class="us-hint-actions">
+                @if (dirty(k.kind)) {
+                  <button type="button" class="us-reset" (click)="discard(k.kind)">Discard</button>
+                  <button type="button" class="us-save" (click)="save(k.kind)">Save</button>
+                } @else if (p.overridden) {
+                  <button type="button" class="us-reset" (click)="reset(k.kind)">
+                    Reset to default
+                  </button>
+                }
+              </span>
             </div>
 
-            @if (p.maxRawDays !== null && p.effectiveRawDays !== p.rawDays) {
+            @if (p.rejected.length > 0) {
+              <!-- A tier that is stored but cannot be applied — usually because an admin raised the
+                   platform minimum after it was chosen. Saying so beats silently dropping it. -->
               <div class="us-clamped">
                 <mat-icon>info</mat-icon>
                 <span>
-                  Capped by an administrator — this is kept for
-                  <b>{{ formatDays(p.effectiveRawDays) }}</b>, not {{ formatDays(p.rawDays) }}.
+                  @for (r of p.rejected; track r.bucket) {
+                    <b>{{ r.bucket }}</b> is not being used — {{ r.reason }}.
+                  }
                 </span>
               </div>
             }
@@ -131,4 +143,10 @@
       }
     </div>
   </div>
+
+  <!-- Their own trail. A platform policy change appears here too: it is the answer to "why did my
+       window move", and it states nothing another user could not already see. -->
+  <section class="us-activity">
+    <app-retention-activity />
+  </section>
 </div>

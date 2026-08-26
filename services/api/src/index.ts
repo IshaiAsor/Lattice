@@ -19,7 +19,10 @@ import { scenesRouter } from './routes/scenes.routes';
 import { pipelinesRouter } from './routes/pipelines.routes';
 import { notificationsRouter } from './routes/notifications.routes';
 import { historyRouter } from './routes/history.routes';
-import { retentionRouter, adminRetentionRouter } from './routes/retention.routes';
+import { retentionRouter } from './routes/retention.routes';
+import { retentionBucketsRouter } from './routes/retention.buckets.routes';
+import { retentionScopesRouter } from './routes/retention.scopes.routes';
+import { adminRetentionRouter } from './routes/admin.retention.routes';
 import { getChannel } from './queue';
 
 // OTel must be initialised before any other imports that could create spans.
@@ -67,6 +70,10 @@ function main() {
   app.use('/api/pipelines', pipelinesRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/history', historyRouter);
+  // /buckets and /scopes are mounted BEFORE the tier router: its `/:kind` routes would otherwise
+  // swallow them, and "buckets" is not a data kind.
+  app.use('/api/retention/buckets', retentionBucketsRouter);
+  app.use('/api/retention/scopes', retentionScopesRouter);
   app.use('/api/retention', retentionRouter);
   app.use('/api/admin/retention', adminRetentionRouter);
 

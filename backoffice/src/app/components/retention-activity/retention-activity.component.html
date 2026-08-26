@@ -1,0 +1,153 @@
+<div class="ra-wrap">
+  <div class="ra-head">
+    <div>
+      <h3 class="ra-title">Activity</h3>
+      <p class="ra-sub">
+        Every retention change and every sweep, newest first. Deleting data is irreversible, so this
+        records who asked for it and what it replaced.
+      </p>
+    </div>
+    @if (actions().length > 1) {
+      <label class="ra-filter">
+        <span class="ra-filter-label">Show</span>
+        <select [value]="filter()" (change)="setFilter($any($event.target).value)">
+          <option value="">Everything</option>
+          @for (a of actions(); track a.value) {
+            <option [value]="a.value">{{ a.label }}</option>
+          }
+        </select>
+      </label>
+    }
+  </div>
+
+  @if (loading() && entries().length === 0) {
+    <p class="ra-empty">Loading…</p>
+  } @else if (shown().length === 0) {
+    <p class="ra-empty">
+      Nothing recorded yet. Changing a window, adding a bucket size or running a sweep will appear
+      here.
+    </p>
+  } @else {
+    <ul class="ra-list">
+      @for (e of shown(); track e.id) {
+        <li class="ra-item" [class.ra-open]="expanded() === e.id">
+          <div
+            class="ra-row"
+            [class.ra-clickable]="hasDetail(e)"
+            [attr.role]="hasDetail(e) ? 'button' : null"
+            [attr.tabindex]="hasDetail(e) ? 0 : null"
+            [attr.aria-expanded]="hasDetail(e) ? expanded() === e.id : null"
+            (click)="hasDetail(e) && toggle(e.id)"
+            (keyup.enter)="hasDetail(e) && toggle(e.id)"
+            (keyup.space)="hasDetail(e) && toggle(e.id)"
+          >
+            <span class="ra-icon" [attr.data-tone]="meta[e.action]?.tone ?? 'muted'">
+              <mat-icon>{{ meta[e.action]?.icon ?? 'history' }}</mat-icon>
+            </span>
+
+            <div class="ra-body">
+              <div class="ra-line1">
+                <span class="ra-action">{{ meta[e.action]?.label ?? e.action }}</span>
+                <span class="ra-target">{{ target(e) }}</span>
+              </div>
+              <p class="ra-summary">{{ e.summary }}</p>
+              <div class="ra-line3">
+                <span class="ra-who">{{ who(e) }}</span>
+                <span class="ra-dot">·</span>
+                <time [attr.title]="exact(e.at)">{{ when(e.at) }}</time>
+                @if (admin() && e.subjectUserName) {
+                  <span class="ra-dot">·</span>
+                  <span class="ra-subject">for {{ e.subjectUserName }}</span>
+                }
+                @if (e.runId) {
+                  <span class="ra-dot">·</span>
+                  <span class="ra-run">run #{{ e.runId }}</span>
+                }
+              </div>
+            </div>
+
+            @if (hasDetail(e)) {
+              <mat-icon class="ra-chev">{{
+                expanded() === e.id ? 'expand_less' : 'expand_more'
+              }}</mat-icon>
+            }
+          </div>
+
+          @if (expanded() === e.id) {
+            <div class="ra-detail">
+              @for (sec of sections(e); track sec.title) {
+                <div class="ra-sec">
+                  <h4 class="ra-sec-title">{{ sec.title }}</h4>
+
+                  @if (sec.kind === 'diff') {
+                    <table class="ra-tbl">
+                      <thead>
+                        <tr>
+                          <th scope="col">Bucket</th>
+                          <th scope="col">Was</th>
+                          <th scope="col">Now</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (r of sec.rows; track r.label) {
+                          <tr [attr.data-state]="r.state">
+                            <td class="ra-c-label">{{ r.label }}</td>
+                            <td class="ra-c-was">{{ r.before ?? '—' }}</td>
+                            <td class="ra-c-now">
+                              {{ r.after ?? '—' }}
+                              @if (r.state !== 'same') {
+                                <span class="ra-tag">{{
+                                  r.state === 'added'
+                                    ? 'added'
+                                    : r.state === 'removed'
+                                      ? 'removed'
+                                      : 'changed'
+                                }}</span>
+                              }
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  } @else {
+                    <table class="ra-tbl">
+                      <thead>
+                        <tr>
+                          <th scope="col">Data</th>
+                          <th scope="col">Summarised</th>
+                          <th scope="col">Removed</th>
+                          <th scope="col">Space</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (r of sec.rows; track r.label) {
+                          <tr>
+                            <td class="ra-c-label">{{ r.label }}</td>
+                            <td class="ra-num">{{ r.summarised | number }}</td>
+                            <td class="ra-num">{{ r.removed | number }}</td>
+                            <td class="ra-num">
+                              {{ formatBytes(r.bytes) }}
+                              <!-- Only frames store a real byte_size; the rest is the same per-row
+                                   constant the storage panel uses, and is labelled, not implied. -->
+                              <span class="ra-tag">{{ r.estimated ? 'est.' : 'measured' }}</span>
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </li>
+      }
+    </ul>
+
+    @if (cursor()) {
+      <button type="button" class="ra-more" [disabled]="loading()" (click)="load(true)">
+        {{ loading() ? 'Loading…' : 'Load older' }}
+      </button>
+    }
+  }
+</div>

@@ -1,0 +1,310 @@
+.ra-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.ra-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 6px !important;
+  min-width: 320px;
+}
+
+.ra-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  /* Was --text-dim, which in dark mode is #3a4f68 — a dark slate. That made the one sentence
+     saying this cannot be undone the least readable text in the dialog. */
+  color: var(--text-muted);
+}
+
+.ra-muted {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ra-none {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  font-size: 12.5px;
+}
+.ra-none mat-icon {
+  font-size: 18px;
+  line-height: 18px;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.ra-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 11px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-divider);
+}
+
+.ra-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.ra-line.ra-total {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--card-divider);
+  font-weight: 600;
+}
+.ra-kind {
+  /* The row label is content, not chrome — it names what is about to be deleted. */
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ra-rows {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ra-bytes {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.ra-bytes em,
+.ra-rows em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.ra-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ra-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ra-progress.done .ra-status {
+  color: var(--primary);
+}
+.ra-progress.failed .ra-status {
+  color: var(--error);
+}
+.ra-status mat-icon {
+  font-size: 19px;
+  line-height: 19px;
+  flex: 0 0 19px;
+  width: 19px;
+  height: 19px;
+}
+
+.ra-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-top-color: var(--primary);
+  animation: ra-rot 0.8s linear infinite;
+}
+@keyframes ra-rot {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ra-spin {
+    animation-duration: 2.4s;
+  }
+}
+
+.ra-error,
+.ra-err-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
+  color: var(--error);
+  font-size: 12.5px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.ra-err-box mat-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 18px;
+}
+
+.ra-actions {
+  gap: 8px;
+  /* No horizontal override. This used to be `padding: 8px 0 0 !important`, which cancelled the
+     20px the glass-dialog gives its content and actions alike — so the buttons hung 20px further
+     right than the panel above them and read as stuck to the edge. Only the top is adjusted. */
+  padding-top: 8px !important;
+}
+.ra-btn {
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.ra-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--primary);
+}
+.ra-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.ra-danger {
+  /* Deepened from the raw --error: white on #ef5350 measures 3.5:1, under AA for text this size.
+     Mixed toward black it clears 4.5 while staying the same hue as every other error in the app. */
+  background: color-mix(in srgb, var(--error) 80%, #000);
+  border-color: color-mix(in srgb, var(--error) 80%, #000);
+  color: #fff;
+  font-weight: 600;
+}
+.ra-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 92%, #000);
+  border-color: color-mix(in srgb, var(--error) 92%, #000);
+  color: #fff;
+}
+.ra-btn:disabled {
+  cursor: default;
+  /* Flattened, not just faded: a translucent accent fill still reads as a live button, which is
+     what made "Running..." look pressable while the sweep was in flight. */
+  background: transparent;
+  border-color: var(--card-divider);
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.ra-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
+/* ── The four stages of a pass ─────────────────────────────────────────────── */
+.ra-steps {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ra-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0 5px 2px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  position: relative;
+}
+
+/* The connecting rail, so the four read as one sequence rather than four bullets. */
+.ra-step + .ra-step::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: -6px;
+  width: 1px;
+  height: 12px;
+  background: var(--card-divider);
+}
+
+.ra-step-mark {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--card-divider);
+  background: transparent;
+  display: block;
+}
+
+.ra-step[data-state='done'] {
+  color: var(--text);
+}
+.ra-step[data-state='done'] .ra-step-mark {
+  border-color: var(--primary);
+  background: var(--primary);
+  /* A ring punched out of the panel fill reads as a filled tick at 13px, where a mat-icon
+     renders as a smudge. It must be the PANEL colour, not a translucent card token, or the
+     punch-out shows the page through it. */
+  box-shadow: inset 0 0 0 2px var(--overlay-solid);
+}
+
+.ra-step[data-state='active'] {
+  color: var(--text);
+  font-weight: 600;
+}
+.ra-step[data-state='active'] .ra-step-mark {
+  border-color: var(--primary);
+  animation: ra-pulse 1.4s ease-in-out infinite;
+}
+
+.ra-step[data-state='failed'] {
+  color: var(--error);
+  font-weight: 600;
+}
+.ra-step[data-state='failed'] .ra-step-mark {
+  border-color: var(--error);
+  background: var(--error);
+}
+
+.ra-step[data-state='pending'] {
+  opacity: 0.5;
+}
+
+@keyframes ra-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ra-step[data-state='active'] .ra-step-mark {
+    animation: none;
+    background: color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+}

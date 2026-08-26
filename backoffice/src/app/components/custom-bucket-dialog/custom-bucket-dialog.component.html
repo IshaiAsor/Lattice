@@ -1,0 +1,75 @@
+<h2 mat-dialog-title class="cb-title">Add a bucket size</h2>
+
+<mat-dialog-content class="cb-body">
+  <p class="cb-lead">
+    A bucket is how wide one summarised point is. Sizes are shared — if someone has already added
+    this one, you will get theirs.
+  </p>
+
+  <div class="cb-input">
+    <input
+      type="number"
+      min="1"
+      step="1"
+      class="cb-value"
+      [ngModel]="value()"
+      (ngModelChange)="value.set(+$event)"
+      aria-label="Duration"
+    />
+    <div class="cb-units">
+      @for (u of units; track u) {
+        <button type="button" class="cb-unit" [class.on]="unit() === u" (click)="unit.set(u)">
+          {{ u }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (problem(); as p) {
+    <div class="cb-problem">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ p }}</span>
+    </div>
+  } @else {
+    <div class="cb-ok">
+      <div class="cb-row">
+        <span class="cb-label">Boundaries</span>
+        <span class="cb-mono">{{ preview() }}</span>
+      </div>
+      <div class="cb-row">
+        <span class="cb-label">Cost</span>
+        <span>{{ rowsPerDay() }} rows per sensor per day</span>
+      </div>
+      @if (existing(); as e) {
+        <div class="cb-row cb-reuse">
+          <mat-icon>check_circle</mat-icon>
+          <span
+            >{{ e.label }} already exists{{
+              e.createdBy ? ' (added by ' + e.createdBy + ')' : ''
+            }}
+            — you will use that one.</span
+          >
+        </div>
+      }
+    </div>
+  }
+
+  @if (serverError(); as e) {
+    <div class="cb-problem">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ e }}</span>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end" class="cb-actions">
+  <button type="button" class="cb-btn" (click)="cancel()">Cancel</button>
+  <button
+    type="button"
+    class="cb-btn cb-primary"
+    [disabled]="!!problem() || saving()"
+    (click)="save()"
+  >
+    {{ saving() ? 'Adding…' : existing() ? 'Use it' : 'Add size' }}
+  </button>
+</mat-dialog-actions>

@@ -296,6 +296,14 @@ const CASES: ContractCase[] = [
     // without it cannot be validated on arrival, so it must not be accepted onto the queue at all.
     broken: { userId: '2', instanceId: 5, bindingId: null, source: 'pipeline' },
   },
+  {
+    rk: RK.RETENTION_SWEEP_REQUESTED,
+    canonical: { runId: 41, trigger: 'user' },
+    // A scope must NOT be accepted from the wire. The worker reads scope_user_id off the
+    // retention_runs row named by runId, so an extra userId here would be a request body deciding
+    // whose history gets deleted — the schema is strict, and this is what keeps it that way.
+    broken: { runId: 41, trigger: 'user', scopeUserId: 7 },
+  },
 ];
 
 describe('queue event contracts', () => {

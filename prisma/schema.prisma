@@ -281,6 +281,12 @@ model User {
   device_events        DeviceEvent[]
   retention_updates    RetentionPolicy[]
   retention_prefs      UserRetentionPreference[]
+  retention_tiers      UserRetentionTier[]
+  retention_buckets    RetentionBucket[]
+  retention_runs       RetentionRun[]
+  retention_tier_edits RetentionPolicyTier[]     @relation("RetentionPolicyTierUpdatedBy")
+  retention_acts       RetentionActivity[]       @relation("RetentionActivityActor")
+  retention_subject_of RetentionActivity[]       @relation("RetentionActivitySubject")
 
   @@map("users")
 }
@@ -403,6 +409,7 @@ model UserDevice {
   commands            DeviceCommand[]
   events              DeviceEvent[]
   availability_daily  DeviceAvailabilityDaily[]
+  retention_tiers     DeviceRetentionTier[]
 
   @@index([area_id])
   @@map("user_devices")
@@ -486,6 +493,7 @@ model UserDeviceAction {
   sensor_rollups    SensorRollup[]
   camera_frames     CameraFrameHistory[]
   command_rollups   CommandRollupDaily[]
+  retention_tiers   ActionRetentionTier[]
   pipeline_sensors  PipelineSensor[]
   pipeline_triggers PipelineTrigger[]         @relation("PipelineTrig")
   commands          DeviceCommand[]
@@ -939,9 +947,15 @@ model DeviceCommand {
 model SensorRollup {
   id                    Int      @id @default(autoincrement())
   user_device_action_id Int
-  // "hour" | "day". Two granularities, not a continuum: the API picks one from the range asked
-  // for, and a third would cost storage without changing any answer.
-  bucket                String   @db.VarChar(8)
+  // A `retention_buckets.code` — '1h', '1d', '15m', or a size a user added. Phase 1 wrote the
+  // literals "hour"/"day" here and typed them in code; Phase 2 made the vocabulary data, and the
+  // FK below is what proves the migration rewrote every existing row (Postgres validates the whole
+  // table as it adds the constraint, so a partial rewrite fails loudly instead of orphaning every
+  // bucket ever written).
+  //
+  // NEVER folded from raw beyond the finest tier: a coarse bucket is built from the next finer
+  // one, or a weekly rollup would re-read a week of 10-second readings per action per night.
+  bucket                String   @db.VarChar(12)
   // Start of the bucket, UTC, truncated to the granularity. The unique key below is what makes
   // the nightly upsert idempotent, so a re-run or a missed night self-heals.
   bucket_start          DateTime @db.Timestamptz(6)
@@ -954,6 +968,9 @@ model SensorRollup {
   last_value            String?  @db.VarChar(255)
 
   user_device_action UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: deleting a bucket code must never delete the history aggregated under
+  // it. The API refuses to remove a code any rollup still uses; this is the backstop.
+  bucket_def         RetentionBucket  @relation(fields: [bucket], references: [code], onDelete: Restrict)
 
   @@unique([user_device_action_id, bucket, bucket_start])
   @@index([user_device_action_id, bucket, bucket_start])
@@ -1083,10 +1100,17 @@ model RetentionPolicy {
   // for "stop touching my data" that does not require setting every window to 0. Platform-level
   // only: a user turning off their own pruning is just retention 0.
   enabled             Boolean  @default(true)
+  // ── Phase 2 (F18.9) ──
+  // The finest SUMMARY anyone may configure for this kind. It never binds `raw`: the floor is
+  // about how fine a rollup may be, and raw is not a rollup — a min_bucket of '15m' still keeps
+  // the readings themselves for as long as the raw tier says.
+  min_bucket          String   @default("raw") @db.VarChar(12)
   updated_by_user_id  Int?
   updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  updated_by User? @relation(fields: [updated_by_user_id], references: [id], onDelete: SetNull)
+  updated_by     User?                 @relation(fields: [updated_by_user_id], references: [id], onDelete: SetNull)
+  min_bucket_def RetentionBucket       @relation(fields: [min_bucket], references: [code], onDelete: Restrict)
+  tiers          RetentionPolicyTier[]
 
   @@map("retention_policy")
 }
@@ -1095,8 +1119,14 @@ model RetentionPolicy {
 // only once the user has actually chosen something, so a new account needs no seeding and the
 // absence of a row is a meaningful "use the default".
 //
-// The effective window is min(user_choice, ceiling) with 0 read as infinity — see
-// `resolveRetention` in the retention worker, which is the single place that arithmetic lives.
+// The effective window is min(user_choice, ceiling) with 0 read as infinity — see `clampKeepDays`
+// in @lattice/retention, which is the single place that arithmetic lives.
+//
+// ⚠️ SUPERSEDED by `user_retention_tiers` (F18.9). Every row here has been copied across by the
+// `retention_tiers` migration, and the two are NOT kept in sync — this table is read-only legacy
+// that exists only so the API and worker keep compiling while their call sites move one at a time.
+// It is dropped, with the six `retention_policy` day columns, once the last reader is gone
+// (Phase 2 Step 5). Do not add a reader.
 model UserRetentionPreference {
   id          Int      @id @default(autoincrement())
   user_id     Int
@@ -1110,6 +1140,328 @@ model UserRetentionPreference {
 
   @@unique([user_id, data_kind])
   @@map("user_retention_preferences")
+}
+
+// ═══ Retention tiers (F18.9–F18.16) ═════════════════════════════════════════════
+//
+// Phase 1 froze the retention shape in code: `sensor_rollup.bucket` was only ever "hour" or "day",
+// and every window lived in six columns on `retention_policy` plus three on
+// `user_retention_preferences`. Both the NUMBER of rollup tiers and each tier's SIZE were
+// unchangeable without a release.
+//
+// Phase 2 makes the tier list DATA. A tier list is the complete retention configuration for one
+// (scope, data_kind): an ordered set of buckets, each with a keep window. `raw` is position 0 of
+// that list rather than a separate kind-level window — which is what makes a per-sensor raw window
+// fall out for free.
+//
+// The arithmetic lives in @lattice/retention (pure, DB-free, unit-tested), never in a service.
+
+// The bucket vocabulary — a real catalog, editable by ANY user, not a constant list in code.
+//
+// A bucket size is a unit, not personal data: two users who both want 90 minutes want the same
+// 5400 seconds, so they share one row and adding a code that already exists reuses it. That keeps
+// a single FK target, which is the whole reason this table exists — a per-user catalog would mean
+// either a second table (and then `sensor_rollup.bucket` could not FK to both) or a nullable owner
+// in the unique key, which Postgres's NULL-distinct rule makes unsafe, as this schema records in
+// three other places.
+//
+// The honest trade: a size one user adds is visible to everyone, because it is arithmetic rather
+// than information. What stays private is the part that actually is private — WHICH buckets you
+// keep and for how long, in your own tier list.
+//
+// Flooring is generic (`floor((epoch − anchor) / seconds) * seconds + anchor`), so a size the
+// catalog has never seen floors correctly the first time it is used and needs no code. What code
+// keeps is only what a row cannot express: the admission rules, the chain-divisibility rule, and
+// the per-kind limits.
+//
+// NOT expressible here: calendar buckets. A month is not a fixed number of seconds, so `1mo` would
+// need a discriminator and real calendar arithmetic — worth knowing before someone adds `30d` and
+// calls it a month.
+model RetentionBucket {
+  // The value stored in every `bucket` column in this file.
+  code                  String   @id @db.VarChar(12)
+  // The bucket's fixed duration. `0` is the `raw` sentinel: raw is a tier in every way that
+  // matters, but it is not a duration — rows are written one per reading, not folded onto a grid.
+  seconds               Int
+  label                 String   @db.VarChar(32)
+  // Shifts the boundary grid. `0` for almost everything, because the epoch grid already lands
+  // where a human expects — but NOT for `1w`: flooring on multiples of 604800 lands on a THURSDAY,
+  // since 1 Jan 1970 was one. That row carries 345600 (four days) to move the grid to Monday.
+  anchor_offset_seconds Int      @default(0)
+  // Seeded rows, which nobody may delete however unused they are.
+  is_builtin            Boolean  @default(false)
+  // Who added it — audit, and who is allowed to remove it later.
+  created_by_user_id    Int?
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+
+  created_by User? @relation(fields: [created_by_user_id], references: [id], onDelete: SetNull)
+
+  rollups         SensorRollup[]
+  policy_minimums RetentionPolicy[]
+  policy_tiers    RetentionPolicyTier[]
+  user_tiers      UserRetentionTier[]
+  device_tiers    DeviceRetentionTier[]
+  action_tiers    ActionRetentionTier[]
+  blueprint_tiers BlueprintRetentionTier[]
+
+  // "what sizes exist, finest first" is the only way this table is ever listed.
+  @@index([seconds])
+  @@map("retention_buckets")
+}
+
+// ── The five scopes ─────────────────────────────────────────────────────────────
+//
+// FIVE TABLES, NOT ONE WITH A NULLABLE OWNER. Postgres treats NULLs as *distinct* in a unique
+// index, so a nullable-owner unique key would happily admit two platform rows for the same
+// (data_kind, bucket). A partial unique index would fix that but cannot be expressed in
+// schema.prisma, so the schema would stop describing the database — the same reasoning already
+// recorded on BlueprintBindingPhaseState. One table per scope also buys real FKs and real cascades:
+// deleting an action takes its tiers with it.
+//
+// Resolution order is action → device → blueprint → user → platform, and THE WHOLE LIST WINS: the
+// most specific scope with any rows for a kind supplies every tier, and the scopes below it are not
+// consulted. Merging tier-by-tier would leave "removing the action's tier falls back to the
+// device's" without a single answer.
+
+// The platform layer — the only scope that carries a ceiling.
+model RetentionPolicyTier {
+  id                 Int      @id @default(autoincrement())
+  // FK to retention_policy.data_kind, which is @unique.
+  data_kind          String   @db.VarChar(20)
+  bucket             String   @db.VarChar(12)
+  // 0 = KEEP FOREVER. The safe reading for a number that drives DELETEs.
+  keep_days          Int      @default(0)
+  // The ceiling for THIS bucket. NULL = uncapped — deliberately not 0, because a ceiling of 0
+  // would read as "cap everyone at forever", which is no cap at all. So forever is the LARGEST
+  // value despite being numerically the smallest, and clamping treats it as infinity.
+  max_keep_days      Int?
+  // Display order. The sweep sorts by the bucket's `seconds` regardless, because the fold chain
+  // builds each tier from its predecessor and a stored position must not be able to invert that.
+  position           Int      @default(0)
+  updated_by_user_id Int?
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  policy     RetentionPolicy @relation(fields: [data_kind], references: [data_kind], onDelete: Cascade)
+  bucket_def RetentionBucket @relation(fields: [bucket], references: [code], onDelete: Restrict)
+  updated_by User?           @relation("RetentionPolicyTierUpdatedBy", fields: [updated_by_user_id], references: [id], onDelete: SetNull)
+
+  @@unique([data_kind, bucket])
+  @@index([data_kind, position])
+  @@map("retention_policy_tiers")
+}
+
+// One user's whole tier list for a kind. Replaces user_retention_preferences.
+//
+// As with the table it replaces, a row exists only once the user has chosen something, so the
+// ABSENCE of rows means "follow the platform" — which is what makes changing a platform default
+// move everyone who never customised.
+model UserRetentionTier {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  data_kind  String   @db.VarChar(20)
+  bucket     String   @db.VarChar(12)
+  keep_days  Int      @default(0)
+  position   Int      @default(0)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user       User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  bucket_def RetentionBucket @relation(fields: [bucket], references: [code], onDelete: Restrict)
+
+  @@unique([user_id, data_kind, bucket])
+  @@index([user_id, data_kind, position])
+  @@map("user_retention_tiers")
+}
+
+// One device's tier list — "this greenhouse controller reports constantly, keep less of it".
+model DeviceRetentionTier {
+  id             Int      @id @default(autoincrement())
+  user_device_id Int
+  data_kind      String   @db.VarChar(20)
+  bucket         String   @db.VarChar(12)
+  keep_days      Int      @default(0)
+  position       Int      @default(0)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user_device UserDevice      @relation(fields: [user_device_id], references: [id], onDelete: Cascade)
+  bucket_def  RetentionBucket @relation(fields: [bucket], references: [code], onDelete: Restrict)
+
+  @@unique([user_device_id, data_kind, bucket])
+  @@index([user_device_id, data_kind, position])
+  @@map("device_retention_tiers")
+}
+
+// One action's tier list — the finest scope, and the reason F18.12 exists: a tank-level sensor
+// worth 5-minute buckets no longer forces every switch in the house to the same shape.
+model ActionRetentionTier {
+  id                    Int      @id @default(autoincrement())
+  user_device_action_id Int
+  data_kind             String   @db.VarChar(20)
+  bucket                String   @db.VarChar(12)
+  keep_days             Int      @default(0)
+  position              Int      @default(0)
+  updated_at            DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user_device_action UserDeviceAction @relation(fields: [user_device_action_id], references: [id], onDelete: Cascade)
+  bucket_def         RetentionBucket  @relation(fields: [bucket], references: [code], onDelete: Restrict)
+
+  @@unique([user_device_action_id, data_kind, bucket])
+  @@index([user_device_action_id, data_kind, position])
+  @@map("action_retention_tiers")
+}
+
+// A blueprint's tier list for one of its slots' actions — admin-authored, so a blueprint that ships
+// a known-noisy sensor can single it out without changing the switches beside it.
+//
+// `slot_key` and `action_name` are plain strings for the same reason BlueprintSlotBinding.slot_key
+// is one: they survive a v2 publish recreating the slot rows. `action_name` is
+// `user_device_actions.mqtt_action_name`, the same stable identity BlueprintRuleTemplate uses.
+//
+// Admin-only by design — a user cannot edit the definition their instance inherits; they override
+// it at their own device or action scope, which sits above this one in the resolution order.
+model BlueprintRetentionTier {
+  id           Int      @id @default(autoincrement())
+  blueprint_id Int
+  slot_key     String   @db.VarChar(64)
+  action_name  String   @db.VarChar(64)
+  data_kind    String   @db.VarChar(20)
+  bucket       String   @db.VarChar(12)
+  keep_days    Int      @default(0)
+  position     Int      @default(0)
+  updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  blueprint  Blueprint       @relation(fields: [blueprint_id], references: [id], onDelete: Cascade)
+  bucket_def RetentionBucket @relation(fields: [bucket], references: [code], onDelete: Restrict)
+
+  @@unique([blueprint_id, slot_key, action_name, data_kind, bucket])
+  @@index([blueprint_id, slot_key, action_name])
+  @@map("blueprint_retention_tiers")
+}
+
+// ── Job history (F18.14) ────────────────────────────────────────────────────────
+
+// One execution of the retention pass — the nightly cron, an admin's "Apply now", or a user's.
+//
+// Relational children rather than a JSON counters blob, for the same reason the tiers are five
+// tables: the job-history page sorts and totals by kind, and a blob cannot be indexed or summed.
+model RetentionRun {
+  id                   Int       @id @default(autoincrement())
+  // cron | admin | user
+  trigger              String    @db.VarChar(8)
+  // queued | running | ok | failed
+  status               String    @db.VarChar(10)
+  // Live progress: "rollup:scalar", "prune:frame". Written as each stage completes, so the page
+  // shows something real rather than a spinner.
+  phase                String?   @db.VarChar(32)
+  requested_by_user_id Int?
+  // Non-null = a user-scoped sweep (F18.15). READ FROM THIS ROW BY THE WORKER, never from the
+  // queue payload — the message is a wake-up, not an authority.
+  scope_user_id        Int?
+  // 'global' for a platform sweep, 'user:<id>' for a user sweep. Held from queued until terminal,
+  // then set NULL. Postgres's NULL-distinct rule is documented as a trap everywhere else in this
+  // schema; here it is the feature — any number of finished rows carry NULL, and exactly one live
+  // run can hold each key.
+  //
+  // The key alone does NOT stop a user sweep overlapping a global one (different keys). Every
+  // claim runs inside a transaction guarded by pg_advisory_xact_lock, which makes "is anything
+  // conflicting active?" and the insert atomic. Global refuses while ANY run is active; user N
+  // refuses while global or user:N is, but not while user:M is — those touch disjoint,
+  // ownership-scoped rows.
+  lock_key             String?   @unique @db.VarChar(32)
+  queued_at            DateTime  @default(now()) @db.Timestamptz(6)
+  started_at           DateTime? @db.Timestamptz(6)
+  finished_at          DateTime? @db.Timestamptz(6)
+  duration_ms          Int?
+  error                String?
+  requested_by         User?     @relation(fields: [requested_by_user_id], references: [id], onDelete: SetNull)
+
+  kinds    RetentionRunKind[]
+  activity RetentionActivity[]
+
+  @@index([queued_at])
+  @@index([scope_user_id, queued_at])
+  @@map("retention_runs")
+}
+
+// What one run did to one data kind.
+model RetentionRunKind {
+  id              Int     @id @default(autoincrement())
+  run_id          Int
+  data_kind       String  @db.VarChar(20)
+  buckets_written Int     @default(0)
+  rows_deleted    Int     @default(0)
+  bytes_reclaimed BigInt  @default(0)
+  // False only for frames, where `byte_size` is summed off the rows before they are deleted.
+  // Everywhere else the figure comes from the same per-row constants the usage panel uses, and is
+  // labelled an estimate in the UI rather than presented as a measurement.
+  bytes_estimated Boolean @default(true)
+
+  run RetentionRun @relation(fields: [run_id], references: [id], onDelete: Cascade)
+
+  @@unique([run_id, data_kind])
+  @@map("retention_run_kinds")
+}
+
+// Every retention event, append-only: when, who, what changed, and how (F18.19).
+//
+// `retention_runs` records what a SWEEP did. This records everything else — every configuration
+// change at all five scopes, every catalog add and remove, and the sweep lifecycle by reference —
+// because until now the config half was not recorded anywhere at all. `updated_at` on a tier row is
+// current state, not history: it can say a list changed this morning, never who changed it, from
+// what, or why the numbers moved. For a feature whose entire purpose is deleting data irreversibly,
+// that is the wrong side of the line.
+//
+// APPEND-ONLY. Nothing updates a row here and nothing deletes one, which is what separates this
+// table from `retention_runs` (live `phase` and `lock_key`, mutated throughout a run). The two are
+// linked by `run_id` rather than merged, so the log never has to carry live state.
+//
+// The denormalized `actor_name` and `subject_label` are deliberate, not laziness. Both FKs are
+// `SetNull`, because deleting a user must not be blocked by an audit row and must not cascade one
+// away either — so the ids go and the names stay. A log that forgets who did something the moment
+// their account closes is not an audit trail.
+model RetentionActivity {
+  id     Int      @id @default(autoincrement())
+  // WHEN.
+  at     DateTime @default(now()) @db.Timestamptz(6)
+  // WHAT: tiers_changed | tiers_reset | policy_changed | bucket_created | bucket_reused |
+  //       bucket_deleted | sweep_requested | sweep_finished | sweep_failed | data_trimmed
+  action String   @db.VarChar(24)
+  // WHERE it applied: platform | user | device | action | blueprint | catalog
+  scope  String   @db.VarChar(12)
+
+  // WHO did it. `actor_kind` is user | admin | cron | system — it distinguishes an admin acting on
+  // the platform from a user acting on their own data, which `actor_user_id` alone cannot.
+  actor_kind    String  @db.VarChar(8)
+  actor_user_id Int?
+  actor_name    String? @db.VarChar(120)
+
+  // WHOSE data it concerned, and which object. `subject_ref_id` is the device / action / blueprint
+  // id for those scopes and null otherwise; `subject_label` is its name AT THE TIME, so the entry
+  // still reads correctly after a rename or a delete.
+  subject_user_id Int?
+  subject_ref_id  Int?
+  subject_label   String? @db.VarChar(160)
+  data_kind       String? @db.VarChar(20)
+
+  // HOW it changed. `summary` is the human line the page shows ("raw 30d → 7d, added 15m kept 90d");
+  // `before`/`after` keep the machine-readable pair so a question the summary did not anticipate is
+  // still answerable years later.
+  summary String @db.VarChar(400)
+  before  Json?
+  after   Json?
+
+  // The sweep this entry belongs to, when it is about one. A `data_trimmed` row points at the run
+  // that deleted the rows, which is what connects "the ceiling dropped" to "these rows went".
+  run_id Int?
+
+  actor        User?         @relation("RetentionActivityActor", fields: [actor_user_id], references: [id], onDelete: SetNull)
+  subject_user User?         @relation("RetentionActivitySubject", fields: [subject_user_id], references: [id], onDelete: SetNull)
+  run          RetentionRun? @relation(fields: [run_id], references: [id], onDelete: SetNull)
+
+  @@index([at])
+  @@index([subject_user_id, at])
+  @@index([action, at])
+  @@index([run_id])
+  @@map("retention_activity")
 }
 
 // ═══ Tier 7 — Blueprints (F10) ══════════════════════════════════════════════════
@@ -1160,14 +1512,15 @@ model Blueprint {
   created_at    DateTime @default(now()) @db.Timestamp(6)
   updated_at    DateTime @default(now()) @db.Timestamp(6)
 
-  slots     BlueprintSlot[]
-  params    BlueprintParam[]
-  fields    BlueprintField[]
-  profiles  BlueprintProfile[]
-  scenes    BlueprintSceneTemplate[]
-  rules     BlueprintRuleTemplate[]
-  pipelines BlueprintPipelineTemplate[]
-  instances BlueprintInstance[]
+  slots           BlueprintSlot[]
+  params          BlueprintParam[]
+  fields          BlueprintField[]
+  profiles        BlueprintProfile[]
+  scenes          BlueprintSceneTemplate[]
+  rules           BlueprintRuleTemplate[]
+  pipelines       BlueprintPipelineTemplate[]
+  instances       BlueprintInstance[]
+  retention_tiers BlueprintRetentionTier[]
 
   @@map("blueprints")
 }

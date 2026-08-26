@@ -1,0 +1,138 @@
+<h2 mat-dialog-title class="ra-title">
+  {{ run() ? 'Cleaning up' : 'Clean up now' }}
+</h2>
+
+<mat-dialog-content class="ra-body">
+  @if (!run()) {
+    <p class="ra-lead">
+      This removes history that is already past
+      {{ data.scope === 'admin' ? 'the windows each user has configured' : 'your retention window' }}.
+      It cannot be undone.
+    </p>
+
+    @if (loading()) {
+      <div class="ra-muted">Working out what would be removed…</div>
+    } @else if (lines().length === 0) {
+      <div class="ra-none">
+        <mat-icon>check_circle</mat-icon>
+        <span>Nothing is past its window — there is nothing to remove.</span>
+      </div>
+    } @else {
+      <div class="ra-list">
+        @for (l of lines(); track l.kind) {
+          <div class="ra-line">
+            <span class="ra-kind">{{ l.label }}</span>
+            <span class="ra-rows">{{ l.rows | number }} rows</span>
+            <span class="ra-bytes">
+              {{ formatBytes(l.bytes) }}
+              <!-- Labelled rather than presented as fact: only frames store a real byte_size. -->
+              <em>{{ l.estimated ? 'est.' : 'measured' }}</em>
+            </span>
+          </div>
+        }
+        <div class="ra-line ra-total">
+          <span class="ra-kind">Total</span>
+          <span class="ra-rows">{{ totalRows() | number }} rows</span>
+          <span class="ra-bytes">{{ formatBytes(totalBytes()) }}</span>
+        </div>
+      </div>
+    }
+  } @else {
+    @if (run(); as r) {
+      <div class="ra-progress" [class.done]="done()" [class.failed]="r.status === 'failed'">
+        <!-- Only the terminal states get a headline. While it runs, the stage list below already
+             says which stage is active, and repeating that here printed the same sentence twice.
+             The one exception is `queued`, which the stages cannot express: nothing has begun, and
+             "nothing has begun" is different from "starting". -->
+        @if (r.status === 'ok') {
+          <div class="ra-status"><mat-icon>check_circle</mat-icon><span>Finished</span></div>
+        } @else if (r.status === 'failed') {
+          <div class="ra-status"><mat-icon>error_outline</mat-icon><span>Failed</span></div>
+        } @else if (r.status === 'queued') {
+          <div class="ra-status">
+            <span class="ra-spin"></span><span>Waiting for the worker…</span>
+          </div>
+        }
+
+        <!-- The four stages the pass actually runs, in its own order. The worker writes `phase` as
+             each one begins, so these tick over for real — and roll-up appearing before prune is
+             not cosmetic ordering, it is the invariant that stops buckets being built from rows
+             that have already been deleted. -->
+        <ol class="ra-steps">
+          @for (s of steps; track s.phase; let i = $index) {
+            <li class="ra-step" [attr.data-state]="stepState(i)">
+              <span class="ra-step-mark" aria-hidden="true"></span>
+              <span class="ra-step-label">{{ s.label }}</span>
+            </li>
+          }
+        </ol>
+
+        @if (r.error) {
+          <!-- Shown inline rather than vanishing into a log: a failed run with no visible reason is
+               indistinguishable from one that never started. -->
+          <div class="ra-error">{{ r.error }}</div>
+        }
+
+        @if (r.kinds.length > 0) {
+          <div class="ra-list">
+            @for (k of r.kinds; track k.dataKind) {
+              @if (k.rowsDeleted > 0 || k.bucketsWritten > 0) {
+                <div class="ra-line">
+                  <span class="ra-kind">{{ kindLabels[k.dataKind] }}</span>
+                  <span class="ra-rows">
+                    {{ k.rowsDeleted | number }} removed
+                    @if (k.bucketsWritten > 0) {
+                      <em>· {{ k.bucketsWritten | number }} summarised</em>
+                    }
+                  </span>
+                  <span class="ra-bytes">
+                    {{ formatBytes(k.bytesReclaimed) }}
+                    <em>{{ k.bytesEstimated ? 'est.' : 'measured' }}</em>
+                  </span>
+                </div>
+              }
+            }
+          </div>
+        }
+
+        @if (r.durationMs !== null) {
+          <div class="ra-muted">Took {{ (r.durationMs / 1000).toFixed(1) }}s</div>
+        }
+      </div>
+    }
+  }
+
+  @if (error(); as e) {
+    <div class="ra-err-box">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ e }}</span>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end" class="ra-actions">
+  @if (!run()) {
+    <button type="button" class="ra-btn" (click)="close()">Cancel</button>
+    <button
+      type="button"
+      class="ra-btn ra-danger"
+      [disabled]="loading() || starting() || lines().length === 0"
+      (click)="start()"
+    >
+      {{ starting() ? 'Starting…' : 'Remove ' + (totalRows() | number) + ' rows' }}
+    </button>
+  } @else {
+    <!-- While it runs there is nothing to press, so the control says so rather than offering a
+         filled primary button that looks live and does nothing. It only becomes primary once
+         closing is a real action. -->
+    <button
+      type="button"
+      class="ra-btn"
+      [class.ra-primary]="done()"
+      [disabled]="!done()"
+      (click)="close()"
+    >
+      {{ done() ? 'Close' : 'Running…' }}
+    </button>
+  }
+</mat-dialog-actions>

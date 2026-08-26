@@ -1,7 +1,9 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import {
@@ -9,13 +11,23 @@ import {
   formatBytes,
   formatDays,
   type DataKind,
-  type RetentionPolicyView,
   type UsageView,
-  type OverrideView,
 } from '../../services/retention.service';
+import {
+  RetentionTiersService,
+  type BucketView,
+  type PolicyTiersView,
+  type TierView,
+} from '../../services/retention-tiers.service';
+import { TierEditorComponent } from '../tier-editor/tier-editor.component';
+import { RetentionApplyDialogComponent } from '../retention-apply-dialog/retention-apply-dialog.component';
 
-// Admin → Data Retention. The platform layer: the default every user starts on, and the ceiling
-// none of them may exceed. A user's own window lives in Settings → Data & storage.
+// Admin → Data Retention. The platform layer: the tier list every user starts on, and the ceilings
+// none of them may exceed. A user's own list lives in Settings → Data & storage.
+//
+// Phase 2 replaced the three fixed windows with a tier LIST per kind (F18.9), so this page is now
+// four tier editors plus the ceiling column. The rules — chain divisibility, the raw floor, the
+// per-kind limits — are the server's; this page shows them as you build.
 
 interface KindMeta {
   kind: DataKind;
@@ -56,29 +68,33 @@ const KINDS: KindMeta[] = [
   },
 ];
 
-const CHOICES = [0, 7, 14, 30, 90, 180, 365];
+const CEILING_CHOICES: (number | null)[] = [null, 7, 14, 30, 90, 180, 365];
 
 @Component({
   selector: 'app-admin-retention',
   standalone: true,
-  imports: [CommonModule, MatIconModule],
+  imports: [CommonModule, MatIconModule, RouterLink, TierEditorComponent],
   templateUrl: './admin-retention.component.html',
   styleUrls: ['./admin-retention.component.css'],
 })
 export class AdminRetentionComponent {
   private retention = inject(RetentionService);
+  private tiersApi = inject(RetentionTiersService);
+  private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
   private destroyRef = inject(DestroyRef);
 
   readonly kinds = KINDS;
-  readonly choices = CHOICES;
+  readonly ceilingChoices = CEILING_CHOICES;
   readonly formatBytes = formatBytes;
   readonly formatDays = formatDays;
 
-  policies = signal<RetentionPolicyView[]>([]);
+  policies = signal<PolicyTiersView[]>([]);
+  buckets = signal<BucketView[]>([]);
   usage = signal<UsageView | null>(null);
-  overrides = signal<OverrideView[]>([]);
   loading = signal(true);
+  /** Per-kind pending edits, so a half-finished list is not saved on every chip press. */
+  drafts = signal<Record<string, TierView[]>>({});
 
   constructor() {
     this.load();
@@ -86,16 +102,17 @@ export class AdminRetentionComponent {
 
   private load(): void {
     forkJoin({
-      policies: this.retention.policies(),
+      policies: this.tiersApi.policyTiers(),
+      buckets: this.tiersApi.buckets(),
       usage: this.retention.platformUsage(),
-      overrides: this.retention.overrides(),
     })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (r) => {
           this.policies.set(r.policies);
+          this.buckets.set(r.buckets);
           this.usage.set(r.usage);
-          this.overrides.set(r.overrides);
+          this.drafts.set({});
           this.loading.set(false);
         },
         error: () => {
@@ -105,8 +122,131 @@ export class AdminRetentionComponent {
       });
   }
 
-  for(kind: DataKind): RetentionPolicyView | undefined {
+  for(kind: DataKind): PolicyTiersView | undefined {
     return this.policies().find((p) => p.dataKind === kind);
+  }
+
+  tiersFor(kind: DataKind): TierView[] {
+    return this.drafts()[kind] ?? this.for(kind)?.tiers ?? [];
+  }
+
+  /** The platform list IS the ceiling, so the editor is not clamped against one. */
+  ceilingsFor(kind: DataKind): Record<string, number | null> {
+    const out: Record<string, number | null> = {};
+    for (const t of this.for(kind)?.tiers ?? []) out[t.bucket] = t.maxKeepDays;
+    return out;
+  }
+
+  dirty(kind: DataKind): boolean {
+    return this.drafts()[kind] !== undefined;
+  }
+
+  onTiersChanged(kind: DataKind, tiers: TierView[]): void {
+    this.drafts.update((d) => ({ ...d, [kind]: tiers }));
+  }
+
+  discard(kind: DataKind): void {
+    this.drafts.update((d) => {
+      const next = { ...d };
+      delete next[kind];
+      return next;
+    });
+  }
+
+  /**
+   * Save the list, carrying each bucket's existing ceiling through.
+   *
+   * The response says who was affected: an admin lowering a ceiling below what someone chose trims
+   * them on the next sweep and notifies them (F18.16), and the snack bar says so rather than
+   * leaving that to be discovered.
+   */
+  save(kind: DataKind): void {
+    const tiers = this.tiersFor(kind);
+    const ceilings = this.ceilingsFor(kind);
+    this.tiersApi
+      .setPolicyTiers(kind, {
+        tiers: tiers.map((t) => ({ ...t, maxKeepDays: ceilings[t.bucket] ?? null })),
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (r) => {
+          this.policies.set(r.policies);
+          this.discard(kind);
+          const n = r.affected?.length ?? 0;
+          this.snack.open(
+            n > 0
+              ? `Saved — ${n} user${n === 1 ? '' : 's'} were above the new limit and have been notified`
+              : 'Saved',
+            undefined,
+            { duration: n > 0 ? 5000 : 1500 },
+          );
+        },
+        error: (e: { error?: { error?: string } }) =>
+          this.snack.open(e.error?.error ?? 'Could not save', 'Dismiss', { duration: 6000 }),
+      });
+  }
+
+  setCeiling(kind: DataKind, bucket: string, days: number | null): void {
+    const policy = this.for(kind);
+    if (!policy) return;
+    const tiers = this.tiersFor(kind).map((t) => ({
+      ...t,
+      maxKeepDays: t.bucket === bucket ? days : (this.ceilingsFor(kind)[t.bucket] ?? null),
+    }));
+    // A ceiling below the platform's own default for that bucket is the invalid pair, so carry the
+    // default down with it: the admin's intent ("nobody above 7 days") is unambiguous, and leaving
+    // a stale 14 on screen would state a window the sweep was never going to honour.
+    const adjusted = tiers.map((t) =>
+      t.bucket === bucket && days !== null && (t.keepDays === 0 || t.keepDays > days)
+        ? { ...t, keepDays: days }
+        : t,
+    );
+    const lowered = adjusted.some((t, i) => t.keepDays !== tiers[i]!.keepDays);
+    this.tiersApi
+      .setPolicyTiers(kind, { tiers: adjusted })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (r) => {
+          this.policies.set(r.policies);
+          this.discard(kind);
+          const n = r.affected?.length ?? 0;
+          const parts: string[] = [];
+          if (lowered) parts.push(`default lowered to ${formatDays(days)}`);
+          if (n > 0) parts.push(`${n} user${n === 1 ? '' : 's'} notified`);
+          this.snack.open(parts.length ? `Saved — ${parts.join(', ')}` : 'Saved', undefined, {
+            duration: parts.length ? 5000 : 1500,
+          });
+        },
+        error: (e: { error?: { error?: string } }) =>
+          this.snack.open(e.error?.error ?? 'Could not save', 'Dismiss', { duration: 6000 }),
+      });
+  }
+
+  toggleEnabled(kind: DataKind, enabled: boolean): void {
+    this.tiersApi
+      .setPolicyTiers(kind, { tiers: this.tiersFor(kind), enabled })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (r) => this.policies.set(r.policies),
+        error: (e: { error?: { error?: string } }) =>
+          this.snack.open(e.error?.error ?? 'Could not save', 'Dismiss', { duration: 4000 }),
+      });
+  }
+
+  /** Counts first, then runs — the dialog never offers a confirm above an unknown number. */
+  cleanUpNow(): void {
+    this.dialog
+      .open(RetentionApplyDialogComponent, {
+        width: '520px',
+        panelClass: ['glass-dialog', 'solid-dialog'],
+        // Focus the panel, not a button: an auto-focused Cancel next to a destructive action reads as
+        // a choice already made, and its ring makes the two buttons look mismatched.
+        autoFocus: 'dialog',
+        data: { scope: 'admin' },
+      })
+      .afterClosed()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.load());
   }
 
   usageFor(kind: DataKind): number {
@@ -148,74 +288,5 @@ export class AdminRetentionComponent {
   share(kind: DataKind): number {
     const total = this.totalBytes();
     return total === 0 ? 0 : (this.usageFor(kind) / total) * 100;
-  }
-
-  overridesFor(kind: DataKind): OverrideView[] {
-    return this.overrides().filter((o) => o.dataKind === kind);
-  }
-
-  private save(
-    kind: DataKind,
-    body: Record<string, number | boolean | null>,
-    note?: string,
-  ): void {
-    this.retention
-      .updatePolicy(kind, body)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (rows) => {
-          this.policies.set(rows);
-          this.snack.open(note ?? 'Policy saved', undefined, { duration: note ? 3500 : 1500 });
-        },
-        error: (e: { error?: { error?: string } }) =>
-          this.snack.open(e.error?.error ?? 'Could not save', 'Dismiss', { duration: 4000 }),
-      });
-  }
-
-  /**
-   * Whether this default would sit above the ceiling — which the worker silently clamps, so the
-   * page would claim a window nobody actually gets.
-   *
-   * `0` is Forever and therefore above every finite ceiling, however small the number reads.
-   */
-  aboveCeiling(kind: DataKind, days: number): boolean {
-    const ceiling = this.for(kind)?.maxRawDays ?? null;
-    if (ceiling === null) return false;
-    return days === 0 || days > ceiling;
-  }
-
-  setDefault(kind: DataKind, days: number): void {
-    if (this.aboveCeiling(kind, days)) return;
-    this.save(kind, { defaultRawDays: days });
-  }
-
-  /**
-   * Null clears the ceiling — uncapped, which is NOT the same as a ceiling of 0.
-   *
-   * Lowering the ceiling under the current default is the one way to reach the invalid pair, so it
-   * carries the default down with it in the same request rather than being refused: the admin's
-   * intent ("nobody above 7 days") is unambiguous, and leaving a stale 14 on screen would state a
-   * window the worker was never going to honour.
-   */
-  setCeiling(kind: DataKind, days: number | null): void {
-    if (days === null || !this.currentDefaultExceeds(kind, days)) {
-      this.save(kind, { maxRawDays: days });
-      return;
-    }
-    this.save(
-      kind,
-      { maxRawDays: days, defaultRawDays: days },
-      `Default lowered to ${formatDays(days)} to stay within the new ceiling`,
-    );
-  }
-
-  /** Would the CURRENT default breach this proposed ceiling? */
-  private currentDefaultExceeds(kind: DataKind, ceiling: number): boolean {
-    const current = this.for(kind)?.defaultRawDays ?? 0;
-    return current === 0 || current > ceiling;
-  }
-
-  toggleEnabled(kind: DataKind, enabled: boolean): void {
-    this.save(kind, { enabled });
   }
 }

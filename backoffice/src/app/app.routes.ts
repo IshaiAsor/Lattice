@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './guards/auth.guard';
 import { adminGuard } from './guards/admin.guard';
+import { AdminRetentionRunsComponent } from './components/admin-retention-runs/admin-retention-runs.component';
 import { LoginComponent } from './components/login/login.component';
 import { RegisterComponent } from './components/register/register.component';
 import { LegalComponent } from './components/legal/legal.component';
@@ -112,6 +113,13 @@ export const routes: Routes = [
     // Platform defaults + the ceiling users may not exceed. A user's own window is /settings.
     path: 'admin/retention',
     component: AdminRetentionComponent,
+    canActivate: [authGuard, adminGuard],
+  },
+  {
+    // The job history behind the retention page (F18.14). Its own route rather than a tab, so a
+    // failed nightly pass can be linked to directly from an alert.
+    path: 'admin/retention/runs',
+    component: AdminRetentionRunsComponent,
     canActivate: [authGuard, adminGuard],
   },
   {

@@ -41,6 +41,13 @@
   /* Dialogs sit over a dimmed backdrop, so they need more fill than a card sitting on the page —
      at the card's alpha the blackened backdrop shows through and the panel reads grey, not glass. */
   --dialog-bg:     rgba(255, 255, 255, 0.92);
+  /* Opaque fill for anything that floats over the page and so cannot be translucent: the
+     `solid-dialog` opt-out below, and native <option> popups. */
+  --overlay-solid: #ffffff;
+  /* Drives `color-scheme` on native controls. Left unset, the browser paints their chrome light
+     in BOTH themes, so a dark-theme <select> renders our near-white option text on the popup's
+     own white ground and a number input's spinners disappear into the field. */
+  --native-scheme: light;
   --card-shadow:   0 8px 32px rgba(99, 102, 241, 0.12);
   --card-shadow-hover: 0 12px 40px rgba(99, 102, 241, 0.20);
   --radius-card:   16px;
@@ -93,6 +100,9 @@
   --card-divider:  rgba(255, 255, 255, 0.18);
   --card-bg:       rgba(255, 255, 255, 0.08);
   --dialog-bg:     rgba(255, 255, 255, 0.08);
+  /* Lifted off #020510 so a floating panel reads as a panel. */
+  --overlay-solid: #111827;
+  --native-scheme: dark;
   --card-shadow:   0 8px 40px rgba(0, 0, 0, 0.55);
   --card-shadow-hover: 0 12px 48px rgba(0, 0, 0, 0.65);
   --offline-overlay-bg:   rgba(6, 10, 22, 0.92);
@@ -388,6 +398,21 @@ app-root {
   border: 1px solid var(--border);
   border-radius: 20px !important;
   box-shadow: var(--card-shadow);
+}
+
+/* `solid-dialog`: opt out of the glass, keeping every other glass-dialog style.
+ *
+ * The 8% white wash over a 24px blur works behind dense content, where the panel is mostly text.
+ * With a few short lines it stops being glass and becomes a window onto the page's own radial
+ * gradient — which lands blue blobs directly behind the copy and drags contrast under readable.
+ * Any dialog whose content is sparse, or whose text someone has to actually read before pressing
+ * an irreversible button, adds this alongside glass-dialog.
+ */
+.glass-dialog.solid-dialog .mat-mdc-dialog-container {
+  background: var(--overlay-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--border-strong);
 }
 
 .glass-dialog .mat-mdc-dialog-surface {

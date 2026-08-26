@@ -214,6 +214,21 @@ export const blueprintPhaseAdvanceSchema = z.object({
   refKey: z.string(),
 });
 
+// A wake-up naming a retention_runs row, not an instruction carrying a scope. `runId` is the
+// whole authority surface: the worker reads trigger and scope_user_id off the row, so a forged or
+// replayed message can at worst re-poke a run that already exists and is claimed.
+//
+// `.strict()` — the only schema in this file that is, and deliberately. Everywhere else an unknown
+// extra field is harmless forward-compatibility; here it is the shape of the attack. A payload that
+// quietly carried `scopeUserId` and got ignored today is a payload someone reads later and wires
+// up. Rejecting it on arrival keeps the authority in the row, permanently.
+export const retentionSweepRequestedSchema = z
+  .object({
+    runId: z.number().int().positive(),
+    trigger: z.enum(['cron', 'admin', 'user']),
+  })
+  .strict();
+
 // Routing key → schema. Dynamic ML-stage routing keys (mlStageRK) intentionally have no
 // entry here — their payload is pipelineStageSchema but the key is per-model; publish()
 // skips validation for unknown keys.
@@ -240,4 +255,5 @@ export const EVENT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   [RK.NOTIFICATION_PUBLISH]: notificationPublishSchema,
   [RK.NOTIFICATION_SEND]: notificationSendSchema,
   [RK.BLUEPRINT_PHASE_ADVANCE]: blueprintPhaseAdvanceSchema,
+  [RK.RETENTION_SWEEP_REQUESTED]: retentionSweepRequestedSchema,
 };
