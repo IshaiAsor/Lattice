@@ -67,15 +67,24 @@ export async function initSocket(httpServer: http.Server, ch: Channel): Promise<
   io.adapter(createAdapter(pubClient, subClient));
 
   // JWT handshake — app_usage tokens only. Reject the connection otherwise.
+  //
+  // Every rejection is logged, because a rejected handshake is terminal on the client: socket.io
+  // retries transport failures but never a middleware refusal, so one stale token ends live
+  // updates for the life of that tab. Unlogged, that outage looked from here exactly like a user
+  // who simply had the app closed — the only trace was a room with nothing in it.
   io.use((socket, next) => {
+    const reject = (reason: string): void => {
+      log.warn({ reason, address: socket.handshake.address }, 'socket handshake rejected');
+      next(new Error(`Authentication error: ${reason}`));
+    };
     const token = socket.handshake.auth?.token as string | undefined;
-    if (!token) return next(new Error('Authentication error: token missing'));
+    if (!token) return reject('token missing');
 
     const result = verifyJwt<AppToken>(token, JwtPurpose.app_usage, env.jwtSecret);
-    if (!result.valid) return next(new Error('Authentication error: invalid token'));
+    if (!result.valid) return reject('invalid token');
 
     const id = result.decoded.id ?? result.decoded.userId;
-    if (id === undefined) return next(new Error('Authentication error: token has no user id'));
+    if (id === undefined) return reject('token has no user id');
 
     socket.data.userId = String(id);
     next();

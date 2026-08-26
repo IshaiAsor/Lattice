@@ -202,6 +202,21 @@ export class UserDashboard implements OnInit {
         this.snackBar.open('Device did not confirm the change', 'Close', { duration: 3000 });
       });
 
+    // The socket was away and is back. Every state change emitted in the gap is gone — the events
+    // above are live pushes, not a log we can replay — so the only way the grid can be right is to
+    // ask the platform again. Without this a scene fired across a dropped socket left every card
+    // it moved showing its pre-scene value until the page was reloaded.
+    this.socketService.reconnected$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        // Anything that was in flight when the socket dropped has long since been acked or timed
+        // out on the server; keeping its commandId would make the next ack read as stale and
+        // strand the card as pending.
+        this.latestCommandId.clear();
+        this.pendingPrevState.clear();
+        this.reloadActions();
+      });
+
     // A read-back that found nothing wrong (F23). It carries no state — the value is unchanged —
     // so all it does is stop the freshness badge ageing past a check that really did happen.
     this.socketService.actionStateConfirmed$
