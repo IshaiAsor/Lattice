@@ -21,6 +21,11 @@ const log = createLogger('automation-worker:retention');
 /**
  * The window one tier is built over.
  *
+ * `lookbackMs` is the pass's own reach — the full `RETENTION_LOOKBACK_DAYS` for a nightly pass, and
+ * only the gap since the last one for an interval pass (F18.17). The per-tier floor below is what
+ * keeps a narrow reach honest: whatever the pass asked for, a tier always sees the two buckets that
+ * could still have changed.
+ *
  * `until` is exclusive — the bucket we are currently inside is still filling, and a bucket written
  * now would be wrong by however much of it is left. Because the upsert is keyed on the bucket,
  * "wrong" would then persist until something recomputed it.
@@ -29,9 +34,13 @@ const log = createLogger('automation-worker:retention');
  * under the default 3-day lookback: `since` would land inside the current week, `until` at its
  * start, and the range would be empty every single night.
  */
-function tierWindow(tier: ResolvedTier, now: Date): { since: Date; until: Date } {
+function tierWindow(
+  tier: ResolvedTier,
+  now: Date,
+  lookbackMs: number,
+): { since: Date; until: Date } {
   const until = bucketStart(now, tier.seconds, tier.anchorOffsetSeconds);
-  const span = Math.max(env.retention.lookbackDays * 86_400_000, 2 * tier.seconds * 1000);
+  const span = Math.max(lookbackMs, 2 * tier.seconds * 1000);
   return { since: new Date(until.getTime() - span), until };
 }
 
@@ -72,12 +81,16 @@ async function upsertRollup(
  * reconstructs a parent's average from its children's counts, so a `1d` bucket folded from hours
  * equals the one folded from the readings themselves.
  */
-export async function rollUpScalars(index: TierIndex, now: Date): Promise<number> {
+export async function rollUpScalars(
+  index: TierIndex,
+  now: Date,
+  lookbackMs: number = env.retention.lookbackDays * 86_400_000,
+): Promise<number> {
   if (!kindEnabled(index, 'scalar')) return 0;
 
   // Which actions have anything to roll up. One groupBy over the widest raw window serves every
   // tier that reads raw...
-  const widest = new Date(now.getTime() - env.retention.lookbackDays * 86_400_000);
+  const widest = new Date(now.getTime() - lookbackMs);
   const [rawActions, rollupActions] = await Promise.all([
     db.sensorHistory.groupBy({
       by: ['user_device_action_id'],
@@ -110,7 +123,7 @@ export async function rollUpScalars(index: TierIndex, now: Date): Promise<number
     for (let i = 0; i < rollupTiers.length; i++) {
       const tier = rollupTiers[i]!;
       const source = i === 0 ? null : rollupTiers[i - 1]!;
-      const { since, until } = tierWindow(tier, now);
+      const { since, until } = tierWindow(tier, now, lookbackMs);
       const buckets = new Map<number, Bucket>();
 
       if (source === null) {

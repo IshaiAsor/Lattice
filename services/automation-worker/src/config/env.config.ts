@@ -32,12 +32,25 @@ export const env = {
     // 03:00. Deliberately the quietest hour: this is the one job that holds locks over the
     // biggest tables in the system.
     //
-    // Two known gaps, both on the roadmap. The schedule is still an env var read once at startup,
-    // so an admin cannot change it without a redeploy — the one piece of retention policy that did
-    // not become data (F18.18). And a single daily pass is too coarse now the finest tier can be
-    // `15m`: a bucket is not built until up to 24h after its window closes, which reads on a chart
-    // as a gap at the right-hand edge rather than as data not yet folded (F18.17).
+    // This is the DESTRUCTIVE half's schedule only. Since F18.17 the rollup half runs on its own
+    // interval, derived from the finest configured bucket — building buckets is cheap, incremental
+    // and idempotent, deleting is none of those, and there is no freshness argument for pruning
+    // more often than nightly. One known gap remains: the schedule is still an env var read once
+    // at startup, so an admin cannot change it without a redeploy (F18.18).
     cron: process.env['RETENTION_CRON'] ?? '0 0 3 * * *',
+    // The heartbeat behind both halves of F18.17. Every minute it asks two questions the cron
+    // above cannot: is an interval rollup due, and was the nightly pass missed entirely? Cheap by
+    // construction — six small reads, and it does nothing at all unless something is overdue.
+    tickCron: process.env['RETENTION_TICK_CRON'] ?? '0 * * * * *',
+    // Floor under the derived rollup interval. A 60-second custom bucket is admissible, and
+    // someone will make one; without this it would turn the sweep into permanent background load.
+    rollupMinIntervalMs: parseInt(process.env['RETENTION_ROLLUP_MIN_INTERVAL_MS'] ?? '300000', 10),
+    // How stale the newest FULL pass may get before the tick runs one regardless of the hour.
+    // node-cron has no catch-up: a worker restarting at 03:00, an evicted pod, or a laptop dev
+    // stack asleep skips that night silently, with nothing in `retention_runs` to say so. 25h
+    // rather than 24h so a healthy daily cron is never in a photo finish with its own safety net —
+    // a day late is a bug, an hour of slack is not.
+    maxPassAgeMs: parseInt(process.env['RETENTION_MAX_PASS_AGE_MS'] ?? '90000000', 10),
     // How far back a single pass will look for buckets to build. Bounds a first run against years
     // of accumulated history; because the upserts are idempotent, successive nights walk backward
     // on their own rather than needing one heroic pass.
@@ -56,6 +69,20 @@ export const env = {
     // A run still queued/running after this is presumed abandoned by a killed worker and released.
     // Without it, one crash mid-sweep holds `lock_key` forever and nothing can ever claim again.
     runStaleMs: parseInt(process.env['RETENTION_RUN_STALE_MS'] ?? '21600000', 10),
+    // The same reaper, run once AT STARTUP with a far shorter fuse.
+    //
+    // A process that is starting cannot be executing a run, so a run left `running` is almost
+    // certainly one this pod was killed in the middle of. Six hours was a defensible fuse when the
+    // only casualty was one missed night; since F18.17 that same held lock also stops every
+    // interval rollup, so a crash would freeze every chart's right-hand edge until the fuse burned
+    // down. Observed exactly that on 2026-08-27 when the Docker daemon restarted mid-pass.
+    //
+    // Ten minutes and not zero because `replicas: 1` with the default RollingUpdate strategy still
+    // means two pods exist briefly, and reaping a sweep the OUTGOING pod is genuinely running would
+    // release the lock for a second, concurrent prune — the one thing the lock exists to prevent.
+    // The overlap is bounded by readiness plus the termination grace (seconds); the longest sweep
+    // ever observed here is 19s. If a deployment ever runs sweeps longer than this, raise it.
+    startupGraceMs: parseInt(process.env['RETENTION_STARTUP_GRACE_MS'] ?? '600000', 10),
     // One user-triggered sweep per user per this window. Without it, "Apply now" is a free
     // denial-of-service on a worker every other user shares.
     userSweepCooldownMs: parseInt(process.env['RETENTION_USER_COOLDOWN_MS'] ?? '900000', 10),

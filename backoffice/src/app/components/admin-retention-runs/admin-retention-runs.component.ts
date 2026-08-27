@@ -39,15 +39,26 @@ export class AdminRetentionRunsComponent {
   runs = signal<RunView[]>([]);
   loading = signal(true);
   expanded = signal<number | null>(null);
+  /**
+   * Successful interval passes are hidden by default (F18.17). Once a `15m` tier exists there are
+   * up to 96 a day, and a page whose first fifty rows all read "0 removed" stops answering the
+   * question it exists for. A FAILED one is never hidden, whatever this is set to.
+   */
+  showRollups = signal(false);
 
   constructor() {
+    this.load();
+  }
+
+  toggleRollups(): void {
+    this.showRollups.update((v) => !v);
     this.load();
   }
 
   load(): void {
     this.loading.set(true);
     this.api
-      .adminRuns()
+      .adminRuns(this.showRollups())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (r) => {
@@ -86,9 +97,20 @@ export class AdminRetentionRunsComponent {
   }
 
   triggerLabel(r: RunView): string {
-    if (r.trigger === 'cron') return 'Nightly';
-    if (r.trigger === 'admin') return 'Admin';
-    return 'User';
+    switch (r.trigger) {
+      case 'cron':
+        return 'Nightly';
+      // Named for what it means rather than for the mechanism: the worker was not running when the
+      // nightly pass was due, so it ran the pass on the way back up.
+      case 'catchup':
+        return 'Nightly (caught up)';
+      case 'rollup':
+        return 'Summaries';
+      case 'admin':
+        return 'Admin';
+      default:
+        return 'User';
+    }
   }
 
   /** Rows the run actually touched, so an expanded panel is not four zeros. */

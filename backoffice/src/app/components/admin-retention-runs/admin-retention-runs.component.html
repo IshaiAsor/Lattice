@@ -7,9 +7,21 @@
         here rather than only in a log.
       </p>
     </div>
-    <button type="button" class="rr-refresh" (click)="load()" title="Refresh">
-      <mat-icon>refresh</mat-icon>
-    </button>
+    <div class="rr-header-actions">
+      <button
+        type="button"
+        class="rr-toggle"
+        [class.on]="showRollups()"
+        (click)="toggleRollups()"
+        [attr.aria-pressed]="showRollups()"
+      >
+        <mat-icon>{{ showRollups() ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+        <span>Summary passes</span>
+      </button>
+      <button type="button" class="rr-refresh" (click)="load()" title="Refresh">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </div>
   </div>
 
   @if (loading()) {

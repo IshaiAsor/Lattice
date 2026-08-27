@@ -51,3 +51,27 @@ export function findSweepConflict(
   const mine = sweepLockKey(scopeUserId);
   return active.find((r) => r.lockKey === GLOBAL_LOCK_KEY || r.lockKey === mine) ?? null;
 }
+
+/**
+ * What a run is, in a sentence a person reads in a 409.
+ *
+ * Lives here because both services refuse a claim and both name what is already running. Since
+ * F18.17 there are five triggers, and two of them would be actively misleading unlabelled: a
+ * `rollup` is not a "cleanup" at all — it deletes nothing — and `catchup` is the nightly pass run
+ * late, which nobody outside the code calls a catchup.
+ */
+export function describeTrigger(trigger: string): string {
+  switch (trigger) {
+    case 'cron':
+    case 'catchup':
+      return 'nightly cleanup';
+    case 'rollup':
+      return 'summary rebuild';
+    case 'admin':
+      return 'platform cleanup';
+    case 'user':
+      return 'cleanup';
+    default:
+      return 'cleanup';
+  }
+}

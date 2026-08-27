@@ -17,6 +17,7 @@ import {
   RetentionTiersService,
   type BucketView,
   type PolicyTiersView,
+  type ScheduleView,
   type TierView,
 } from '../../services/retention-tiers.service';
 import { TierEditorComponent } from '../tier-editor/tier-editor.component';
@@ -92,6 +93,7 @@ export class AdminRetentionComponent {
   policies = signal<PolicyTiersView[]>([]);
   buckets = signal<BucketView[]>([]);
   usage = signal<UsageView | null>(null);
+  schedule = signal<ScheduleView | null>(null);
   loading = signal(true);
   /** Per-kind pending edits, so a half-finished list is not saved on every chip press. */
   drafts = signal<Record<string, TierView[]>>({});
@@ -105,6 +107,7 @@ export class AdminRetentionComponent {
       policies: this.tiersApi.policyTiers(),
       buckets: this.tiersApi.buckets(),
       usage: this.retention.platformUsage(),
+      schedule: this.tiersApi.adminSchedule(),
     })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -112,6 +115,7 @@ export class AdminRetentionComponent {
           this.policies.set(r.policies);
           this.buckets.set(r.buckets);
           this.usage.set(r.usage);
+          this.schedule.set(r.schedule);
           this.drafts.set({});
           this.loading.set(false);
         },
@@ -120,6 +124,25 @@ export class AdminRetentionComponent {
           this.loading.set(false);
         },
       });
+  }
+
+  /**
+   * How often summaries are rebuilt, in words (F18.17).
+   *
+   * The cadence is DERIVED from the finest tier configured anywhere rather than set anywhere, which
+   * is the point — and completely invisible unless the page says so. Adding a `15m` tier below
+   * moves this line, with no redeploy.
+   */
+  cadenceLabel(): string {
+    const s = this.schedule();
+    if (!s) return '';
+    if (s.rollupIntervalSeconds === null)
+      return 'Summaries are rebuilt by the nightly cleanup — nothing finer than a day is configured.';
+    const minutes = Math.round(s.rollupIntervalSeconds / 60);
+    const every = minutes % 60 === 0 ? `${minutes / 60} hour` : `${minutes} minute`;
+    const plural = minutes % 60 === 0 ? minutes / 60 !== 1 : minutes !== 1;
+    const finest = s.finestBucket ? ` — the finest tier configured is ${s.finestBucket.label}` : '';
+    return `Summaries are rebuilt every ${every}${plural ? 's' : ''}${finest}.`;
   }
 
   for(kind: DataKind): PolicyTiersView | undefined {

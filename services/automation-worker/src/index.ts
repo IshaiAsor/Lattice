@@ -16,7 +16,7 @@ import {
   sweepUnsettledCommands,
   reapSilentDevices,
 } from './services/reconcile.service';
-import { runNightlySweep, reapStale } from './services/retention-run';
+import { runNightlySweep, runCadenceTick, reapStale } from './services/retention-run';
 import { retentionSweepConsumer } from './consumers/retention-sweep.consumer';
 import { healthRouter } from './routes/health.routes';
 
@@ -37,8 +37,12 @@ async function main() {
   log.info('consumers started (rules-evaluate, telemetry-trigger, phase-advance, retention-sweep)');
 
   // Release any run a previous process died holding. Until this runs, a crash mid-sweep leaves
-  // `lock_key` held and nothing — not the cron, not an Apply — can ever claim again.
-  await reapStale().catch((err) => log.error({ err }, 'error reaping stale retention runs'));
+  // `lock_key` held and nothing — not the cron, not the interval rollup, not an Apply — can ever
+  // claim again. The SHORT fuse here on purpose: this process is starting, so it is not executing
+  // anything, and a run still `running` is one the previous process was killed in the middle of.
+  await reapStale(new Date(), env.retention.startupGraceMs).catch((err) =>
+    log.error({ err }, 'error reaping stale retention runs'),
+  );
 
   cron.schedule('*/10 * * * * *', () => rulesEngine.evaluateScheduledRules(ch));
   log.info('scheduled rules cron started (every 10 seconds)');
@@ -82,18 +86,36 @@ async function main() {
   });
   log.info({ cron: env.liveness.cron }, 'device liveness reaper cron started');
 
-  // History rollup + retention (F18.1/F18.9). Nightly and slow by design: it is the only job here
-  // that touches the biggest tables in the system, and everything it does is idempotent, so a
-  // missed night self-heals on the next pass rather than needing a catch-up run.
+  // History retention (F18.1/F18.9/F18.17), on TWO schedules that used to be one.
   //
-  // It claims through the same lock an Apply does, so the cron and a user's sweep can never
-  // overlap. A cron that loses the claim skips the night rather than queuing — every window is
-  // computed from `now`, so tomorrow's pass does whatever tonight's would have.
+  // The destructive half stays here, nightly and slow by design: it is the only job in this process
+  // that deletes from the biggest tables in the system, and no chart is any fresher for a row
+  // having been removed sooner.
+  //
+  // The building half moved to the tick below, because "nightly" stopped being an answer once a
+  // `15m` tier became something anyone can configure.
+  //
+  // Both claim through the same lock an Apply does, so no two ever overlap. A pass that loses the
+  // claim skips rather than queuing — every window is computed from `now`, so the next one does
+  // whatever this one would have.
   if (env.retention.enabled) {
     cron.schedule(env.retention.cron, () => {
       runNightlySweep().catch((err) => log.error({ err }, 'error running retention pass'));
     });
     log.info({ cron: env.retention.cron }, 'history retention cron started');
+
+    // The cadence heartbeat. Cheap and usually a no-op: it reads the tier lists and the newest
+    // run, and only then decides whether anything is due. It is also the ONLY thing that makes a
+    // missed night survivable — node-cron is a wall-clock ticker with no catch-up, so without this
+    // a worker that was restarting at 03:00 simply skips that night, silently, with nothing in
+    // `retention_runs` to say so.
+    cron.schedule(env.retention.tickCron, () => {
+      runCadenceTick().catch((err) => log.error({ err }, 'error on retention cadence tick'));
+    });
+    // Once at startup too, so coming back up is enough to catch up — no waiting for the next tick
+    // and no being lucky about restart timing.
+    runCadenceTick().catch((err) => log.error({ err }, 'error on startup retention cadence tick'));
+    log.info({ cron: env.retention.tickCron }, 'retention cadence tick started');
   } else {
     log.warn('history retention disabled by RETENTION_ENABLED=false');
   }

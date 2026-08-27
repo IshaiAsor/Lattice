@@ -221,3 +221,50 @@
   padding-top: 22px;
   border-top: 1px solid var(--card-divider);
 }
+
+/* Header actions ---------------------------------------------------------- */
+
+.rr-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Interval passes are hidden by default and this says so out loud, rather than the page quietly
+   omitting rows. Reads as a checkbox because that is exactly what it is. */
+.rr-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition:
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.rr-toggle:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+.rr-toggle.on {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+.rr-toggle mat-icon {
+    font-size: 16px;
+    line-height: 16px;
+    /* flex: 0 0 <size> and not the default 0 1 auto -- a shrinking mat-icon is CLIPPED rather than
+       scaled, because Material sets overflow: hidden on it. */
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+}

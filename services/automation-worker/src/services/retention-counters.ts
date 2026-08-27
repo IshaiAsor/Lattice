@@ -35,10 +35,30 @@ export const READING_BYTES = 48n;
 export const COMMAND_BYTES = 180n;
 export const EVENT_BYTES = 120n;
 
+/**
+ * Which halves of the pass run (F18.17).
+ *
+ * `full`   roll up every kind, then prune. The nightly pass, an admin Apply, a user Apply.
+ * `rollup` build sub-daily scalar buckets and delete NOTHING. The interval pass — it exists so a
+ *          `15m` bucket is minutes stale rather than up to a day, and the one thing it must never
+ *          do is bring a DELETE along to that cadence.
+ */
+export type PassMode = 'full' | 'rollup';
+
 export interface PassOptions {
   now?: Date;
   /** Non-null restricts the whole pass to one user's rows (F18.15). */
   scopeUserId?: number | null;
   /** Progress hook — writes the run row's `phase` column. */
   onPhase?: (phase: string) => Promise<void> | void;
+  /** Defaults to `full`. */
+  mode?: PassMode;
+  /**
+   * How far back to look for buckets to rebuild. Defaults to `RETENTION_LOOKBACK_DAYS`.
+   *
+   * An interval pass narrows it to the gap since the last one finished: the nightly figure is
+   * three days of raw per action, which is correct once a night and **96× the read volume every
+   * fifteen minutes**. Every upsert is idempotent either way, so the two differ only in cost.
+   */
+  lookbackMs?: number;
 }

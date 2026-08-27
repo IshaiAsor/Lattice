@@ -386,3 +386,41 @@ app-tier-editor {
     gap: 4px;
   }
 }
+
+/* Schedule (F18.17) --------------------------------------------------------- */
+
+.ar-sched-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    margin-top: 11px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.ar-sched-fact b {
+    color: var(--text);
+    font-weight: 600;
+    /* The three facts are all timestamps sitting in a row; without this they jitter as the minute
+       digits change width. */
+    font-variant-numeric: tabular-nums;
+}
+
+.ar-sched-late {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--warning);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.ar-sched-late mat-icon {
+    font-size: 16px;
+    line-height: 16px;
+    /* Never `flex: 0 1 auto` on a mat-icon: Material sets overflow: hidden, so a shrunk icon is
+       clipped rather than scaled. */
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+}

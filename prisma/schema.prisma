@@ -1345,7 +1345,12 @@ model BlueprintRetentionTier {
 // tables: the job-history page sorts and totals by kind, and a blob cannot be indexed or summed.
 model RetentionRun {
   id                   Int       @id @default(autoincrement())
-  // cron | admin | user
+  // cron | catchup | rollup | admin | user.
+  //
+  // `rollup` is an INTERVAL pass (F18.17): it builds sub-daily buckets at the cadence the finest
+  // configured tier implies and deletes nothing. `catchup` is the nightly full pass run late,
+  // because node-cron has no catch-up and a worker that was down at 03:00 used to skip the night
+  // silently — a distinct value so that fact leaves a trace instead of a `cron` row at 11:40.
   trigger              String    @db.VarChar(8)
   // queued | running | ok | failed
   status               String    @db.VarChar(10)

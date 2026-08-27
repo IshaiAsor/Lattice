@@ -53,10 +53,26 @@ export const retentionSweepsService = {
     return previewSweep(scopeUserId);
   },
 
-  /** Job history. A user only ever sees their own runs — a platform run's counters are everyone's. */
-  async runs(scopeUserId: number | null, limit = 50) {
+  /**
+   * Job history. A user only ever sees their own runs — a platform run's counters are everyone's.
+   *
+   * Successful INTERVAL rollups are hidden unless asked for (F18.17). There are up to 96 of them a
+   * day once a `15m` tier exists, and a page whose first fifty rows are all "summarised 12 buckets,
+   * removed 0 rows" no longer answers the question it exists to answer — which is what the nightly
+   * pass deleted, and what failed. A FAILED rollup is never hidden: a build half that quietly
+   * stopped working is precisely the thing this page must not swallow.
+   *
+   * Interval rollups are platform-scoped, so a user's list is unaffected either way.
+   */
+  async runs(scopeUserId: number | null, limit = 50, includeRollups = false) {
+    const hideRoutineRollups = includeRollups
+      ? {}
+      : { NOT: { AND: [{ trigger: 'rollup' }, { status: 'ok' }] } };
     const rows = await db.retentionRun.findMany({
-      where: scopeUserId === null ? {} : { scope_user_id: scopeUserId },
+      where: {
+        ...(scopeUserId === null ? {} : { scope_user_id: scopeUserId }),
+        ...hideRoutineRollups,
+      },
       orderBy: { queued_at: 'desc' },
       take: Math.min(limit, 200),
       include: {

@@ -27,6 +27,16 @@ export {
 export { rawFloorDays, clampKeepDays, pruneCutoff } from './windows';
 
 export {
+  MIN_ROLLUP_INTERVAL_SECONDS,
+  ROLLUP_INTERVAL_CEILING_SECONDS,
+  finestBucketSeconds,
+  rollupIntervalSeconds,
+  isDue,
+  dueAt,
+  catchUpLookbackMs,
+} from './cadence';
+
+export {
   TIER_SCOPES,
   resolveTiers,
   assertTierList,
@@ -53,6 +63,7 @@ export {
 export {
   sweepLockKey,
   findSweepConflict,
+  describeTrigger,
   GLOBAL_LOCK_KEY,
   RETENTION_LOCK_ID,
   type ActiveSweep,

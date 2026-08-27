@@ -51,6 +51,40 @@
     }
   </div>
 
+  <!-- Schedule (F18.17). The rollup cadence is derived from the tier lists below rather than set
+       anywhere, so without this line an admin has no way to tell that adding a finer tier moved it. -->
+  @if (schedule(); as sch) {
+    <div class="lattice-card ar-card ar-schedule">
+      <div class="ar-head">
+        <div>
+          <div class="ar-card-title">Schedule</div>
+          <div class="ar-card-sub">{{ cadenceLabel() }}</div>
+        </div>
+        @if (sch.fullOverdue) {
+          <span class="ar-sched-late">
+            <mat-icon>warning</mat-icon>
+            <span>Cleanup overdue</span>
+          </span>
+        }
+      </div>
+      <div class="ar-sched-facts">
+        <span class="ar-sched-fact">
+          Summaries last rebuilt
+          <b>{{ sch.lastRollupAt ? (sch.lastRollupAt | date: 'MMM d, HH:mm') : 'never' }}</b>
+        </span>
+        <span class="ar-sched-fact">
+          Last cleanup
+          <b>{{ sch.lastFullAt ? (sch.lastFullAt | date: 'MMM d, HH:mm') : 'never' }}</b>
+        </span>
+        @if (sch.nextRollupDueAt) {
+          <span class="ar-sched-fact">
+            Next summaries due <b>{{ sch.nextRollupDueAt | date: 'HH:mm' }}</b>
+          </span>
+        }
+      </div>
+    </div>
+  }
+
   <span class="section-label">Tier list per data kind</span>
 
   @for (k of kinds; track k.kind) {

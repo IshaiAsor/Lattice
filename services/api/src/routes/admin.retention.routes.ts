@@ -3,6 +3,7 @@ import { requireAppToken, requireAdmin } from '../middlewares/auth.middleware';
 import { retentionUsageService } from '../services/retention-usage.service';
 import { retentionTiersService } from '../services/retention-tiers.service';
 import { retentionActivityService } from '../services/retention-activity.service';
+import { retentionScheduleService } from '../services/retention-schedule.service';
 
 // The platform layer: the tier list every user starts on, the ceilings none may exceed, the
 // blueprint definitions users inherit, and the job history (F18.14).
@@ -63,9 +64,19 @@ adminRetentionRouter.get('/activity', async (req, res, next) => {
   }
 });
 
-adminRetentionRouter.get('/runs', async (_req, res, next) => {
+// When the pass runs, and whether it is late (F18.17). Derived from the tier lists rather than
+// configured, so this is the only place an admin can see that adding a finer tier moved the cadence.
+adminRetentionRouter.get('/schedule', async (_req, res, next) => {
   try {
-    res.json(await retentionTiersService.runs(null));
+    res.json(await retentionScheduleService.schedule());
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRetentionRouter.get('/runs', async (req, res, next) => {
+  try {
+    res.json(await retentionTiersService.runs(null, 50, req.query['rollups'] === 'true'));
   } catch (err) {
     next(err);
   }

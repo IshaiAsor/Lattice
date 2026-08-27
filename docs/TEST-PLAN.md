@@ -477,6 +477,38 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
     and the result is an audit entry describing a change in the wrong direction — worse than no
     entry at all, because it will be believed.
 
+### History — `history.retention-cadence.test.ts` ✅ (F18.17 when the pass runs, and whether it is late)
+
+- takes the smallest size any scope has a tier for
+- finds a custom size the same way as a seeded one
+- never treats raw as the finest bucket
+- ignores a code the catalog does not know
+- returns null when nothing is configured at all
+- follows the finest bucket
+- never runs more often than its floor
+- honours a floor raised by configuration
+- schedules no interval pass at a day or coarser
+- schedules no interval pass when nothing is rolled up
+- treats a pass that has never run as due
+- is not due inside its own interval
+- is due the moment the interval has elapsed
+- is due after a worker was down through the scheduled hour
+- names the next due time from the last completion, not from a fixed grid
+- reads only the gap since the last pass
+- always reaches back two intervals, so the bucket that just closed is rebuilt
+- caps a long outage rather than reading everything at once
+- reads the full window when no pass has ever completed
+  - two separate failures, one file. The CADENCE half is what makes "an admin adds a 15m tier and
+    the schedule moves" true with no release — the interval is derived from the finest bucket
+    configured anywhere, so it is data like everything else Phase 2 touched. The OVERDUE half is
+    what makes a missed pass survivable: node-cron is a wall-clock ticker with **no catch-up**, so a
+    worker restarting at 03:00, an evicted pod, or a laptop asleep skips that night silently. That
+    was observed live on 2026-08-26 — rollups stopped at the last manual sweep while raw ran to the
+    current minute, and neither of the pass's two log lines had ever been written.
+  - the two-interval floor under the incremental lookback is the case most easily got wrong: a
+    pass running exactly on schedule has a gap of ONE interval, and the bucket it exists to build
+    lies entirely in the interval before that. One interval of lookback steps straight over it.
+
 ### History — `history.retention-tiers.test.ts` ✅ (F18.9/F18.12 the N-tier retention core)
 
 - reproduces the UTC hour and UTC midnight for the hour and day sizes

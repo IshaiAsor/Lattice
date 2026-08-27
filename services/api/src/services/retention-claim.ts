@@ -1,4 +1,9 @@
-import { findSweepConflict, sweepLockKey, RETENTION_LOCK_ID } from '@lattice/retention';
+import {
+  describeTrigger,
+  findSweepConflict,
+  sweepLockKey,
+  RETENTION_LOCK_ID,
+} from '@lattice/retention';
 import { db } from '../db';
 
 // Claiming the right to sweep, from the API side (F18.13/F18.15).
@@ -85,9 +90,11 @@ export async function claim(req: ClaimRequest, now: Date = new Date()): Promise<
       const row = active.find((r) => r.id === conflict.id)!;
       const at = (row.started_at ?? row.queued_at).toISOString();
       // 409 naming the trigger and the time — "a sweep is already running" with no detail is the
-      // kind of error that gets retried in a loop.
+      // kind of error that gets retried in a loop. The trigger goes through `describeTrigger`
+      // because since F18.17 one of them is not a cleanup at all: an interval `rollup` deletes
+      // nothing, and telling a user their cleanup was refused by another cleanup would be a lie.
       throw Object.assign(
-        new Error(`A ${row.trigger} cleanup started at ${at} is still running.`),
+        new Error(`A ${describeTrigger(row.trigger)} started at ${at} is still running.`),
         { statusCode: 409, runId: row.id, trigger: row.trigger, startedAt: at },
       );
     }

@@ -73,7 +73,11 @@ export interface RunKindView {
 
 export interface RunView {
   id: number;
-  trigger: 'cron' | 'admin' | 'user';
+  /**
+   * `rollup` is an interval pass (F18.17) — buckets built, nothing deleted; `catchup` is the
+   * nightly full pass run late because the worker was down when it was due.
+   */
+  trigger: 'cron' | 'catchup' | 'rollup' | 'admin' | 'user';
   status: 'queued' | 'running' | 'ok' | 'failed';
   phase: string | null;
   scoped: boolean;
@@ -86,6 +90,22 @@ export interface RunView {
   kinds: RunKindView[];
   rowsDeleted: number;
   bytesReclaimed: number;
+}
+
+/**
+ * When the pass runs, and whether it is late (F18.17).
+ *
+ * The rollup cadence is DERIVED from the finest configured tier rather than set anywhere, so this
+ * is the only place an admin can see that adding a `15m` tier moved it.
+ */
+export interface ScheduleView {
+  /** Null when nothing sub-daily is configured and the nightly pass is the whole schedule. */
+  rollupIntervalSeconds: number | null;
+  finestBucket: { code: string; label: string } | null;
+  lastRollupAt: string | null;
+  lastFullAt: string | null;
+  nextRollupDueAt: string | null;
+  fullOverdue: boolean;
 }
 
 export interface PreviewView {
@@ -168,8 +188,14 @@ export class RetentionTiersService {
     return this.http.post<RunView>(`${this.admin}/apply`, {});
   }
 
-  adminRuns(): Observable<RunView[]> {
-    return this.http.get<RunView[]>(`${this.admin}/runs`);
+  /** Routine (successful) interval rollups are hidden server-side unless asked for. */
+  adminRuns(includeRollups = false): Observable<RunView[]> {
+    const query = includeRollups ? '?rollups=true' : '';
+    return this.http.get<RunView[]>(`${this.admin}/runs${query}`);
+  }
+
+  adminSchedule(): Observable<ScheduleView> {
+    return this.http.get<ScheduleView>(`${this.admin}/schedule`);
   }
 
   adminRun(id: number): Observable<RunView> {
