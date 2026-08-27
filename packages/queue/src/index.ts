@@ -19,6 +19,45 @@ export const DLQ_ARGS = {
   'x-message-ttl': 300_000,
 } as const;
 
+/**
+ * Liveness of this process's AMQP plumbing, for readiness probes.
+ *
+ * The failure this exists to catch: a consumer dies while the process stays up. Nothing in
+ * Kubernetes notices — the container is Running, so with no readiness probe it is Ready, the
+ * Deployment reports Available, ArgoCD reports Healthy, and Kargo reports Healthy. Work simply
+ * stops. Exposing the state here is what lets a probe turn that into a real signal.
+ */
+type ConsumerState = { queue: string; consumerTag: string; alive: boolean };
+
+let queueUsed = false;
+let connectionUp = false;
+const consumerRegistry = new Map<string, ConsumerState>();
+
+function markConnectionDown(): void {
+  connectionUp = false;
+  // A dropped channel takes every consumer on it with it; amqplib will not re-deliver to them.
+  for (const c of consumerRegistry.values()) c.alive = false;
+}
+
+export type QueueHealth = {
+  /** False only when something is actually wrong; true for services that never use the queue. */
+  ok: boolean;
+  /** Whether this process ever called connect() — distinguishes "unused" from "down". */
+  enabled: boolean;
+  connected: boolean;
+  consumers: Array<{ queue: string; alive: boolean }>;
+};
+
+export function getQueueHealth(): QueueHealth {
+  const consumers = [...consumerRegistry.values()].map((c) => ({ queue: c.queue, alive: c.alive }));
+  return {
+    ok: !queueUsed || (connectionUp && consumers.every((c) => c.alive)),
+    enabled: queueUsed,
+    connected: connectionUp,
+    consumers,
+  };
+}
+
 // Static queue → routing key mapping (same key names, parallel arrays).
 const STATIC_QUEUE_BINDINGS: Array<[string, string]> = [
   [QUEUES.TELEMETRY_ARRIVED, RK.TELEMETRY_ARRIVED],
@@ -62,12 +101,29 @@ export async function connect(url?: string): Promise<Channel> {
   );
   // Without these, a dropped connection/channel is an uncaught 'error' event —
   // the process crashes with a raw stack dump instead of a structured log line.
-  conn.on('error', (err) => log.error({ err }, 'RabbitMQ connection error'));
-  conn.on('close', () => log.error('RabbitMQ connection closed'));
+  // They also flip the health state a readiness probe reads, so a process that survives a
+  // broker drop reports NotReady instead of sitting there Ready and idle.
+  conn.on('error', (err) => {
+    markConnectionDown();
+    log.error({ err }, 'RabbitMQ connection error');
+  });
+  conn.on('close', () => {
+    markConnectionDown();
+    log.error('RabbitMQ connection closed');
+  });
 
   const ch = await conn.createChannel();
-  ch.on('error', (err) => log.error({ err }, 'RabbitMQ channel error'));
-  ch.on('close', () => log.error('RabbitMQ channel closed'));
+  ch.on('error', (err) => {
+    markConnectionDown();
+    log.error({ err }, 'RabbitMQ channel error');
+  });
+  ch.on('close', () => {
+    markConnectionDown();
+    log.error('RabbitMQ channel closed');
+  });
+
+  queueUsed = true;
+  connectionUp = true;
 
   await ch.assertExchange(EXCHANGE, 'topic', { durable: true });
 
@@ -189,8 +245,20 @@ export async function consume<T>(
   // global=false (amqplib's default) — the bound applies per consumer, not to the whole channel,
   // so services that call consume() several times on the one shared channel each get their own.
   await ch.prefetch(prefetch);
-  await ch.consume(queue, async (msg) => {
-    if (!msg) return;
+
+  // Registered before consume() resolves so the broker-cancel branch below can never race it.
+  const state: ConsumerState = { queue, consumerTag: '', alive: true };
+  consumerRegistry.set(queue, state);
+
+  const { consumerTag } = await ch.consume(queue, async (msg) => {
+    // amqplib delivers null when the *broker* cancels the consumer (queue deleted, node
+    // failover, channel torn down). Returning quietly here is exactly the silent-offline bug:
+    // the process keeps running, healthy in every external view, subscribed to nothing.
+    if (!msg) {
+      state.alive = false;
+      log.error({ queue }, 'consumer cancelled by broker — no longer receiving messages');
+      return;
+    }
     try {
       const payload = JSON.parse(msg.content.toString()) as T;
       await handler(payload, msg);
@@ -201,4 +269,6 @@ export async function consume<T>(
       ch.nack(msg, false, false);
     }
   });
+
+  state.consumerTag = consumerTag;
 }
