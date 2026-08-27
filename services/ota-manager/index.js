@@ -8,7 +8,7 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { createLogger, createHttpLogger } = require('@lattice/logger');
-const { connect, publish, RK } = require('@lattice/queue');
+const { connect, publish, RK, getQueueHealth } = require('@lattice/queue');
 
 const log = createLogger('ota-manager');
 
@@ -17,6 +17,22 @@ app.use(createHttpLogger(log));
 
 // Prometheus scrape endpoint (metrics always on; traces export only when OTEL endpoint set).
 app.get('/metrics', (req, res) => metricsHandler(req, res));
+
+// Health endpoints are registered above the rate limiter, like /metrics. kubelet probes every
+// 10s (readiness) and 30s (liveness), which together would eat the limiter's 100-request window
+// on their own and start answering 429 — turning the probe itself into the outage.
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'ota-manager' }));
+
+// ota-manager only publishes and registers no consumers, so readiness reduces to "is the AMQP
+// connection up": getQueueHealth() reports ok for an empty consumer set.
+app.get('/health/ready', (req, res) => {
+  const queue = getQueueHealth();
+  res.status(queue.ok ? 200 : 503).json({
+    status: queue.ok ? 'ready' : 'not-ready',
+    service: 'ota-manager',
+    queue,
+  });
+});
 const port = process.env.PORT || 3000;
 const firmwarePath = process.env.FIRMWARE_PATH || './firmware';
 
