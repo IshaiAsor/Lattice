@@ -7,6 +7,7 @@ import { deviceActionsService } from '../services/device.actions.service';
 import { googleStateService } from '../services/google-smart-home/google.state.service';
 import { googleSyncDevicesService } from '../services/google-smart-home/google.sync.device.service';
 import { googleExecuteDeviceService } from '../services/google-smart-home/google.execute.device';
+import { actionDeviceId } from '../services/google-smart-home/google.device-id';
 
 export function createSmarthomeRouter(ch: Channel) {
   const router = express.Router();
@@ -21,12 +22,15 @@ export function createSmarthomeRouter(ch: Channel) {
     };
   });
 
+  // Scenes are deliberately absent from QUERY: the Scene trait carries no state, SYNC declares
+  // them `willReportState: false`, and their ids are namespaced (`scene:<id>`), so they can never
+  // collide with an action's entry in this map.
   appSmarthome.onQuery(async (body: any, _headers: any, frameworkData: any) => {
     const userId = frameworkData.express.request.user.id;
     const actions = await deviceActionsService.getUserActions(parseInt(userId), '');
     const queryDevices: Record<string, any> = {};
     actions.forEach((action) => {
-      queryDevices[action.id.toString()] = googleStateService.buildState(action);
+      queryDevices[actionDeviceId(action.id)] = googleStateService.buildState(action);
     });
     return { requestId: body.requestId, payload: { devices: queryDevices } };
   });

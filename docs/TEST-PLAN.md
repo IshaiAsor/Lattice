@@ -677,6 +677,22 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - every implemented plan case exists as a test in its file
 - no test exists that is not in the plan
 
+### Google Home — `google.scenes.test.ts` ✅ (F7.12 scenes over Google Home)
+
+- round-trips both kinds
+- keeps scene 12 and action 12 apart
+- leaves an action id in its original wire format, so a linked account keeps working
+- rejects ids that are not ours instead of coercing them
+- emits a scene as a SCENE device with a namespaced id
+- offers a scene that cannot run right now, because SYNC is cached and phases move
+- runs the scene through the shared executor, not a local fan-out
+- separates a scene from an action carrying the same number
+- reports a gated scene as an error rather than claiming success
+- reports a scene owned by someone else as deviceNotFound
+- does not call a scene that dispatched nothing a success
+- refuses to deactivate a scene, which has no stored "before" to restore
+- answers an unknown id instead of coercing it into an action id
+
 ### Google Home — `googlehome.token-guards.test.ts` ⬜
 
 - client-secret check is timing-safe and rejects wrong length and wrong value

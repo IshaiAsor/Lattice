@@ -14,6 +14,7 @@ COPY packages/prisma-client packages/prisma-client
 COPY packages/capability-validation packages/capability-validation
 COPY packages/params        packages/params
 COPY packages/retention     packages/retention
+COPY packages/scenes        packages/scenes
 COPY services/api services/api
 # Root schema is the single source of truth; prisma-client's prepare step reads it.
 COPY prisma prisma
@@ -28,6 +29,7 @@ RUN npm run build -w @lattice/otel \
  && npm run build -w @lattice/capability-validation \
  && npm run build -w @lattice/params \
  && npm run build -w @lattice/retention \
+ && npm run build -w @lattice/scenes \
  && npm run build -w @lattice/api
 
 FROM node:22-slim
@@ -66,6 +68,8 @@ COPY --from=builder /workspace/packages/params/package.json ./node_modules/@latt
 COPY --from=builder /workspace/packages/params/dist         ./node_modules/@lattice/params/dist
 COPY --from=builder /workspace/packages/retention/package.json ./node_modules/@lattice/retention/package.json
 COPY --from=builder /workspace/packages/retention/dist         ./node_modules/@lattice/retention/dist
+COPY --from=builder /workspace/packages/scenes/package.json    ./node_modules/@lattice/scenes/package.json
+COPY --from=builder /workspace/packages/scenes/dist            ./node_modules/@lattice/scenes/dist
 
 COPY --from=builder /workspace/services/api/dist ./dist
 

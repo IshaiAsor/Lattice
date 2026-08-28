@@ -74,6 +74,7 @@ src/
 | `@lattice/capability-validation` | device capability validation                                                                                                     |
 | `@lattice/params`                | blueprint parameter refs, resolution, schedules, thresholds                                                                      |
 | `@lattice/retention`             | retention arithmetic: bucket flooring, tier resolution across scopes, keep-window clamping, rollup folding, query-tier selection |
+| `@lattice/scenes`                | executing a scene: lifecycle/phase gates, `@param.` resolution, staggered member fan-out (api + google-home)                     |
 
 Rules:
 

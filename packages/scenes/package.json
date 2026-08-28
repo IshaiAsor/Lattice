@@ -1,0 +1,23 @@
+{
+  "name": "@lattice/scenes",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "@lattice/logger": "*",
+    "@lattice/params": "*",
+    "@lattice/prisma-client": "*",
+    "@lattice/queue": "*",
+    "amqplib": "^0.10.7"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.7",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -15,6 +15,7 @@
     "@lattice/jwt": "*",
     "@lattice/params": "*",
     "@lattice/retention": "*",
+    "@lattice/scenes": "*",
     "@lattice/prisma-client": "*",
     "@lattice/queue": "*",
     "bcrypt": "^6.0.0",

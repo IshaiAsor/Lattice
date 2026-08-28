@@ -1,24 +1,16 @@
-import { publish, RK, type ActionRequestedPayload } from '@lattice/queue';
-import {
-  isAutomationLive,
-  isInstanceRunning,
-  positionalError,
-  positionalText,
-  resolveParam,
-  resolveSeconds,
-} from '@lattice/params';
-import { createLogger } from '@lattice/logger';
+import { isAutomationLive, positionalError, positionalText } from '@lattice/params';
+import { executeScene } from '@lattice/scenes';
 import { db } from '../db';
 import { getChannel } from '../queue';
-import { loadParamContext } from './blueprints.param-context';
-
-const log = createLogger('api:scenes');
 
 // Scenes (F10.5) — a user-named set of device actions fired on demand. Structurally a
 // UserRule without conditions, so this mirrors rules.service.ts. Execution fans out the
 // existing ACTION_REQUESTED event (one message per member); digest-service resolves each
 // actionId to a device command and streams state back over the user's socket room, so
 // there is no scene-specific dispatch or ack path here.
+//
+// This module owns the CRUD half only. The execution half moved to @lattice/scenes with F7.12,
+// when google-home became the second surface that can press a scene.
 
 export interface SceneMemberDto {
   user_device_action_id: number;
@@ -179,145 +171,24 @@ class ScenesService {
 
   // Fire-and-forget fan-out: one ACTION_REQUESTED per member. Returns immediately (route
   // answers 202); per-device acks surface through the normal digest → socket state path.
+  //
+  // The gates, the reference resolution and the stagger live in @lattice/scenes so that pressing
+  // the tile and saying "run <scene>" are literally the same code path (F7.12).
   async execute(userId: number, id: number): Promise<{ queued: number }> {
-    const {
-      name: sceneName,
-      blueprint_instance_id,
-      blueprint_binding_id,
-      phase_scope,
-      currentPhaseKey,
-      lifecycleState,
-      bindingLifecycleState,
-    } = await this.ensureOwned(userId, id);
-    // A derived scene is runnable only while its setup is running (F10.13), while the device it
-    // belongs to is running if it is a per-device scene (F11.3), and, if it declared phases, while
-    // that owner is in one of them (F10). Hand-written scenes belong to no setup and pass all three
-    // unconditionally. The messages are separate because the fixes are: start the setup, start the
-    // device, versus wait for (or move to) the right phase.
-    if (!isInstanceRunning(lifecycleState)) {
-      throw Object.assign(new Error('This scene’s setup is not running'), { statusCode: 409 });
-    }
-    if (!isInstanceRunning(bindingLifecycleState)) {
-      throw Object.assign(new Error('The device this scene belongs to is not running'), {
-        statusCode: 409,
-      });
-    }
-    if (!isAutomationLive(phase_scope, currentPhaseKey, lifecycleState, bindingLifecycleState)) {
-      throw Object.assign(
-        new Error('This scene is not available in the current phase of its setup'),
-        { statusCode: 409 },
-      );
-    }
-    const members = await db.sceneMember.findMany({
-      where: { scene_id: id },
-      orderBy: { sort_order: 'asc' },
-    });
-    if (members.length === 0) return { queued: 0 };
-
-    // A derived member's target_state may be a stored `@param.` / `@phase.` reference — derive
-    // writes those verbatim and resolution belongs to whoever dispatches, exactly as the
-    // automation-worker's rule engine does. Unresolved, the reference would travel to
-    // digest-service as a literal, fail the capability's valid_parameters check and come back as
-    // "device did not confirm" without a command ever reaching the device.
-    //
-    // Resolved once, up front, rather than per member at send time: a scene is one user gesture,
-    // so every member should act on the values as they were when it was pressed — a delayed
-    // member must not silently use a different phase's numbers because the phase advanced while
-    // it waited.
-    const ctx = await loadParamContext(blueprint_instance_id, blueprint_binding_id);
-
-    const ch = await getChannel();
-    const send = (actionId: number, value: string, durationSeconds: number | null): void => {
-      const payload: ActionRequestedPayload = {
-        userId: String(userId),
-        actionId,
-        value,
-        // Held by the device itself, then released — see user_rule_actions.duration_seconds.
-        ...(durationSeconds ? { duration: String(durationSeconds) } : {}),
-        // Recorded with each command so the history says "Evening scene", not just "on" (F11.12).
-        source: { kind: 'scene', refId: id, label: sceneName },
-      };
-      publish(ch, RK.ACTION_REQUESTED, payload);
-    };
-
-    let queued = 0;
-    for (const m of members) {
-      // Fail closed, like the rule engine: a reference with nothing behind it is dropped with a
-      // warning rather than dispatched as raw text.
-      const target = resolveParam(m.target_state, ctx);
-      if (target === null) {
-        log.warn(
-          { sceneId: id, actionId: m.user_device_action_id, target_state: m.target_state },
-          'scene member references an unresolvable parameter — not dispatched',
-        );
-        continue;
-      }
-      queued++;
-
-      // Both may be references since F11.14, resolved against the same up-front context as the
-      // target so a delayed member still acts on the values as they were when the scene was
-      // pressed. Unresolvable duration ⇒ hold indefinitely; unresolvable delay ⇒ send now.
-      const hold = resolveSeconds(m.duration_seconds, ctx);
-      const delay = resolveSeconds(m.delay_seconds, ctx) ?? 0;
-
-      if (delay > 0) {
-        // Best-effort in-process stagger; a restart drops pending delayed members.
-        setTimeout(() => {
-          try {
-            send(m.user_device_action_id, target, hold);
-          } catch {
-            // Channel gone (restart/reconnect) — the scene is fire-and-forget, so drop it
-            // rather than crashing the timer callback.
-          }
-        }, delay * 1000).unref();
-      } else {
-        send(m.user_device_action_id, target, hold);
-      }
-    }
-    return { queued };
+    return executeScene(await getChannel(), userId, id);
   }
 
   private async ensureOwned(
     userId: number,
     id: number,
-  ): Promise<{
-    name: string;
-    blueprint_instance_id: number | null;
-    blueprint_binding_id: number | null;
-    phase_scope: string[];
-    currentPhaseKey: string | null;
-    lifecycleState: string | null;
-    bindingLifecycleState: string | null;
-  }> {
+  ): Promise<{ blueprint_instance_id: number | null }> {
     const scene = await db.scene.findUnique({
       where: { id },
-      select: {
-        user_id: true,
-        name: true,
-        blueprint_instance_id: true,
-        blueprint_binding_id: true,
-        phase_scope: true,
-        blueprint_instance: {
-          select: { lifecycle_state: true, current_phase: { select: { key: true } } },
-        },
-        blueprint_binding: {
-          select: { lifecycle_state: true, current_phase: { select: { key: true } } },
-        },
-      },
+      select: { user_id: true, blueprint_instance_id: true },
     });
     if (!scene) throw Object.assign(new Error('Scene not found'), { statusCode: 404 });
     if (scene.user_id !== userId) throw Object.assign(new Error('Forbidden'), { statusCode: 403 });
-    return {
-      name: scene.name,
-      blueprint_instance_id: scene.blueprint_instance_id,
-      blueprint_binding_id: scene.blueprint_binding_id,
-      phase_scope: scene.phase_scope,
-      // A per-device scene reads its own device's phase; a setup-wide one reads the setup's.
-      currentPhaseKey:
-        (scene.blueprint_binding ?? scene.blueprint_instance)?.current_phase?.key ?? null,
-      lifecycleState: scene.blueprint_instance?.lifecycle_state ?? null,
-      bindingLifecycleState: scene.blueprint_binding?.lifecycle_state ?? null,
-    };
+    return { blueprint_instance_id: scene.blueprint_instance_id };
   }
 
   // Pre-check the (user_id, name) unique index so a collision is a clean 409 rather than a

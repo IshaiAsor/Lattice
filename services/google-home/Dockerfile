@@ -11,6 +11,8 @@ COPY packages/jwt           packages/jwt
 COPY packages/queue         packages/queue
 COPY packages/prisma-client packages/prisma-client
 COPY packages/capability-validation packages/capability-validation
+COPY packages/params        packages/params
+COPY packages/scenes        packages/scenes
 COPY services/google-home   services/google-home
 COPY prisma                 prisma
 COPY tsconfig.base.json ./
@@ -22,6 +24,8 @@ RUN npm run build -w @lattice/otel \
  && npm run build -w @lattice/queue \
  && npm run build -w @lattice/prisma-client \
  && npm run build -w @lattice/capability-validation \
+ && npm run build -w @lattice/params \
+ && npm run build -w @lattice/scenes \
  && npm run build -w @lattice/google-home
 
 FROM node:22-slim
@@ -49,6 +53,10 @@ COPY --from=builder /workspace/packages/prisma-client/dist          ./node_modul
 COPY --from=builder /workspace/packages/prisma-client/node_modules  ./node_modules/@lattice/prisma-client/node_modules
 COPY --from=builder /workspace/packages/capability-validation/package.json ./node_modules/@lattice/capability-validation/package.json
 COPY --from=builder /workspace/packages/capability-validation/dist         ./node_modules/@lattice/capability-validation/dist
+COPY --from=builder /workspace/packages/params/package.json  ./node_modules/@lattice/params/package.json
+COPY --from=builder /workspace/packages/params/dist          ./node_modules/@lattice/params/dist
+COPY --from=builder /workspace/packages/scenes/package.json  ./node_modules/@lattice/scenes/package.json
+COPY --from=builder /workspace/packages/scenes/dist          ./node_modules/@lattice/scenes/dist
 
 COPY --from=builder /workspace/services/google-home/dist ./dist
 
