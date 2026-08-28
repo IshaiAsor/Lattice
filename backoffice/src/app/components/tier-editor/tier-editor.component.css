@@ -266,8 +266,3 @@
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
-
-/* An orphan nothing will collect is a standing cost, not a pending one. */
-.te-orphan-stuck {
-    color: var(--warning);
-}

@@ -21,6 +21,7 @@ import {
   formatSeconds,
   resolveTiers,
   assertTierList,
+  dailyTierOf,
   emptyBucket,
   foldRollup,
   bucketAvg,
@@ -646,5 +647,53 @@ describe('findSweepConflict', () => {
   it('takes the oldest conflicting run, so the refusal names the one actually running', () => {
     const conflict = findSweepConflict(null, [active(3, 'user:1'), active(4, 'global')]);
     expect(conflict?.id).toBe(3);
+  });
+});
+
+// ── Which tier governs a DATE-keyed rollup table (F18.23) ────────────────────
+//
+// `command_rollup_daily` and `device_availability_daily` have no bucket column -- one row IS one
+// day -- so nothing in a tier list names them the way `sensor_rollup.bucket` is named. Something
+// has to decide which entry applies, in two places at once: the rollup half (build these rows at
+// all?) and the prune half (remove them on whose window?). The old answer was an exact match on
+// 86,400 seconds in the prune half and NOTHING in the rollup half, and the gap between those two
+// is the whole bug: rows written every night that nothing would ever delete.
+
+describe('the tier governing a daily rollup table', () => {
+  it('answers 1d when the list has one, exactly as the old exact match did', () => {
+    const tiers = [{ seconds: 0 }, { seconds: 86_400 }];
+    expect(dailyTierOf(tiers)).toEqual({ seconds: 86_400 });
+  });
+
+  it('answers a whole-day tier that is not one day', () => {
+    // `raw -> 1w` is legal, offered by the editor and accepted by assertTierList -- and matched by
+    // nothing before this. So `command_rollup_daily` was written nightly and pruned never.
+    expect(dailyTierOf([{ seconds: 0 }, { seconds: 604_800 }])).toEqual({ seconds: 604_800 });
+  });
+
+  it('prefers the finest whole-day tier, which is the granularity actually stored', () => {
+    // The table holds DAY rows. With both 1d and 1w configured, 1d is the tier that describes
+    // them; 1w would be about weekly rows that do not exist.
+    const tiers = [{ seconds: 0 }, { seconds: 604_800 }, { seconds: 86_400 }];
+    expect(dailyTierOf(tiers)).toEqual({ seconds: 86_400 });
+  });
+
+  it('answers null when the list says nothing about daily summaries', () => {
+    // The case nobody chose: the Phase 2 migration folded a legacy row with a NULL `daily_days`
+    // into a raw-only list, and whole-list-wins then let that absence shadow the platform's own
+    // 1d tier. Null is a real answer -- build nothing, and sweep away what a previous
+    // configuration left behind -- where before it silently meant "write forever, delete never".
+    expect(dailyTierOf([{ seconds: 0 }])).toBeNull();
+    expect(dailyTierOf([])).toBeNull();
+  });
+
+  it('never mistakes raw for a daily tier', () => {
+    // Raw is seconds 0, and 0 % 86400 is 0 -- so a naive modulo check answers "yes" and would
+    // prune the daily table on the RAW window.
+    expect(dailyTierOf([{ seconds: 0 }])).toBeNull();
+  });
+
+  it('ignores a sub-daily tier, which cannot describe a day-keyed row', () => {
+    expect(dailyTierOf([{ seconds: 0 }, { seconds: 3_600 }])).toBeNull();
   });
 });

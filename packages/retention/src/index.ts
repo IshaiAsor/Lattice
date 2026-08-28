@@ -50,6 +50,8 @@ export {
 
 export {
   TIER_SCOPES,
+  DAY_SECONDS,
+  dailyTierOf,
   resolveTiers,
   assertTierList,
   assertChainDivisible,

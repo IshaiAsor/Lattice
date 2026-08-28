@@ -563,6 +563,21 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - applies no raw floor when the list has no rollup tier
 - refuses a negative or fractional keep window
 - refuses a keep window past a decade
+- answers 1d when the list has one, exactly as the old exact match did
+- answers a whole-day tier that is not one day
+- prefers the finest whole-day tier, which is the granularity actually stored
+- answers null when the list says nothing about daily summaries
+- never mistakes raw for a daily tier
+- ignores a sub-daily tier, which cannot describe a day-keyed row
+  - `dailyTierOf` (F18.23) is the one place that decides which entry governs a DATE-keyed rollup
+    table, and it exists because that decision is made in TWO halves — the rollup (build these
+    rows?) and the prune (remove them on whose window?). The old code answered it with an exact
+    match on 86,400 in the prune half and with nothing at all in the rollup half, and the gap
+    between the two was rows written every night that nothing would ever delete. `raw → 1w` is
+    legal and matched nothing; `raw` alone is what the Phase 2 migration produced for every user
+    whose legacy `daily_days` was NULL, and whole-list-wins let that absence shadow the platform's
+    own `1d`. The `never mistakes raw for a daily tier` case guards the obvious naive fix: raw is
+    `seconds: 0`, and `0 % 86400 === 0`.
   - everything here constrains the tier **list**, never a size. `90m` is a perfectly legal
     bucket; it simply cannot sit directly above `1h`, because 5400/3600 is 1.5 and half a
     bucket cannot be folded. That distinction is what lets the catalog stay open to any

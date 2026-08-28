@@ -36,6 +36,39 @@ export interface PlatformTier extends Tier {
  * Order is the resolution order, and it is the only place it is written down.
  */
 export const TIER_SCOPES = ['action', 'device', 'blueprint', 'user', 'platform'] as const;
+
+/** One day, in seconds. The granularity the two DATE-keyed rollup tables physically store. */
+export const DAY_SECONDS = 86_400;
+
+/**
+ * The tier that governs a DATE-keyed rollup table, or null when the list has none (F18.23).
+ *
+ * `command_rollup_daily` and `device_availability_daily` have no bucket column — one row IS one
+ * day — so a tier list does not name them the way `sensor_rollup.bucket` is named. Something has
+ * to decide which entry in the list applies, and that decision is made in TWO places: the rollup
+ * half (should these rows be built at all?) and the prune half (on whose window are they removed?).
+ * Two copies of it disagreeing is what produced the bug this exists to fix.
+ *
+ * **The FINEST whole-day tier**, not the coarsest, because it is the one that describes the
+ * granularity actually stored. A list of `raw → 1d → 1w` is answered by `1d`, which is both correct
+ * and identical to the exact-match behaviour it replaces. A list of `raw → 1w` — legal, offered by
+ * the editor, and previously matched by nothing — is answered by `1w`.
+ *
+ * Null means the list makes no statement about daily summaries at all. That is a real answer and
+ * the caller must handle it: the rollup should not build rows nobody asked for, and the prune
+ * should sweep away any that a previous configuration left behind. Before F18.23 it silently meant
+ * "write them forever and never delete them", which is how a `raw`-only commands list — created by
+ * the Phase 2 migration for every user whose legacy `daily_days` was NULL, chosen by nobody —
+ * ended up accumulating rows that nothing on the platform would ever remove.
+ */
+export function dailyTierOf<T extends { seconds: number }>(tiers: readonly T[]): T | null {
+  let best: T | null = null;
+  for (const t of tiers) {
+    if (t.seconds <= 0 || t.seconds % DAY_SECONDS !== 0) continue;
+    if (best === null || t.seconds < best.seconds) best = t;
+  }
+  return best;
+}
 export type TierScope = (typeof TIER_SCOPES)[number];
 
 /** A tier that was configured but cannot be applied, with the reason the API can show. */

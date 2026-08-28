@@ -1,6 +1,12 @@
 import { createLogger } from '@lattice/logger';
 import { Prisma } from '@lattice/prisma-client';
-import { DATA_KINDS, RAW_SECONDS, pruneCutoff, type ResolvedTier } from '@lattice/retention';
+import {
+  DATA_KINDS,
+  RAW_SECONDS,
+  dailyTierOf,
+  pruneCutoff,
+  type ResolvedTier,
+} from '@lattice/retention';
 import { db } from '../db/client';
 import { env } from '../config/env.config';
 import { kindEnabled, tiersForAction, tiersForUser, type TierIndex } from './tier-index';
@@ -137,16 +143,36 @@ export async function pruneHistory(
         counters.command.rowsDeleted += n;
         counters.command.bytesReclaimed += BigInt(n) * COMMAND_BYTES;
       }
-      // The daily rollup, on the '1d' tier's own window.
-      const daily = tiers.find((t) => t.seconds === 86_400);
-      const dailyCut = daily ? pruneCutoff(daily.keepDays, true, now) : null;
-      if (dailyCut && actionIds.length > 0 && counters.command.rowsDeleted < cap) {
-        const n = await deleteBounded(
-          'command_rollup_daily',
-          Prisma.sql`"user_device_action_id" IN (${Prisma.join(actionIds)}) AND "day" < ${dailyCut}`,
-          cap - counters.command.rowsDeleted,
-        );
-        counters.command.rowsDeleted += n;
+      // The daily rollup, on its governing tier's window — or swept away entirely when the list
+      // has no whole-day tier at all (F18.23).
+      //
+      // This used to be `tiers.find((t) => t.seconds === 86_400)`, an exact match on one day, and
+      // the two ways it missed both ended in the same place: rows written every night that nothing
+      // would ever delete. `raw → 1w` is legal and offered by the editor but is not 86,400. `raw`
+      // alone is what the Phase 2 migration produced for every user whose legacy `daily_days` was
+      // NULL — a list nobody chose, which whole-list-wins then let shadow the platform's own `1d`.
+      const daily = dailyTierOf(tiers);
+      if (actionIds.length > 0 && counters.command.rowsDeleted < cap) {
+        // Two different nulls, and conflating them is how this feature loses data or leaks it.
+        // A MISSING tier means the list says nothing about daily summaries, so the rows are
+        // orphans and all of them go. A `keepDays` of 0 means KEEP FOREVER, so none of them do.
+        const where =
+          daily === null
+            ? Prisma.sql`"user_device_action_id" IN (${Prisma.join(actionIds)})`
+            : (() => {
+                const cut = pruneCutoff(daily.keepDays, true, now);
+                return cut
+                  ? Prisma.sql`"user_device_action_id" IN (${Prisma.join(actionIds)}) AND "day" < ${cut}`
+                  : null;
+              })();
+        if (where) {
+          const n = await deleteBounded(
+            'command_rollup_daily',
+            where,
+            cap - counters.command.rowsDeleted,
+          );
+          counters.command.rowsDeleted += n;
+        }
       }
     }
 
@@ -164,16 +190,25 @@ export async function pruneHistory(
         counters.device_event.rowsDeleted += n;
         counters.device_event.bytesReclaimed += BigInt(n) * EVENT_BYTES;
       }
-      const daily = tiers.find((t) => t.seconds === 86_400);
-      const dailyCut = daily ? pruneCutoff(daily.keepDays, true, now) : null;
-      if (dailyCut && counters.device_event.rowsDeleted < cap) {
+      // Same rule, same two nulls — see the command branch above.
+      const daily = dailyTierOf(tiers);
+      if (counters.device_event.rowsDeleted < cap) {
         const deviceIds = await db.userDevice
           .findMany({ where: { user_id: userId }, select: { id: true } })
           .then((rows) => rows.map((r) => r.id));
-        if (deviceIds.length > 0) {
+        const cut = daily ? pruneCutoff(daily.keepDays, true, now) : null;
+        const where =
+          deviceIds.length === 0
+            ? null
+            : daily === null
+              ? Prisma.sql`"user_device_id" IN (${Prisma.join(deviceIds)})`
+              : cut
+                ? Prisma.sql`"user_device_id" IN (${Prisma.join(deviceIds)}) AND "day" < ${cut}`
+                : null;
+        if (where) {
           const n = await deleteBounded(
             'device_availability_daily',
-            Prisma.sql`"user_device_id" IN (${Prisma.join(deviceIds)}) AND "day" < ${dailyCut}`,
+            where,
             cap - counters.device_event.rowsDeleted,
           );
           counters.device_event.rowsDeleted += n;

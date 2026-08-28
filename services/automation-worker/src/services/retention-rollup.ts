@@ -7,12 +7,13 @@ import {
   foldReading,
   foldRollup,
   bucketAvg,
+  dailyTierOf,
   type Bucket,
   type ResolvedTier,
 } from '@lattice/retention';
 import { db } from '../db/client';
 import { env } from '../config/env.config';
-import { kindEnabled, tiersForAction, type TierIndex } from './tier-index';
+import { kindEnabled, tiersForAction, tiersForUser, type TierIndex } from './tier-index';
 
 const log = createLogger('automation-worker:retention');
 
@@ -178,6 +179,29 @@ export async function rollUpScalars(
   return written;
 }
 
+/**
+ * Does this user's list ask for daily summaries of this kind at all? (F18.23)
+ *
+ * The two DATE-keyed tables were written for everyone whose kind was merely ENABLED, with no
+ * reference to the tier list — so a list that says nothing about daily summaries still got them,
+ * every night, and the prune half then had no tier to remove them on. Building nothing is better
+ * than building rows the very next pass has to sweep away.
+ *
+ * Memoised per user: this is asked once per action, and `tiersForUser` resolves five scopes.
+ */
+function wantsDailyFor(
+  index: TierIndex,
+  kind: 'command' | 'device_event',
+  cache: Map<number, boolean>,
+  userId: number,
+): boolean {
+  const hit = cache.get(userId);
+  if (hit !== undefined) return hit;
+  const wants = dailyTierOf(tiersForUser(index, userId, kind).tiers) !== null;
+  cache.set(userId, wants);
+  return wants;
+}
+
 /** Daily command counts per (action, source, outcome). */
 export async function rollUpCommands(index: TierIndex, now: Date): Promise<number> {
   if (!kindEnabled(index, 'command')) return 0;
@@ -197,8 +221,13 @@ export async function rollUpCommands(index: TierIndex, now: Date): Promise<numbe
     },
   });
 
+  const wantsDaily = new Map<number, boolean>();
   const counts = new Map<string, number>();
   for (const r of rows) {
+    // Skip actions whose owner's list has no whole-day tier: those rows would be built tonight and
+    // swept away by the prune half of this same pass.
+    const owner = index.actionOwners.get(r.user_device_action_id!);
+    if (!owner || !wantsDailyFor(index, 'command', wantsDaily, owner.userId)) continue;
     const key = `${r.user_device_action_id}|${dayStart(r.dispatched_at).getTime()}|${r.source}|${r.status}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -250,11 +279,14 @@ export async function rollUpAvailability(
 
   const devices = await db.userDevice.findMany({
     where: scopeUserId === null ? {} : { user_id: scopeUserId },
-    select: { id: true },
+    select: { id: true, user_id: true },
   });
+  const wantsDaily = new Map<number, boolean>();
   let written = 0;
 
-  for (const { id: deviceId } of devices) {
+  for (const { id: deviceId, user_id: ownerId } of devices) {
+    // As in the command rollup: no whole-day tier means the list never asked for these rows.
+    if (!wantsDailyFor(index, 'device_event', wantsDaily, ownerId)) continue;
     const [prior, events] = await Promise.all([
       db.deviceEvent.findFirst({
         where: {

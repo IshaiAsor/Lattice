@@ -137,42 +137,46 @@ export class TierEditorComponent {
     ) / 100,
   );
 
+  /**
+   * Which usage figure a tier row reads.
+   *
+   * For scalars it is the bucket itself — `sensor_rollup` has a `bucket` column, so the mapping is
+   * literal. For commands and device events the summaries live in ONE DATE-keyed table with no
+   * bucket column, so the rows are reported under `1d` (one row is one day, factually) while the
+   * tier governing them may be any whole-day size the list carries. Reading a literal `1d` would
+   * show a `1w` tier as empty and simultaneously claim its rows were orphaned.
+   */
+  usageKeyFor(bucket: string): string {
+    const k = this.kind();
+    if (k !== 'command' && k !== 'device_event') return bucket;
+    const seconds = this.secondsOf(bucket);
+    return seconds > 0 && seconds % 86_400 === 0 ? '1d' : bucket;
+  }
+
   /** What this bucket is holding, or null when nothing has been written under it yet. */
   storedIn(bucket: string): UsageBucket | null {
-    const u = this.usage()[bucket];
+    const u = this.usage()[this.usageKeyFor(bucket)];
     return u && u.rows > 0 ? u : null;
   }
 
   /**
-   * Will the next cleanup actually collect an orphaned bucket?
-   *
-   * **Only for scalars.** `pruneHistory` sweeps `sensor_rollup` for rows whose bucket is no longer
-   * configured, and nothing equivalent exists for `command_rollup_daily` or
-   * `device_availability_daily` — those are pruned only while a tier of exactly one day is in the
-   * list, and are written regardless (F18.23). So on those two kinds an orphan is not "about to be
-   * removed", it is simply sitting there, and saying otherwise would promise a cleanup that never
-   * comes.
-   */
-  orphansAreCollected = computed(() => this.kind() === 'scalar');
-
-  /**
-   * Every bucket holding rows that the list no longer configures.
+   * Every bucket holding rows that this list does not configure.
    *
    * Worth naming rather than silently omitting: a tier removed this morning is still costing what
-   * it cost, and the storage figure above will not drop until something removes it — which, per
-   * the flag above, is not guaranteed to be anything.
+   * it cost, and the storage figure above will not drop until the next cleanup sweeps it.
    */
   orphaned = computed<{ bucket: string; usage: UsageBucket }[]>(() => {
-    const configured = new Set(this.rows().map((t) => t.bucket));
+    const covered = new Set(this.rows().map((t) => this.usageKeyFor(t.bucket)));
     return Object.entries(this.usage())
-      .filter(([bucket, u]) => !configured.has(bucket) && u.rows > 0)
+      .filter(([bucket, u]) => !covered.has(bucket) && u.rows > 0)
       .map(([bucket, usage]) => ({ bucket, usage }));
   });
 
   /** Rows stored across every bucket in this list, so the footer totals what the rows show. */
-  totalStored = computed(() =>
-    this.rows().reduce((n, t) => n + (this.usage()[t.bucket]?.rows ?? 0), 0),
-  );
+  totalStored = computed(() => {
+    const covered = new Set(this.rows().map((t) => this.usageKeyFor(t.bucket)));
+    return [...covered].reduce((n, key) => n + (this.usage()[key]?.rows ?? 0), 0);
+  });
 
   ceilingFor(bucket: string): number | null {
     return this.ceilings()[bucket] ?? null;

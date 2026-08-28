@@ -110,25 +110,18 @@
     </div>
 
     @if (orphaned().length > 0) {
-      <!-- Rows under a bucket the list no longer has. Real, on disk, and NOT counted by the tiers
-           above — so the storage figure would otherwise silently disagree with what is listed
-           under it.
-
-           The two endings are not interchangeable. Scalars have a real orphan sweep; the two
-           DATE-keyed tables do not, and are pruned only while a tier of exactly one day is in the
-           list (F18.23). Promising a cleanup that never comes would be worse than saying nothing. -->
-      <div class="te-orphan" [class.te-orphan-stuck]="!orphansAreCollected()">
-        <mat-icon>{{ orphansAreCollected() ? 'schedule' : 'info_outline' }}</mat-icon>
+      <!-- Rows under a bucket this list does not configure. Real, on disk, and NOT counted by the
+           tiers above — so the storage figure would otherwise silently disagree with what is
+           listed under it. Every kind now has a sweep that collects them (F18.23), so the one
+           ending is true everywhere. -->
+      <div class="te-orphan">
+        <mat-icon>schedule</mat-icon>
         <span>
           @for (o of orphaned(); track o.bucket; let last = $last) {
             {{ bucketFor(o.bucket)?.label ?? o.bucket }} ({{ o.usage.rows | number }} rows)@if
             (!last) {,&nbsp;}
           }
-          @if (orphansAreCollected()) {
-            no longer in this list — removed by the next cleanup
-          } @else {
-            still stored — add a 1 day tier to have it cleaned up
-          }
+          no longer in this list — removed by the next cleanup
         </span>
       </div>
     }
