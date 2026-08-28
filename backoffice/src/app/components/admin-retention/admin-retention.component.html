@@ -116,6 +116,7 @@
           [buckets]="buckets()"
           [kind]="k.kind"
           [minBucket]="p.minBucket"
+          [usage]="bucketUsageFor(k.kind)"
           (changed)="onTiersChanged(k.kind, $event)"
         />
 

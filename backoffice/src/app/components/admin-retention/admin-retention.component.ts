@@ -10,7 +10,9 @@ import {
   RetentionService,
   formatBytes,
   formatDays,
+  usageForKind,
   type DataKind,
+  type UsageBucket,
   type UsageView,
 } from '../../services/retention.service';
 import {
@@ -273,33 +275,16 @@ export class AdminRetentionComponent {
   }
 
   usageFor(kind: DataKind): number {
-    const u = this.usage();
-    if (!u) return 0;
-    switch (kind) {
-      case 'frame':
-        return u.frames.bytes;
-      case 'scalar':
-        return u.readings.bytes;
-      case 'command':
-        return u.commands.bytes;
-      default:
-        return u.events.bytes;
-    }
+    return usageForKind(this.usage(), kind).bytes;
   }
 
   rowsFor(kind: DataKind): number {
-    const u = this.usage();
-    if (!u) return 0;
-    switch (kind) {
-      case 'frame':
-        return u.frames.rows;
-      case 'scalar':
-        return u.readings.rows;
-      case 'command':
-        return u.commands.rows;
-      default:
-        return u.events.rows;
-    }
+    return usageForKind(this.usage(), kind).rows;
+  }
+
+  /** What each bucket of this kind is holding, for the tier editor's per-row figures (F18.22). */
+  bucketUsageFor(kind: DataKind): Record<string, UsageBucket> {
+    return usageForKind(this.usage(), kind).buckets;
   }
 
   totalBytes(): number {

@@ -1,0 +1,20 @@
+-- F18.22: make a platform-wide "how much is stored in each bucket?" cheap.
+--
+-- `sensor_rollup` already carries @@index([user_device_action_id, bucket, bucket_start]), which
+-- serves every query the rollup and prune halves make — they always know the action. The storage
+-- panel asks a different question: GROUP BY bucket across ALL actions. `bucket` is the SECOND
+-- column of that index, so it is not a usable prefix, and Postgres answers with a sequential scan
+-- of the largest table the feature owns.
+--
+-- Harmless at today's few thousand rows and not harmless at a real one — and this runs on every
+-- load of the admin retention page and of Settings -> Data & storage.
+--
+-- An index rather than a periodically-refreshed counter table on purpose: a counter is a caching
+-- subsystem with staleness semantics to explain, invalidation to get wrong, and a number that can
+-- silently disagree with the rows it claims to count. This keeps the figure exact and costs one
+-- btree over a 12-character column.
+--
+-- A plain btree on (bucket) alone: the panel counts rows per bucket, so an index-only scan over
+-- this index answers the whole query without touching the heap. The per-USER version of the same
+-- question still filters by action id and keeps using the composite index above.
+CREATE INDEX IF NOT EXISTS "sensor_rollup_bucket_idx" ON "sensor_rollup"("bucket");

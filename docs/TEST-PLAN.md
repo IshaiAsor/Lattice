@@ -477,6 +477,24 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
     and the result is an audit entry describing a change in the wrong direction — worse than no
     entry at all, because it will be believed.
 
+### History — `history.retention-usage.test.ts` ✅ (F18.22 how stored history adds up)
+
+- counts the summaries as well as the readings they came from
+- counts a daily rollup table under its own bucket
+- keeps the breakdown beside the total, so the two cannot disagree
+- calls a kind measured only when every part of it is
+- calls a kind estimated as soon as any part of it is
+- totals an empty breakdown to nothing rather than to NaN
+- prices a summary row above the reading it summarises
+  - the storage panel was wrong for a release in a way no test could have caught, because there
+    was nothing to catch: the per-kind total was computed from the RAW table while the rollup
+    tables sat uncounted beside it. So the fix is structural rather than arithmetical — a kind's
+    total is SUMMED from its breakdown instead of computed alongside it, and there is nowhere left
+    for an omitted part to hide. That is what these cases pin.
+  - `estimated` rounds DOWN, not up: a kind whose frames are measured and whose summaries are
+    guessed is not a measurement. Rounding it the other way would make the single honest figure in
+    the feature dishonest.
+
 ### History — `history.retention-cadence.test.ts` ✅ (F18.17 when the pass runs, and whether it is late)
 
 - takes the smallest size any scope has a tier for

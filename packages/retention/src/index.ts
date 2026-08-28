@@ -27,6 +27,18 @@ export {
 export { rawFloorDays, clampKeepDays, pruneCutoff } from './windows';
 
 export {
+  READING_BYTES,
+  COMMAND_BYTES,
+  EVENT_BYTES,
+  ROLLUP_BYTES,
+  COMMAND_ROLLUP_BYTES,
+  AVAILABILITY_BYTES,
+  sumUsage,
+  type UsageBucket,
+  type KindUsage,
+} from './bytes';
+
+export {
   MIN_ROLLUP_INTERVAL_SECONDS,
   ROLLUP_INTERVAL_CEILING_SECONDS,
   finestBucketSeconds,

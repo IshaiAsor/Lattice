@@ -90,6 +90,7 @@
               [kind]="k.kind"
               [minBucket]="p.minBucket"
               [ceilings]="ceilingsFor(k.kind)"
+              [usage]="bucketUsageFor(k.kind)"
               (changed)="onTiersChanged(k.kind, $event)"
             />
 

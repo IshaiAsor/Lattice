@@ -219,3 +219,55 @@
     grid-area: choices;
   }
 }
+
+/* What a bucket is actually holding (F18.22) ------------------------------- */
+
+/* Sits beside the PREDICTED cost, deliberately quieter than it: the prediction is what you are
+   choosing, this is what that choice has already produced. */
+.te-stored {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.te-stored em {
+    font-style: normal;
+    opacity: 0.7;
+}
+
+/* A tier that has never been written is not an error and must not read as one -- a 1w tier is
+   simply younger than a week. */
+.te-stored-none {
+    opacity: 0.55;
+}
+
+.te-orphan {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+}
+
+.te-orphan mat-icon {
+    font-size: 15px;
+    line-height: 15px;
+    /* Never `flex: 0 1 auto` on a mat-icon: Material sets overflow: hidden, so a shrunk icon is
+       clipped rather than scaled. */
+    flex: 0 0 15px;
+    width: 15px;
+    height: 15px;
+    margin-top: 1px;
+}
+
+.te-cost-actual {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* An orphan nothing will collect is a standing cost, not a pending one. */
+.te-orphan-stuck {
+    color: var(--warning);
+}

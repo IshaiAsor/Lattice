@@ -974,6 +974,11 @@ model SensorRollup {
 
   @@unique([user_device_action_id, bucket, bucket_start])
   @@index([user_device_action_id, bucket, bucket_start])
+  // For the storage panel's "how much is stored in each bucket?" (F18.22), which groups by bucket
+  // across ALL actions. `bucket` is the second column of the composite above and so not a usable
+  // prefix for that — without this the panel seq-scans the largest table the feature owns, on
+  // every page load. Counting rows per bucket is answered index-only from here.
+  @@index([bucket])
   @@map("sensor_rollup")
 }
 

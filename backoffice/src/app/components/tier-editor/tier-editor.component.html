@@ -21,6 +21,20 @@
           @if (bucketFor(t.bucket)?.isBuiltin === false) {
             <span class="te-tag te-custom">custom</span>
           }
+          <!-- What this bucket is actually holding, beside what it is predicted to cost (F18.22).
+               The prediction says how many rows a day a tier makes; only this says whether the
+               tier is earning its keep, and it is the one place raw and its own summaries appear
+               in the same units. -->
+          @if (storedIn(t.bucket); as u) {
+            <span class="te-stored">
+              {{ u.rows | number }} stored · {{ formatBytes(u.bytes) }}
+              @if (u.estimated) {
+                <em>est.</em>
+              }
+            </span>
+          } @else {
+            <span class="te-stored te-stored-none">nothing stored yet</span>
+          }
         </div>
 
         <div class="te-choices">
@@ -95,6 +109,30 @@
       }
     </div>
 
+    @if (orphaned().length > 0) {
+      <!-- Rows under a bucket the list no longer has. Real, on disk, and NOT counted by the tiers
+           above — so the storage figure would otherwise silently disagree with what is listed
+           under it.
+
+           The two endings are not interchangeable. Scalars have a real orphan sweep; the two
+           DATE-keyed tables do not, and are pruned only while a tier of exactly one day is in the
+           list (F18.23). Promising a cleanup that never comes would be worse than saying nothing. -->
+      <div class="te-orphan" [class.te-orphan-stuck]="!orphansAreCollected()">
+        <mat-icon>{{ orphansAreCollected() ? 'schedule' : 'info_outline' }}</mat-icon>
+        <span>
+          @for (o of orphaned(); track o.bucket; let last = $last) {
+            {{ bucketFor(o.bucket)?.label ?? o.bucket }} ({{ o.usage.rows | number }} rows)@if
+            (!last) {,&nbsp;}
+          }
+          @if (orphansAreCollected()) {
+            no longer in this list — removed by the next cleanup
+          } @else {
+            still stored — add a 1 day tier to have it cleaned up
+          }
+        </span>
+      </div>
+    }
+
     @if (totalRowsPerDay() > 0) {
       <!-- The cost line. A 5m tier on a 10-second sensor produces more rollup rows than some raw
            windows keep, and that is not obvious until it is counted. -->
@@ -102,6 +140,9 @@
         <mat-icon>storage</mat-icon>
         ~{{ totalRowsPerDay() }} rollup {{ totalRowsPerDay() === 1 ? 'row' : 'rows' }} per sensor per
         day
+        @if (totalStored() > 0) {
+          <span class="te-cost-actual">· {{ totalStored() | number }} stored now</span>
+        }
       </div>
     }
   </div>

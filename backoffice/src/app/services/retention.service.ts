@@ -14,16 +14,46 @@ import { apiUrl } from './api.config';
 
 export type DataKind = 'scalar' | 'frame' | 'command' | 'device_event';
 
+/** One bucket's contribution: `raw` for the source table, a catalog code for each rollup tier. */
 export interface UsageBucket {
   rows: number;
   bytes: number;
+  /** False only for camera frames, where `byte_size` is recorded at write time. */
+  estimated: boolean;
+}
+
+export interface KindUsage extends UsageBucket {
+  /**
+   * Keyed by `retention_buckets.code`, always including `raw`. The totals above are their sum
+   * (F18.22) — before that they were the RAW table alone, so every row retention itself creates
+   * was missing from the figure retention is judged by.
+   */
+  buckets: Record<string, UsageBucket>;
 }
 
 export interface UsageView {
-  frames: UsageBucket;
-  readings: UsageBucket;
-  commands: UsageBucket;
-  events: UsageBucket;
+  frames: KindUsage;
+  readings: KindUsage;
+  commands: KindUsage;
+  events: KindUsage;
+}
+
+/** The API key a data kind's usage lands under. */
+const USAGE_KEY: Record<DataKind, keyof UsageView> = {
+  scalar: 'readings',
+  frame: 'frames',
+  command: 'commands',
+  device_event: 'events',
+};
+
+/**
+ * One kind's usage, or an empty shell.
+ *
+ * Both retention screens do this lookup, and both used to do it with their own inline switch —
+ * which is how the admin page and Settings end up disagreeing about what "Sensor readings" counts.
+ */
+export function usageForKind(usage: UsageView | null, kind: DataKind): KindUsage {
+  return usage?.[USAGE_KEY[kind]] ?? { rows: 0, bytes: 0, estimated: true, buckets: {} };
 }
 
 @Injectable({ providedIn: 'root' })

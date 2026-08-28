@@ -1,4 +1,9 @@
-import type { DataKind } from '@lattice/retention';
+import {
+  COMMAND_BYTES as COMMAND_BYTES_EST,
+  EVENT_BYTES as EVENT_BYTES_EST,
+  READING_BYTES as READING_BYTES_EST,
+  type DataKind,
+} from '@lattice/retention';
 
 // What a retention pass counts, and the per-row constants behind "bytes reclaimed".
 //
@@ -31,9 +36,13 @@ export function newPassCounters(): PassCounters {
   };
 }
 
-export const READING_BYTES = 48n;
-export const COMMAND_BYTES = 180n;
-export const EVENT_BYTES = 120n;
+// The same per-row estimates the storage panel quotes, from @lattice/retention (F18.22). They were
+// duplicated here and in `api` until the panel needed three more, and the two numbers describe the
+// same rows: a person reading "4.2 MB stored" then "reclaimed 1.1 MB" is entitled to assume they
+// are in the same units. BigInt because a pass counts bytes across millions of rows.
+export const READING_BYTES = BigInt(READING_BYTES_EST);
+export const COMMAND_BYTES = BigInt(COMMAND_BYTES_EST);
+export const EVENT_BYTES = BigInt(EVENT_BYTES_EST);
 
 /**
  * Which halves of the pass run (F18.17).

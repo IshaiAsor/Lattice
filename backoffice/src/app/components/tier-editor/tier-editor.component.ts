@@ -10,7 +10,12 @@ import {
   type BucketView,
   type TierView,
 } from '../../services/retention-tiers.service';
-import { formatDays, type DataKind } from '../../services/retention.service';
+import {
+  formatBytes,
+  formatDays,
+  type DataKind,
+  type UsageBucket,
+} from '../../services/retention.service';
 import { CustomBucketDialogComponent } from '../custom-bucket-dialog/custom-bucket-dialog.component';
 
 // One tier list, editable. Used by the admin page (the platform list, with ceilings) and by
@@ -50,12 +55,22 @@ export class TierEditorComponent {
    * against itself would refuse an admin raising their own limit.
    */
   ceilings = input<Record<string, number | null>>({});
+  /**
+   * What each bucket is ACTUALLY holding right now, keyed by catalog code (F18.22).
+   *
+   * The cost line beside it is a prediction — `86400 / seconds` rows per sensor per day — and a
+   * prediction cannot tell you whether a tier is earning its keep. This can: it is the only place
+   * raw and its own summaries appear on one screen in the same units, which is the trade a tier
+   * list exists to make.
+   */
+  usage = input<Record<string, UsageBucket>>({});
   disabled = input<boolean>(false);
 
   changed = output<TierView[]>();
 
   readonly choices = CHOICES;
   readonly formatDays = formatDays;
+  readonly formatBytes = formatBytes;
   readonly bucketCost = bucketCost;
 
   /** Local working copy, so a half-finished edit is not pushed on every keystroke. */
@@ -120,6 +135,43 @@ export class TierEditorComponent {
     Math.round(
       this.rows().reduce((n, t) => n + (this.bucketFor(t.bucket)?.rowsPerDay ?? 0), 0) * 100,
     ) / 100,
+  );
+
+  /** What this bucket is holding, or null when nothing has been written under it yet. */
+  storedIn(bucket: string): UsageBucket | null {
+    const u = this.usage()[bucket];
+    return u && u.rows > 0 ? u : null;
+  }
+
+  /**
+   * Will the next cleanup actually collect an orphaned bucket?
+   *
+   * **Only for scalars.** `pruneHistory` sweeps `sensor_rollup` for rows whose bucket is no longer
+   * configured, and nothing equivalent exists for `command_rollup_daily` or
+   * `device_availability_daily` — those are pruned only while a tier of exactly one day is in the
+   * list, and are written regardless (F18.23). So on those two kinds an orphan is not "about to be
+   * removed", it is simply sitting there, and saying otherwise would promise a cleanup that never
+   * comes.
+   */
+  orphansAreCollected = computed(() => this.kind() === 'scalar');
+
+  /**
+   * Every bucket holding rows that the list no longer configures.
+   *
+   * Worth naming rather than silently omitting: a tier removed this morning is still costing what
+   * it cost, and the storage figure above will not drop until something removes it — which, per
+   * the flag above, is not guaranteed to be anything.
+   */
+  orphaned = computed<{ bucket: string; usage: UsageBucket }[]>(() => {
+    const configured = new Set(this.rows().map((t) => t.bucket));
+    return Object.entries(this.usage())
+      .filter(([bucket, u]) => !configured.has(bucket) && u.rows > 0)
+      .map(([bucket, usage]) => ({ bucket, usage }));
+  });
+
+  /** Rows stored across every bucket in this list, so the footer totals what the rows show. */
+  totalStored = computed(() =>
+    this.rows().reduce((n, t) => n + (this.usage()[t.bucket]?.rows ?? 0), 0),
   );
 
   ceilingFor(bucket: string): number | null {
