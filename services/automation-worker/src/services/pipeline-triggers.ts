@@ -9,6 +9,7 @@ import {
   isAutomationLive,
   isErrorReading,
   isTriggerInCooldown,
+  matchesErrorCode,
   matchesSchedule,
   resolveClock,
   resolveParam,
@@ -23,32 +24,42 @@ const log = createLogger('automation-worker:pipeline-triggers');
 // is a large base64 blob — skip resolution entirely for these. Mirrors digest-service/src/resolve.
 const IMAGE_IMPL_TYPES = new Set(['CameraAction']);
 
-// Match a fresh scalar reading against every enabled sensor_threshold pipeline trigger on that
-// action and fire the ones whose threshold + phase scope + cooldown all pass. This is the pipeline
-// half of "a scalar state changed → fire automations"; the rule half is rulesEngine.evaluateForUser.
-// digest-service owns the authoritative state write for the same telemetry (separate queue); the two
-// consume telemetry.arrived independently, so nothing here depends on that write having happened.
+// Match a fresh reading against every enabled pipeline trigger on that action and fire the ones
+// whose match + phase scope + cooldown all pass. This is the pipeline half of "a reading arrived →
+// fire automations"; the rule half is rulesEngine.evaluateForUser. digest-service owns the
+// authoritative state write for the same telemetry (separate queue); the two consume
+// telemetry.arrived independently, so nothing here depends on that write having happened.
+//
+// Two kinds arrive on this path and they differ in exactly three places — which `trigger_type` is
+// selected, what counts as a match, and the type stamped on the run. Everything else (resolving the
+// action, the three phase gates, the param context, the cooldown, the run row, the publish and the
+// last_fired_at stamp) is identical, so it is written once below rather than forked: a second copy
+// is how one kind quietly stops honouring a gate the other one gained.
+//
+// `sensor_threshold` compares a scalar against a threshold. `error` fires on a fault envelope —
+// EDGE-triggered, unlike the rule condition of the same name, because this path sees the message
+// itself rather than the action's stored state.
 export async function matchPipelineTriggers(
   ch: Channel,
   payload: TelemetryArrivedPayload,
 ): Promise<void> {
   const { userId, deviceId, actionName, value } = payload;
 
-  // A fault envelope is not a value — it can never satisfy a threshold. (evaluateThreshold guards
-  // this too, but bailing here avoids the resolve/query round-trips for every fault reading.)
-  if (isErrorReading(value)) return;
+  const fault = isErrorReading(value) ? value : null;
+  const triggerType = fault ? 'error' : 'sensor_threshold';
 
   const action = await db.userDeviceAction.findFirst({
     where: { user_device_id: parseInt(deviceId, 10), mqtt_action_name: actionName },
     select: { id: true, capability: { select: { implementation_type: true } } },
   });
-  // Unknown action, or an image action (no value threshold applies) — nothing to match.
+  // Unknown action, or an image action (neither a value threshold nor a fault applies) — nothing
+  // to match.
   if (!action || IMAGE_IMPL_TYPES.has(action.capability.implementation_type)) return;
 
   const triggers = await db.pipelineTrigger.findMany({
     where: {
       pipeline: { enabled: true, user_id: parseInt(userId, 10) },
-      trigger_type: 'sensor_threshold',
+      trigger_type: triggerType,
       user_device_action_id: action.id,
     },
     include: {
@@ -72,7 +83,9 @@ export async function matchPipelineTriggers(
   // reference, stored verbatim by derive — so it has to be resolved here for the same reason the
   // rule engine resolves its condition thresholds. Unresolved, `evaluateThreshold` parses the
   // reference to NaN, falls back to string equality against the reading, and the trigger simply
-  // never fires: no error, no log, a dead automation.
+  // never fires: no error, no log, a dead automation. (An error trigger has no such position —
+  // `error_code` is a literal fault name, never a reference — but it wants the same context for
+  // the phase gate below, which is read from it.)
   const contexts = await loadParamContexts(triggers.map((t) => t.pipeline));
 
   const now = new Date();
@@ -94,17 +107,22 @@ export async function matchPipelineTriggers(
       continue;
     }
 
-    // Fail closed, like the rule engine: a reference with nothing behind it must not be compared
-    // as raw text.
-    const threshold = resolveParam(trigger.threshold_value, ctx);
-    if (threshold === null) {
-      log.warn(
-        { triggerId: trigger.id, threshold_value: trigger.threshold_value },
-        'pipeline trigger threshold references an unresolvable parameter — not evaluated',
-      );
-      continue;
+    if (fault) {
+      // Null error_code = any fault, which is what the editor writes today.
+      if (!matchesErrorCode(fault.error, trigger.error_code)) continue;
+    } else {
+      // Fail closed, like the rule engine: a reference with nothing behind it must not be compared
+      // as raw text.
+      const threshold = resolveParam(trigger.threshold_value, ctx);
+      if (threshold === null) {
+        log.warn(
+          { triggerId: trigger.id, threshold_value: trigger.threshold_value },
+          'pipeline trigger threshold references an unresolvable parameter — not evaluated',
+        );
+        continue;
+      }
+      if (!evaluateThreshold(value, trigger.operator!, threshold)) continue;
     }
-    if (!evaluateThreshold(value, trigger.operator!, threshold)) continue;
 
     // Per-trigger cooldown, persisted on the trigger row (durable across restarts — unlike the
     // former Valkey key, which reset on restart and could double-fire).
@@ -114,11 +132,13 @@ export async function matchPipelineTriggers(
       data: {
         pipeline_id: trigger.pipeline.id,
         status: 'queued',
-        trigger_type: 'sensor_threshold',
+        trigger_type: triggerType,
         trigger_payload: {
           triggerId: trigger.id,
           actionId: action.id,
-          value: String(value),
+          // For a fault this is the envelope's own code, so the run records WHICH fault started
+          // it rather than the stringified object.
+          value: fault ? fault.error : String(value),
         } as Prisma.InputJsonValue,
       },
     });
@@ -136,8 +156,8 @@ export async function matchPipelineTriggers(
     }
 
     log.info(
-      { triggerId: trigger.id, pipelineId: trigger.pipeline.id, runId: run.id },
-      'pipeline sensor_threshold trigger fired',
+      { triggerId: trigger.id, pipelineId: trigger.pipeline.id, runId: run.id, triggerType },
+      'pipeline trigger fired',
     );
   }
 }

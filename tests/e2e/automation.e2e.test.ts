@@ -159,4 +159,68 @@ describe('automation e2e', () => {
     const after = await apiGet('/api/rules', token);
     expect(after.find((r: any) => r.id === ruleId).enabled).toBe(false);
   });
+
+  // Runs last on purpose: the threshold rule above is disabled by the CRUD case, so nothing else
+  // is watching this sensor and a command arriving here can only have come from the fault rule.
+  itStack(
+    'a fault reading fires an error rule and a good reading afterwards stops it',
+    async () => {
+      if (!sensorActionId || !outletActionId) {
+        console.warn('no sensor+outlet pair in catalog — skipping');
+        return;
+      }
+
+      const rule = await apiPost('/api/rules', token, {
+        name: `e2e fault ${MAC}`,
+        condition_operator: 'AND',
+        cooldown_seconds: 1,
+        conditions: [
+          // No error_code — any fault. That is what the editors write today (F20).
+          { condition_type: 'error', user_device_action_id: sensorActionId },
+        ],
+        // 'off' rather than 'on' so this rule's command is distinguishable from the threshold
+        // rule's, not merely newer than it.
+        actions: [{ user_device_action_id: outletActionId, target_state: 'off', delay_seconds: 0 }],
+      });
+      ruleIds.push(rule.id);
+      expect(rule.conditions[0].condition_type).toBe('error');
+
+      // The fault envelope the firmware publishes on the normal telemetry topic. digest records it,
+      // sets the action's fault marker and nudges rules.evaluate — without that nudge the rule would
+      // sit unevaluated, since the 10s cron only sweeps schedule-bearing rules.
+      const commandP = dev.waitFor(
+        'command',
+        (c: any) => c.action === outlet.mqtt_action_name && c.value === 'off',
+        20000,
+      );
+      dev.publishTelemetry(
+        sensor.mqtt_action_name,
+        JSON.stringify({ error: 'read_failed', action: sensor.mqtt_action_name }),
+      );
+      const cmd = await commandP;
+      expect(cmd.valid).toBe(true);
+      const faultCommandId = cmd.commandId;
+
+      // Recovery. Same ordering care as the below-threshold case: publish the good reading and wait
+      // until the platform has RECORDED it before opening the observation window, or the marker may
+      // still be set when the window opens and a correct fire reads as a failure to clear.
+      dev.publishTelemetry(sensor.mqtt_action_name, 50);
+      await poll(
+        () => apiGet('/api/actions', token),
+        (all: any[]) => Number(all.find((a) => a.id === sensorActionId)?.state) === 50,
+        { timeoutMs: 15000 },
+      );
+
+      // A good reading clears the marker, so the level condition is false and the rule stops — with
+      // nobody having edited it. Wait past the 1s cooldown first so silence means "does not match"
+      // rather than "still rate-limited".
+      await new Promise((r) => setTimeout(r, 1500));
+      const afterRecovery = dev.waitFor(
+        'command',
+        (c: any) => c.action === outlet.mqtt_action_name && c.commandId !== faultCommandId,
+        5000,
+      );
+      await expect(afterRecovery).rejects.toThrow(/timed out/);
+    },
+  );
 });

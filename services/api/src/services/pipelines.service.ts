@@ -74,6 +74,7 @@ function toPipelineWriteData(dto: CreatePipelineDto) {
         user_device_action_id: t.user_device_action_id ?? null,
         operator: t.operator ?? null,
         threshold_value: t.threshold_value ?? null,
+        error_code: t.error_code ?? null,
         schedule_time: t.schedule_time ?? null,
         schedule_until: t.schedule_until ?? null,
         schedule_every_minutes: t.schedule_every_minutes ?? null,

@@ -422,6 +422,7 @@
 .cond-threshold { border-left: 3px solid color-mix(in srgb, var(--stage-exec) 55%, transparent); }
 .cond-state     { border-left: 3px solid color-mix(in srgb, var(--stage-digest) 55%, transparent); }
 .cond-schedule  { border-left: 3px solid color-mix(in srgb, var(--primary) 55%, transparent); }
+.cond-error     { border-left: 3px solid color-mix(in srgb, var(--error) 55%, transparent); }
 .act-card       { border-left: 3px solid color-mix(in srgb, var(--stage-exec) 55%, transparent); }
 
 .item-head {
@@ -499,6 +500,7 @@
   color: var(--primary);
   border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
 }
+.badge-error,
 .badge-emergency {
   background: color-mix(in srgb, var(--error) 15%, transparent);
   color: var(--error);

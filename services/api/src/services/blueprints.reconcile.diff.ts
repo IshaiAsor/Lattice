@@ -175,6 +175,7 @@ export async function reconcileRuleTemplate(
       operator: c.operator,
       threshold_value: c.threshold_value,
       status_value: c.status_value,
+      error_code: c.error_code,
       schedule_time: c.schedule_time,
       schedule_until: c.schedule_until,
       schedule_every_minutes: c.schedule_every_minutes,
@@ -334,19 +335,25 @@ export async function reconcilePipelineTemplate(
   }
   const triggerData: Prisma.PipelineTriggerUncheckedCreateWithoutPipelineInput[] = [];
   for (const t of template.triggers) {
-    // Schedule triggers carry no device action — pass through unchanged.
+    // Written once so the two branches below cannot drift apart — the same fix the condition loop
+    // above already carries, and for the same reason: these were two hand-copied field maps, so a
+    // column added to one and forgotten in the other is silently dropped on every reconcile of a
+    // pipeline whose trigger happens to take that branch.
+    const common = {
+      trigger_type: t.trigger_type,
+      operator: t.operator,
+      threshold_value: t.threshold_value,
+      error_code: t.error_code,
+      schedule_time: t.schedule_time,
+      schedule_until: t.schedule_until,
+      schedule_every_minutes: t.schedule_every_minutes,
+      schedule_days: t.schedule_days,
+      min_interval_sec: t.min_interval_sec,
+    };
+
+    // Schedule and manual triggers carry no device action — pass through unchanged.
     if (!(t.slot_key && t.action_name)) {
-      triggerData.push({
-        trigger_type: t.trigger_type,
-        user_device_action_id: null,
-        operator: t.operator,
-        threshold_value: t.threshold_value,
-        schedule_time: t.schedule_time,
-        schedule_until: t.schedule_until,
-        schedule_every_minutes: t.schedule_every_minutes,
-        schedule_days: t.schedule_days,
-        min_interval_sec: t.min_interval_sec,
-      });
+      triggerData.push({ ...common, user_device_action_id: null });
       continue;
     }
     const ids = ctx.resolveAll(t.slot_key, t.action_name);
@@ -355,17 +362,7 @@ export async function reconcilePipelineTemplate(
       continue;
     }
     for (const id of ids) {
-      triggerData.push({
-        trigger_type: t.trigger_type,
-        user_device_action_id: id,
-        operator: t.operator,
-        threshold_value: t.threshold_value,
-        schedule_time: t.schedule_time,
-        schedule_until: t.schedule_until,
-        schedule_every_minutes: t.schedule_every_minutes,
-        schedule_days: t.schedule_days,
-        min_interval_sec: t.min_interval_sec,
-      });
+      triggerData.push({ ...common, user_device_action_id: id });
     }
   }
   if (unresolved > 0) {

@@ -34,10 +34,12 @@ export interface CommandExecStageDto {
 export type PipelineStageDto = EnrichStageDto | InferStageDto | CommandExecStageDto;
 
 export interface PipelineTriggerDto {
-  trigger_type: 'sensor_threshold' | 'schedule' | 'manual';
+  trigger_type: 'sensor_threshold' | 'schedule' | 'manual' | 'error';
   user_device_action_id?: number | null;
   operator?: string | null;
   threshold_value?: string | null;
+  /** `error`: which fault fires the run, null = any fault (F20). */
+  error_code?: string | null;
   /** HH:MM — fires once a day, or opens a window when the two below are set. */
   schedule_time?: string | null;
   schedule_until?: string | null;

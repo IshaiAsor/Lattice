@@ -472,6 +472,15 @@ model UserDeviceAction {
   // Where that confirmation came from: command-ack | telemetry | reconcile | boot-restore.
   // "boot-restore" is an unsolicited ack — the device volunteering its NVS state after a reboot.
   state_source          String?   @db.VarChar(20)
+  // The fault the action is reporting RIGHT NOW, and since when (F20). Written by digest-service
+  // when a fault envelope arrives, cleared by the next good reading. Deliberately beside
+  // `current_state` rather than derived from `sensor_history`: an error rule condition has to be
+  // answerable in one query alongside every other condition it is ANDed with, and history rows are
+  // pruned by retention — a fault could otherwise vanish from under a live rule for a reason that
+  // has nothing to do with the device. `error_since` survives repeat faults (only a recovery
+  // clears it) so it measures fault DURATION, not the age of the last fault message.
+  current_error_code    String?   @db.VarChar(100)
+  error_since           DateTime? @db.Timestamptz(6)
   status                String    @default("active") @db.VarChar(20)
   sort_order            Int       @default(0)
   telemetry_interval_ms Int?
@@ -589,7 +598,7 @@ model UserRule {
 model UserRuleCondition {
   id             Int    @id @default(autoincrement())
   rule_id        Int
-  condition_type String @db.VarChar(20) // threshold | device_status | schedule | vlm
+  condition_type String @db.VarChar(20) // threshold | device_status | schedule | error | vlm
 
   // threshold: reading from a sensor action vs a value
   user_device_action_id Int?
@@ -599,6 +608,13 @@ model UserRuleCondition {
   // device_status: a device is online/offline
   user_device_id Int?
   status_value   String? @db.VarChar(20)
+
+  // error: the sensor action is currently reporting a fault (F20). Reuses user_device_action_id
+  // above for the target; this names WHICH fault to match. Null = any fault, which is what the
+  // editors write today — firmware emits one code (`read_failed`) and a picker over one value
+  // would be a promise the platform cannot keep. The engine reads the action's own
+  // `current_error_code`, so this is a level condition like threshold, not an edge one.
+  error_code String? @db.VarChar(100)
 
   // schedule: time-of-day + days-of-week (0=Sun … 6=Sat)
   // HH:MM literal OR a reference (`@phase.light.on_time`) — see user_rule_actions.duration_seconds
@@ -802,10 +818,14 @@ model PipelineStage {
 model PipelineTrigger {
   id                     Int       @id @default(autoincrement())
   pipeline_id            Int
-  trigger_type           String    @db.VarChar(20)
+  trigger_type           String    @db.VarChar(20) // sensor_threshold | schedule | manual | error
   user_device_action_id  Int?
   operator               String?   @db.VarChar(5)
   threshold_value        String?   @db.VarChar(100)
+  // error: which fault to fire on, null = any (F20). Unlike the rule condition of the same name
+  // this one is EDGE-triggered — pipeline triggers consume telemetry.arrived directly, so the run
+  // starts on the fault message arriving rather than on the action being in a faulted state.
+  error_code             String?   @db.VarChar(100)
   // A schedule trigger, in the same shape a rule condition uses (see user_rule_conditions).
   // Replaces `schedule_cron`, which was stored, validated and NEVER evaluated — a pipeline with a
   // schedule trigger simply never ran. One shape for both, so there is one thing to learn and one
@@ -1786,12 +1806,14 @@ model BlueprintRuleTemplate {
 model BlueprintRuleTemplateCondition {
   id                     Int     @id @default(autoincrement())
   template_id            Int
-  condition_type         String  @db.VarChar(20) // threshold | device_status | schedule
+  condition_type         String  @db.VarChar(20) // threshold | device_status | schedule | error
   slot_key               String? @db.VarChar(64)
   action_name            String? @db.VarChar(64)
   operator               String? @db.VarChar(5)
   threshold_value        String? @db.VarChar(100) // literal OR "@phase.humidity.min"
   status_value           String? @db.VarChar(20)
+  // error: which fault this condition matches, null = any (F20). See user_rule_conditions.
+  error_code             String? @db.VarChar(100)
   schedule_time          String? @db.VarChar(100) // HH:MM literal OR "@phase.light.on_time" (F11.14)
   schedule_days          Int[]   @default([])
   // A schedule is one minute a day unless a WINDOW is given, in which case it repeats:
@@ -1899,6 +1921,8 @@ model BlueprintPipelineTemplateTrigger {
   action_name            String? @db.VarChar(64)
   operator               String? @db.VarChar(5)
   threshold_value        String? @db.VarChar(100) // literal OR a reference
+  // error: which fault this trigger fires on, null = any (F20). See pipeline_triggers.
+  error_code             String? @db.VarChar(100)
   // A schedule trigger, in the same shape a rule condition uses (see user_rule_conditions).
   // Replaces `schedule_cron`, which was stored, validated and NEVER evaluated — a pipeline with a
   // schedule trigger simply never ran. One shape for both, so there is one thing to learn and one

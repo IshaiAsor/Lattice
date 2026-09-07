@@ -6,12 +6,14 @@ import { apiUrl } from './api.config';
 // Typed conditions (F1.7) — no more `parameters` blob. Fields are populated per
 // condition_type; the rest stay null.
 export interface RuleConditionDto {
-  condition_type: 'device_state' | 'device_status' | 'threshold' | 'schedule';
+  condition_type: 'device_state' | 'device_status' | 'threshold' | 'schedule' | 'error';
   user_device_action_id?: number | null;
   operator?: string | null;
   threshold_value?: string | null;
   user_device_id?: number | null;
   status_value?: string | null;
+  /** `error`: which fault to match on the action, null = any fault (F20). */
+  error_code?: string | null;
   schedule_time?: string | null;
   /** With `schedule_every_minutes`, repeats from schedule_time through this each day. */
   schedule_until?: string | null;

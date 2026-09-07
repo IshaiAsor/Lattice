@@ -465,6 +465,7 @@
 .trig-sensor_threshold   { border-left: 3px solid color-mix(in srgb, var(--stage-exec) 55%, transparent); }
 .trig-schedule           { border-left: 3px solid color-mix(in srgb, var(--primary) 55%, transparent); }
 .trig-manual             { border-left: 3px solid color-mix(in srgb, var(--text-muted) 45%, transparent); }
+.trig-error              { border-left: 3px solid color-mix(in srgb, var(--error) 55%, transparent); }
 
 .item-head {
   display: flex;
@@ -542,6 +543,11 @@
   background: color-mix(in srgb, var(--primary) 14%, transparent);
   color: var(--primary);
   border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.badge-error {
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error);
+  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
 }
 .badge-manual {
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);

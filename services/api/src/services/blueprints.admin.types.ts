@@ -216,6 +216,8 @@ export interface BlueprintRuleDoc extends FanOutDoc {
     operator?: string | null;
     threshold_value?: string | null;
     status_value?: string | null;
+    /** `error`: which fault the condition matches on the slot's action, null = any (F20). */
+    error_code?: string | null;
     schedule_time?: string | null;
     /** With `schedule_every_minutes`, turns the time into a repeating window (F11.11). */
     schedule_until?: string | null;
@@ -274,6 +276,8 @@ export interface BlueprintPipelineDoc extends FanOutDoc {
     action_name?: string | null;
     operator?: string | null;
     threshold_value?: string | null;
+    /** `error`: which fault fires the run, null = any (F20). */
+    error_code?: string | null;
     /**
      * A schedule trigger, in the same shape a rule condition uses: `schedule_time` alone fires once
      * a day; add `schedule_until` + `schedule_every_minutes` for a repeating window. Replaces

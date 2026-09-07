@@ -44,6 +44,9 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - is not in cooldown when no interval is set
 - is in cooldown while inside the interval window
 - is out of cooldown once the interval has elapsed
+- matches any fault when no error code is wanted
+- matches only the wanted error code when one is given
+- never matches when the action is not faulted
 
 ### Telemetry — `telemetry.topic-parser.test.ts` ✅
 
@@ -849,6 +852,9 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
   - full chain: telemetry → digest → rules.evaluate → automation-worker → action.dispatch → device
 - below-threshold telemetry does not fire the rule
 - rule CRUD: list shows it, toggle disables it, delete removes it
+- a fault reading fires an error rule and a good reading afterwards stops it
+  - F20: digest sets the action's fault marker and nudges rules.evaluate; the recovery
+    reading clears it, so the rule stops matching without anyone editing it
 - ⬜ schedule rule fires at the configured minute
 - ⬜ cooldown suppresses an immediate refire
 - ⬜ pipeline sensor-threshold trigger → pipelineRun row queued, cooldown respected

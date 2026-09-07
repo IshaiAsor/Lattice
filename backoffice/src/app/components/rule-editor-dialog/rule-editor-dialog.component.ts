@@ -8,6 +8,7 @@ import { CreateRuleDto, UserRuleView } from 'src/app/services/user.rules.service
 import { actionControlType, ActionControlType } from 'src/app/utils/device-type.utils';
 
 interface ConditionPrefill {
+  error_code?: string | null;
   days?: number[];
   until?: string;
   everyMinutes?: number | null;
@@ -27,6 +28,7 @@ interface ActionPrefill {
 
 interface ConditionFormValue {
   condition_type: string;
+  error_code?: string | null;
   time?: string;
   days?: boolean[];
   until?: string;
@@ -49,7 +51,7 @@ export interface RuleEditorData {
   devices: DeviceView[];
 }
 
-export type ConditionType = 'device_state' | 'threshold' | 'schedule' | 'device_status';
+export type ConditionType = 'device_state' | 'threshold' | 'schedule' | 'device_status' | 'error';
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -150,6 +152,7 @@ export class RuleEditorDialogComponent implements OnInit {
           status: c.status_value ?? undefined,
           user_device_action_id: c.user_device_action_id ?? undefined,
           operator: c.operator ?? undefined,
+          error_code: c.error_code ?? null,
         });
       }
       for (const a of rule.actions) {
@@ -208,6 +211,18 @@ export class RuleEditorDialogComponent implements OnInit {
         condition_type: ['device_state'],
         device_id: [prefill?.user_device_id ?? null, Validators.required],
         value: [prefill?.value ?? prefill?.status ?? 'online', Validators.required],
+      });
+    } else if (type === 'error') {
+      // A fault condition watches one action and compares nothing — no operator, no value. It must
+      // come before the threshold fallback below, which would otherwise build it with two required
+      // controls it never fills and a Save that can never be reached.
+      group = this.fb.group({
+        condition_type: [type],
+        device_id: [this.deviceIdForAction(prefill?.user_device_action_id)],
+        user_device_action_id: [prefill?.user_device_action_id ?? null, Validators.required],
+        // Null = any fault. Carried through the form so editing a blueprint-authored condition that
+        // names a specific code does not silently widen it to "any".
+        error_code: [prefill?.error_code ?? null],
       });
     } else {
       // threshold
@@ -386,6 +401,7 @@ export class RuleEditorDialogComponent implements OnInit {
     const type = this.conditionsArray.at(i).get('condition_type')?.value as string;
     if (type === 'schedule') return { key: 'schedule', label: 'Schedule' };
     if (type === 'threshold') return { key: 'threshold', label: 'Threshold' };
+    if (type === 'error') return { key: 'error', label: 'Fault' };
     return { key: 'state', label: 'State' };
   }
 
@@ -408,6 +424,13 @@ export class RuleEditorDialogComponent implements OnInit {
     if (type === 'device_state') {
       const device = this.uniqueDevices.find((d) => d.id === c.get('device_id')?.value);
       return device ? `${device.name} is ${c.get('value')?.value}` : 'no device selected';
+    }
+
+    if (type === 'error') {
+      const faulted = this.getAction(c.get('user_device_action_id')?.value);
+      if (!faulted) return 'no action selected';
+      const code = c.get('error_code')?.value as string | null;
+      return `${this.actionLabel(faulted)} reports ${code ? code : 'a fault'}`;
     }
 
     const action = this.getAction(c.get('user_device_action_id')?.value);
@@ -507,6 +530,14 @@ export class RuleEditorDialogComponent implements OnInit {
         }
         if (thresholds.some((c) => c.get('value')?.value === '' || c.get('value')?.value == null)) {
           errors.push('Every threshold condition needs a value to compare against.');
+        }
+        if (
+          controls.some(
+            (c) =>
+              c.get('condition_type')?.value === 'error' && !c.get('user_device_action_id')?.value,
+          )
+        ) {
+          errors.push('Every fault condition needs an action to watch.');
         }
         break;
       }
@@ -619,6 +650,13 @@ export class RuleEditorDialogComponent implements OnInit {
             condition_type: 'device_state',
             user_device_id: c.device_id,
             status_value: String(c.value),
+          };
+        }
+        if (c.condition_type === 'error') {
+          return {
+            condition_type: 'error',
+            user_device_action_id: c.user_device_action_id,
+            error_code: c.error_code ?? null,
           };
         }
         // threshold

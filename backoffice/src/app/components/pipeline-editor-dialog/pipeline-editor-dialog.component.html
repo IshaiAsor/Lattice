@@ -515,6 +515,28 @@
                           </div>
                         }
 
+                        @if (triggerType(ti) === 'error') {
+                          <!-- A fault trigger has no value to compare: it fires when this sensor
+                               reports a read failure. No error-code control — the firmware emits a
+                               single code, so "any fault" is the only honest choice today (F20). -->
+                          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width">
+                            <mat-label>Sensor action</mat-label>
+                            <input matInput
+                                   formControlName="user_device_action_id"
+                                   [matAutocomplete]="faultAuto"
+                                   placeholder="Search…" />
+                            <mat-autocomplete #faultAuto="matAutocomplete" [displayWith]="actionDisplayName">
+                              @for (a of filteredScalarActions(t); track a.id) {
+                                <mat-option [value]="a.id">{{ a.deviceName }} — {{ a.name }}</mat-option>
+                              }
+                            </mat-autocomplete>
+                            @if (t.get('user_device_action_id')?.hasError('invalidAction')) {
+                              <mat-error>Select an item from the list</mat-error>
+                            }
+                            <mat-hint>Runs when this sensor reports a fault instead of a reading.</mat-hint>
+                          </mat-form-field>
+                        }
+
                         @if (triggerType(ti) === 'schedule') {
                           <!-- Leave Until/Every blank to run once a day. Filled, they repeat it
                                through the window — "06:00 to 17:30, every 10 minutes". -->

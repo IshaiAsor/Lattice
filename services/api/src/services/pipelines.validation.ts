@@ -53,6 +53,12 @@ export function validate(dto: CreatePipelineDto): void {
         );
       }
     }
+    // An error trigger fires on a fault from ONE action, so it must name it — without one nothing
+    // would ever match it and the pipeline would look enabled while being unreachable (F20).
+    // `error_code` stays optional: null means any fault.
+    if (t.trigger_type === 'error' && !t.user_device_action_id) {
+      throw err(400, 'error trigger requires user_device_action_id');
+    }
     if (t.trigger_type === 'schedule') {
       // The same rules a rule condition and a blueprint template are held to — one validator, so a
       // schedule that saves on one surface cannot be rejected on another.

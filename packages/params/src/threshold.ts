@@ -22,6 +22,25 @@ export function isErrorReading(value: unknown): value is ErrorReading {
   );
 }
 
+// Does an observed fault code satisfy a condition/trigger that asked for `want` (F20)?
+//
+// `want === null` is the common case and means ANY fault — it is what both editors write, because
+// firmware emits a single code today and a picker over one value would promise a choice that does
+// not exist. So the question this answers is usually just "is it faulted at all", and the code
+// comparison is the part that starts mattering the day a second code ships.
+//
+// `observed` is nullable because that is how "not faulted" is stored: a null current_error_code on
+// the action, or a fault envelope that somehow carried an empty code. Both are NOT a fault, and
+// neither may satisfy a condition — including one asking for any fault.
+export function matchesErrorCode(
+  observed: string | null | undefined,
+  want: string | null | undefined,
+): boolean {
+  if (!observed) return false;
+  if (!want) return true;
+  return observed === want;
+}
+
 // Per-trigger cooldown gate. True while a trigger with this `minIntervalSec` is still within its
 // cooldown window measured from `lastFiredAt`. A trigger that has never fired (null `lastFiredAt`)
 // or has no interval is never in cooldown. Pure so the matcher's rate-limit is unit-testable.

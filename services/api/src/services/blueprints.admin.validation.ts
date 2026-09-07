@@ -672,6 +672,13 @@ function problemsFor(bp: ValidationShape): string[] {
           );
         }
       }
+      // An error condition reads the fault marker on ONE resolved action, so it needs both halves
+      // of the address. Same silent-inertness class as the device_status check above (F20).
+      if (c.condition_type === 'error' && !(c.slot_key && c.action_name)) {
+        problems.push(
+          `rule "${rule.key}" checks for a fault but names no slot and action to watch`,
+        );
+      }
       // A schedule that does not parse fires never, and "never" is indistinguishable from a rule
       // whose conditions simply have not been met — so it has to be caught before publish.
       if (c.condition_type === 'schedule') {
@@ -721,6 +728,12 @@ function problemsFor(bp: ValidationShape): string[] {
       checkRefs(`pipeline "${pipeline.key}" trigger threshold`, t.threshold_value);
       checkPositional(`pipeline "${pipeline.key}" schedule_time`, t.schedule_time, 'clock');
       checkPositional(`pipeline "${pipeline.key}" schedule_until`, t.schedule_until, 'clock');
+      // Same address requirement as the error rule condition above (F20).
+      if (t.trigger_type === 'error' && !(t.slot_key && t.action_name)) {
+        problems.push(
+          `pipeline "${pipeline.key}" triggers on a fault but names no slot and action to watch`,
+        );
+      }
       if (t.trigger_type === 'schedule') {
         const problem = validateSchedule(scheduleOf(t));
         if (problem) problems.push(`pipeline "${pipeline.key}" schedule: ${problem}`);

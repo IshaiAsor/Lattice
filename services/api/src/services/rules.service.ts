@@ -6,12 +6,14 @@ import { db } from '../db';
 // automation-worker reads, so rules created here fire correctly.
 
 export interface RuleConditionDto {
-  condition_type: string; // threshold | device_state | device_status | schedule | vlm
+  condition_type: string; // threshold | device_state | device_status | schedule | error | vlm
   user_device_action_id?: number | null;
   operator?: string | null;
   threshold_value?: string | null;
   user_device_id?: number | null;
   status_value?: string | null;
+  /** `error`: which fault to match on the action, null = any fault (F20). */
+  error_code?: string | null;
   schedule_time?: string | null;
   /** With `schedule_every_minutes`, repeats from schedule_time through this each day (F11.11). */
   schedule_until?: string | null;
@@ -75,6 +77,14 @@ function validate(dto: CreateRuleDto): void {
   // simply never matched, which reads to a user as a broken rule rather than a bad value. Same
   // validator the pipelines API and blueprint publish use.
   for (const c of dto.conditions) {
+    // An error condition names the action whose fault marker it reads. Without one it can never
+    // resolve a target and evaluates false forever — the same silent-inertness the schedule check
+    // below exists to prevent, so it is refused here rather than saved and quietly dead (F20).
+    if (c.condition_type === 'error' && !c.user_device_action_id) {
+      throw Object.assign(new Error('an error condition must name a device action'), {
+        statusCode: 400,
+      });
+    }
     if (c.condition_type !== 'schedule') continue;
     const problem = validateSchedule({
       time: c.schedule_time ?? null,
@@ -94,6 +104,7 @@ function conditionCreateData(c: RuleConditionDto) {
     threshold_value: c.threshold_value ?? null,
     user_device_id: c.user_device_id ?? null,
     status_value: c.status_value ?? null,
+    error_code: c.error_code ?? null,
     schedule_time: c.schedule_time ?? null,
     // A window makes the schedule repeat inside its hours (F11.11); both null is the single-time
     // shape every schedule had before.
@@ -235,6 +246,7 @@ class RulesService {
       threshold_value: string | null;
       user_device_id: number | null;
       status_value: string | null;
+      error_code: string | null;
       schedule_time: string | null;
       schedule_until: string | null;
       schedule_every_minutes: number | null;
@@ -265,6 +277,7 @@ class RulesService {
         threshold_value: c.threshold_value,
         user_device_id: c.user_device_id,
         status_value: c.status_value,
+        error_code: c.error_code,
         schedule_time: c.schedule_time,
         schedule_until: c.schedule_until,
         schedule_every_minutes: c.schedule_every_minutes,

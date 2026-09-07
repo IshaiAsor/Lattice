@@ -142,6 +142,7 @@ async function handleScalar(
   // The last good value stays authoritative.
   if (isErrorReading(value)) {
     await recordErrorReading(
+      ch,
       userActionId,
       value,
       timestamp,
@@ -163,11 +164,13 @@ async function handleScalar(
 }
 
 // A fault reading is persisted to sensor_history as a structured error row (value NULL,
-// is_error true, error_code = the fault envelope's code) and nowhere else — the fault never
-// touches current_state or value thresholds. The history write is authoritative — a throw
-// nacks → DLQ. Keeping faults out of the value column keeps the numeric series clean and makes
-// the roadmapped sensor_error_duration trigger a simple `WHERE is_error = true` query.
+// is_error true, error_code = the fault envelope's code) and mirrored onto the action itself as
+// the live fault marker — the fault still never touches current_state or value thresholds. The
+// history write is authoritative — a throw nacks → DLQ. Keeping faults out of the value column
+// keeps the numeric series clean and makes the roadmapped sensor_error_duration trigger a simple
+// `WHERE is_error = true` query.
 async function recordErrorReading(
+  ch: Channel,
   userActionId: number,
   reading: ErrorReading,
   timestamp: string,
@@ -175,19 +178,51 @@ async function recordErrorReading(
   userDeviceId: number,
   actionName: string,
 ): Promise<void> {
-  log.warn(
-    { userActionId, errorCode: reading.error },
-    'fault telemetry reading — recording to history only',
-  );
+  const code = reading.error.slice(0, 100);
+  log.warn({ userActionId, errorCode: code }, 'fault telemetry reading — recording to history');
   await db.sensorHistory.create({
     data: {
       user_device_action_id: userActionId,
       value: null,
       is_error: true,
-      error_code: reading.error.slice(0, 100),
+      error_code: code,
       recorded_at: new Date(timestamp),
     },
   });
+
+  // The live fault marker an error rule condition reads (F20). Authoritative like the history row
+  // above — a rule that cannot see the fault is the whole feature failing — so it is awaited and
+  // a throw nacks to the DLQ.
+  //
+  // `error_since` is stamped only on the TRANSITION into a fault: `updateMany` with
+  // `error_since: null` in the filter means a repeat fault leaves the original instant alone, so
+  // the column measures how long the action has been failing rather than when it last said so. The
+  // code itself is refreshed unconditionally by the second write, because a sensor can move from
+  // one fault to another without a good reading in between.
+  await db.userDeviceAction.updateMany({
+    where: { id: userActionId, error_since: null },
+    data: { error_since: new Date(timestamp) },
+  });
+  await db.userDeviceAction.update({
+    where: { id: userActionId },
+    data: { current_error_code: code },
+  });
+
+  // Wake the rules engine. It is a poll-over-DB evaluator driven by this nudge, and its 10s cron
+  // only picks up rules carrying a schedule condition — so without this an error rule would sit
+  // unevaluated until some unrelated reading from the same user happened to arrive.
+  try {
+    publish(ch, RK.RULES_EVALUATE, {
+      userId,
+      deviceId: String(userDeviceId),
+      actionName,
+      value: reading,
+      timestamp,
+    });
+  } catch (err) {
+    log.error({ err, userActionId }, 'rules.evaluate publish failed for fault reading');
+  }
+
   // Mirror it onto the device's own timeline (best-effort; F18.1). Not a second copy of the
   // reading — the row above is that — but an entry on the list the device page reads, so "it went
   // quiet at 03:12 and started failing reads at 11:02" is one ordered story rather than two

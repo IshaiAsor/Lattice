@@ -150,7 +150,7 @@ export class PipelineEditorDialogComponent implements OnInit {
     { value: 'time_series', label: 'Time series (all)', hint: 'Full window, ordered' },
   ];
   windowUnits  = ['minutes', 'hours', 'days'];
-  triggerTypes = ['sensor_threshold', 'schedule', 'manual'];
+  triggerTypes = ['sensor_threshold', 'schedule', 'manual', 'error'];
   operators    = ['>', '<', '>=', '<=', '='];
 
   notifyChoices = [
@@ -166,6 +166,7 @@ export class PipelineEditorDialogComponent implements OnInit {
     sensor_threshold: 'Sensor threshold',
     schedule:         'Schedule',
     manual:           'Manual only',
+    error:            'Sensor fault',
   };
   cooldownUnits = [
     { value: 'sec',   label: 'Seconds' },
@@ -443,7 +444,7 @@ export class PipelineEditorDialogComponent implements OnInit {
   // so a pipeline whose only trigger was a schedule never ran at all.
   makeTrigger(v?: {
     trigger_type?: string; user_device_action_id?: number | null; operator?: string | null;
-    threshold_value?: string | null; min_interval_sec?: number | null;
+    threshold_value?: string | null; error_code?: string | null; min_interval_sec?: number | null;
     schedule_time?: string | null; schedule_until?: string | null;
     schedule_every_minutes?: number | null; schedule_days?: number[] | null;
   }): FormGroup {
@@ -454,6 +455,9 @@ export class PipelineEditorDialogComponent implements OnInit {
       user_device_action_id:  [v?.user_device_action_id ?? null],
       operator:               [v?.operator ?? '>'],
       threshold_value:        [v?.threshold_value ?? null],
+      // Null = any fault, and nothing in the editor sets it to anything else yet: firmware emits
+      // one code today, so a picker over it would offer a choice that does not exist (F20).
+      error_code:             [v?.error_code ?? null],
       schedule_time:          [v?.schedule_time ?? '08:00'],
       // Blank pair = fire once at `schedule_time`. Filled, they repeat it through the day.
       schedule_until:         [v?.schedule_until ?? ''],
@@ -479,6 +483,11 @@ export class PipelineEditorDialogComponent implements OnInit {
       timeCtrl.setValidators(Validators.required);
       actionCtrl.setValidators(this.validActionId);
       thresholdCtrl.clearValidators();
+    } else if (type === 'error') {
+      // A fault trigger needs the action to watch and nothing else — there is no value to compare.
+      actionCtrl.setValidators([Validators.required, this.validActionId]);
+      thresholdCtrl.clearValidators();
+      timeCtrl.clearValidators();
     } else {
       actionCtrl.setValidators(this.validActionId);
       thresholdCtrl.clearValidators();
@@ -705,6 +714,11 @@ export class PipelineEditorDialogComponent implements OnInit {
       const every = t.get('schedule_every_minutes')?.value;
       return until && every ? `${from} → ${until}, every ${every} min` : `at ${from}`;
     }
+    if (type === 'error') {
+      const name = this.actionDisplayName(t.get('user_device_action_id')?.value ?? null) || 'sensor';
+      const code = t.get('error_code')?.value as string | null;
+      return code ? `${name} reports ${code}` : `${name} reports a fault`;
+    }
     return 'Manual only';
   }
 
@@ -791,6 +805,13 @@ export class PipelineEditorDialogComponent implements OnInit {
           if (type === 'schedule' && !t.get('schedule_time')?.value) {
             errors.push(`Trigger ${n}: a start time is required.`);
           }
+          if (type === 'error') {
+            if (!t.get('user_device_action_id')?.value) {
+              errors.push(`Trigger ${n}: pick the sensor to watch for faults.`);
+            } else if (t.get('user_device_action_id')?.hasError('invalidAction')) {
+              errors.push(`Trigger ${n}: pick the sensor from the list.`);
+            }
+          }
         });
         break;
       }
@@ -861,7 +882,7 @@ export class PipelineEditorDialogComponent implements OnInit {
       execute_condition: string;
       triggers: {
         trigger_type: never; user_device_action_id: number | null; operator: string | null;
-        threshold_value: string | null;
+        threshold_value: string | null; error_code: string | null;
         schedule_time: string | null; schedule_until: string | null;
         schedule_every_minutes: number | null; schedule_days: boolean[];
         min_interval_value: number; min_interval_unit: string;
@@ -911,6 +932,7 @@ export class PipelineEditorDialogComponent implements OnInit {
           user_device_action_id:  t.user_device_action_id,
           operator:               t.operator,
           threshold_value:        t.threshold_value,
+          error_code:             t.trigger_type === 'error' ? (t.error_code || null) : null,
           schedule_time:          t.trigger_type === 'schedule' ? (t.schedule_time || null) : null,
           schedule_until:         repeats ? t.schedule_until : null,
           schedule_every_minutes: repeats ? Number(t.schedule_every_minutes) : null,

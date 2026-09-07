@@ -1,7 +1,12 @@
 // Unit: pipeline sensor-threshold evaluation (@lattice/params — shared by automation-worker's
 // trigger matcher and digest-service's fault guard).
 
-import { evaluateThreshold, isErrorReading, isTriggerInCooldown } from '@lattice/params';
+import {
+  evaluateThreshold,
+  isErrorReading,
+  isTriggerInCooldown,
+  matchesErrorCode,
+} from '@lattice/params';
 
 describe('evaluateThreshold', () => {
   it.each([
@@ -59,6 +64,31 @@ describe('isErrorReading', () => {
     expect(isErrorReading(null)).toBe(false);
     expect(isErrorReading({ value: 'on' })).toBe(false);
     expect(isErrorReading({ error: 42 })).toBe(false); // error must be a string
+  });
+});
+
+describe('matchesErrorCode', () => {
+  it('matches any fault when no error code is wanted', () => {
+    // The common case, and the only one either editor can currently produce: null/undefined `want`
+    // means "faulted at all", whatever the device called it.
+    expect(matchesErrorCode('read_failed', null)).toBe(true);
+    expect(matchesErrorCode('read_failed', undefined)).toBe(true);
+    expect(matchesErrorCode('some_future_code', null)).toBe(true);
+  });
+
+  it('matches only the wanted error code when one is given', () => {
+    expect(matchesErrorCode('read_failed', 'read_failed')).toBe(true);
+    expect(matchesErrorCode('read_failed', 'calibration_lost')).toBe(false);
+  });
+
+  it('never matches when the action is not faulted', () => {
+    // How "not faulted" is stored: a null current_error_code. It must not satisfy a condition,
+    // including one asking for any fault — that is the difference between a rule that fires on a
+    // real failure and one that fires forever.
+    expect(matchesErrorCode(null, null)).toBe(false);
+    expect(matchesErrorCode(undefined, null)).toBe(false);
+    expect(matchesErrorCode(null, 'read_failed')).toBe(false);
+    expect(matchesErrorCode('', null)).toBe(false);
   });
 });
 

@@ -48,6 +48,13 @@ export async function writeScalarState(
       // all of them — not only on the reconcile path that made it necessary.
       last_confirmed_at: new Date(),
       state_source: source,
+      // Recovery clears the fault marker (F20). Every path into this function is the device
+      // reporting a real value, which is precisely what "no longer faulted" means — so the clear
+      // belongs in the authoritative write, not on the telemetry path alone. It is unconditional:
+      // writing null over null costs nothing, and a marker left set is an error rule that never
+      // stops firing, which is the expensive direction to be wrong in.
+      current_error_code: null,
+      error_since: null,
     },
   });
 

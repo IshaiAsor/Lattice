@@ -11,6 +11,7 @@ import {
   firedThisMinute,
   isAutomationLive,
   isInstanceRunning,
+  matchesErrorCode,
   matchesSchedule,
   EMPTY_PARAM_CONTEXT,
   type ParamContext,
@@ -348,6 +349,35 @@ class RulesEngine {
       } catch {
         return NOT_MET;
       }
+    }
+
+    // "This sensor is currently failing" (F20). A LEVEL condition, deliberately: it reads the
+    // action's fault marker rather than the reading that woke the pass, so it can be ANDed with a
+    // threshold or a device_status condition and still be answerable at any moment — which is what
+    // every other kind here does. digest-service maintains the marker (set on a fault envelope,
+    // cleared by the next good reading) and nudges rules.evaluate on the fault so this runs
+    // promptly; repeat firing is governed by the rule's own cooldown, as everywhere else.
+    if (condition.condition_type === 'error') {
+      if (!condition.user_device_action_id) return NOT_MET;
+      const action = await db.userDeviceAction.findUnique({
+        where: { id: condition.user_device_action_id },
+        select: { current_error_code: true },
+      });
+      if (!action) return NOT_MET;
+      const met = matchesErrorCode(action.current_error_code, condition.error_code);
+      log.debug(
+        {
+          rule: rule.name,
+          actionId: condition.user_device_action_id,
+          observed: action.current_error_code,
+          want: condition.error_code,
+          met,
+        },
+        'error condition evaluated',
+      );
+      // The fault code is what `user_rule_events.triggered_value` should carry here — the same
+      // role the crossing reading plays for a threshold.
+      return { met, observed: action.current_error_code };
     }
 
     if (condition.condition_type === 'vlm_result' || condition.condition_type === 'vlm_decision') {

@@ -38,7 +38,12 @@ export {
 } from './phase-timer';
 export type { PhaseAdvanceInput, PhaseDurationUnit, PhaseTimerMode } from './phase-timer';
 export { resolveSeconds, resolveClock, positionalText, positionalError } from './positional';
-export { evaluateThreshold, isErrorReading, isTriggerInCooldown } from './threshold';
+export {
+  evaluateThreshold,
+  isErrorReading,
+  matchesErrorCode,
+  isTriggerInCooldown,
+} from './threshold';
 export type { ErrorReading } from './threshold';
 export {
   describeSchedule,
