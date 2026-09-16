@@ -10,6 +10,7 @@ import {
   type Tier,
 } from '@lattice/retention';
 import { db } from '../db';
+import { buildGapDays } from './retention-schedule.service';
 import { retentionActivityService, type ActivityScope } from './retention-activity.service';
 
 // Shared internals for the retention services (F18.9-F18.19).
@@ -110,11 +111,21 @@ export async function validate(
   tiers: Tier[],
   opts: { applyCeilings: boolean },
 ): Promise<void> {
-  const [buckets, knobs] = await Promise.all([loadCatalog(), loadKnobs(kind)]);
+  const [buckets, knobs, gapDays] = await Promise.all([
+    loadCatalog(),
+    loadKnobs(kind),
+    // The ordering invariant, from this side (F18.18). A build pass reads raw to build the finest
+    // rollup, so raw has to outlive the gap between builds — and since an admin can now pin that
+    // schedule, the floor under a raw window is no longer a constant. Checked on BOTH writes or the
+    // pair can be made unsafe from whichever side is edited second; `assertBuildKeepsUpWithRaw` is
+    // the mirror of this, on the schedule.
+    buildGapDays(),
+  ]);
   assertTierList(tiers, {
     kind,
     buckets,
     lookbackDays: LOOKBACK_DAYS,
+    buildGapDays: gapDays,
     minBucket: knobs.minBucket,
     // F18.11: a user's write is refused against the ceiling rather than stored and quietly clamped
     // at prune time. The number shown has to be the number applied.

@@ -96,21 +96,31 @@ export class AdminRetentionRunsComponent {
     }
   }
 
+  /**
+   * What this run was, in one phrase.
+   *
+   * Two axes since F18.18: `trigger` is why the run exists, `job` is which of the four it did. A
+   * person-initiated run is named by its trigger — "an admin's cleanup" is the useful fact — and a
+   * scheduled one by its job, because all four now fire from a `cron` trigger and labelling them
+   * all "Nightly" would make the page unreadable.
+   */
   triggerLabel(r: RunView): string {
-    switch (r.trigger) {
-      case 'cron':
-        return 'Nightly';
-      // Named for what it means rather than for the mechanism: the worker was not running when the
-      // nightly pass was due, so it ran the pass on the way back up.
-      case 'catchup':
-        return 'Nightly (caught up)';
-      case 'rollup':
-        return 'Summaries';
-      case 'admin':
-        return 'Admin';
-      default:
-        return 'User';
-    }
+    if (r.trigger === 'admin') return 'Admin';
+    if (r.trigger === 'user') return 'User';
+    // `rollup` is only on rows written before the split; they were all builds.
+    const job = r.trigger === 'rollup' ? 'build' : r.job;
+    const name =
+      job === 'build'
+        ? 'Summaries'
+        : job === 'sweep'
+          ? 'Data cleanup'
+          : job === 'delete'
+            ? 'Summary cleanup'
+            : job === 'orphan'
+              ? 'Orphan cleanup'
+              : 'Full cleanup';
+    // The worker was not running when this was due, so it ran on the way back up.
+    return r.trigger === 'catchup' ? `${name} (caught up)` : name;
   }
 
   /** Rows the run actually touched, so an expanded panel is not four zeros. */

@@ -29,27 +29,36 @@ export const env = {
   // shape of the job, not the policy it enforces.
   retention: {
     enabled: process.env['RETENTION_ENABLED'] !== 'false',
-    // 03:00. Deliberately the quietest hour: this is the one job that holds locks over the
-    // biggest tables in the system.
+    // 03:00, the quietest hour — but since F18.18 this is only the FALLBACK.
     //
-    // This is the DESTRUCTIVE half's schedule only. Since F18.17 the rollup half runs on its own
-    // interval, derived from the finest configured bucket — building buckets is cheap, incremental
-    // and idempotent, deleting is none of those, and there is no freshness argument for pruning
-    // more often than nightly. One known gap remains: the schedule is still an env var read once
-    // at startup, so an admin cannot change it without a redeploy (F18.18).
+    // The real schedules live in `retention_schedule`, four rows an admin edits in the UI, because
+    // when the pass runs is as much a product decision as how long rows are kept and an env var
+    // means a redeploy plus no record of what the policy was. This value seeds those rows in the
+    // migration and is used at runtime only when a row is missing or its expression will not parse:
+    // a schedule nobody can read must not silently mean no cleanup at all.
     cron: process.env['RETENTION_CRON'] ?? '0 0 3 * * *',
-    // The heartbeat behind both halves of F18.17. Every minute it asks two questions the cron
-    // above cannot: is an interval rollup due, and was the nightly pass missed entirely? Cheap by
-    // construction — six small reads, and it does nothing at all unless something is overdue.
+    // How late a job may start and still be recorded as its scheduled run rather than a `catchup`.
+    //
+    // The tick fires once a minute, so a pass is routinely a few seconds past its slot; calling that
+    // a catch-up would make the label meaningless. Five minutes is comfortably more than the tick
+    // plus the longest sweep ever observed here (19s), and comfortably less than any real outage.
+    onTimeGraceMs: parseInt(process.env['RETENTION_ON_TIME_GRACE_MS'] ?? '300000', 10),
+    // The heartbeat. Since F18.18 it is not a helper beside a cron — it IS the retention scheduler:
+    // every minute it asks each of the four jobs whether it is past its own last due slot. Cheap by
+    // construction — a handful of small reads and pure arithmetic — and it does nothing at all
+    // unless something is overdue.
     tickCron: process.env['RETENTION_TICK_CRON'] ?? '0 * * * * *',
     // Floor under the derived rollup interval. A 60-second custom bucket is admissible, and
     // someone will make one; without this it would turn the sweep into permanent background load.
     rollupMinIntervalMs: parseInt(process.env['RETENTION_ROLLUP_MIN_INTERVAL_MS'] ?? '300000', 10),
-    // How stale the newest FULL pass may get before the tick runs one regardless of the hour.
-    // node-cron has no catch-up: a worker restarting at 03:00, an evicted pod, or a laptop dev
-    // stack asleep skips that night silently, with nothing in `retention_runs` to say so. 25h
-    // rather than 24h so a healthy daily cron is never in a photo finish with its own safety net —
-    // a day late is a bug, an hour of slack is not.
+    // A backstop, and since F18.18 nothing more.
+    //
+    // F18.17 used this fixed 25h fuse to decide the nightly pass had been missed, which was correct
+    // only while the schedule was a constant. The moment an admin can choose it, a constant fuse
+    // silently overrides them: a weekly schedule would be upgraded to daily, and switching a job off
+    // would hold for 25 hours and then run anyway. "Late" is now measured against each job's OWN
+    // previous occurrence, which is exact for any expression. This survives for the case where no
+    // job has a usable schedule at all.
     maxPassAgeMs: parseInt(process.env['RETENTION_MAX_PASS_AGE_MS'] ?? '90000000', 10),
     // How far back a single pass will look for buckets to build. Bounds a first run against years
     // of accumulated history; because the upserts are idempotent, successive nights walk backward

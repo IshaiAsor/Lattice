@@ -29,7 +29,9 @@ export type ActivityAction =
   | 'sweep_requested'
   | 'sweep_finished'
   | 'sweep_failed'
-  | 'data_trimmed';
+  | 'data_trimmed'
+  // F18.18 — when a job's schedule changed, and to what.
+  | 'schedule_changed';
 
 /** Where it applied. */
 export type ActivityScope = 'platform' | 'user' | 'device' | 'action' | 'blueprint' | 'catalog';

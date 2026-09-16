@@ -530,6 +530,69 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
     pass running exactly on schedule has a gap of ONE interval, and the bucket it exists to build
     lies entirely in the interval before that. One interval of lookback steps straight over it.
 
+### History — `history.retention-schedule.test.ts` ✅ (F18.18 when each of the four jobs runs)
+
+- accepts the five-field form by assuming a zero seconds field
+- expands a step into the values it admits
+- steps a range from its start, the standard reading
+- understands month and weekday names
+- treats 7 as Sunday, the one alias every cron agrees on
+- refuses an expression with the wrong number of fields
+- refuses a value outside its field, naming the field
+- refuses a name no field understands
+- refuses a zero step rather than looping forever
+- reads the hour in the schedule zone, not the host zone
+- finds the most recent firing at or before an instant
+- skips a day whose wall-clock time the spring-forward jump erased
+- fires once, at the earlier instant, when the clocks go back over it
+- returns nothing for a date the calendar never reaches
+- measures the real gap, not the average one
+- reports a steady schedule as one gap
+- treats an expression that can never fire twice as unboundedly rare
+- accepts a daily cleanup against the destructive floor
+- refuses a schedule that would delete more often than the floor allows
+- holds the cheap build job to a lower floor than the destructive ones
+- refuses a time zone the system does not know
+- refuses an expression that describes a date that never happens
+- accepts a daily build against a two-day raw window
+- refuses a build too rare to summarise raw before it expires
+- names both numbers in the refusal, and what would work
+- permits any build cadence when raw is kept forever
+- raises the raw floor to cover the build gap, which is the same rule from the other side
+- describes the shapes an admin actually picks
+- falls back to the expression rather than guessing
+- names a duration the way a person would say it
+- names what is running from the job, not only the trigger
+- knows the four jobs and rejects anything else
+- is due when it has never run
+- is not due when it already ran for this slot
+- is due when the last run predates the slot
+- is never due when the schedule yields no occurrence
+- holds off inside the grace window so a slot is not claimed twice
+  - `RETENTION_CRON` was the last piece of retention policy that still needed a redeploy, and it
+    covered three jobs that want three different hours: deleting a million raw readings, deleting a
+    few thousand summary rows, and cleaning up after a tier somebody removed this morning. Moving it
+    into a table is only half the change — the other half is that **the minute tick became the
+    scheduler**, so this module is the single authority on what a valid schedule is and when it
+    fires. node-cron never sees these expressions, which is also why the parser's accepted surface
+    deliberately matches its own: nothing that ran yesterday may be refused today.
+  - the timezone block is not decoration. The worker container sets no `TZ` in compose or in the k8s
+    manifests, so it runs UTC while postgres runs Asia/Jerusalem — `0 0 3 * * *` has been firing at
+    **06:00 Jerusalem** all along. Both DST directions are silent data bugs if wrong: a
+    spring-forward wall time does not exist and its day must be SKIPPED (no spurious catch-up
+    follows, because the previous occurrence is then yesterday's, which already ran), and a
+    fall-back one exists twice and must fire ONCE, at the earlier instant.
+  - the frequency floor is sampled, never averaged: `0 0,1 3 * * *` fires twice a day with an
+    average gap of twelve hours and a real gap of one minute, so an average would wave through
+    exactly the schedule the floor exists to refuse.
+  - the ordering invariant is the one thing splitting the pass into four schedules can break. A
+    bucket is built by reading the rows it summarises, so raw deleted before a build has seen it
+    produces permanently empty buckets for the periods someone asked to COMPRESS rather than lose.
+    Note what is NOT part of it: the data-sweep schedule. However often a sweep runs it only deletes
+    rows past their window, so the comparison is build-gap against raw-window and nothing else. It
+    is checked from BOTH sides — here on the schedule, and through `rawFloorDays` on the tier write
+    — because either write can make the pair unsafe from whichever side is edited second.
+
 ### History — `history.retention-tiers.test.ts` ✅ (F18.9/F18.12 the N-tier retention core)
 
 - reproduces the UTC hour and UTC midnight for the hour and day sizes

@@ -23,6 +23,7 @@ import {
   type TierView,
 } from '../../services/retention-tiers.service';
 import { TierEditorComponent } from '../tier-editor/tier-editor.component';
+import { ScheduleEditorComponent } from '../schedule-editor/schedule-editor.component';
 import { RetentionApplyDialogComponent } from '../retention-apply-dialog/retention-apply-dialog.component';
 
 // Admin → Data Retention. The platform layer: the tier list every user starts on, and the ceilings
@@ -76,7 +77,7 @@ const CEILING_CHOICES: (number | null)[] = [null, 7, 14, 30, 90, 180, 365];
 @Component({
   selector: 'app-admin-retention',
   standalone: true,
-  imports: [CommonModule, MatIconModule, RouterLink, TierEditorComponent],
+  imports: [CommonModule, MatIconModule, RouterLink, TierEditorComponent, ScheduleEditorComponent],
   templateUrl: './admin-retention.component.html',
   styleUrls: ['./admin-retention.component.css'],
 })
@@ -96,6 +97,10 @@ export class AdminRetentionComponent {
   buckets = signal<BucketView[]>([]);
   usage = signal<UsageView | null>(null);
   schedule = signal<ScheduleView | null>(null);
+  /** Which job is mid-save, so only its own button shows the pending state. */
+  savingJob = signal<string | null>(null);
+  /** Server refusals, per job, shown inline beside the control that caused them. */
+  scheduleError = signal<Record<string, string | null>>({});
   loading = signal(true);
   /** Per-kind pending edits, so a half-finished list is not saved on every chip press. */
   drafts = signal<Record<string, TierView[]>>({});
@@ -129,22 +134,35 @@ export class AdminRetentionComponent {
   }
 
   /**
-   * How often summaries are rebuilt, in words (F18.17).
+   * Save one job's schedule (F18.18).
    *
-   * The cadence is DERIVED from the finest tier configured anywhere rather than set anywhere, which
-   * is the point — and completely invisible unless the page says so. Adding a `15m` tier below
-   * moves this line, with no redeploy.
+   * Refusals are rendered against the row that caused them rather than in a snack bar: the server's
+   * message names a number the admin has just typed ("that schedule would run every 15 minutes, and
+   * the limit is once every 1 hour"), and a toast that disappears takes the reason with it.
    */
-  cadenceLabel(): string {
-    const s = this.schedule();
-    if (!s) return '';
-    if (s.rollupIntervalSeconds === null)
-      return 'Summaries are rebuilt by the nightly cleanup — nothing finer than a day is configured.';
-    const minutes = Math.round(s.rollupIntervalSeconds / 60);
-    const every = minutes % 60 === 0 ? `${minutes / 60} hour` : `${minutes} minute`;
-    const plural = minutes % 60 === 0 ? minutes / 60 !== 1 : minutes !== 1;
-    const finest = s.finestBucket ? ` — the finest tier configured is ${s.finestBucket.label}` : '';
-    return `Summaries are rebuilt every ${every}${plural ? 's' : ''}${finest}.`;
+  saveSchedule(
+    job: string,
+    body: { cron: string | null; timezone: string; enabled: boolean },
+  ): void {
+    this.savingJob.set(job);
+    this.scheduleError.update((e) => ({ ...e, [job]: null }));
+    this.tiersApi
+      .setAdminSchedule(job, body)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (s) => {
+          this.schedule.set(s);
+          this.savingJob.set(null);
+          this.snack.open('Schedule saved', undefined, { duration: 1800 });
+        },
+        error: (e: { error?: { error?: string } }) => {
+          this.savingJob.set(null);
+          this.scheduleError.update((prev) => ({
+            ...prev,
+            [job]: e.error?.error ?? 'Could not save the schedule',
+          }));
+        },
+      });
   }
 
   for(kind: DataKind): PolicyTiersView | undefined {

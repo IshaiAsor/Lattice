@@ -287,6 +287,7 @@ model User {
   retention_tier_edits RetentionPolicyTier[]     @relation("RetentionPolicyTierUpdatedBy")
   retention_acts       RetentionActivity[]       @relation("RetentionActivityActor")
   retention_subject_of RetentionActivity[]       @relation("RetentionActivitySubject")
+  retention_schedules  RetentionSchedule[]
 
   @@map("users")
 }
@@ -1362,6 +1363,63 @@ model BlueprintRetentionTier {
   @@map("blueprint_retention_tiers")
 }
 
+// ── When each job runs (F18.18) ─────────────────────────────────────────────────
+
+// The schedule for each of the four retention jobs.
+//
+// Everything else Phase 2 touched became data — windows, tier counts, bucket sizes, ceilings, the
+// per-kind `enabled` flag — on the reasoning `retention_policy` states about itself: retention is a
+// product decision an owner makes and changes, and an env var means a redeploy plus no record of
+// what the policy was. That argument covers WHEN the pass runs exactly as well as HOW LONG rows are
+// kept, but the schedule stayed `RETENTION_CRON`, read once at worker startup.
+//
+// FOUR rows and not one, because the pass turned out not to be one pass. F18.17 split it in two on
+// the observation that building a bucket and deleting a row never shared a cost; the destructive
+// half was still three jobs wearing one schedule:
+//
+//   bucket_build   writes the three rollup tables. Cheap, incremental, idempotent.
+//   data_sweep     deletes raw sensor_history / camera_frame_history / device_commands /
+//                  device_events — the biggest tables in the system, irreversibly.
+//   bucket_delete  deletes the three rollup tables past each tier's own window.
+//   orphan_sweep   deletes rollup rows whose bucket size is no longer in any tier list. The only
+//                  one whose trigger is a PERSON rather than a window expiring, which is exactly
+//                  why it wants its own cadence.
+//
+// Still not per data kind: four kinds x four jobs would multiply lock contention for nothing.
+//
+// A keyed table rather than a singleton with CHECK (id = 1): a CHECK cannot be expressed here, and
+// this schema records in three other places that it will not accept the file ceasing to describe
+// the database.
+model RetentionSchedule {
+  id                 Int      @id @default(autoincrement())
+  // bucket_build | data_sweep | bucket_delete | orphan_sweep
+  job                String   @unique @db.VarChar(16)
+  // A 5- or 6-field cron expression, parsed by @lattice/retention rather than by node-cron: since
+  // F18.18 the minute heartbeat IS the scheduler, comparing each job's last completion against its
+  // own previous occurrence, so nothing else ever reads this string.
+  //
+  // NULL is a third encoding in a feature that already has two (`0` = forever on a window, `null` =
+  // uncapped on a ceiling). Here it means DERIVE FROM THE FINEST CONFIGURED TIER — F18.17's
+  // behaviour, which is what makes "add a 15m tier and the schedule moves with no redeploy" true.
+  // Meaningful on `bucket_build` alone; the API refuses it on the other three, which have nothing
+  // to derive from.
+  cron               String?  @db.VarChar(120)
+  // The zone the expression is read in. A quiet hour is a local wall-clock concept — 03:00 only
+  // means anything against somebody's clock. Seeded 'UTC' because that is what the worker container
+  // has always run as (no TZ is set in compose or in the k8s manifests), so day-one behaviour is
+  // unchanged rather than silently shifted by three hours.
+  timezone           String   @default("UTC") @db.VarChar(64)
+  // Per job, so switching data cleanup off does not stop summaries being built. The process-level
+  // RETENTION_ENABLED still sits above all four.
+  enabled            Boolean  @default(true)
+  updated_by_user_id Int?
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  updated_by User? @relation(fields: [updated_by_user_id], references: [id], onDelete: SetNull)
+
+  @@map("retention_schedule")
+}
+
 // ── Job history (F18.14) ────────────────────────────────────────────────────────
 
 // One execution of the retention pass — the nightly cron, an admin's "Apply now", or a user's.
@@ -1377,6 +1435,15 @@ model RetentionRun {
   // because node-cron has no catch-up and a worker that was down at 03:00 used to skip the night
   // silently — a distinct value so that fact leaves a trace instead of a `cron` row at 11:40.
   trigger              String    @db.VarChar(8)
+  // WHAT this run did: full | build | sweep | delete | orphan (F18.18).
+  //
+  // A second axis beside `trigger`, which `rollup` had been conflating: `trigger` is WHY a run
+  // exists (the schedule fired, it was late, a person pressed Apply) and `job` is which of the four
+  // jobs it performed. `full` is all four in the load-bearing order and is what an Apply and a
+  // catch-up still run.
+  //
+  // Backfilled from `trigger`: historical `rollup` rows became `build`, everything else `full`.
+  job                  String    @default("full") @db.VarChar(12)
   // queued | running | ok | failed
   status               String    @db.VarChar(10)
   // Live progress: "rollup:scalar", "prune:frame". Written as each stage completes, so the page
@@ -1409,6 +1476,8 @@ model RetentionRun {
 
   @@index([queued_at])
   @@index([scope_user_id, queued_at])
+  // The heartbeat asks "when did THIS job last finish?" for each of the four, every minute.
+  @@index([job, finished_at])
   @@map("retention_runs")
 }
 
@@ -1453,7 +1522,8 @@ model RetentionActivity {
   // WHEN.
   at     DateTime @default(now()) @db.Timestamptz(6)
   // WHAT: tiers_changed | tiers_reset | policy_changed | bucket_created | bucket_reused |
-  //       bucket_deleted | sweep_requested | sweep_finished | sweep_failed | data_trimmed
+  //       bucket_deleted | sweep_requested | sweep_finished | sweep_failed | data_trimmed |
+  //       schedule_changed
   action String   @db.VarChar(24)
   // WHERE it applied: platform | user | device | action | blueprint | catalog
   scope  String   @db.VarChar(12)

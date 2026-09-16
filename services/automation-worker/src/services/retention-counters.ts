@@ -45,14 +45,46 @@ export const COMMAND_BYTES = BigInt(COMMAND_BYTES_EST);
 export const EVENT_BYTES = BigInt(EVENT_BYTES_EST);
 
 /**
- * Which halves of the pass run (F18.17).
+ * Which parts of the pass run (F18.17, widened by F18.18).
  *
- * `full`   roll up every kind, then prune. The nightly pass, an admin Apply, a user Apply.
- * `rollup` build sub-daily scalar buckets and delete NOTHING. The interval pass — it exists so a
- *          `15m` bucket is minutes stale rather than up to a day, and the one thing it must never
- *          do is bring a DELETE along to that cadence.
+ * F18.17 made this a two-way split — build or everything — because building a bucket and deleting a
+ * row never shared a cost. F18.18 finished the job: the destructive half was still three jobs
+ * wearing one schedule, and they are not alike either.
+ *
+ * `full`   everything, in the load-bearing order. An Apply and a catch-up.
+ * `build`  write the rollup tables and delete NOTHING. The one thing it must never do is bring a
+ *          DELETE along to a fifteen-minute cadence.
+ * `sweep`  delete raw rows only — the biggest tables in the system.
+ * `delete` delete rollup rows past each tier's own window. Small tables, irreversible.
+ * `orphan` delete rollup rows for a bucket size no longer in any tier list. The only one whose
+ *          trigger is a person changing their mind rather than a window expiring.
+ *
+ * A pass in one of the three destructive modes reports counters for that mode alone, which is a
+ * quiet correctness win: F18.23 was found because `rowsDeleted` summed raw and rollup deletes into
+ * one ambiguous number, and it now cannot.
  */
-export type PassMode = 'full' | 'rollup';
+export type PassMode = 'full' | 'build' | 'sweep' | 'delete' | 'orphan';
+
+/** Which deletes a pass is allowed to issue. Derived from the mode; see `pruneTargetsFor`. */
+export interface PruneTargets {
+  raw: boolean;
+  rollups: boolean;
+  orphans: boolean;
+}
+
+export function pruneTargetsFor(mode: PassMode): PruneTargets {
+  return {
+    raw: mode === 'full' || mode === 'sweep',
+    rollups: mode === 'full' || mode === 'delete',
+    orphans: mode === 'full' || mode === 'orphan',
+  };
+}
+
+/** Does this mode delete anything at all? `build` is the only one that does not. */
+export function prunes(mode: PassMode): boolean {
+  const t = pruneTargetsFor(mode);
+  return t.raw || t.rollups || t.orphans;
+}
 
 export interface PassOptions {
   now?: Date;

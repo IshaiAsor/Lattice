@@ -11,7 +11,13 @@ import { db } from '../db/client';
 import { env } from '../config/env.config';
 import { kindEnabled, tiersForAction, tiersForUser, type TierIndex } from './tier-index';
 import { deleteBounded } from './retention-delete';
-import { COMMAND_BYTES, EVENT_BYTES, READING_BYTES, type PassCounters } from './retention-counters';
+import {
+  COMMAND_BYTES,
+  EVENT_BYTES,
+  READING_BYTES,
+  type PassCounters,
+  type PruneTargets,
+} from './retention-counters';
 
 const log = createLogger('automation-worker:retention');
 
@@ -32,12 +38,18 @@ function rawTierOf(tiers: ResolvedTier[]): ResolvedTier | null {
  *
  * Capped per kind per pass. Whatever is left over is deleted tomorrow — being a night late costs
  * nothing next to holding a lock over a million rows while rules are trying to evaluate.
+ *
+ * `targets` selects which of the three deletes run (F18.18), because they became three separately
+ * scheduled jobs. A `full` pass passes all three and behaves exactly as this function always did;
+ * everything else does one. Note the cap is still per KIND rather than per target, so a `sweep`
+ * gets the whole budget for raw rather than sharing it with rollup deletes it is not doing.
  */
 export async function pruneHistory(
   index: TierIndex,
   now: Date,
   scopeUserId: number | null,
   counters: PassCounters,
+  targets: PruneTargets = { raw: true, rollups: true, orphans: true },
 ): Promise<void> {
   const cap = env.retention.deleteBatch;
   const users = await db.user.findMany({
@@ -58,7 +70,7 @@ export async function pruneHistory(
         if (tiers.length === 0) continue;
 
         const raw = rawTierOf(tiers);
-        const rawCut = raw ? pruneCutoff(raw.keepDays, true, now) : null;
+        const rawCut = targets.raw && raw ? pruneCutoff(raw.keepDays, true, now) : null;
         if (rawCut && counters.scalar.rowsDeleted < cap) {
           const n = await deleteBounded(
             'sensor_history',
@@ -72,7 +84,7 @@ export async function pruneHistory(
         // Each rollup tier on its own window. F18.10: Phase 1 pruned NONE of these, so
         // `sensor_rollup` grew without bound whatever anyone configured — a retention UI wired to
         // nothing.
-        for (const tier of tiers) {
+        for (const tier of targets.rollups ? tiers : []) {
           if (tier.seconds === RAW_SECONDS) continue;
           const cut = pruneCutoff(tier.keepDays, true, now);
           if (!cut || counters.scalar.rowsDeleted >= cap) continue;
@@ -88,7 +100,7 @@ export async function pruneHistory(
         // chart can still find them, so "I removed that granularity" silently means "I stopped
         // updating it" while the stale buckets keep being drawn.
         const configured = tiers.filter((t) => t.seconds !== RAW_SECONDS).map((t) => t.bucket);
-        if (counters.scalar.rowsDeleted < cap) {
+        if (targets.orphans && counters.scalar.rowsDeleted < cap) {
           const n = await deleteBounded(
             'sensor_rollup',
             configured.length > 0
@@ -102,7 +114,9 @@ export async function pruneHistory(
     }
 
     // ── frame: raw only, and the one kind whose bytes are MEASURED rather than estimated ──
-    if (kindEnabled(index, 'frame')) {
+    // A frame is an image and there is no average of two images, so this kind has no rollup at all:
+    // `targets.raw` is the only one that can ever apply to it.
+    if (targets.raw && kindEnabled(index, 'frame')) {
       for (const actionId of actionIds) {
         const { tiers } = tiersForAction(index, actionId, 'frame');
         const raw = rawTierOf(tiers);
@@ -133,7 +147,7 @@ export async function pruneHistory(
     if (kindEnabled(index, 'command')) {
       const { tiers } = tiersForUser(index, userId, 'command');
       const raw = rawTierOf(tiers);
-      const cut = raw ? pruneCutoff(raw.keepDays, true, now) : null;
+      const cut = targets.raw && raw ? pruneCutoff(raw.keepDays, true, now) : null;
       if (cut && counters.command.rowsDeleted < cap) {
         const n = await deleteBounded(
           'device_commands',
@@ -156,10 +170,18 @@ export async function pruneHistory(
         // Two different nulls, and conflating them is how this feature loses data or leaks it.
         // A MISSING tier means the list says nothing about daily summaries, so the rows are
         // orphans and all of them go. A `keepDays` of 0 means KEEP FOREVER, so none of them do.
+        //
+        // Those two nulls are also two different JOBS since F18.18: "no tier governs these rows"
+        // is an orphan removal, triggered by somebody editing a list, while "past its window" is
+        // the ordinary summary cleanup. They ran together while there was one schedule; now the
+        // branch that applies decides which target has to be switched on.
         const where =
           daily === null
-            ? Prisma.sql`"user_device_action_id" IN (${Prisma.join(actionIds)})`
+            ? targets.orphans
+              ? Prisma.sql`"user_device_action_id" IN (${Prisma.join(actionIds)})`
+              : null
             : (() => {
+                if (!targets.rollups) return null;
                 const cut = pruneCutoff(daily.keepDays, true, now);
                 return cut
                   ? Prisma.sql`"user_device_action_id" IN (${Prisma.join(actionIds)}) AND "day" < ${cut}`
@@ -180,7 +202,7 @@ export async function pruneHistory(
     if (kindEnabled(index, 'device_event')) {
       const { tiers } = tiersForUser(index, userId, 'device_event');
       const raw = rawTierOf(tiers);
-      const cut = raw ? pruneCutoff(raw.keepDays, true, now) : null;
+      const cut = targets.raw && raw ? pruneCutoff(raw.keepDays, true, now) : null;
       if (cut && counters.device_event.rowsDeleted < cap) {
         const n = await deleteBounded(
           'device_events',
@@ -190,9 +212,9 @@ export async function pruneHistory(
         counters.device_event.rowsDeleted += n;
         counters.device_event.bytesReclaimed += BigInt(n) * EVENT_BYTES;
       }
-      // Same rule, same two nulls — see the command branch above.
+      // Same rule, same two nulls, same split across two jobs — see the command branch above.
       const daily = dailyTierOf(tiers);
-      if (counters.device_event.rowsDeleted < cap) {
+      if ((targets.rollups || targets.orphans) && counters.device_event.rowsDeleted < cap) {
         const deviceIds = await db.userDevice
           .findMany({ where: { user_id: userId }, select: { id: true } })
           .then((rows) => rows.map((r) => r.id));
@@ -201,8 +223,10 @@ export async function pruneHistory(
           deviceIds.length === 0
             ? null
             : daily === null
-              ? Prisma.sql`"user_device_id" IN (${Prisma.join(deviceIds)})`
-              : cut
+              ? targets.orphans
+                ? Prisma.sql`"user_device_id" IN (${Prisma.join(deviceIds)})`
+                : null
+              : cut && targets.rollups
                 ? Prisma.sql`"user_device_id" IN (${Prisma.join(deviceIds)}) AND "day" < ${cut}`
                 : null;
         if (where) {
@@ -218,7 +242,7 @@ export async function pruneHistory(
   }
 
   log.info(
-    Object.fromEntries(DATA_KINDS.map((k) => [k, counters[k].rowsDeleted])),
+    { ...Object.fromEntries(DATA_KINDS.map((k) => [k, counters[k].rowsDeleted])), targets },
     'history prune complete',
   );
 }

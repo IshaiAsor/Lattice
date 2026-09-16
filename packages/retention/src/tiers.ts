@@ -199,6 +199,13 @@ export interface TierListValidation {
   buckets: ReadonlyMap<string, BucketDef>;
   /** How far back the nightly rollup reads, in days — the raw floor is derived from it. */
   lookbackDays: number;
+  /**
+   * The longest gap between bucket-build passes, in days (F18.18).
+   *
+   * Raw has to outlive it, or readings expire before anything summarises them. Optional because
+   * most callers validate against the default schedule; the API passes the real figure.
+   */
+  buildGapDays?: number;
   minBucket?: string | null;
   /** Platform ceilings, when validating a list that is not itself the platform's. */
   ceilings?: ReadonlyMap<string, number | null>;
@@ -282,7 +289,7 @@ export function assertTierList(list: readonly Tier[], v: TierListValidation): vo
   // history they were compressing into.
   const rollupTiers = resolved.filter(({ def }) => def.seconds !== RAW_SECONDS);
   if (rollupTiers.length > 0) {
-    const min = rawFloorDays(v.lookbackDays);
+    const min = rawFloorDays(v.lookbackDays, v.buildGapDays ?? 0);
     if (raw.keepDays !== 0 && raw.keepDays < min)
       throw badRequest(
         `Raw readings must be kept at least ${min} day${min === 1 ? '' : 's'} while any rollup ` +

@@ -75,3 +75,31 @@ export function describeTrigger(trigger: string): string {
       return 'cleanup';
   }
 }
+
+/**
+ * What is running, named for a person — from BOTH axes (F18.18).
+ *
+ * `trigger` alone stopped being enough once the pass became four separately scheduled jobs: a
+ * `cron` trigger now covers the orphan cleanup as readily as the data cleanup, and a 409 saying
+ * "a nightly cleanup is already running" when what is running is a summary rebuild names the wrong
+ * thing to whoever is being refused.
+ *
+ * A person-initiated run keeps its trigger wording, because "an admin's platform cleanup" is what
+ * the reader needs to know; a scheduled one is named by the job it is doing.
+ */
+export function describeSweep(trigger: string, job?: string | null): string {
+  if (trigger === 'admin' || trigger === 'user') return describeTrigger(trigger);
+  if (!job || job === 'full') return describeTrigger(trigger);
+  switch (job) {
+    case 'build':
+      return 'summary rebuild';
+    case 'sweep':
+      return 'data cleanup';
+    case 'delete':
+      return 'summary cleanup';
+    case 'orphan':
+      return 'orphan cleanup';
+    default:
+      return describeTrigger(trigger);
+  }
+}

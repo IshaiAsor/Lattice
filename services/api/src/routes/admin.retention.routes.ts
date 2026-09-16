@@ -64,11 +64,26 @@ adminRetentionRouter.get('/activity', async (req, res, next) => {
   }
 });
 
-// When the pass runs, and whether it is late (F18.17). Derived from the tier lists rather than
-// configured, so this is the only place an admin can see that adding a finer tier moved the cadence.
+// When each of the four jobs runs (F18.17 / F18.18). The build cadence is still DERIVED from the
+// tier lists by default — the only place an admin can see that adding a finer tier moved it — and
+// the three destructive jobs each carry a schedule an admin sets here rather than in an env var.
 adminRetentionRouter.get('/schedule', async (_req, res, next) => {
   try {
     res.json(await retentionScheduleService.schedule());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT before the `/:kind` handler at the bottom of this file, which is a bare parameter and would
+// otherwise match `/schedule/data_sweep` as the kind `schedule`. Express matches in registration
+// order, so the literal prefix has to come first — the same trap the four retention routers hit when
+// they were split.
+adminRetentionRouter.put('/schedule/:job', async (req, res, next) => {
+  try {
+    res.json(
+      await retentionScheduleService.setSchedule(req.user!.id, req.params.job, req.body ?? {}),
+    );
   } catch (err) {
     next(err);
   }

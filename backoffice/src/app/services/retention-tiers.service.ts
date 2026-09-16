@@ -77,7 +77,10 @@ export interface RunView {
    * `rollup` is an interval pass (F18.17) — buckets built, nothing deleted; `catchup` is the
    * nightly full pass run late because the worker was down when it was due.
    */
+  /** WHY the run exists. `rollup` appears only on rows written before F18.18 split the two axes. */
   trigger: 'cron' | 'catchup' | 'rollup' | 'admin' | 'user';
+  /** WHICH of the four jobs it performed; `full` is all of them. */
+  job: 'full' | 'build' | 'sweep' | 'delete' | 'orphan';
   status: 'queued' | 'running' | 'ok' | 'failed';
   phase: string | null;
   scoped: boolean;
@@ -93,19 +96,48 @@ export interface RunView {
 }
 
 /**
- * When the pass runs, and whether it is late (F18.17).
+ * One retention job's schedule (F18.18).
  *
- * The rollup cadence is DERIVED from the finest configured tier rather than set anywhere, so this
- * is the only place an admin can see that adding a `15m` tier moved it.
+ * Four of them, because the pass turned out not to be one pass: building summaries, deleting old
+ * readings, deleting old summaries and cleaning up after a removed tier have different costs and
+ * want different hours.
+ */
+export interface JobScheduleView {
+  job: 'bucket_build' | 'data_sweep' | 'bucket_delete' | 'orphan_sweep';
+  title: string;
+  /** One line on what this job actually touches — the names alone do not tell you. */
+  blurb: string;
+  /** Null on the build job means "follow the tier lists", which is the default. */
+  cron: string | null;
+  timezone: string;
+  enabled: boolean;
+  derived: boolean;
+  /** The schedule in plain language, already formatted by the server. */
+  label: string;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  /** Already formatted in this schedule's own zone, so the row does not mix two clocks. */
+  lastRunLabel: string | null;
+  nextRunLabel: string | null;
+  /** The frequency floor this job is held to — build is cheap, the other three delete. */
+  minIntervalSeconds: number;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * When each job runs (F18.17 / F18.18).
+ *
+ * The build cadence is still DERIVED from the finest configured tier by default, so this is the only
+ * place an admin can see that adding a `15m` tier moved it. The other three carry a schedule an
+ * admin sets here rather than in an env var.
  */
 export interface ScheduleView {
-  /** Null when nothing sub-daily is configured and the nightly pass is the whole schedule. */
+  jobs: JobScheduleView[];
+  /** Null when nothing sub-daily is configured and the daily pass is the whole schedule. */
   rollupIntervalSeconds: number | null;
   finestBucket: { code: string; label: string } | null;
-  lastRollupAt: string | null;
-  lastFullAt: string | null;
-  nextRollupDueAt: string | null;
-  fullOverdue: boolean;
+  fallbackCron: string;
 }
 
 export interface PreviewView {
@@ -196,6 +228,13 @@ export class RetentionTiersService {
 
   adminSchedule(): Observable<ScheduleView> {
     return this.http.get<ScheduleView>(`${this.admin}/schedule`);
+  }
+
+  setAdminSchedule(
+    job: string,
+    body: { cron: string | null; timezone?: string; enabled?: boolean },
+  ): Observable<ScheduleView> {
+    return this.http.put<ScheduleView>(`${this.admin}/schedule/${job}`, body);
   }
 
   adminRun(id: number): Observable<RunView> {

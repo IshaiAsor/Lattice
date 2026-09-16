@@ -1,0 +1,216 @@
+@if (schedule(); as s) {
+  <div class="se-row" [class.off]="!s.enabled">
+    <div class="se-head">
+      <div class="se-id">
+        <div class="se-title">{{ s.title }}</div>
+        <!-- "bucket deletion" and "data cleanup" are indistinguishable to anyone who has not read
+             the code, so each row says what it actually touches. -->
+        <div class="se-blurb">{{ s.blurb }}</div>
+      </div>
+      <button
+        type="button"
+        class="se-switch"
+        [class.on]="s.enabled"
+        [disabled]="saving()"
+        (click)="toggleEnabled()"
+        [attr.aria-label]="s.enabled ? 'Switch off ' + s.title : 'Switch on ' + s.title"
+      ><span></span></button>
+    </div>
+
+    <div class="se-when">
+      <span class="se-label">{{ s.label }}</span>
+      @if (s.derived) {
+        <span class="se-tag">automatic</span>
+      }
+      @if (!editing()) {
+        <button type="button" class="se-edit" (click)="open()">Change</button>
+      }
+    </div>
+
+    <div class="se-facts">
+      <!-- Every time on this row is formatted server-side in the SCHEDULE's zone, not the
+           viewer's: "Every day at 03:00 (UTC)" beside a browser-local "06:00" reads as a
+           contradiction rather than as the same moment. -->
+      <span class="se-fact">
+        Last run
+        <b>{{ s.lastRunLabel ?? 'never' }}</b>
+      </span>
+      @if (s.enabled && s.nextRunLabel) {
+        <span class="se-fact">
+          Next <b>{{ s.nextRunLabel }}</b>
+        </span>
+      }
+      @if (s.updatedBy) {
+        <span class="se-fact se-by">
+          Set by <b>{{ s.updatedBy }}</b>
+          @if (s.updatedAt) {
+            <span class="se-when-set">on {{ s.updatedAt | date: 'MMM d' }}</span>
+          }
+        </span>
+      }
+    </div>
+
+    @if (editing()) {
+      <div class="se-editor">
+        <div class="se-field">
+          <label [attr.for]="s.job + '-mode'">Runs</label>
+          <select [attr.id]="s.job + '-mode'" [ngModel]="mode()" (ngModelChange)="mode.set($event)">
+            @for (m of modes(); track m.id) {
+              <option [value]="m.id">{{ m.label }}</option>
+            }
+          </select>
+        </div>
+
+        @switch (mode()) {
+          @case ('derived') {
+            <p class="se-note">
+              The rebuild interval comes from the finest tier anyone has configured, so adding a
+              finer tier moves it on its own — with no schedule to remember to change.
+            </p>
+          }
+          @case ('minutes') {
+            <div class="se-field">
+              <label [attr.for]="s.job + '-mins'">Every</label>
+              <select
+                [attr.id]="s.job + '-mins'"
+                [ngModel]="everyMinutes()"
+                (ngModelChange)="everyMinutes.set(+$event)"
+              >
+                @for (n of minuteSteps; track n) {
+                  <option [value]="n">{{ n }} minutes</option>
+                }
+              </select>
+            </div>
+          }
+          @case ('hours') {
+            <div class="se-field">
+              <label [attr.for]="s.job + '-hrs'">Every</label>
+              <select
+                [attr.id]="s.job + '-hrs'"
+                [ngModel]="everyHours()"
+                (ngModelChange)="everyHours.set(+$event)"
+              >
+                @for (n of hourSteps; track n) {
+                  <option [value]="n">{{ n }} hours</option>
+                }
+              </select>
+            </div>
+            <div class="se-field">
+              <label [attr.for]="s.job + '-hrs-at'">At minute</label>
+              <input
+                [attr.id]="s.job + '-hrs-at'"
+                type="time"
+                [ngModel]="time()"
+                (ngModelChange)="time.set($event)"
+              />
+            </div>
+          }
+          @case ('weekly') {
+            <div class="se-field">
+              <label [attr.for]="s.job + '-dow'">On</label>
+              <select
+                [attr.id]="s.job + '-dow'"
+                [ngModel]="weekday()"
+                (ngModelChange)="weekday.set(+$event)"
+              >
+                @for (d of weekdays; track d.value) {
+                  <option [value]="d.value">{{ d.label }}</option>
+                }
+              </select>
+            </div>
+            <div class="se-field">
+              <label [attr.for]="s.job + '-wt'">At</label>
+              <input
+                [attr.id]="s.job + '-wt'"
+                type="time"
+                [ngModel]="time()"
+                (ngModelChange)="time.set($event)"
+              />
+            </div>
+          }
+          @case ('monthly') {
+            <div class="se-field">
+              <label [attr.for]="s.job + '-dom'">Day</label>
+              <input
+                [attr.id]="s.job + '-dom'"
+                type="number"
+                min="1"
+                max="28"
+                [ngModel]="dayOfMonth()"
+                (ngModelChange)="dayOfMonth.set(+$event)"
+              />
+            </div>
+            <div class="se-field">
+              <label [attr.for]="s.job + '-mt'">At</label>
+              <input
+                [attr.id]="s.job + '-mt'"
+                type="time"
+                [ngModel]="time()"
+                (ngModelChange)="time.set($event)"
+              />
+            </div>
+          }
+          @case ('cron') {
+            <div class="se-field se-wide">
+              <label [attr.for]="s.job + '-expr'">Expression</label>
+              <input
+                [attr.id]="s.job + '-expr'"
+                type="text"
+                spellcheck="false"
+                autocomplete="off"
+                [ngModel]="expression()"
+                (ngModelChange)="expression.set($event)"
+                placeholder="0 0 3 * * *"
+              />
+            </div>
+          }
+          @default {
+            <div class="se-field">
+              <label [attr.for]="s.job + '-at'">At</label>
+              <input
+                [attr.id]="s.job + '-at'"
+                type="time"
+                [ngModel]="time()"
+                (ngModelChange)="time.set($event)"
+              />
+            </div>
+          }
+        }
+
+        @if (mode() !== 'derived') {
+          <div class="se-field">
+            <label [attr.for]="s.job + '-tz'">Time zone</label>
+            <select
+              [attr.id]="s.job + '-tz'"
+              [ngModel]="timezone()"
+              (ngModelChange)="timezone.set($event)"
+            >
+              @for (z of zones; track z) {
+                <option [value]="z">{{ z }}{{ z === localZone ? ' — yours' : '' }}</option>
+              }
+            </select>
+          </div>
+          <!-- The worker runs UTC, so an hour chosen without a zone is not the hour anyone meant.
+               Saying which clock is the whole reason this column exists. -->
+          <p class="se-note se-preview">
+            Stored as <code>{{ preview() }}</code>
+          </p>
+        }
+
+        @if (error()) {
+          <p class="se-error">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ error() }}</span>
+          </p>
+        }
+
+        <div class="se-actions">
+          <button type="button" class="se-cancel" (click)="cancel()">Cancel</button>
+          <button type="button" class="se-save" [disabled]="saving()" (click)="save()">
+            {{ saving() ? 'Saving…' : 'Save schedule' }}
+          </button>
+        </div>
+      </div>
+    }
+  </div>
+}

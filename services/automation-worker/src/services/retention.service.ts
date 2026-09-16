@@ -3,17 +3,28 @@ import { env } from '../config/env.config';
 import { loadTierIndex } from './tier-index';
 import { rollUpScalars, rollUpCommands, rollUpAvailability } from './retention-rollup';
 import { pruneHistory } from './retention-prune';
-import { newPassCounters, type PassCounters, type PassOptions } from './retention-counters';
+import {
+  newPassCounters,
+  prunes,
+  pruneTargetsFor,
+  type PassCounters,
+  type PassOptions,
+} from './retention-counters';
 
-// The history pass (F18.1 / F18.9 / F18.10 / F18.17): roll every configured tier up, then prune
-// whatever is past its window.
+/** A day in milliseconds — the line above which a build pass also rebuilds the day-keyed tables. */
+const DAY_MS = 86_400_000;
+
+// The history pass (F18.1 / F18.9 / F18.10 / F18.17 / F18.18): roll every configured tier up, then
+// prune whatever is past its window.
 //
-// Since F18.17 it runs in two MODES rather than one shape on one schedule. `full` is the whole
-// thing — the nightly cron, an admin Apply, a user Apply. `rollup` is the interval pass: it builds
-// sub-daily scalar buckets at the cadence the finest configured tier implies and deletes nothing at
-// all. The two halves stopped sharing a schedule because they never shared a cost: building a
-// bucket is cheap, incremental and idempotent, and somebody is looking at the result right now;
-// deleting a row is none of those.
+// It runs in five MODES rather than one shape on one schedule. F18.17 made the first cut — build or
+// everything — because building a bucket and deleting a row never shared a cost: building is cheap,
+// incremental, idempotent, and somebody is looking at the result right now; deleting is none of
+// those. F18.18 finished it, because the destructive half was still three jobs wearing one
+// schedule: deleting a million raw readings, deleting a few thousand summary rows, and cleaning up
+// after a tier somebody removed this morning are not the same job and do not want the same hour.
+//
+// `full` remains all of it, in order, and is what an Apply and a catch-up run.
 //
 // Order is load-bearing: ROLL UP FIRST, PRUNE SECOND. A bucket is built by reading the rows it
 // summarises, so pruning first would silently produce empty buckets for exactly the periods a user
@@ -38,7 +49,13 @@ export type { KindCounters, PassCounters, PassOptions, PassMode } from './retent
 export { rollUpScalars, rollUpCommands, rollUpAvailability } from './retention-rollup';
 export { pruneHistory } from './retention-prune';
 
-/** The whole pass. Roll up, then prune — never the other way round. */
+/**
+ * One pass, doing whichever of the four jobs the mode names.
+ *
+ * `full` still runs everything in the load-bearing order, so an Apply and a catch-up behave exactly
+ * as they always have. The other four modes each do one job, which is what lets each have its own
+ * schedule.
+ */
 export async function runRetentionPass(opts: PassOptions = {}): Promise<PassCounters> {
   const now = opts.now ?? new Date();
   const scopeUserId = opts.scopeUserId ?? null;
@@ -49,33 +66,41 @@ export async function runRetentionPass(opts: PassOptions = {}): Promise<PassCoun
   const counters = newPassCounters();
 
   const index = await loadTierIndex(scopeUserId);
+  const builds = mode === 'full' || mode === 'build';
+  const targets = pruneTargetsFor(mode);
 
-  await phase('rollup:scalar');
-  counters.scalar.bucketsWritten = await rollUpScalars(index, now, lookbackMs);
+  if (builds) {
+    await phase('rollup:scalar');
+    counters.scalar.bucketsWritten = await rollUpScalars(index, now, lookbackMs);
 
-  // An interval pass stops here (F18.17), and stops here for two separate reasons.
-  //
-  // It never prunes, because deleting is the half that is neither cheap nor reversible and has no
-  // freshness argument behind it — nobody is looking at a row that is about to be gone.
-  //
-  // And it skips the other two rollups because **their buckets are day-keyed**: `command_rollup_daily`
-  // and `device_availability_daily` cannot be made fresher by running more often than the day ends,
-  // and `rollUpCommands` in particular anchors its window on `dayStart(now)`, so a fifteen-minute
-  // lookback would scan fifteen minutes of the previous evening and build nothing. The interval is
-  // derived from the finest SCALAR bucket — the only kind that may have a sub-daily one — so scalar
-  // is the only thing it is answering for.
-  if (mode === 'rollup') {
-    log.debug({ ms: Date.now() - started, lookbackMs }, 'retention rollup pass complete');
-    return counters;
+    // The two DAY-KEYED rollups do not ride every build pass.
+    //
+    // `command_rollup_daily` and `device_availability_daily` cannot be made fresher than the day
+    // ending, and `rollUpCommands` anchors its window on `dayStart(now)` — so a build running every
+    // fifteen minutes would rebuild today's partial day row ninety-six times to reach the same
+    // answer, and a narrow lookback would scan fifteen minutes of the previous evening and build
+    // nothing at all.
+    //
+    // F18.17 expressed this as "the interval pass is scalar-only", which was right while the only
+    // sub-daily pass was the derived one. Now that an admin can pin the build schedule, the rule has
+    // to be about the CADENCE rather than about which code path called: a build pinned to daily
+    // should build all three tables, not silently skip two of them.
+    if (mode === 'full' || lookbackMs >= DAY_MS) {
+      await phase('rollup:command');
+      counters.command.bucketsWritten = await rollUpCommands(index, now);
+      await phase('rollup:device_event');
+      counters.device_event.bucketsWritten = await rollUpAvailability(index, now, scopeUserId);
+    }
   }
 
-  await phase('rollup:command');
-  counters.command.bucketsWritten = await rollUpCommands(index, now);
-  await phase('rollup:device_event');
-  counters.device_event.bucketsWritten = await rollUpAvailability(index, now, scopeUserId);
-  await phase('prune');
-  await pruneHistory(index, now, scopeUserId, counters);
+  if (prunes(mode)) {
+    await phase(mode === 'full' ? 'prune' : `prune:${mode}`);
+    await pruneHistory(index, now, scopeUserId, counters, targets);
+  }
 
-  log.info({ ms: Date.now() - started, scopeUserId }, 'retention pass complete');
+  log[mode === 'full' ? 'info' : 'debug'](
+    { ms: Date.now() - started, scopeUserId, mode, lookbackMs },
+    'retention pass complete',
+  );
   return counters;
 }

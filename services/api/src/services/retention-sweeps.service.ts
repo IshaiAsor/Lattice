@@ -56,18 +56,28 @@ export const retentionSweepsService = {
   /**
    * Job history. A user only ever sees their own runs — a platform run's counters are everyone's.
    *
-   * Successful INTERVAL rollups are hidden unless asked for (F18.17). There are up to 96 of them a
-   * day once a `15m` tier exists, and a page whose first fifty rows are all "summarised 12 buckets,
-   * removed 0 rows" no longer answers the question it exists to answer — which is what the nightly
-   * pass deleted, and what failed. A FAILED rollup is never hidden: a build half that quietly
-   * stopped working is precisely the thing this page must not swallow.
+   * Successful BUILD passes are hidden unless asked for (F18.17). There are up to 288 of them a day
+   * once a `5m` tier exists, and a page whose first fifty rows are all "summarised 12 buckets,
+   * removed 0 rows" no longer answers the question it exists to answer — which is what the cleanup
+   * deleted, and what failed. A FAILED build is never hidden: a build half that quietly stopped
+   * working is precisely the thing this page must not swallow.
    *
-   * Interval rollups are platform-scoped, so a user's list is unaffected either way.
+   * Matched on `job` rather than on `trigger` since F18.18. The two were one axis until the four
+   * jobs got four schedules, and a build pass now writes `trigger: 'cron'` like every other
+   * scheduled job — so the old `trigger: 'rollup'` test would have hidden nothing and buried this
+   * page under one row every five minutes. `trigger: 'rollup'` is still matched for the historical
+   * rows written before the split.
+   *
+   * Build passes are platform-scoped, so a user's list is unaffected either way.
    */
   async runs(scopeUserId: number | null, limit = 50, includeRollups = false) {
     const hideRoutineRollups = includeRollups
       ? {}
-      : { NOT: { AND: [{ trigger: 'rollup' }, { status: 'ok' }] } };
+      : {
+          NOT: {
+            AND: [{ OR: [{ job: 'build' }, { trigger: 'rollup' }] }, { status: 'ok' }],
+          },
+        };
     const rows = await db.retentionRun.findMany({
       where: {
         ...(scopeUserId === null ? {} : { scope_user_id: scopeUserId }),
@@ -102,6 +112,7 @@ export const retentionSweepsService = {
 interface RunRow {
   id: number;
   trigger: string;
+  job: string;
   status: string;
   phase: string | null;
   scope_user_id: number | null;
@@ -124,6 +135,9 @@ function runView(r: RunRow) {
   return {
     id: r.id,
     trigger: r.trigger,
+    // WHICH of the four jobs this run performed. Without it the history page labels a data cleanup,
+    // a summary cleanup and an orphan cleanup identically — they all fire from a `cron` trigger now.
+    job: r.job,
     status: r.status,
     phase: r.phase,
     scoped: r.scope_user_id !== null,

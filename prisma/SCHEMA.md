@@ -11,7 +11,7 @@ change** (mermaid ERD + per-table examples). 63 tables, ordered by dependency ti
 | 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`, `sensor_rollup`, `camera_frame_history`, `command_rollup_daily`, `device_events`, `device_availability_daily`, `retention_policy`, `user_retention_preferences`, `retention_policy_tiers`, `user_retention_tiers`, `device_retention_tiers`, `action_retention_tiers`, `blueprint_retention_tiers`, `retention_runs`, `retention_run_kinds`, `retention_activity`                                                                                                                                                                                                                                     |
+| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`, `sensor_rollup`, `camera_frame_history`, `command_rollup_daily`, `device_events`, `device_availability_daily`, `retention_policy`, `user_retention_preferences`, `retention_policy_tiers`, `user_retention_tiers`, `device_retention_tiers`, `action_retention_tiers`, `blueprint_retention_tiers`, `retention_schedule`, `retention_runs`, `retention_run_kinds`, `retention_activity`                                                                                                                                                                                                               |
 | 7    | Blueprints (F10 — admin definition + user instance)                                  | `blueprints`, `blueprint_slots`, `blueprint_params`, `blueprint_profiles`, `blueprint_phases`, `blueprint_phase_targets`, `blueprint_scene_templates`, `blueprint_scene_template_members`, `blueprint_rule_templates`, `blueprint_rule_template_conditions`, `blueprint_rule_template_actions`, `blueprint_pipeline_templates`, `blueprint_pipeline_template_sensors`, `blueprint_pipeline_template_stages`, `blueprint_pipeline_template_triggers`, `blueprint_instances`, `blueprint_slot_bindings`, `blueprint_param_overrides`, `blueprint_instance_phase_state`, `blueprint_binding_phase_state`, `blueprint_binding_param_overrides` |
 
 ---
@@ -494,9 +494,20 @@ erDiagram
     datetime updated_at
   }
 
+  RetentionSchedule {
+    int id PK
+    string job UK "bucket_build|data_sweep|bucket_delete|orphan_sweep"
+    string cron "nullable — NULL = derive from the finest configured tier"
+    string timezone "IANA zone the expression is read in"
+    bool enabled
+    int updated_by_user_id FK "nullable"
+    datetime updated_at
+  }
+
   RetentionRun {
     int id PK
-    string trigger "cron|admin|user"
+    string trigger "cron|catchup|admin|user — WHY it exists"
+    string job "full|build|sweep|delete|orphan — WHAT it did"
     string status "queued|running|ok|failed"
     string phase "rollup:scalar | prune:frame — live progress"
     int requested_by_user_id FK "nullable"
@@ -875,6 +886,7 @@ erDiagram
   UserDevice            ||--o{ DeviceRetentionTier    : "this device's tier list"
   UserDeviceAction      ||--o{ ActionRetentionTier    : "this sensor's tier list"
   Blueprint             ||--o{ BlueprintRetentionTier : "ships tiers for its slots"
+  User                  |o--o{ RetentionSchedule      : "set the schedule"
   User                  |o--o{ RetentionRun           : "requested sweep"
   RetentionRun          ||--o{ RetentionRunKind       : "per-kind counters"
   RetentionRun          |o--o{ RetentionActivity      : "entries about this sweep"
@@ -1405,9 +1417,43 @@ Two invariants live in `@lattice/retention`, not in the schema, because no colum
 
 `user_retention_tiers`, `device_retention_tiers` and `blueprint_retention_tiers` have the same shape minus `max_keep_days`, keyed on `(user_id, …)`, `(user_device_id, …)` and `(blueprint_id, slot_key, action_name, …)` respectively. As with the table it replaces, a `user_retention_tiers` row exists only once the user has chosen something, so the **absence** of rows means "follow the platform" — which is what makes changing a platform default move everyone who never customised.
 
+#### `retention_schedule` (`RetentionSchedule`) — when each of the four retention jobs runs (F18.18). Everything else Phase 2 touched became data — windows, tier counts, bucket sizes, ceilings, the per-kind `enabled` flag — on the reasoning `retention_policy` states about itself: retention is a product decision an owner makes and changes, and an env var means a redeploy plus no record of what the policy was. That covers **when** the pass runs exactly as well as **how long** rows are kept, but the schedule stayed `RETENTION_CRON`, read once at worker startup.
+
+**Four rows, because the pass turned out not to be one pass.** F18.17 split it in two on the observation that building a bucket and deleting a row never shared a cost. The destructive half was still three jobs wearing one schedule:
+
+| `job`           | what it touches                                                                          | why it is not the others                                                             |
+| --------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `bucket_build`  | writes `sensor_rollup`, `command_rollup_daily`, `device_availability_daily`              | cheap, incremental, idempotent — and somebody is looking at the output right now     |
+| `data_sweep`    | deletes raw `sensor_history`, `camera_frame_history`, `device_commands`, `device_events` | the biggest tables in the system, irreversibly                                       |
+| `bucket_delete` | deletes the three rollup tables past each tier's own window                              | small tables, irreversible, no freshness argument at all                             |
+| `orphan_sweep`  | deletes rollup rows whose bucket size is no longer in any tier list                      | **fires on a configuration change, not a window expiring** — its trigger is a person |
+
+Still **not** per data kind: four kinds × four jobs would multiply lock contention for nothing.
+
+`cron` is a 5- or 6-field expression parsed by `@lattice/retention`, never by node-cron — since F18.18 the minute heartbeat **is** the scheduler, comparing each job's last completion against its own previous occurrence, so nothing else ever reads the string. That removes the class of bug where a registered task drifts from the row that configured it, and it is also what makes a missed slot survivable.
+
+**`cron = NULL` is a third encoding**, alongside the two this feature already carries (`0` = forever on a window, `NULL` = uncapped on a ceiling). Here it means _derive from the finest configured tier_ — F18.17's behaviour, and what makes "add a `15m` tier and the schedule moves with no redeploy" true. Meaningful on `bucket_build` alone; the API refuses it on the other three, which have nothing to derive from.
+
+`timezone` exists because a quiet hour is a local wall-clock concept — 03:00 only means anything against somebody's clock. It ships `'UTC'` because that is what the worker container has always been (no `TZ` in compose or in the k8s manifests), so day-one behaviour is unchanged rather than silently shifted three hours; the fact that `0 0 3 * * *` had therefore been firing at **06:00 Jerusalem** is exactly the bug the column fixes.
+
+**One invariant spans this table and the tier lists.** A bucket is built by reading the rows it summarises, so raw deleted before a build pass has seen it produces permanently empty buckets for exactly the periods someone asked to compress rather than lose — which the single pass guaranteed for free and four schedules do not. The rule is `max gap between build passes < the shortest raw window configured anywhere`, and it is enforced on **both** writes (`assertBuildKeepsUpWithRaw` here, `rawFloorDays` on the tier write) because either one can make the pair unsafe. Note the `data_sweep` schedule is _not_ part of it: however often a sweep runs it only deletes rows past their window.
+
+A keyed table rather than a singleton with `CHECK (id = 1)`: a CHECK cannot be expressed in `schema.prisma`, and this file records in three other places that it will not accept the schema ceasing to describe the database.
+
+| id  | job             | cron           | timezone       | enabled | updated_by_user_id | updated_at           |
+| --- | --------------- | -------------- | -------------- | ------- | ------------------ | -------------------- |
+| 1   | `bucket_build`  | NULL           | UTC            | true    | NULL               | 2026-09-07T12:00:00Z |
+| 2   | `data_sweep`    | `0 0 3 * * *`  | Asia/Jerusalem | true    | 1                  | 2026-09-07T14:20:00Z |
+| 3   | `bucket_delete` | `0 0 4 * * 0`  | Asia/Jerusalem | true    | 1                  | 2026-09-07T14:21:00Z |
+| 4   | `orphan_sweep`  | `0 30 * * * *` | UTC            | false   | 1                  | 2026-09-07T14:22:00Z |
+
 #### `retention_runs` (`RetentionRun`) — one execution of the retention pass: the nightly cron, an admin's "Apply now", or a user's (F18.13–F18.15). `phase` is written as each stage completes (`rollup:scalar`, `prune:frame`), so the page shows real progress rather than a spinner.
 
-`trigger` is `cron | catchup | rollup | admin | user`. The last two are an out-of-band Apply; the first three are the platform pass, which since F18.17 runs on **two** schedules rather than one. A `rollup` run is an INTERVAL pass — it builds sub-daily scalar buckets at the cadence the finest configured tier implies and deletes nothing, so a `15m` bucket is minutes stale rather than up to a day. A `catchup` run is the nightly full pass run late, because node-cron is a wall-clock ticker with no catch-up and a worker restarting at 03:00 used to skip that night silently; a distinct value so the fact leaves a trace instead of appearing as a `cron` row at 11:40. Rows are also what the cadence is measured FROM: "is a pass overdue?" is `now` minus the newest terminal platform run, which needs no cursor and survives a restart.
+**Two axes, and they used to be one.** `trigger` is WHY the run exists — `cron | catchup | admin | user` — and `job` is WHAT it did: `full | build | sweep | delete | orphan`. Until F18.18 a single `trigger` carried both, and the value `rollup` meant simultaneously "the interval fired" and "it only built buckets", which stopped working the moment the four jobs got four schedules and a `cron` trigger could mean any of them. Historical `rollup` rows were backfilled to `trigger='rollup', job='build'`; everything else to `job='full'`.
+
+A `catchup` run is a scheduled job run late, because node-cron is a wall-clock ticker with no catch-up and a worker restarting at 03:00 used to skip that night silently; a distinct value so the fact leaves a trace instead of appearing as a `cron` row at 11:40. Since F18.18 "late" is measured against the job's OWN previous occurrence rather than a fixed 25-hour fuse — a constant fuse silently overrode any schedule coarser than daily, and made switching a job off hold for a day and then stop meaning anything.
+
+Rows are also what the schedule is measured FROM: "is this job overdue?" is its newest terminal platform run against its own previous scheduled occurrence, which needs no cursor and survives a restart. A `full` run satisfies every job, because it did every job.
 
 `lock_key` is the single-flight mechanism: `'global'` for a platform sweep, `'user:<id>'` for a user sweep, `UNIQUE` and nullable, held from `queued` until terminal and then set NULL. Postgres's NULL-distinct rule is documented as a trap everywhere else in this file; **here it is the feature** — any number of finished rows carry NULL, and exactly one live run can hold each key.
 
@@ -1415,11 +1461,12 @@ The key alone is not enough, because a user sweep and a platform sweep would sti
 
 `scope_user_id` is **read from this row by the worker, never from the queue payload**: the message is a wake-up, not an authority.
 
-| id  | trigger | status  | phase        | requested_by_user_id | scope_user_id | lock_key | queued_at            | duration_ms | error |
-| --- | ------- | ------- | ------------ | -------------------- | ------------- | -------- | -------------------- | ----------- | ----- |
-| 40  | cron    | ok      | NULL         | NULL                 | NULL          | NULL     | 2026-08-24T03:00:00Z | 41200       | NULL  |
-| 41  | user    | running | prune:scalar | 1                    | 1             | user:1   | 2026-08-24T09:14:02Z | NULL        | NULL  |
-| 42  | rollup  | ok      | NULL         | NULL                 | NULL          | NULL     | 2026-08-24T09:15:00Z | 380         | NULL  |
+| id  | trigger | job    | status  | phase        | requested_by_user_id | scope_user_id | lock_key | queued_at            | duration_ms | error |
+| --- | ------- | ------ | ------- | ------------ | -------------------- | ------------- | -------- | -------------------- | ----------- | ----- |
+| 40  | cron    | sweep  | ok      | NULL         | NULL                 | NULL          | NULL     | 2026-08-24T03:00:00Z | 41200       | NULL  |
+| 41  | user    | full   | running | prune:scalar | 1                    | 1             | user:1   | 2026-08-24T09:14:02Z | NULL        | NULL  |
+| 42  | cron    | build  | ok      | NULL         | NULL                 | NULL          | NULL     | 2026-08-24T09:15:00Z | 380         | NULL  |
+| 43  | catchup | orphan | ok      | prune:orphan | NULL                 | NULL          | NULL     | 2026-08-24T11:40:00Z | 900         | NULL  |
 
 #### `retention_run_kinds` (`RetentionRunKind`) — what one run did to one data kind. Relational children rather than a JSON counters blob, for the same reason the tiers are five tables: the job-history page sorts and totals by kind, and a blob can be neither indexed nor summed. `bytes_estimated` is `false` **only for frames**, where `byte_size` is summed off the rows before they are deleted; everywhere else the figure comes from the same per-row constants the storage panel uses and is labelled an estimate in the UI rather than presented as a measurement. Unique `(run_id, data_kind)`.
 

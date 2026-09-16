@@ -27,6 +27,21 @@
 export const MIN_ROLLUP_INTERVAL_SECONDS = 300;
 
 /**
+ * The floor under the three DESTRUCTIVE schedules, in seconds (F18.18).
+ *
+ * Deliberately not the same number as the one above. That floor guards an interval pass that builds
+ * buckets: cheap, incremental, idempotent, and the half whose output somebody is looking at right
+ * now. This one guards data sweep, bucket deletion and the orphan sweep, which issue bounded DELETEs
+ * against the biggest tables in the system and are not reversible at all. F18.17 stopped the two
+ * halves sharing a cadence because they never shared a cost; sharing a floor would put the argument
+ * straight back.
+ *
+ * An hour rather than a day because there are legitimate reasons to prune often — a volume with no
+ * headroom, a test stack — and none at all to prune every five minutes.
+ */
+export const MIN_SWEEP_INTERVAL_SECONDS = 3_600;
+
+/**
  * At or above this, there is no interval pass at all.
  *
  * A `1d` bucket closes at midnight and the nightly pass builds it a few hours later; nothing is

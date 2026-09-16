@@ -1,0 +1,245 @@
+/* One job's schedule row inside the Schedule card.
+   Every colour comes from a token defined on bare :root in styles.css — an undefined custom
+   property drops the whole declaration silently, which is how F18.17 shipped a toggle that never
+   showed its active state. */
+
+.se-row {
+  padding: 13px 0;
+  border-top: 1px solid var(--card-divider);
+}
+.se-row:first-child {
+  border-top: none;
+  padding-top: 4px;
+}
+/* A switched-off job stays legible — it is still a schedule, just not running. */
+.se-row.off .se-id,
+.se-row.off .se-when,
+.se-row.off .se-facts {
+  opacity: 0.55;
+}
+
+.se-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.se-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.se-blurb {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  max-width: 62ch;
+  line-height: 1.45;
+}
+
+.se-switch {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 19px;
+  border-radius: 10px;
+  border: none;
+  background: var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  margin-top: 2px;
+}
+.se-switch.on {
+  background: var(--primary);
+  justify-content: flex-end;
+}
+.se-switch:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.se-switch span {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+
+.se-when {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.se-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.se-tag {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: var(--radius-chip);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.se-edit {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 11px;
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+}
+.se-edit:hover {
+  background: var(--surface-alt);
+}
+
+.se-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 7px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.se-fact b {
+  color: var(--text);
+  font-weight: 600;
+  margin-left: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.se-when-set {
+  margin-left: 4px;
+  color: var(--text-dim);
+}
+
+.se-editor {
+  margin-top: 12px;
+  padding: 13px;
+  border-radius: var(--radius-chip);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+}
+
+.se-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.se-field.se-wide {
+  flex: 1 1 260px;
+}
+.se-field label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.se-field select,
+.se-field input {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 6px 9px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--border-strong);
+  background: var(--card-bg);
+  color: var(--text);
+  min-width: 0;
+}
+.se-field input[type='number'] {
+  width: 88px;
+}
+.se-field select:focus-visible,
+.se-field input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.se-note {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.se-preview code {
+  font-size: 0.76rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.se-error {
+  flex: 1 1 100%;
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--error);
+}
+.se-error mat-icon {
+  /* mat-icon sets overflow:hidden, so a shrinkable basis clips the glyph rather than scaling it. */
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
+  font-size: 17px;
+  line-height: 17px;
+}
+
+.se-actions {
+  flex: 1 1 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+.se-cancel,
+.se-save {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 15px;
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+}
+.se-cancel {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+}
+.se-save {
+  border: none;
+  background: var(--primary);
+  color: #fff;
+}
+.se-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 560px) {
+  .se-editor {
+    gap: 10px;
+  }
+  .se-field {
+    flex: 1 1 100%;
+  }
+}

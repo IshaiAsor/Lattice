@@ -1,6 +1,6 @@
 import { createLogger } from '@lattice/logger';
 import {
-  describeTrigger,
+  describeSweep,
   findSweepConflict,
   sweepLockKey,
   RETENTION_LOCK_ID,
@@ -10,7 +10,8 @@ import { db } from '../db/client';
 import { countersForLog, recordActivity, summarizePass } from './retention-activity';
 import { env } from '../config/env.config';
 import { runRetentionPass, type PassCounters, type PassMode } from './retention.service';
-import { currentCadence, decide, lastPlatformRuns } from './retention-cadence';
+import { prunes } from './retention-counters';
+import { currentCadence, currentSchedules, decide, lastRunPerJob } from './retention-cadence';
 
 const log = createLogger('automation-worker:retention-run');
 
@@ -42,18 +43,30 @@ const log = createLogger('automation-worker:retention-run');
  * `catchup` the same full pass, run late because the scheduled one was missed (F18.17). A distinct
  *           value on purpose — "the worker was down at 03:00" is exactly the fact that used to
  *           leave no trace at all, and a run labelled `cron` at 11:40 would just look wrong.
- * `rollup`  an interval pass: builds sub-daily buckets, deletes nothing.
  * `admin`   / `user` — an out-of-band Apply (F18.13/F18.15).
+ *
+ * `rollup` is GONE as a value to write, though historical rows still carry it. It meant both "the
+ * interval fired" and "it only built buckets" — one value doing two jobs — which stopped working
+ * once all four jobs became separately scheduled and any of them could fire from a `cron` trigger.
+ * WHAT a run did now lives in `job`; this column is only WHY it exists.
  */
-export type Trigger = 'cron' | 'catchup' | 'rollup' | 'admin' | 'user';
+export type Trigger = 'cron' | 'catchup' | 'admin' | 'user';
 
-/** Everything except an interval pass both rolls up AND prunes. */
-function modeOf(trigger: string): PassMode {
-  return trigger === 'rollup' ? 'rollup' : 'full';
+/**
+ * What a run actually does, from the `job` column rather than from `trigger` (F18.18).
+ *
+ * The two were one axis until the four jobs got four schedules: `rollup` said both "the interval
+ * fired" and "it only built buckets", while `cron` said only the first. `full` is the default so an
+ * Apply, a catch-up and every historical row still mean the whole pass.
+ */
+function modeOf(job: string): PassMode {
+  return job === 'build' || job === 'sweep' || job === 'delete' || job === 'orphan' ? job : 'full';
 }
 
 export interface ClaimRequest {
   trigger: Trigger;
+  /** Which of the four jobs this run performs; `full` is all of them. */
+  job?: string;
   requestedByUserId: number | null;
   /** Non-null = a user-scoped sweep. NEVER taken from a request body — see the routes. */
   scopeUserId: number | null;
@@ -62,6 +75,7 @@ export interface ClaimRequest {
 export interface ActiveRun {
   id: number;
   trigger: string;
+  job: string;
   status: string;
   startedAt: Date | null;
   queuedAt: Date;
@@ -72,7 +86,7 @@ export class SweepInFlightError extends Error {
   statusCode = 409;
   constructor(public readonly active: ActiveRun) {
     super(
-      `A ${describeTrigger(active.trigger)} is already running (started ${(active.startedAt ?? active.queuedAt).toISOString()})`,
+      `A ${describeSweep(active.trigger, active.job)} is already running (started ${(active.startedAt ?? active.queuedAt).toISOString()})`,
     );
   }
 }
@@ -135,6 +149,7 @@ export async function claim(req: ClaimRequest, now: Date = new Date()): Promise<
       select: {
         id: true,
         trigger: true,
+        job: true,
         status: true,
         started_at: true,
         queued_at: true,
@@ -162,6 +177,7 @@ export async function claim(req: ClaimRequest, now: Date = new Date()): Promise<
       throw new SweepInFlightError({
         id: row.id,
         trigger: row.trigger,
+        job: row.job,
         status: row.status,
         startedAt: row.started_at,
         queuedAt: row.queued_at,
@@ -188,6 +204,7 @@ export async function claim(req: ClaimRequest, now: Date = new Date()): Promise<
     const run = await tx.retentionRun.create({
       data: {
         trigger: req.trigger,
+        job: req.job ?? 'full',
         status: 'queued',
         requested_by_user_id: req.requestedByUserId,
         scope_user_id: req.scopeUserId,
@@ -274,11 +291,11 @@ export async function execute(
     where: { id: runId },
     // THE SCOPE COMES FROM HERE. The queue message named the run; it did not get to say whose data
     // this sweep touches.
-    select: { scope_user_id: true, trigger: true, requested_by_user_id: true },
+    select: { scope_user_id: true, trigger: true, job: true, requested_by_user_id: true },
   });
 
   const started = Date.now();
-  const mode = modeOf(row.trigger);
+  const mode = modeOf(row.job);
   try {
     const counters = await runRetentionPass({
       now,
@@ -298,12 +315,18 @@ export async function execute(
         lock_key: null,
       },
     });
-    // An interval pass deletes nothing, so it writes no audit entry. `retention_activity` is the
-    // trail for irreversible and configuration changes; ninety-six "summarised 12 buckets, removed
-    // 0 rows" entries a day would bury the entries someone actually opens the log to find. The
-    // FAILURE path below still records, because a rollup that stopped working is exactly the kind
-    // of thing this feature is meant to stop being invisible.
-    if (mode === 'full') {
+    // A BUILD pass deletes nothing, so it writes no audit entry. `retention_activity` is the trail
+    // for irreversible and configuration changes; ninety-six "summarised 12 buckets, removed 0 rows"
+    // entries a day would bury the entries someone actually opens the log to find.
+    //
+    // Every other mode is gated on `prunes()` rather than on `full`, which is the point of the
+    // F18.18 split: a `sweep` that deleted two million raw readings has to leave the same trail the
+    // combined pass did, and gating on `full` would have made three of the four jobs silently
+    // exempt from the audit log the moment they got their own schedules.
+    //
+    // The FAILURE path below records for every mode, build included — a rollup that stopped working
+    // is exactly the kind of thing this feature exists to stop being invisible.
+    if (prunes(mode)) {
       await recordActivity({
         action: 'sweep_finished',
         scope: row.scope_user_id === null ? 'platform' : 'user',
@@ -315,8 +338,8 @@ export async function execute(
         runId,
       });
     }
-    log[mode === 'full' ? 'info' : 'debug'](
-      { runId, trigger: row.trigger, ms: Date.now() - started },
+    log[prunes(mode) ? 'info' : 'debug'](
+      { runId, trigger: row.trigger, job: row.job, ms: Date.now() - started },
       'retention run complete',
     );
   } catch (err) {
@@ -355,12 +378,13 @@ export async function execute(
  */
 async function sweepAsPlatform(
   trigger: Trigger,
+  job: string,
   now: Date,
   lookbackMs: number | undefined,
   onBusy: (activeId: number) => void,
 ): Promise<void> {
   try {
-    const runId = await claim({ trigger, requestedByUserId: null, scopeUserId: null }, now);
+    const runId = await claim({ trigger, job, requestedByUserId: null, scopeUserId: null }, now);
     await execute(runId, now, lookbackMs);
   } catch (err) {
     if (err instanceof SweepInFlightError) {
@@ -371,49 +395,71 @@ async function sweepAsPlatform(
   }
 }
 
-/** The nightly cron: a full pass, rollup then prune, on its quiet-hour schedule. */
-export async function runNightlySweep(now: Date = new Date()): Promise<void> {
-  await sweepAsPlatform('cron', now, undefined, (activeId) =>
-    log.warn({ active: activeId }, 'a sweep is already in flight — skipping tonight'),
+/**
+ * A full pass on demand — every job, in the load-bearing order.
+ *
+ * No longer wired to a cron: since F18.18 the four jobs each have their own schedule and the tick
+ * runs them individually. Kept because a `full` pass is still exactly what an Apply means, and
+ * because a catch-up for a job that has never run has nothing narrower to do.
+ */
+export async function runFullSweep(
+  now: Date = new Date(),
+  trigger: Trigger = 'cron',
+): Promise<void> {
+  await sweepAsPlatform(trigger, 'full', now, undefined, (activeId) =>
+    log.warn({ active: activeId }, 'a sweep is already in flight — skipping this one'),
   );
 }
 
 /**
- * The minute heartbeat behind F18.17.
+ * The minute heartbeat. **Since F18.18 this is the entire retention scheduler.**
  *
- * Two things a cron string cannot do, both answered by comparing `now` against `retention_runs`:
+ * There is no `cron.schedule` for retention any more. Each tick asks the same question of all four
+ * jobs — "when were you last due, and have you run since?" — which answers the two things a cron
+ * string never could:
  *
- *   AN INTERVAL ROLLUP, at the cadence the tier lists imply. A `15m` bucket built once a night does
- *   not exist for up to 24 hours after its window closes, which a chart draws as a gap at its
- *   right-hand edge — not as "not folded yet", but as "the device was off". Adding the tier changes
- *   the cadence here on the next tick, with no redeploy anywhere.
+ *   WHEN each job should run, from a row an admin can change. Previously `RETENTION_CRON`, read once
+ *   at startup, so moving the quiet hour in prod meant a GitOps commit and a promotion.
  *
- *   A CATCH-UP, when the nightly pass was missed entirely. node-cron has no catch-up: a worker
+ *   WHETHER a slot was missed. node-cron is a wall-clock ticker with no catch-up: a worker
  *   restarting at 03:00, an evicted pod, or a laptop dev stack asleep skips the night silently.
- *   Asking "how long since the last full pass finished?" needs no memory of missed occurrences and
- *   survives a restart, because the answer is in the database rather than in the scheduler.
+ *   Comparing against the job's own previous occurrence needs no memory of missed slots and survives
+ *   a restart, because the answer is in the database rather than in a scheduler.
  *
- * Runs at startup as well as on the tick — a worker that comes back at 11:40 having missed 03:00
- * should not have to be lucky about its restart time.
+ * ONE JOB PER TICK. All four contend for the same global lock, so running them together would just
+ * mean three immediate refusals; a backlog drains over successive minutes instead. `decide` returns
+ * them in priority order with build first, which also preserves the ordering the single pass used to
+ * guarantee for free — summarise before deleting the rows being summarised.
+ *
+ * Runs at startup as well as on the tick, so a worker that comes back at 11:40 having missed 03:00
+ * does not have to be lucky about its restart time.
  */
 export async function runCadenceTick(now: Date = new Date()): Promise<void> {
-  const [cadence, last] = await Promise.all([currentCadence(), lastPlatformRuns()]);
-  const due = decide(cadence, last, now);
-  if (due === null) return;
+  const [schedules, cadence, last] = await Promise.all([
+    currentSchedules(),
+    currentCadence(),
+    lastRunPerJob(),
+  ]);
+  const due = decide(schedules, cadence, last, now);
+  if (due.length === 0) return;
 
-  if (due.kind === 'full') {
-    log.warn({ reason: due.reason }, 'retention catch-up pass — the scheduled one was missed');
-    await sweepAsPlatform('catchup', now, undefined, (activeId) =>
-      log.info({ active: activeId }, 'catch-up deferred — a sweep is already in flight'),
-    );
-    return;
-  }
-
-  log.debug(
-    { finest: cadence.finestBucket, everyMs: cadence.intervalMs, lookbackMs: due.lookbackMs },
-    'interval rollup due',
+  const next = due[0]!;
+  const level =
+    next.trigger === 'catchup' ? 'warn' : next.job === 'bucket_build' ? 'debug' : 'info';
+  log[level](
+    {
+      job: next.job,
+      trigger: next.trigger,
+      reason: next.reason,
+      lookbackMs: next.lookbackMs,
+      alsoDue: due.slice(1).map((d) => d.job),
+    },
+    next.trigger === 'catchup'
+      ? 'retention job is late — running it now rather than skipping the slot'
+      : 'retention job due',
   );
-  await sweepAsPlatform('rollup', now, due.lookbackMs, (activeId) =>
-    log.debug({ active: activeId }, 'interval rollup deferred — a sweep is already in flight'),
+
+  await sweepAsPlatform(next.trigger, next.mode, now, next.lookbackMs, (activeId) =>
+    log.debug({ active: activeId, job: next.job }, 'deferred — a sweep is already in flight'),
   );
 }

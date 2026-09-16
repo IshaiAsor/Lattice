@@ -40,6 +40,7 @@ export {
 
 export {
   MIN_ROLLUP_INTERVAL_SECONDS,
+  MIN_SWEEP_INTERVAL_SECONDS,
   ROLLUP_INTERVAL_CEILING_SECONDS,
   finestBucketSeconds,
   rollupIntervalSeconds,
@@ -47,6 +48,25 @@ export {
   dueAt,
   catchUpLookbackMs,
 } from './cadence';
+
+export {
+  RETENTION_JOBS,
+  isRetentionJob,
+  parseCron,
+  isKnownTimeZone,
+  nextOccurrence,
+  prevOccurrence,
+  occurrenceGaps,
+  assertScheduleAdmissible,
+  assertBuildKeepsUpWithRaw,
+  rawDaysNeededForGap,
+  describeGap,
+  describeSchedule,
+  describeJob,
+  isJobDue,
+  type CronFields,
+  type RetentionJob,
+} from './schedule';
 
 export {
   TIER_SCOPES,
@@ -78,6 +98,7 @@ export {
   sweepLockKey,
   findSweepConflict,
   describeTrigger,
+  describeSweep,
   GLOBAL_LOCK_KEY,
   RETENTION_LOCK_ID,
   type ActiveSweep,

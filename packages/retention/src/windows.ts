@@ -24,11 +24,18 @@
  * lookback deletes rows before they were ever aggregated — the user loses the long-range history
  * they were trying to compress into. Two days is the absolute minimum whatever the lookback is set
  * to, because the nightly pass can miss a night.
+ *
+ * `buildGapDays` is the other side of the same invariant (F18.18). Once bucket build has a schedule
+ * an admin can pin, the longest gap between build passes becomes a second thing raw has to outlive:
+ * a weekly build against a two-day raw window loses five days of readings every week, silently. The
+ * check has to exist on BOTH writes or the pair can be made unsafe from whichever side is edited
+ * second, so it lives in this one function and `assertBuildKeepsUpWithRaw` in `schedule.ts` is its
+ * mirror.
  */
 const MIN_RAW_KEEP_DAYS = 2;
 
-export function rawFloorDays(lookbackDays: number): number {
-  return Math.max(lookbackDays, MIN_RAW_KEEP_DAYS);
+export function rawFloorDays(lookbackDays: number, buildGapDays = 0): number {
+  return Math.max(lookbackDays, MIN_RAW_KEEP_DAYS, buildGapDays);
 }
 
 /**

@@ -51,37 +51,29 @@
     }
   </div>
 
-  <!-- Schedule (F18.17). The rollup cadence is derived from the tier lists below rather than set
-       anywhere, so without this line an admin has no way to tell that adding a finer tier moved it. -->
+  <!-- Schedule (F18.17 / F18.18). Four jobs, four schedules: building summaries is cheap and
+       incremental, deleting readings is neither, deleting summaries is neither and touches
+       different tables, and cleaning up after a removed tier fires when somebody edits a list
+       rather than when a window expires. They shared one cron until this row. -->
   @if (schedule(); as sch) {
-    <div class="lattice-card ar-card ar-schedule">
+    <div class="lattice-card ar-card">
       <div class="ar-head">
         <div>
           <div class="ar-card-title">Schedule</div>
-          <div class="ar-card-sub">{{ cadenceLabel() }}</div>
+          <div class="ar-card-sub">
+            When each cleanup job runs. Changes take effect within a minute — no redeploy.
+          </div>
         </div>
-        @if (sch.fullOverdue) {
-          <span class="ar-sched-late">
-            <mat-icon>warning</mat-icon>
-            <span>Cleanup overdue</span>
-          </span>
-        }
       </div>
-      <div class="ar-sched-facts">
-        <span class="ar-sched-fact">
-          Summaries last rebuilt
-          <b>{{ sch.lastRollupAt ? (sch.lastRollupAt | date: 'MMM d, HH:mm') : 'never' }}</b>
-        </span>
-        <span class="ar-sched-fact">
-          Last cleanup
-          <b>{{ sch.lastFullAt ? (sch.lastFullAt | date: 'MMM d, HH:mm') : 'never' }}</b>
-        </span>
-        @if (sch.nextRollupDueAt) {
-          <span class="ar-sched-fact">
-            Next summaries due <b>{{ sch.nextRollupDueAt | date: 'HH:mm' }}</b>
-          </span>
-        }
-      </div>
+
+      @for (j of sch.jobs; track j.job) {
+        <app-schedule-editor
+          [schedule]="j"
+          [error]="scheduleError()[j.job] ?? null"
+          [saving]="savingJob() === j.job"
+          (changed)="saveSchedule(j.job, $event)"
+        />
+      }
     </div>
   }
 

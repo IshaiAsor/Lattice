@@ -1,5 +1,5 @@
 import {
-  describeTrigger,
+  describeSweep,
   findSweepConflict,
   sweepLockKey,
   RETENTION_LOCK_ID,
@@ -70,6 +70,7 @@ export async function claim(req: ClaimRequest, now: Date = new Date()): Promise<
         id: true,
         lock_key: true,
         trigger: true,
+        job: true,
         status: true,
         started_at: true,
         queued_at: true,
@@ -89,13 +90,15 @@ export async function claim(req: ClaimRequest, now: Date = new Date()): Promise<
     if (conflict) {
       const row = active.find((r) => r.id === conflict.id)!;
       const at = (row.started_at ?? row.queued_at).toISOString();
-      // 409 naming the trigger and the time — "a sweep is already running" with no detail is the
-      // kind of error that gets retried in a loop. The trigger goes through `describeTrigger`
-      // because since F18.17 one of them is not a cleanup at all: an interval `rollup` deletes
-      // nothing, and telling a user their cleanup was refused by another cleanup would be a lie.
+      // 409 naming what is actually running, and when — "a sweep is already running" with no
+      // detail is the kind of error that gets retried in a loop. It goes through `describeSweep`
+      // rather than the raw trigger because since F18.18 the trigger no longer says what the run
+      // does: `cron` covers all four jobs, and three of them are not the cleanup the caller asked
+      // for. Telling someone their cleanup was refused by a "nightly cleanup" that is in fact a
+      // summary rebuild would be a lie in the one message they will read.
       throw Object.assign(
-        new Error(`A ${describeTrigger(row.trigger)} started at ${at} is still running.`),
-        { statusCode: 409, runId: row.id, trigger: row.trigger, startedAt: at },
+        new Error(`A ${describeSweep(row.trigger, row.job)} started at ${at} is still running.`),
+        { statusCode: 409, runId: row.id, trigger: row.trigger, job: row.job, startedAt: at },
       );
     }
 
@@ -116,6 +119,9 @@ export async function claim(req: ClaimRequest, now: Date = new Date()): Promise<
     const run = await tx.retentionRun.create({
       data: {
         trigger: req.trigger,
+        // An Apply always means the whole pass: someone pressing "Clean up now" is asking for
+        // everything, not for whichever of the four jobs happens to be next.
+        job: 'full',
         status: 'queued',
         requested_by_user_id: req.requestedByUserId,
         scope_user_id: req.scopeUserId,
