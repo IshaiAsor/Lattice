@@ -3,13 +3,14 @@ import { retentionBucketsService } from './retention-buckets.service';
 import { retentionPolicyService } from './retention-policy.service';
 import { retentionScopesService } from './retention-scopes.service';
 import { retentionBlueprintsService } from './retention-blueprints.service';
+import { retentionSealedService } from './retention-sealed.service';
 import { retentionSweepsService } from './retention-sweeps.service';
 
-// Retention tiers, the bucket catalog, and out-of-band sweeps (F18.9-F18.19).
+// Retention tiers, the bucket catalog, and out-of-band sweeps (F18.9-F18.21).
 //
-// This was one 1,200-line file. It is now five, split along the lines the ROUTES already follow -
-// catalog, platform policy, the four stored scopes, blueprints, sweeps - with the internals they
-// share in retention-tiers.shared.ts.
+// This was one 1,200-line file. It is now six, split along the lines the ROUTES already follow -
+// catalog, platform policy, the stored user scopes, blueprints, sealed templates, sweeps - with the
+// internals they share in retention-tiers.shared.ts.
 //
 // What stays here is a facade, and deliberately so. Several methods call siblings in their own part
 // through `this` (setMine -> mine, setPolicyTiers -> listPolicies), which keeps working because the
@@ -21,6 +22,7 @@ export const retentionTiersService = {
   ...retentionPolicyService,
   ...retentionScopesService,
   ...retentionBlueprintsService,
+  ...retentionSealedService,
   ...retentionSweepsService,
 };
 

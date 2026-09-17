@@ -25,7 +25,7 @@ export interface ActivityEntryView {
   id: number;
   at: string;
   action: ActivityAction;
-  scope: 'platform' | 'user' | 'device' | 'action' | 'blueprint' | 'catalog';
+  scope: 'platform' | 'user' | 'device' | 'action' | 'blueprint' | 'sealed' | 'catalog';
   actorKind: 'user' | 'admin' | 'cron' | 'system';
   actorUserId: number | null;
   /** Never empty — a deleted actor still reads as "a deleted user" rather than a blank cell. */
@@ -33,7 +33,7 @@ export interface ActivityEntryView {
   subjectUserId: number | null;
   subjectUserName: string | null;
   subjectRefId: number | null;
-  /** The device / action / blueprint name AT THE TIME, so a rename does not rewrite history. */
+  /** The device / action / blueprint / template name AT THE TIME, so a rename does not rewrite history. */
   subjectLabel: string | null;
   dataKind: string | null;
   summary: string;
@@ -96,5 +96,6 @@ export const SCOPE_LABELS: Record<string, string> = {
   device: 'Device',
   action: 'Sensor',
   blueprint: 'Blueprint',
+  sealed: 'Sealed template',
   catalog: 'Bucket catalog',
 };

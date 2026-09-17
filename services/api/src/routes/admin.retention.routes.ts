@@ -6,13 +6,13 @@ import { retentionActivityService } from '../services/retention-activity.service
 import { retentionScheduleService } from '../services/retention-schedule.service';
 
 // The platform layer: the tier list every user starts on, the ceilings none may exceed, the
-// blueprint definitions users inherit, and the job history (F18.14).
+// blueprint and sealed template definitions users inherit, and the job history (F18.14).
 //
-// Blueprint tiers are admin-only by design — a user cannot edit the definition their instance
-// inherits; they override it at their own device or action scope, which sits above blueprint in the
-// resolution order.
+// Blueprint and sealed tiers are admin-only by design — a user cannot edit the definition their
+// device inherits; they override it at their own device or action scope, which sits above both in
+// the resolution order.
 
-/** Mounted at /api/admin/retention — the platform list, ceilings, blueprint tiers and job history. */
+/** Mounted at /api/admin/retention — platform list, ceilings, inherited tiers and job history. */
 export const adminRetentionRouter = Router();
 adminRetentionRouter.use(requireAppToken, requireAdmin);
 
@@ -132,6 +132,47 @@ adminRetentionRouter.put(
     }
   },
 );
+
+// Sealed template tiers (F18.21) — one list per (entry, kind), inherited by every device the
+// template covers. Admin-only for the same reason blueprint tiers are.
+adminRetentionRouter.get('/sealed/:templateId', async (req, res, next) => {
+  try {
+    res.json(await retentionTiersService.sealedTiers(Number(req.params.templateId)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRetentionRouter.put('/sealed/:templateId/:actionName/:kind', async (req, res, next) => {
+  try {
+    res.json(
+      await retentionTiersService.setSealedTiers(
+        Number(req.params.templateId),
+        req.params.actionName,
+        req.params.kind,
+        req.body ?? {},
+        req.user!.id,
+      ),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRetentionRouter.delete('/sealed/:templateId/:actionName/:kind', async (req, res, next) => {
+  try {
+    res.json(
+      await retentionTiersService.clearSealedTiers(
+        Number(req.params.templateId),
+        req.params.actionName,
+        req.params.kind,
+        req.user!.id,
+      ),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
 
 adminRetentionRouter.put('/:kind', async (req, res, next) => {
   try {

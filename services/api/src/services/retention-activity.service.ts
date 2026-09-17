@@ -33,8 +33,9 @@ export type ActivityAction =
   // F18.18 — when a job's schedule changed, and to what.
   | 'schedule_changed';
 
-/** Where it applied. */
-export type ActivityScope = 'platform' | 'user' | 'device' | 'action' | 'blueprint' | 'catalog';
+/** Where it applied. `sealed` is a sealed template entry's list (F18.21). */
+export type ActivityScope =
+  'platform' | 'user' | 'device' | 'action' | 'blueprint' | 'sealed' | 'catalog';
 
 export interface ActivityEntry {
   action: ActivityAction;

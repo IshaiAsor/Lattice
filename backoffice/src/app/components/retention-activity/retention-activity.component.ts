@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -33,7 +33,7 @@ const KIND_LABELS: Record<string, string> = {
   templateUrl: './retention-activity.component.html',
   styleUrls: ['./retention-activity.component.css'],
 })
-export class RetentionActivityComponent {
+export class RetentionActivityComponent implements OnInit {
   private api = inject(RetentionActivityService);
   private snack = inject(MatSnackBar);
   private destroyRef = inject(DestroyRef);
@@ -62,7 +62,11 @@ export class RetentionActivityComponent {
     return f ? this.entries().filter((e) => e.action === f) : this.entries();
   });
 
-  constructor() {
+  // Not the constructor: `admin` is a signal input, and it still holds its default (`false`) until
+  // the parent's binding is applied. Loading from the constructor sent the admin page to the
+  // personal feed, which excludes every entry with no subject user — blueprint and sealed template
+  // changes among them — so the admin trail silently never showed them.
+  ngOnInit(): void {
     this.load();
   }
 

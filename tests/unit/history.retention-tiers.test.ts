@@ -1,8 +1,8 @@
-// Unit: the N-tier retention core (@lattice/retention) — F18.9/F18.12.
+// Unit: the N-tier retention core (@lattice/retention) — F18.9/F18.12/F18.21.
 //
 // Phase 1 froze the tier list in code: two rollup tiers named 'hour' and 'day', six day-columns on
 // one table. Phase 2 makes the list DATA — any number of tiers, any admissible size, resolvable at
-// five scopes — and moves the part that cannot be data (the chain rule, the per-kind limits, the
+// six scopes — and moves the part that cannot be data (the chain rule, the per-kind limits, the
 // raw floor) into this package. This file pins that part.
 //
 // The single most important case in the file is "refuses a raw window shorter than the rollup
@@ -344,7 +344,7 @@ describe('assertTierList', () => {
   });
 });
 
-// ── Resolution across the five scopes ────────────────────────────────────────
+// ── Resolution across the six scopes ─────────────────────────────────────────
 
 describe('resolveTiers', () => {
   const base = { kind: 'scalar' as const, buckets: CATALOG, platform: PLATFORM };
@@ -369,6 +369,61 @@ describe('resolveTiers', () => {
     });
     expect(r.source).toBe('blueprint');
     expect(r.tiers.map((t) => t.bucket)).toEqual(['raw', '15m']);
+  });
+
+  // F18.21 — a sealed template's list sits below blueprint and above user.
+  it('takes the sealed template list over the user list', () => {
+    // The ordering decision itself: a board's shape is not overridden by the owner's Settings list.
+    // An owner who wants less of it overrides at the device or action scope instead.
+    const r = resolveTiers({
+      ...base,
+      user: tiers(['raw', 3]),
+      sealed: tiers(['raw', 14], ['5m', 30]),
+    });
+    expect(r.source).toBe('sealed');
+    expect(r.tiers.map((t) => t.bucket)).toEqual(['raw', '5m']);
+  });
+
+  it('takes the sealed template list over the platform list', () => {
+    const r = resolveTiers({ ...base, sealed: tiers(['raw', 7], ['15m', 30]) });
+    expect(r.source).toBe('sealed');
+    expect(r.tiers.map((t) => t.bucket)).toEqual(['raw', '15m']);
+  });
+
+  it('takes the blueprint list over the sealed template list', () => {
+    // A blueprint composes sealed templates and may override them per slot.
+    const r = resolveTiers({
+      ...base,
+      sealed: tiers(['raw', 14], ['5m', 30]),
+      blueprint: tiers(['raw', 7], ['1h', 90]),
+    });
+    expect(r.source).toBe('blueprint');
+    expect(r.tiers.map((t) => t.bucket)).toEqual(['raw', '1h']);
+  });
+
+  it('takes the device and action lists over the sealed template list', () => {
+    const sealed = tiers(['raw', 14], ['5m', 30]);
+    expect(resolveTiers({ ...base, sealed, device: tiers(['raw', 3]) }).source).toBe('device');
+    expect(resolveTiers({ ...base, sealed, action: tiers(['raw', 3]) }).source).toBe('action');
+  });
+
+  it('falls through an empty sealed list to the user list', () => {
+    // A template with no rows for an entry says nothing — it must not shadow the owner's choice.
+    const r = resolveTiers({ ...base, sealed: [], user: tiers(['raw', 30]) });
+    expect(r.source).toBe('user');
+  });
+
+  it('clamps a sealed template list against the platform ceilings', () => {
+    const r = resolveTiers({
+      ...base,
+      platform: platform(['raw', 14, 7], ['5m', 30, 10]),
+      sealed: tiers(['raw', 30], ['5m', 0]),
+    });
+    expect(r.source).toBe('sealed');
+    expect(r.tiers.map((t) => [t.bucket, t.keepDays])).toEqual([
+      ['raw', 7],
+      ['5m', 10],
+    ]);
   });
 
   it('takes the device list over the blueprint list', () => {

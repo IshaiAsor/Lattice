@@ -64,6 +64,12 @@ export class TierEditorComponent {
    * list exists to make.
    */
   usage = input<Record<string, UsageBucket>>({});
+  /**
+   * Whether the per-row stored figures apply to this list at all. False where nothing measures usage
+   * for the list being edited — a sealed template entry's list spans every device of the type — so
+   * an absent figure is not rendered as "nothing stored yet", which would be a false statement.
+   */
+  showStored = input<boolean>(true);
   disabled = input<boolean>(false);
 
   changed = output<TierView[]>();

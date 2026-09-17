@@ -104,12 +104,16 @@ adminCatalogRouter.patch('/sealed/templates/:id', async (req, res, next) => {
   try {
     const { name, targets, entries, force } = req.body ?? {};
     res.json(
-      await sealedTemplatesService.updateTemplate(Number(req.params.id), {
-        name,
-        targets,
-        entries,
-        force: force === true,
-      }),
+      await sealedTemplatesService.updateTemplate(
+        Number(req.params.id),
+        {
+          name,
+          targets,
+          entries,
+          force: force === true,
+        },
+        req.user!.id,
+      ),
     );
   } catch (err) {
     next(err);
@@ -117,7 +121,7 @@ adminCatalogRouter.patch('/sealed/templates/:id', async (req, res, next) => {
 });
 adminCatalogRouter.delete('/sealed/templates/:id', async (req, res, next) => {
   try {
-    await sealedTemplatesService.deleteTemplate(Number(req.params.id));
+    await sealedTemplatesService.deleteTemplate(Number(req.params.id), req.user!.id);
     res.sendStatus(204);
   } catch (err) {
     next(err);

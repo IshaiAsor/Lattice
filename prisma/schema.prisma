@@ -151,6 +151,7 @@ model SealedTemplate {
   targets         SealedTemplateTarget[]
   entries         SealedTemplateEntry[]
   blueprint_slots BlueprintSlot[]
+  retention_tiers SealedRetentionTier[]
 
   @@map("sealed_templates")
 }
@@ -1229,25 +1230,26 @@ model RetentionBucket {
   device_tiers    DeviceRetentionTier[]
   action_tiers    ActionRetentionTier[]
   blueprint_tiers BlueprintRetentionTier[]
+  sealed_tiers    SealedRetentionTier[]
 
   // "what sizes exist, finest first" is the only way this table is ever listed.
   @@index([seconds])
   @@map("retention_buckets")
 }
 
-// ── The five scopes ─────────────────────────────────────────────────────────────
+// ── The six scopes ──────────────────────────────────────────────────────────────
 //
-// FIVE TABLES, NOT ONE WITH A NULLABLE OWNER. Postgres treats NULLs as *distinct* in a unique
+// SIX TABLES, NOT ONE WITH A NULLABLE OWNER. Postgres treats NULLs as *distinct* in a unique
 // index, so a nullable-owner unique key would happily admit two platform rows for the same
 // (data_kind, bucket). A partial unique index would fix that but cannot be expressed in
 // schema.prisma, so the schema would stop describing the database — the same reasoning already
 // recorded on BlueprintBindingPhaseState. One table per scope also buys real FKs and real cascades:
 // deleting an action takes its tiers with it.
 //
-// Resolution order is action → device → blueprint → user → platform, and THE WHOLE LIST WINS: the
-// most specific scope with any rows for a kind supplies every tier, and the scopes below it are not
-// consulted. Merging tier-by-tier would leave "removing the action's tier falls back to the
-// device's" without a single answer.
+// Resolution order is action → device → blueprint → sealed → user → platform, and THE WHOLE LIST
+// WINS: the most specific scope with any rows for a kind supplies every tier, and the scopes below
+// it are not consulted. Merging tier-by-tier would leave "removing the action's tier falls back to
+// the device's" without a single answer.
 
 // The platform layer — the only scope that carries a ceiling.
 model RetentionPolicyTier {
@@ -1361,6 +1363,43 @@ model BlueprintRetentionTier {
   @@unique([blueprint_id, slot_key, action_name, data_kind, bucket])
   @@index([blueprint_id, slot_key, action_name])
   @@map("blueprint_retention_tiers")
+}
+
+// A sealed template's tier list for one of its entries (F18.21) — admin-authored, and inherited by
+// every device the template covers. A sealed board is built for one application, so whoever composes
+// its template already knows which entry is a fast-sampling sensor worth a `5m` tier and which is a
+// switch that only needs raw; without this every owner re-derives that per device.
+//
+// It sits BELOW blueprint and ABOVE user: a sealed template is a TYPE-level definition, a blueprint
+// composes sealed templates and may override them per slot, and the owner overrides both at their
+// own device or action scope.
+//
+// `action_name` is `sealed_template_entries.mqtt_action_name` as a plain string, not an FK to the
+// entry, because `updateTemplate` deletes and recreates every entry on each save — an entry FK
+// would cascade these rows away on every Save. The name is the stable identity (F10.10 guards it),
+// and it is what `user_device_actions.mqtt_action_name` carries on each materialized device. The
+// template itself IS a real FK: deleting a template takes its tiers with it.
+//
+// There is no link from a device to its template. Which template covers a device is resolved the
+// same way materialization resolves it — the released target whose type matches and whose version
+// range contains the device's catalog version — so retention cannot disagree with the actions the
+// device was actually given.
+model SealedRetentionTier {
+  id                 Int      @id @default(autoincrement())
+  sealed_template_id Int
+  action_name        String   @db.VarChar(64)
+  data_kind          String   @db.VarChar(20)
+  bucket             String   @db.VarChar(12)
+  keep_days          Int      @default(0)
+  position           Int      @default(0)
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  sealed_template SealedTemplate  @relation(fields: [sealed_template_id], references: [id], onDelete: Cascade)
+  bucket_def      RetentionBucket @relation(fields: [bucket], references: [code], onDelete: Restrict)
+
+  @@unique([sealed_template_id, action_name, data_kind, bucket])
+  @@index([sealed_template_id, action_name])
+  @@map("sealed_retention_tiers")
 }
 
 // ── When each job runs (F18.18) ─────────────────────────────────────────────────
@@ -1525,7 +1564,7 @@ model RetentionActivity {
   //       bucket_deleted | sweep_requested | sweep_finished | sweep_failed | data_trimmed |
   //       schedule_changed
   action String   @db.VarChar(24)
-  // WHERE it applied: platform | user | device | action | blueprint | catalog
+  // WHERE it applied: platform | user | device | action | blueprint | sealed | catalog
   scope  String   @db.VarChar(12)
 
   // WHO did it. `actor_kind` is user | admin | cron | system — it distinguishes an admin acting on
@@ -1534,9 +1573,9 @@ model RetentionActivity {
   actor_user_id Int?
   actor_name    String? @db.VarChar(120)
 
-  // WHOSE data it concerned, and which object. `subject_ref_id` is the device / action / blueprint
-  // id for those scopes and null otherwise; `subject_label` is its name AT THE TIME, so the entry
-  // still reads correctly after a rename or a delete.
+  // WHOSE data it concerned, and which object. `subject_ref_id` is the device / action / blueprint /
+  // sealed template id for those scopes and null otherwise; `subject_label` is its name AT THE TIME,
+  // so the entry still reads correctly after a rename or a delete.
   subject_user_id Int?
   subject_ref_id  Int?
   subject_label   String? @db.VarChar(160)

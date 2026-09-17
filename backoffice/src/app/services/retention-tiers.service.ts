@@ -40,7 +40,16 @@ export interface RejectedTierView {
 }
 
 /** Which scope supplied the list. The whole list wins from the most specific one that has any. */
-export type TierScope = 'action' | 'device' | 'blueprint' | 'user' | 'platform';
+export type TierScope = 'action' | 'device' | 'blueprint' | 'sealed' | 'user' | 'platform';
+
+/**
+ * One tier of a sealed template entry's list (F18.21). A template carries one list per
+ * (entry, kind); the entry is addressed by its `mqtt_action_name`.
+ */
+export interface SealedTierView extends TierView {
+  actionName: string;
+  dataKind: DataKind;
+}
 
 export interface MyTiersView {
   dataKind: DataKind;
@@ -239,6 +248,37 @@ export class RetentionTiersService {
 
   adminRun(id: number): Observable<RunView> {
     return this.http.get<RunView>(`${this.admin}/runs/${id}`);
+  }
+
+  // ── Sealed templates (F18.21) ─────────────────────────────────────────────
+
+  /** Every list a sealed template carries, one row per tier. */
+  sealedTiers(templateId: number): Observable<SealedTierView[]> {
+    return this.http.get<SealedTierView[]>(`${this.admin}/sealed/${templateId}`);
+  }
+
+  /** Applies immediately — tier lists are not part of a template's draft/release cycle. */
+  setSealedTiers(
+    templateId: number,
+    actionName: string,
+    kind: DataKind,
+    tiers: TierView[],
+  ): Observable<SealedTierView[]> {
+    return this.http.put<SealedTierView[]>(
+      `${this.admin}/sealed/${templateId}/${encodeURIComponent(actionName)}/${kind}`,
+      { tiers },
+    );
+  }
+
+  /** Deletes the entry's list, so its devices fall back to the wider scope. */
+  clearSealedTiers(
+    templateId: number,
+    actionName: string,
+    kind: DataKind,
+  ): Observable<SealedTierView[]> {
+    return this.http.delete<SealedTierView[]>(
+      `${this.admin}/sealed/${templateId}/${encodeURIComponent(actionName)}/${kind}`,
+    );
   }
 }
 

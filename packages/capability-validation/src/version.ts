@@ -34,3 +34,26 @@ export function versionInRange(version: string, min: string, max: string): boole
 export function rangesOverlap(aMin: string, aMax: string, bMin: string, bMax: string): boolean {
   return compareVersions(aMin, bMax) <= 0 && compareVersions(bMin, aMax) <= 0;
 }
+
+export interface TemplateTarget {
+  template_id: number;
+  device_type: string;
+  version_min: string;
+  version_max: string;
+}
+
+// The template whose target covers (type, version), or null. Pass RELEASED templates' targets only
+// — the caller owns that filter, as materialization does. Overlapping released targets are refused
+// at release, so at most one matches; the first wins defensively, exactly like device-gateway's
+// resolveTemplateForDevice. Shared so retention (api + automation-worker) answers "which template
+// covers this device" with the same rule that decided which actions the device was given.
+export function releasedTemplateFor(
+  type: string,
+  version: string,
+  targets: readonly TemplateTarget[],
+): number | null {
+  const match = targets.find(
+    (t) => t.device_type === type && versionInRange(version, t.version_min, t.version_max),
+  );
+  return match?.template_id ?? null;
+}

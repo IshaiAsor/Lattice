@@ -1,5 +1,6 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { forkJoin } from 'rxjs';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import {
@@ -12,6 +13,16 @@ import {
   SealedTemplateTarget,
   SealedTemplateUsage,
 } from 'src/app/services/admin.device.config.service';
+import {
+  RetentionTiersService,
+  bucketLabel,
+  type BucketView,
+  type PolicyTiersView,
+  type SealedTierView,
+  type TierView,
+} from 'src/app/services/retention-tiers.service';
+import { formatDays, type DataKind } from 'src/app/services/retention.service';
+import { TierEditorComponent } from '../tier-editor/tier-editor.component';
 
 // One composed action instance in the editor. A capability may be added multiple times (e.g. 8
 // i2c_socket_8 channels); the server assigns each a unique mqtt_action_name from base_mqtt_name.
@@ -19,6 +30,7 @@ interface DraftInstance {
   capability_key: string;
   label: string; // catalog label (display)
   base_mqtt_name: string; // capability's base mqtt_action_name (server suffixes _2/_3…)
+  implementation_type: string; // decides which history kind the entry produces (F18.21)
   // The name this instance is ALREADY stored under, when it came from a saved entry. Sent back
   // verbatim so a round-trip renames nothing: the catalog's base name and the stored one can
   // legitimately differ (a template seeded through the API may have used the capability_key as its
@@ -35,14 +47,20 @@ interface DraftInstance {
 
 const BEHAVIORS = ['command', 'interval', 'on_demand'];
 
+// The implementation types whose history is camera frames rather than readings — the same set
+// digest-service routes to camera_frame_history.
+const IMAGE_IMPL_TYPES = new Set(['CameraAction']);
+
 @Component({
   selector: 'app-sealed-templates',
-  imports: [SHARED_MATERIAL],
+  imports: [SHARED_MATERIAL, TierEditorComponent],
   templateUrl: './sealed-templates.component.html',
   styleUrls: ['./sealed-templates.component.css'],
 })
 export class SealedTemplatesComponent implements OnInit {
   private service = inject(AdminDeviceConfigService);
+  private tiersApi = inject(RetentionTiersService);
+  private snack = inject(MatSnackBar);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
@@ -73,6 +91,17 @@ export class SealedTemplatesComponent implements OnInit {
   // behind. Distinct from `problems`, which is what a rejected save would have broken.
   strandedNow = computed(() => this.usage().flatMap((u) => u.stranded));
 
+  // F18.21 — retention per entry. A template's lists apply the moment they are saved, independently
+  // of the template's own Save/Release, because they change nothing on the device.
+  retentionBuckets = signal<BucketView[]>([]);
+  retentionPolicies = signal<PolicyTiersView[]>([]);
+  sealedTiers = signal<SealedTierView[]>([]);
+  /** Unsaved edits per `${actionName}|${kind}`. */
+  tierDrafts = signal<Record<string, TierView[]>>({});
+  /** Which entries have their retention panel expanded, by `mqtt_action_name`. */
+  retentionOpen = signal<Record<string, boolean>>({});
+  readonly formatDays = formatDays;
+
   ngOnInit() {
     // Load the list + identities first (open() needs the identities to build its palette), then let
     // the URL's id decide which template is open. Subscribing handles back/forward and our own
@@ -84,6 +113,17 @@ export class SealedTemplatesComponent implements OnInit {
       this.templates.set(templates);
       this.identities.set(identities);
       this.route.paramMap.subscribe((pm) => this.applyRouteId(pm.get('id')));
+    });
+    // Loaded apart from the template list so a retention hiccup cannot block composing templates.
+    forkJoin({
+      buckets: this.tiersApi.buckets(),
+      policies: this.tiersApi.policyTiers(),
+    }).subscribe({
+      next: ({ buckets, policies }) => {
+        this.retentionBuckets.set(buckets);
+        this.retentionPolicies.set(policies);
+      },
+      error: () => this.snack.open('Could not load retention settings', 'Dismiss', { duration: 4000 }),
     });
   }
 
@@ -148,6 +188,9 @@ export class SealedTemplatesComponent implements OnInit {
 
   open(id: number) {
     this.service.getSealedTemplateUsage(id).subscribe((u) => this.usage.set(u));
+    this.tierDrafts.set({});
+    this.retentionOpen.set({});
+    this.loadSealedTiers(id);
     this.service.getSealedTemplate(id).subscribe((t) => {
       this.selected.set(t);
       this.name = t.name;
@@ -218,6 +261,7 @@ export class SealedTemplatesComponent implements OnInit {
       capability_key: c.capability_key,
       label: c.label,
       base_mqtt_name: c.mqtt_action_name,
+      implementation_type: c.implementation_type,
       mqtt_action_name: null, // new instance — the server names it from the base
       action_label: label,
       default_trait_value: null,
@@ -239,6 +283,7 @@ export class SealedTemplatesComponent implements OnInit {
       capability_key: e.capability_key,
       label: c.label,
       base_mqtt_name: c.mqtt_action_name,
+      implementation_type: c.implementation_type,
       mqtt_action_name: e.mqtt_action_name ?? null, // keep the name it is already addressed by
       action_label: e.action_label,
       default_trait_value: e.default_trait_value ?? null,
@@ -279,6 +324,14 @@ export class SealedTemplatesComponent implements OnInit {
           this.reload();
           // Re-read the dependents: a forced save is exactly when `stranded` becomes non-empty.
           this.service.getSealedTemplateUsage(t.id).subscribe((u) => this.usage.set(u));
+          // A removed entry takes its retention lists with it, server-side.
+          this.loadSealedTiers(t.id);
+          // Rebuild from what was stored, exactly as opening the template does: an instance added
+          // before this save has only now been given its name, and until the draft carries it the
+          // retention panel cannot address it (and a second save would send the base name again).
+          this.instances = updated.entries
+            .map((e) => this.entryToInstance(e))
+            .filter((x): x is DraftInstance => x !== null);
         },
         error: (e) => this.failed(e, 'Save failed'),
       });
@@ -335,6 +388,138 @@ export class SealedTemplatesComponent implements OnInit {
       // A template holding up a blueprint is refused (409). Without this the delete simply did
       // nothing, with no page state to say why.
       error: (e) => this.failed(e, 'Delete failed'),
+    });
+  }
+
+  // ─── Retention per entry (F18.21) ─────────────────────────────────────────
+  //
+  // One list per (entry, kind), inherited by every device the template covers once it is released.
+  // Blueprint, device and sensor lists still override it; platform ceilings still bind it.
+
+  private loadSealedTiers(templateId: number): void {
+    this.tiersApi.sealedTiers(templateId).subscribe({
+      next: (rows) => this.sealedTiers.set(rows),
+      error: () => this.sealedTiers.set([]),
+    });
+  }
+
+  /** The one kind an entry records: frames for a camera, readings for everything else. */
+  entryKind(e: DraftInstance): DataKind {
+    return IMAGE_IMPL_TYPES.has(e.implementation_type) ? 'frame' : 'scalar';
+  }
+
+  private tierKey(actionName: string, kind: DataKind): string {
+    return `${actionName}|${kind}`;
+  }
+
+  toggleRetention(actionName: string): void {
+    this.retentionOpen.update((o) => ({ ...o, [actionName]: !o[actionName] }));
+  }
+
+  /** The list stored for this entry, in order — empty when the entry follows the wider scope. */
+  storedTiers(actionName: string, kind: DataKind): TierView[] {
+    return this.sealedTiers()
+      .filter((t) => t.actionName === actionName && t.dataKind === kind)
+      .sort((a, b) => a.position - b.position)
+      .map((t) => ({ bucket: t.bucket, keepDays: t.keepDays, position: t.position }));
+  }
+
+  hasOwnTiers(actionName: string, kind: DataKind): boolean {
+    return this.sealedTiers().some((t) => t.actionName === actionName && t.dataKind === kind);
+  }
+
+  tierDirty(actionName: string, kind: DataKind): boolean {
+    return this.tierDrafts()[this.tierKey(actionName, kind)] !== undefined;
+  }
+
+  /** What the editor shows: the unsaved edit if there is one, else what is stored. */
+  entryTiers(actionName: string, kind: DataKind): TierView[] {
+    return this.tierDrafts()[this.tierKey(actionName, kind)] ?? this.storedTiers(actionName, kind);
+  }
+
+  /** Whether the editor is showing at all — an entry with no list and no edit shows the fallback. */
+  editingTiers(actionName: string, kind: DataKind): boolean {
+    return this.hasOwnTiers(actionName, kind) || this.tierDirty(actionName, kind);
+  }
+
+  private policyFor(kind: DataKind): PolicyTiersView | undefined {
+    return this.retentionPolicies().find((p) => p.dataKind === kind);
+  }
+
+  minBucketFor(kind: DataKind): string {
+    return this.policyFor(kind)?.minBucket ?? 'raw';
+  }
+
+  ceilingsFor(kind: DataKind): Record<string, number | null> {
+    const out: Record<string, number | null> = {};
+    for (const t of this.policyFor(kind)?.tiers ?? []) out[t.bucket] = t.maxKeepDays;
+    return out;
+  }
+
+  /** The platform list in one line — what an entry without its own list falls back to. */
+  platformSummary(kind: DataKind): string {
+    const tiers = [...(this.policyFor(kind)?.tiers ?? [])].sort((a, b) => a.position - b.position);
+    if (tiers.length === 0) return 'keep everything';
+    return tiers
+      .map((t) => {
+        const b = this.retentionBuckets().find((x) => x.code === t.bucket);
+        return `${b ? bucketLabel(b) : t.bucket} ${formatDays(t.keepDays).toLowerCase()}`;
+      })
+      .join(' · ');
+  }
+
+  /** Start an entry's own list from the platform's, which is the list it was already following. */
+  customiseTiers(actionName: string, kind: DataKind): void {
+    const platform = this.policyFor(kind)?.tiers ?? [];
+    const start: TierView[] =
+      platform.length === 0
+        ? [{ bucket: 'raw', keepDays: 0, position: 0 }]
+        : [...platform]
+            .sort((a, b) => a.position - b.position)
+            .map((t, i) => ({ bucket: t.bucket, keepDays: t.keepDays, position: i }));
+    this.onEntryTiersChanged(actionName, kind, start);
+  }
+
+  onEntryTiersChanged(actionName: string, kind: DataKind, tiers: TierView[]): void {
+    this.tierDrafts.update((d) => ({ ...d, [this.tierKey(actionName, kind)]: tiers }));
+  }
+
+  discardEntryTiers(actionName: string, kind: DataKind): void {
+    this.tierDrafts.update((d) => {
+      const next = { ...d };
+      delete next[this.tierKey(actionName, kind)];
+      return next;
+    });
+  }
+
+  saveEntryTiers(actionName: string, kind: DataKind): void {
+    const t = this.selected();
+    if (!t) return;
+    this.tiersApi.setSealedTiers(t.id, actionName, kind, this.entryTiers(actionName, kind)).subscribe({
+      next: (rows) => {
+        this.sealedTiers.set(rows);
+        this.discardEntryTiers(actionName, kind);
+        this.snack.open('Retention saved — applies to every device on this template', undefined, { duration: 2500 });
+      },
+      // The refusal names the rule and what would work instead ("90m cannot fold from 1h; use 30m or
+      // 45m below it") — the useful part, which a generic failure message would throw away.
+      error: (e: { error?: { error?: string } }) =>
+        this.snack.open(e.error?.error ?? 'Could not save retention', 'Dismiss', { duration: 6000 }),
+    });
+  }
+
+  clearEntryTiers(actionName: string, kind: DataKind): void {
+    const t = this.selected();
+    if (!t) return;
+    if (!confirm(`Remove ${actionName}'s retention list? Its devices fall back to the wider scope.`)) return;
+    this.tiersApi.clearSealedTiers(t.id, actionName, kind).subscribe({
+      next: (rows) => {
+        this.sealedTiers.set(rows);
+        this.discardEntryTiers(actionName, kind);
+        this.snack.open('Retention list removed', undefined, { duration: 2500 });
+      },
+      error: (e: { error?: { error?: string } }) =>
+        this.snack.open(e.error?.error ?? 'Could not remove retention', 'Dismiss', { duration: 6000 }),
     });
   }
 

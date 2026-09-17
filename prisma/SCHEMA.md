@@ -11,7 +11,7 @@ change** (mermaid ERD + per-table examples). 63 tables, ordered by dependency ti
 | 3    | User devices & actions                                                               | `user_devices`, `user_action_groups`, `areas`, `user_device_actions`, `user_device_action_pins`, `user_action_configurations`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 4    | Automation (rules; emergencies = rules with `is_emergency`; scenes = manual fan-out) | `user_rules`, `user_rule_conditions`, `user_rule_actions`, `user_rule_events`, `scenes`, `scene_members`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 5    | Pipelines (ML execution)                                                             | `pipelines`, `pipeline_sensors`, `pipeline_stages`, `pipeline_triggers`, `pipeline_runs`, `pipeline_run_stages`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`, `sensor_rollup`, `camera_frame_history`, `command_rollup_daily`, `device_events`, `device_availability_daily`, `retention_policy`, `user_retention_preferences`, `retention_policy_tiers`, `user_retention_tiers`, `device_retention_tiers`, `action_retention_tiers`, `blueprint_retention_tiers`, `retention_schedule`, `retention_runs`, `retention_run_kinds`, `retention_activity`                                                                                                                                                                                                               |
+| 6    | Telemetry                                                                            | `sensor_history`, `device_commands`, `sensor_rollup`, `camera_frame_history`, `command_rollup_daily`, `device_events`, `device_availability_daily`, `retention_policy`, `user_retention_preferences`, `retention_policy_tiers`, `user_retention_tiers`, `device_retention_tiers`, `action_retention_tiers`, `blueprint_retention_tiers`, `sealed_retention_tiers`, `retention_schedule`, `retention_runs`, `retention_run_kinds`, `retention_activity`                                                                                                                                                                                     |
 | 7    | Blueprints (F10 — admin definition + user instance)                                  | `blueprints`, `blueprint_slots`, `blueprint_params`, `blueprint_profiles`, `blueprint_phases`, `blueprint_phase_targets`, `blueprint_scene_templates`, `blueprint_scene_template_members`, `blueprint_rule_templates`, `blueprint_rule_template_conditions`, `blueprint_rule_template_actions`, `blueprint_pipeline_templates`, `blueprint_pipeline_template_sensors`, `blueprint_pipeline_template_stages`, `blueprint_pipeline_template_triggers`, `blueprint_instances`, `blueprint_slot_bindings`, `blueprint_param_overrides`, `blueprint_instance_phase_state`, `blueprint_binding_phase_state`, `blueprint_binding_param_overrides` |
 
 ---
@@ -494,6 +494,17 @@ erDiagram
     datetime updated_at
   }
 
+  SealedRetentionTier {
+    int id PK
+    int sealed_template_id FK
+    string action_name "entry mqtt_action_name; plain string, survives a template save"
+    string data_kind "scalar|frame"
+    string bucket FK
+    int keep_days
+    int position
+    datetime updated_at
+  }
+
   RetentionSchedule {
     int id PK
     string job UK "bucket_build|data_sweep|bucket_delete|orphan_sweep"
@@ -534,12 +545,12 @@ erDiagram
     int id PK
     datetime at
     string action "tiers_changed|policy_changed|bucket_created|sweep_finished|data_trimmed|..."
-    string scope "platform|user|device|action|blueprint|catalog"
+    string scope "platform|user|device|action|blueprint|sealed|catalog"
     string actor_kind "user|admin|cron|system"
     int actor_user_id FK "nullable — SetNull, so closing an account cannot erase who acted"
     string actor_name "denormalized: the id goes, the name stays"
     int subject_user_id FK "nullable — whose data it concerned"
-    int subject_ref_id "nullable — device / action / blueprint id"
+    int subject_ref_id "nullable — device / action / blueprint / sealed template id"
     string subject_label "its name AT THE TIME, so a rename does not rewrite history"
     string data_kind "nullable"
     string summary "the human line: raw 30d → 7d, added 15m kept 90d"
@@ -880,12 +891,14 @@ erDiagram
   RetentionBucket       ||--o{ DeviceRetentionTier    : "sized by"
   RetentionBucket       ||--o{ ActionRetentionTier    : "sized by"
   RetentionBucket       ||--o{ BlueprintRetentionTier : "sized by"
+  RetentionBucket       ||--o{ SealedRetentionTier    : "sized by"
   User                  |o--o{ RetentionBucket        : "added custom size"
   RetentionPolicy       ||--o{ RetentionPolicyTier    : "platform tier list"
   User                  ||--o{ UserRetentionTier      : "my tier list"
   UserDevice            ||--o{ DeviceRetentionTier    : "this device's tier list"
   UserDeviceAction      ||--o{ ActionRetentionTier    : "this sensor's tier list"
   Blueprint             ||--o{ BlueprintRetentionTier : "ships tiers for its slots"
+  SealedTemplate        ||--o{ SealedRetentionTier    : "ships tiers for its entries"
   User                  |o--o{ RetentionSchedule      : "set the schedule"
   User                  |o--o{ RetentionRun           : "requested sweep"
   RetentionRun          ||--o{ RetentionRunKind       : "per-kind counters"
@@ -1383,15 +1396,17 @@ F18.9 also shipped a `max_tiers` column — a per-kind cap on how many tiers a l
 | --- | ------- | --------- | -------- | ----------- | ---------- | -------------------- |
 | 31  | 1       | scalar    | 0        | 90          | 0          | 2026-08-21T10:00:00Z |
 
-#### The five tier tables — `retention_policy_tiers`, `user_retention_tiers`, `device_retention_tiers`, `action_retention_tiers`, `blueprint_retention_tiers`
+#### The six tier tables — `retention_policy_tiers`, `user_retention_tiers`, `device_retention_tiers`, `action_retention_tiers`, `blueprint_retention_tiers`, `sealed_retention_tiers`
 
 A **tier list** is the complete retention configuration for one `(scope, data_kind)`: an ordered set of buckets, each with a keep window. **`raw` is position 0 of that list**, not a separate kind-level window — which is what makes a per-sensor raw window fall out for free, and is why the six `retention_policy` day columns above are on their way out.
 
-**Five tables, not one with a nullable owner.** Postgres treats NULLs as _distinct_ in a unique index, so a nullable-owner key would admit two platform rows for the same `(data_kind, bucket)`; a partial unique index would fix that but cannot be expressed in `schema.prisma`, so the schema would stop describing the database — the same reasoning already recorded on `blueprint_binding_phase_state` and on `user_retention_preferences` itself. One table per scope also buys real FKs and real cascades: deleting an action takes its tiers with it.
+**Six tables, not one with a nullable owner.** Postgres treats NULLs as _distinct_ in a unique index, so a nullable-owner key would admit two platform rows for the same `(data_kind, bucket)`; a partial unique index would fix that but cannot be expressed in `schema.prisma`, so the schema would stop describing the database — the same reasoning already recorded on `blueprint_binding_phase_state` and on `user_retention_preferences` itself. One table per scope also buys real FKs and real cascades: deleting an action takes its tiers with it.
 
-Resolution runs **action → device → blueprint → user → platform**, and **the whole list wins**: the most specific scope with _any_ rows for a kind supplies every tier, and the scopes below it are not consulted. Merging tier-by-tier would leave "removing the action's tier falls back to the device's" without a single answer, and a half-inherited list composes differently depending on which half you remove. Clamping is per bucket against the platform row for the _same_ bucket; a scope that keeps a bucket the platform does not configure is uncapped for it, because the platform expresses a ceiling by carrying the bucket rather than by omitting it.
+Resolution runs **action → device → blueprint → sealed → user → platform**, and **the whole list wins**: the most specific scope with _any_ rows for a kind supplies every tier, and the scopes below it are not consulted. Merging tier-by-tier would leave "removing the action's tier falls back to the device's" without a single answer, and a half-inherited list composes differently depending on which half you remove. Clamping is per bucket against the platform row for the _same_ bucket; a scope that keeps a bucket the platform does not configure is uncapped for it, because the platform expresses a ceiling by carrying the bucket rather than by omitting it.
 
 Only `retention_policy_tiers` carries `max_keep_days` — the ceiling, mirroring the `default_* / max_*` pairing Phase 1 used. `blueprint_retention_tiers` addresses `(blueprint_id, slot_key, action_name)` so a blueprint can single out a known-noisy sensor without changing the switches beside it; `slot_key` and `action_name` are plain strings for the same reason `blueprint_slot_bindings.slot_key` is one — they survive a v2 publish recreating the slot rows. Blueprint tiers are **admin-only**: a user cannot edit the definition their instance inherits, they override it at their own device or action scope, which sits above it in the order.
+
+`sealed_retention_tiers` (F18.21) is the same idea one level down: a sealed template ships a tier list per **entry**, addressed by `(sealed_template_id, action_name)` where `action_name` is the entry's `mqtt_action_name`, and every device the template covers inherits it. A sealed board is built for one application, so whoever composes its template already knows which entry is a fast-sampling sensor worth a `5m` tier and which is a switch that only needs raw. It sits **below blueprint** (a blueprint composes sealed templates and may override them per slot) and **above user** (the board's shape is not overridden by an owner's Settings list; the owner overrides it per device or per sensor). `action_name` is a plain string rather than an FK to `sealed_template_entries` because a template save deletes and recreates every entry row — an entry FK would cascade the tiers away on every Save; instead the save removes the lists of entries it drops, and logs them. There is **no device → template link**: which template covers a device is resolved exactly as materialization resolves it — the `released` target whose `device_type` matches and whose version range holds the device's catalog `version` (`releasedTemplateFor` in `@lattice/capability-validation`) — so retention cannot disagree with the actions the device was given. Only `scalar` and `frame` lists are accepted: `command` and `device_event` windows are resolved per user, so a sealed row for them would never apply.
 
 Two invariants live in `@lattice/retention`, not in the schema, because no column can express them:
 
@@ -1415,7 +1430,7 @@ Two invariants live in `@lattice/retention`, not in the schema, because no colum
 | 13  | 100                   | scalar    | 90m    | 60        | 1        |
 | 14  | 100                   | scalar    | 1d     | 0         | 2        |
 
-`user_retention_tiers`, `device_retention_tiers` and `blueprint_retention_tiers` have the same shape minus `max_keep_days`, keyed on `(user_id, …)`, `(user_device_id, …)` and `(blueprint_id, slot_key, action_name, …)` respectively. As with the table it replaces, a `user_retention_tiers` row exists only once the user has chosen something, so the **absence** of rows means "follow the platform" — which is what makes changing a platform default move everyone who never customised.
+`user_retention_tiers`, `device_retention_tiers`, `blueprint_retention_tiers` and `sealed_retention_tiers` have the same shape minus `max_keep_days`, keyed on `(user_id, …)`, `(user_device_id, …)`, `(blueprint_id, slot_key, action_name, …)` and `(sealed_template_id, action_name, …)` respectively. As with the table it replaces, a `user_retention_tiers` row exists only once the user has chosen something, so the **absence** of rows means "follow the platform" — which is what makes changing a platform default move everyone who never customised.
 
 #### `retention_schedule` (`RetentionSchedule`) — when each of the four retention jobs runs (F18.18). Everything else Phase 2 touched became data — windows, tier counts, bucket sizes, ceilings, the per-kind `enabled` flag — on the reasoning `retention_policy` states about itself: retention is a product decision an owner makes and changes, and an env var means a redeploy plus no record of what the policy was. That covers **when** the pass runs exactly as well as **how long** rows are kept, but the schedule stayed `RETENTION_CRON`, read once at worker startup.
 

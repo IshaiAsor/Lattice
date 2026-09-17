@@ -127,16 +127,19 @@ async function lastRunPerJob(): Promise<Map<string, Date>> {
 
 /** The derived build cadence — F18.17's rule, unchanged, and still the default. */
 async function derivedCadence() {
-  const [policy, user, blueprint, device, action, buckets] = await Promise.all([
+  const [policy, user, blueprint, sealed, device, action, buckets] = await Promise.all([
     db.retentionPolicyTier.findMany({ distinct: ['bucket'], select: { bucket: true } }),
     db.userRetentionTier.findMany({ distinct: ['bucket'], select: { bucket: true } }),
     db.blueprintRetentionTier.findMany({ distinct: ['bucket'], select: { bucket: true } }),
+    db.sealedRetentionTier.findMany({ distinct: ['bucket'], select: { bucket: true } }),
     db.deviceRetentionTier.findMany({ distinct: ['bucket'], select: { bucket: true } }),
     db.actionRetentionTier.findMany({ distinct: ['bucket'], select: { bucket: true } }),
     db.retentionBucket.findMany({ select: { code: true, seconds: true, label: true } }),
   ]);
   const catalog = new Map(buckets.map((b) => [b.code, { seconds: b.seconds }]));
-  const codes = [...policy, ...user, ...blueprint, ...device, ...action].map((r) => r.bucket);
+  const codes = [...policy, ...user, ...blueprint, ...sealed, ...device, ...action].map(
+    (r) => r.bucket,
+  );
   const finestSeconds = finestBucketSeconds(codes, catalog);
   const intervalSeconds = rollupIntervalSeconds(finestSeconds, Math.ceil(MIN_INTERVAL_MS / 1000));
   const finest = finestSeconds === null ? null : buckets.find((b) => b.seconds === finestSeconds);
@@ -152,7 +155,7 @@ async function derivedCadence() {
  * that backwards would refuse every schedule on a platform that deletes nothing.
  */
 async function shortestRawKeepDays(): Promise<number> {
-  const [platform, user, device, action, blueprint] = await Promise.all([
+  const [platform, user, device, action, blueprint, sealed] = await Promise.all([
     db.retentionPolicyTier.aggregate({
       where: { bucket: 'raw', keep_days: { gt: 0 } },
       _min: { keep_days: true },
@@ -173,8 +176,12 @@ async function shortestRawKeepDays(): Promise<number> {
       where: { bucket: 'raw', keep_days: { gt: 0 } },
       _min: { keep_days: true },
     }),
+    db.sealedRetentionTier.aggregate({
+      where: { bucket: 'raw', keep_days: { gt: 0 } },
+      _min: { keep_days: true },
+    }),
   ]);
-  const mins = [platform, user, device, action, blueprint]
+  const mins = [platform, user, device, action, blueprint, sealed]
     .map((r) => r._min.keep_days)
     .filter((n): n is number => n !== null && n > 0);
   return mins.length === 0 ? 0 : Math.min(...mins);

@@ -31,11 +31,28 @@ export interface PlatformTier extends Tier {
 }
 
 /**
- * The five scopes a tier list can be stored at, finest-first.
+ * The six scopes a tier list can be stored at, finest-first.
  *
- * Order is the resolution order, and it is the only place it is written down.
+ * Order is the resolution order, and it is the only place it is written down. `sealed` (F18.21)
+ * sits below `blueprint` and above `user`: a sealed template is a TYPE-level definition of a board,
+ * a blueprint composes sealed templates and may override them per slot, and the owner overrides
+ * both at their own device or action scope.
  */
-export const TIER_SCOPES = ['action', 'device', 'blueprint', 'user', 'platform'] as const;
+export const TIER_SCOPES = ['action', 'device', 'blueprint', 'sealed', 'user', 'platform'] as const;
+
+/**
+ * The kinds whose history belongs to an ACTION, and so the only kinds the action, device, blueprint
+ * and sealed scopes can govern.
+ *
+ * `command` and `device_event` are owned by the user — `device_commands.user_id` and
+ * `device_events.user_id` are what their prune indexes hit — so their window is resolved from the
+ * user and platform lists alone. A per-action row for them would be stored and silently ignored.
+ */
+export const ACTION_SCOPED_KINDS: readonly DataKind[] = ['scalar', 'frame'];
+
+export function isActionScopedKind(kind: DataKind): boolean {
+  return ACTION_SCOPED_KINDS.includes(kind);
+}
 
 /** One day, in seconds. The granularity the two DATE-keyed rollup tables physically store. */
 export const DAY_SECONDS = 86_400;
@@ -99,6 +116,8 @@ export interface TierResolutionInput {
   buckets: ReadonlyMap<string, BucketDef>;
   platform: readonly PlatformTier[];
   user?: readonly Tier[];
+  /** The sealed template entry's list (F18.21), when the device is covered by a released template. */
+  sealed?: readonly Tier[];
   blueprint?: readonly Tier[];
   device?: readonly Tier[];
   action?: readonly Tier[];
@@ -129,6 +148,7 @@ export function resolveTiers(input: TierResolutionInput): ResolvedTiers {
     ['action', input.action],
     ['device', input.device],
     ['blueprint', input.blueprint],
+    ['sealed', input.sealed],
     ['user', input.user],
     ['platform', platform],
   ];

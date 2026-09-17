@@ -139,11 +139,11 @@ export const view = (t: { bucket: string; keep_days: number; position: number })
   position: t.position,
 });
 
-// ── The five scopes, as one shape ────────────────────────────────────────────
+// ── The six scopes, as one shape ─────────────────────────────────────────────
 //
-// Each scope is a different table (see prisma/SCHEMA.md for why it is five tables and not one with
+// Each scope is a different table (see prisma/SCHEMA.md for why it is six tables and not one with
 // a nullable owner), but the read/replace/clear operations are identical, so they are expressed
-// once here rather than five times.
+// once here rather than six times.
 
 /**
  * Replace a scope's whole list for one kind, in a transaction.
@@ -176,7 +176,8 @@ interface AuditContext {
 async function replaceTiers(
   where: Record<string, unknown>,
   create: (t: Tier) => Record<string, unknown>,
-  model: 'userRetentionTier' | 'deviceRetentionTier' | 'actionRetentionTier',
+  model:
+    'userRetentionTier' | 'deviceRetentionTier' | 'actionRetentionTier' | 'sealedRetentionTier',
   kind: DataKind,
   tiers: Tier[],
   audit: AuditContext,
@@ -279,6 +280,34 @@ export async function replaceActionTiers(
       position: t.position,
     }),
     'actionRetentionTier',
+    kind,
+    tiers,
+    audit,
+  );
+}
+
+/**
+ * A sealed template entry's list (F18.21), addressed by `(template, mqtt_action_name)` — the name,
+ * not the entry row, because a template save recreates every entry row.
+ */
+export async function replaceSealedTiers(
+  templateId: number,
+  actionName: string,
+  kind: DataKind,
+  tiers: Tier[],
+  audit: AuditContext,
+): Promise<void> {
+  await replaceTiers(
+    { sealed_template_id: templateId, action_name: actionName, data_kind: kind },
+    (t) => ({
+      sealed_template_id: templateId,
+      action_name: actionName,
+      data_kind: kind,
+      bucket: t.bucket,
+      keep_days: t.keepDays,
+      position: t.position,
+    }),
+    'sealedRetentionTier',
     kind,
     tiers,
     audit,

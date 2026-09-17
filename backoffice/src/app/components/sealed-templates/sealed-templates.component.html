@@ -283,6 +283,60 @@
                       }
                     </div>
                   </div>
+
+                  <!-- Retention (F18.21): one list per entry, inherited by every device on the template. -->
+                  <div class="retention">
+                    @if (e.mqtt_action_name; as name) {
+                      @let kind = entryKind(e);
+                      <button type="button" class="ret-toggle" (click)="toggleRetention(name)">
+                        <mat-icon>{{ retentionOpen()[name] ? 'expand_less' : 'expand_more' }}</mat-icon>
+                        <span class="group-label">Retention</span>
+                        <span class="ret-state">{{ hasOwnTiers(name, kind) ? 'Own list' : 'Follows the platform list' }}</span>
+                      </button>
+
+                      @if (retentionOpen()[name]) {
+                        <p class="ret-note">
+                          Applies to every device on this template{{ t.status === 'released' ? '' : ' once it is released' }}.
+                          Blueprint, device and sensor settings still override it.
+                        </p>
+
+                        @if (editingTiers(name, kind)) {
+                          <app-tier-editor
+                            #ed
+                            [tiers]="entryTiers(name, kind)"
+                            [buckets]="retentionBuckets()"
+                            [kind]="kind"
+                            [minBucket]="minBucketFor(kind)"
+                            [ceilings]="ceilingsFor(kind)"
+                            [showStored]="false"
+                            (changed)="onEntryTiersChanged(name, kind, $event)"
+                          />
+                          <div class="ret-actions">
+                            @if (tierDirty(name, kind)) {
+                              <button type="button" class="ret-link" (click)="discardEntryTiers(name, kind); ed.reset()">
+                                Discard
+                              </button>
+                              <button type="button" class="ret-save" (click)="saveEntryTiers(name, kind)">Save retention</button>
+                            } @else if (hasOwnTiers(name, kind)) {
+                              <button type="button" class="ret-link" (click)="clearEntryTiers(name, kind)">
+                                Remove list — follow the wider scope
+                              </button>
+                            }
+                          </div>
+                        } @else {
+                          <div class="ret-fallback">
+                            <span>{{ kind === 'frame' ? 'Frames' : 'Readings' }}: {{ platformSummary(kind) }}</span>
+                            <button type="button" class="ret-link" (click)="customiseTiers(name, kind)">
+                              Customise for this action
+                            </button>
+                          </div>
+                        }
+                      }
+                    } @else {
+                      <span class="group-label">Retention</span>
+                      <p class="ret-note">Save the template to set this action's retention.</p>
+                    }
+                  </div>
                 </div>
               </div>
             }

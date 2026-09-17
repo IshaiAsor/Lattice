@@ -655,6 +655,14 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - falls back to the platform list when nothing else is configured
 - takes the user list over the platform list
 - takes the blueprint list over the user list
+- takes the sealed template list over the user list
+- takes the sealed template list over the platform list
+- takes the blueprint list over the sealed template list
+- takes the device and action lists over the sealed template list
+- falls through an empty sealed list to the user list
+- clamps a sealed template list against the platform ceilings
+  - F18.21: sealed sits below blueprint and above user (user's call, 2026-09-17) — a board's
+    shape is not overridden by an owner's Settings list, only by their device or sensor lists
 - takes the device list over the blueprint list
 - takes the action list over the device list
 - takes the whole list from one scope rather than merging tiers
@@ -696,6 +704,25 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
     automation-worker (the cron) claim, and two copies could disagree
 - ⬜ a duplicate bucket code resolves to the catalog row that already exists
 - ⬜ a custom bucket cannot be deleted while any rollup row still uses it
+
+### History — `history.retention-sealed.test.ts` ✅ (F18.21 sealed templates as a retention scope)
+
+- finds the template whose range holds the version
+- treats both ends of a range as inside it
+- compares versions numerically, not as strings
+- never matches a target for another device type
+- answers null when no target covers the version
+  - `releasedTemplateFor` decides which template covers a device for retention. It must agree
+    with materialization, or a device gets one template's actions and another's retention
+- admits only the kinds whose history belongs to an action
+  - a sealed `command` list would be stored and shown and never applied — those windows are
+    resolved per user
+- keeps every list whose entry is still in the template
+- returns the whole list of a removed entry, tiers in order, per kind
+- treats a renamed entry as removed
+- returns every list when the template is deleted
+  - `staleSealedLists` is what a template save strands: a list left behind for a removed entry
+    would attach itself to whichever entry a later save gives that name
 
 ### Commands — `commands.command-models.test.js` ✅
 

@@ -27,6 +27,12 @@ the record of why they changed.
    §1.1 was rewritten for this; the FK it creates is also what makes the `sensor_rollup` vocabulary
    rewrite in §1.5 a checked migration rather than a silent one.
 
+**Later addition (F18.21, 2026-09-17) — a sixth scope.** Sealed templates carry a tier list per
+entry (`sealed_retention_tiers`, addressed by `(sealed_template_id, action_name)`). The user chose
+the order **action → device → blueprint → sealed → user → platform**: a board's shape is not
+overridden by an owner's Settings list, only by their device or sensor lists. The five-scope shapes
+in §2.2 below are as Phase 2 built them; `TIER_SCOPES` in `@lattice/retention` is the current order.
+
 ---
 
 ## Superseded after build (2026-08-26)

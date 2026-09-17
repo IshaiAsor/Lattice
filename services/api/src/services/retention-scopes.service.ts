@@ -1,8 +1,10 @@
-// The four stored scopes below the platform (F18.12): a user's own list, a device's, an
-// action's, and what actually applies once they are resolved. The whole list wins from the most
+// The stored scopes a user owns (F18.12) — their own list, a device's, an action's — and what
+// actually applies once every scope, including the admin-authored blueprint and sealed ones, is
+// resolved. The whole list wins from the most
 // specific scope that has one - not a tier-by-tier merge, which would leave "removing it falls
 // back to the device's" without a single answer.
 
+import { releasedTemplateFor } from '@lattice/capability-validation';
 import { DATA_KINDS, resolveTiers, type PlatformTier, type Tier } from '@lattice/retention';
 import { db } from '../db';
 import { ensureActionOwned, ensureDeviceOwned } from './ownership';
@@ -273,6 +275,7 @@ export const retentionScopesService = {
           user_device: {
             select: {
               user_id: true,
+              device: { select: { type: true, version: true, is_sealed: true } },
               blueprint_bindings: {
                 select: { slot_key: true, instance: { select: { blueprint_id: true } } },
               },
@@ -282,7 +285,20 @@ export const retentionScopesService = {
       }),
     ]);
     const binding = action.user_device.blueprint_bindings[0];
-    const [own, device, blueprint, act] = await Promise.all([
+    // The sealed template covering this device, resolved the way materialization resolves it
+    // (F18.21) — so the list shown is the one the sweep applies.
+    const catalog = action.user_device.device;
+    const templateId = catalog.is_sealed
+      ? releasedTemplateFor(
+          catalog.type,
+          catalog.version,
+          await db.sealedTemplateTarget.findMany({
+            where: { device_type: catalog.type, template: { status: 'released' } },
+            select: { template_id: true, device_type: true, version_min: true, version_max: true },
+          }),
+        )
+      : null;
+    const [own, device, blueprint, sealed, act] = await Promise.all([
       db.userRetentionTier.findMany({ where: { user_id: userId, data_kind: kind } }),
       db.deviceRetentionTier.findMany({
         where: { user_device_id: action.user_device_id, data_kind: kind },
@@ -292,6 +308,15 @@ export const retentionScopesService = {
             where: {
               blueprint_id: binding.instance.blueprint_id,
               slot_key: binding.slot_key,
+              action_name: action.mqtt_action_name,
+              data_kind: kind,
+            },
+          })
+        : Promise.resolve([]),
+      templateId !== null
+        ? db.sealedRetentionTier.findMany({
+            where: {
+              sealed_template_id: templateId,
               action_name: action.mqtt_action_name,
               data_kind: kind,
             },
@@ -319,6 +344,7 @@ export const retentionScopesService = {
       user: own.map(toTier),
       device: device.map(toTier),
       blueprint: blueprint.map(toTier),
+      sealed: sealed.map(toTier),
       action: act.map(toTier),
       minBucket: policy?.min_bucket ?? null,
     });

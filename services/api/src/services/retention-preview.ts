@@ -1,3 +1,4 @@
+import { releasedTemplateFor } from '@lattice/capability-validation';
 import {
   DATA_KINDS,
   RAW_SECONDS,
@@ -51,29 +52,66 @@ export async function previewSweep(
   now: Date = new Date(),
 ): Promise<SweepPreview> {
   const userWhere = scopeUserId === null ? {} : { user_id: scopeUserId };
-  const [bucketRows, policies, users, userTiers, deviceTiers, actionTiers, actions] =
-    await Promise.all([
-      db.retentionBucket.findMany(),
-      db.retentionPolicy.findMany({ include: { tiers: true } }),
-      db.user.findMany({
-        where: scopeUserId === null ? {} : { id: scopeUserId },
-        select: { id: true },
-      }),
-      db.userRetentionTier.findMany({ where: userWhere }),
-      db.deviceRetentionTier.findMany({
-        where: scopeUserId === null ? {} : { user_device: { user_id: scopeUserId } },
-      }),
-      db.actionRetentionTier.findMany({
-        where:
-          scopeUserId === null
-            ? {}
-            : { user_device_action: { user_device: { user_id: scopeUserId } } },
-      }),
-      db.userDeviceAction.findMany({
-        where: scopeUserId === null ? {} : { user_device: { user_id: scopeUserId } },
-        select: { id: true, user_device_id: true, user_device: { select: { user_id: true } } },
-      }),
-    ]);
+  const [
+    bucketRows,
+    policies,
+    users,
+    userTiers,
+    deviceTiers,
+    actionTiers,
+    actions,
+    blueprintTiers,
+    bindings,
+    sealedTiers,
+    sealedCatalog,
+    releasedTargets,
+  ] = await Promise.all([
+    db.retentionBucket.findMany(),
+    db.retentionPolicy.findMany({ include: { tiers: true } }),
+    db.user.findMany({
+      where: scopeUserId === null ? {} : { id: scopeUserId },
+      select: { id: true },
+    }),
+    db.userRetentionTier.findMany({ where: userWhere }),
+    db.deviceRetentionTier.findMany({
+      where: scopeUserId === null ? {} : { user_device: { user_id: scopeUserId } },
+    }),
+    db.actionRetentionTier.findMany({
+      where:
+        scopeUserId === null
+          ? {}
+          : { user_device_action: { user_device: { user_id: scopeUserId } } },
+    }),
+    db.userDeviceAction.findMany({
+      where: scopeUserId === null ? {} : { user_device: { user_id: scopeUserId } },
+      select: {
+        id: true,
+        mqtt_action_name: true,
+        user_device_id: true,
+        user_device: { select: { user_id: true, device_type_id: true } },
+      },
+    }),
+    // The two admin-authored scopes. Never narrowed by user — they are definitions every matching
+    // device inherits — exactly as the worker's `loadTierIndex` loads them.
+    db.blueprintRetentionTier.findMany(),
+    db.blueprintSlotBinding.findMany({
+      where: scopeUserId === null ? {} : { user_device: { user_id: scopeUserId } },
+      select: {
+        user_device_id: true,
+        slot_key: true,
+        instance: { select: { blueprint_id: true } },
+      },
+    }),
+    db.sealedRetentionTier.findMany(),
+    db.device.findMany({
+      where: { is_sealed: true },
+      select: { id: true, type: true, version: true },
+    }),
+    db.sealedTemplateTarget.findMany({
+      where: { template: { status: 'released' } },
+      select: { template_id: true, device_type: true, version_min: true, version_max: true },
+    }),
+  ]);
 
   const buckets = new Map<string, BucketDef>(
     bucketRows.map((b) => [
@@ -110,7 +148,7 @@ export async function previewSweep(
   const enabledFor = (kind: DataKind) =>
     policies.find((p) => p.data_kind === kind)?.enabled ?? false;
 
-  const group = <T extends { data_kind: string }>(list: T[], key: (r: T) => number) => {
+  const group = <T extends { data_kind: string }>(list: T[], key: (r: T) => number | string) => {
     const m = new Map<string, T[]>();
     for (const r of list) {
       const k = `${key(r)}|${r.data_kind}`;
@@ -123,12 +161,28 @@ export async function previewSweep(
   const byUser = group(userTiers, (r) => r.user_id);
   const byDevice = group(deviceTiers, (r) => r.user_device_id);
   const byAction = group(actionTiers, (r) => r.user_device_action_id);
+  const byBlueprintSlot = group(
+    blueprintTiers,
+    (r) => `${r.blueprint_id}\u0000${r.slot_key}\u0000${r.action_name}`,
+  );
+  const bySealedEntry = group(sealedTiers, (r) => `${r.sealed_template_id}\u0000${r.action_name}`);
+  const deviceSlot = new Map(
+    bindings.map((b) => [b.user_device_id, `${b.instance.blueprint_id}\u0000${b.slot_key}`]),
+  );
+  const catalogTemplate = new Map<number, number>();
+  for (const d of sealedCatalog) {
+    const templateId = releasedTemplateFor(d.type, d.version, releasedTargets);
+    if (templateId !== null) catalogTemplate.set(d.id, templateId);
+  }
 
-  // Per-action kinds. Blueprint tiers are deliberately not consulted here: a preview that differed
-  // from the sweep would be worse than no preview, but blueprint tiers only ever sit BELOW device
-  // and action in the order, and a user who has neither is on the platform list either way. The
-  // sweep's own resolution is authoritative; this is the number shown before confirming.
+  // Per-action kinds, resolved through EVERY scope the sweep resolves through. A preview that
+  // differed from the sweep would be worse than no preview. Blueprint tiers were once skipped here on
+  // the grounds that they sit below device and action — but they also sit ABOVE user and platform, so
+  // any device bound to a blueprint with tiers was previewed on the wrong list. Sealed (F18.21) has
+  // the same shape and is loaded the same way.
   for (const a of actions) {
+    const slot = deviceSlot.get(a.user_device_id);
+    const templateId = catalogTemplate.get(a.user_device.device_type_id);
     for (const kind of ['scalar', 'frame'] as const) {
       if (!enabledFor(kind)) continue;
       const { tiers } = resolveTiers({
@@ -136,6 +190,14 @@ export async function previewSweep(
         buckets,
         platform: platformFor(kind),
         user: byUser.get(`${a.user_device.user_id}|${kind}`)?.map(toTier),
+        sealed:
+          templateId === undefined
+            ? undefined
+            : bySealedEntry.get(`${templateId}\u0000${a.mqtt_action_name}|${kind}`)?.map(toTier),
+        blueprint:
+          slot === undefined
+            ? undefined
+            : byBlueprintSlot.get(`${slot}\u0000${a.mqtt_action_name}|${kind}`)?.map(toTier),
         device: byDevice.get(`${a.user_device_id}|${kind}`)?.map(toTier),
         action: byAction.get(`${a.id}|${kind}`)?.map(toTier),
         minBucket: minBucketFor(kind),

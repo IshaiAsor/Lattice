@@ -8,6 +8,7 @@ import {
   strandedReferences,
   type TemplateUsage,
 } from './sealed-templates.usage';
+import { dropSealedTiers } from './retention-sealed.service';
 
 // Sealed-device template authoring (admin only). A sealed template is the admin's SELECTION from
 // the shared catalog: which capabilities (by capability_key) to activate on a factory-soldered
@@ -173,8 +174,9 @@ class SealedTemplatesService {
   async updateTemplate(
     id: number,
     body: { name?: string; targets?: TargetInput[]; entries?: EntryInput[]; force?: boolean },
+    actorUserId: number | null = null,
   ): Promise<FullTemplate> {
-    await this.getTemplate(id);
+    const current = await this.getTemplate(id);
     if (body.targets) body.targets.forEach(assertValidTarget);
     if (body.entries) assertValidEntries(body.entries);
 
@@ -234,14 +236,24 @@ class SealedTemplatesService {
             },
           });
         }
+        // A removed entry takes its retention lists with it (F18.21). Left behind, a list would
+        // attach itself to whichever entry a later save gives the same name.
+        await dropSealedTiers(
+          tx,
+          id,
+          body.name?.trim() || current.name,
+          new Set(named.map((e) => e.mqtt_action_name)),
+          actorUserId,
+          'entry removed from the template',
+        );
       }
       await tx.sealedTemplate.update({ where: { id }, data: { updated_at: new Date() } });
     });
     return this.getTemplate(id);
   }
 
-  async deleteTemplate(id: number): Promise<void> {
-    await this.getTemplate(id);
+  async deleteTemplate(id: number, actorUserId: number | null = null): Promise<void> {
+    const template = await this.getTemplate(id);
     // BlueprintSlot.sealed_template_id is onDelete: Restrict, so the database would refuse this
     // anyway — as an opaque 500. Name the dependents instead. No force here: unlike an entry edit,
     // there is no state the admin could reach by pushing through.
@@ -252,7 +264,12 @@ class SealedTemplatesService {
         usage.map((u) => `"${u.name}" (${u.status}) — slot ${u.slot_keys.join(', ')}`),
       );
     }
-    await db.sealedTemplate.delete({ where: { id } }); // cascades targets/entries/pins/behaviors
+    await db.$transaction(async (tx) => {
+      // The FK cascade would remove its retention lists silently; log them first so the deletion of
+      // a retention configuration is on the trail like every other one (F18.19, F18.21).
+      await dropSealedTiers(tx, id, template.name, null, actorUserId, 'template deleted');
+      await tx.sealedTemplate.delete({ where: { id } }); // cascades targets/entries/pins/behaviors
+    });
   }
 
   // ─── Release: validate, mark released, re-apply to live devices ──────────

@@ -70,6 +70,8 @@ export {
 
 export {
   TIER_SCOPES,
+  ACTION_SCOPED_KINDS,
+  isActionScopedKind,
   DAY_SECONDS,
   dailyTierOf,
   resolveTiers,

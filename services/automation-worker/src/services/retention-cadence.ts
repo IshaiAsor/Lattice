@@ -117,21 +117,22 @@ export interface Cadence {
  * entire job is to claim the lock, find nothing to do, and write a run row about it.
  *
  * One small read per tier table, plus the policy. Written out rather than shared through one object:
- * Prisma's `distinct` is a per-model enum, so a single literal cannot type-check against all five.
+ * Prisma's `distinct` is a per-model enum, so a single literal cannot type-check against all six.
  */
 async function configuredBucketCodes(): Promise<string[]> {
   const select = { bucket: true, data_kind: true };
   const distinct = ['bucket', 'data_kind'] as const;
-  const [policies, platform, user, blueprint, device, action] = await Promise.all([
+  const [policies, platform, user, blueprint, sealed, device, action] = await Promise.all([
     db.retentionPolicy.findMany({ where: { enabled: true }, select: { data_kind: true } }),
     db.retentionPolicyTier.findMany({ distinct: [...distinct], select }),
     db.userRetentionTier.findMany({ distinct: [...distinct], select }),
     db.blueprintRetentionTier.findMany({ distinct: [...distinct], select }),
+    db.sealedRetentionTier.findMany({ distinct: [...distinct], select }),
     db.deviceRetentionTier.findMany({ distinct: [...distinct], select }),
     db.actionRetentionTier.findMany({ distinct: [...distinct], select }),
   ]);
   const enabled = new Set(policies.map((p) => p.data_kind));
-  return [...platform, ...user, ...blueprint, ...device, ...action]
+  return [...platform, ...user, ...blueprint, ...sealed, ...device, ...action]
     .filter((r) => enabled.has(r.data_kind))
     .map((r) => r.bucket);
 }

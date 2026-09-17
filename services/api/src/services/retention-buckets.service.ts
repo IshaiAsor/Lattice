@@ -129,7 +129,8 @@ export const retentionBucketsService = {
             (await db.userRetentionTier.count({ where: { bucket: code } })) +
             (await db.deviceRetentionTier.count({ where: { bucket: code } })) +
             (await db.actionRetentionTier.count({ where: { bucket: code } })) +
-            (await db.blueprintRetentionTier.count({ where: { bucket: code } })),
+            (await db.blueprintRetentionTier.count({ where: { bucket: code } })) +
+            (await db.sealedRetentionTier.count({ where: { bucket: code } })),
         ),
       db.sensorRollup.count({ where: { bucket: code } }),
     ]);
