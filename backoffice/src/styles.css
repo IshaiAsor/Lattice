@@ -258,6 +258,16 @@ app-root {
   padding: 0 !important;
 }
 
+/* `solid-sheet`: the bottom-sheet twin of `solid-dialog` (below). A sheet holding a few cards is
+   mostly glass, and glass over glass cards read as a grey fog with the page — down to the bottom
+   nav's labels — showing through, dragging the cards' dim text under readable. */
+.glass-bottom-sheet.solid-sheet .mat-bottom-sheet-container {
+  background: var(--overlay-solid) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: var(--border-strong) !important;
+}
+
 /* dial % tspan in dark mode */
 .dial-pct-unit { fill: var(--text-muted); }
 
@@ -375,6 +385,35 @@ app-root {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
+}
+
+/* ── Long-press drag cue (LongPressDragDirective) ─────────────────────── */
+/* A touch drag on a card waits for a long press on its rail. The finger covers the rail, so the
+   cue sits on the card instead: a bar fills along its bottom edge while the press is held, and the
+   card is outlined once it can be moved. The fill is a transition timed by --long-press-ms, and
+   the resting state has no transition, so letting go snaps the bar back instead of draining it. */
+.long-press-drag::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  z-index: 6;
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+.long-press-drag.drag-arming::after {
+  transform: scaleX(1);
+  transition: transform var(--long-press-ms) linear;
+}
+
+.long-press-drag.drag-armed {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* ── Tables ───────────────────────────────────────────────────────────── */

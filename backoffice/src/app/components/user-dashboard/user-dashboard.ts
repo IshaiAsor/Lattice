@@ -33,6 +33,7 @@ import { SceneEditorDialogComponent } from '../scene-editor-dialog/scene-editor-
 import { ScenesService, SceneView } from 'src/app/services/scenes.service';
 import { ActionCardComponent } from '../action-card/action-card.component';
 import { GroupBottomSheetComponent } from '../group-bottom-sheet/group-bottom-sheet.component';
+import { LongPressDragDirective } from '../long-press-drag/long-press-drag.directive';
 import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop';
 import { HttpClient } from '@angular/common/http';
 import { apiUrl } from 'src/app/services/api.config';
@@ -59,6 +60,7 @@ interface AreaSection {
     ActivityFeedComponent,
     DisplayPickerComponent,
     RangePickerComponent,
+    LongPressDragDirective,
   ],
   templateUrl: './user-dashboard.html',
   styleUrl: './user-dashboard.css',
@@ -861,7 +863,7 @@ export class UserDashboard implements OnInit {
     // sheet (so the trap and screen readers behave), just onto the container rather than a control.
     const ref = this.bottomSheet.open(GroupBottomSheetComponent, {
       data: { group },
-      panelClass: 'glass-bottom-sheet',
+      panelClass: ['glass-bottom-sheet', 'solid-sheet'],
       autoFocus: 'dialog',
     });
     ref.afterDismissed().subscribe((needsReload: boolean) => {

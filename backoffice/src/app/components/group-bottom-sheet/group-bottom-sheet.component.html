@@ -6,24 +6,25 @@
     <button mat-icon-button (click)="close()">
         <mat-icon>close</mat-icon>
     </button>
+
+    <div class="drag-up-zone" [class.visible]="dragging" [class.active]="dragUpActive"
+         cdkDropList id="group-remove-zone" [cdkDropListConnectedTo]="['group-cards']"
+         (cdkDropListEntered)="dragUpActive = true"
+         (cdkDropListExited)="dragUpActive = false"
+         (cdkDropListDropped)="onRemoveZoneDrop($event)">
+        <mat-icon>keyboard_arrow_up</mat-icon>
+        <span>Release to remove from group</span>
+    </div>
 </div>
 
-<div class="drag-up-zone" [class.visible]="dragging" [class.active]="dragUpActive"
-     cdkDropList id="group-remove-zone" [cdkDropListConnectedTo]="['group-cards']"
-     (cdkDropListEntered)="dragUpActive = true"
-     (cdkDropListExited)="dragUpActive = false"
-     (cdkDropListDropped)="onRemoveZoneDrop($event)">
-    <mat-icon>keyboard_arrow_up</mat-icon>
-    <span>Release to remove from group</span>
-</div>
-
-<div class="sheet-cards" [attr.data-density]="tiles.density()"
+<div #cardList class="sheet-cards" [attr.data-density]="tiles.density()"
+     [style.min-height.px]="pinnedListHeight"
      cdkDropList id="group-cards" cdkDropListOrientation="mixed"
      [cdkDropListConnectedTo]="['group-remove-zone']"
      (cdkDropListDropped)="drop($event)">
     @for (action of actions; track action.id) {
-    <div class="device-card-wrapper" cdkDrag [cdkDragData]="action"
-         (cdkDragStarted)="onDragStarted()"
+    <div class="device-card-wrapper" cdkDrag appLongPressDrag [cdkDragData]="action"
+         (cdkDragStarted)="onDragStarted(cardList)"
          (cdkDragEnded)="onDragEnded()">
 
         <div class="drag-rail" cdkDragHandle>

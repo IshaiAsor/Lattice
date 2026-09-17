@@ -9,6 +9,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { RenameActionDialogComponent } from '../rename-action-dialog/rename-action-dialog.component';
 import { ActionCardComponent } from '../action-card/action-card.component';
+import { LongPressDragDirective } from '../long-press-drag/long-press-drag.directive';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { forkJoin } from 'rxjs';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -17,7 +18,7 @@ import { TileDensityService } from 'src/app/services/tile-density.service';
 @Component({
   selector: 'app-group-bottom-sheet',
   standalone: true,
-  imports: [SHARED_MATERIAL, ActionCardComponent],
+  imports: [SHARED_MATERIAL, ActionCardComponent, LongPressDragDirective],
   templateUrl: './group-bottom-sheet.component.html',
   styleUrl: './group-bottom-sheet.component.css',
 })
@@ -35,6 +36,8 @@ export class GroupBottomSheetComponent implements OnInit {
   actions: DeviceActionView[] = [];
   dragging = false;
   dragUpActive = false;
+  /** The card list's content height while a drag is in progress — see onDragStarted. */
+  pinnedListHeight: number | null = null;
   // Set when intra-group order changed, so the dashboard reloads on dismiss.
   private orderChanged = false;
 
@@ -105,11 +108,21 @@ export class GroupBottomSheetComponent implements OnInit {
   // The remove zone is its own connected drop list rather than a distance
   // threshold, so dragging a card upward to reorder no longer removes it.
 
-  onDragStarted() { this.dragging = true; }
+  // Entering the remove zone moves CDK's placeholder out of the card list and into the zone, so
+  // the list lost a row mid-drag. The sheet is anchored to the bottom of the screen, so it shrank
+  // from the top and carried the header (the zone) down, away from the finger that had just
+  // reached it. Holding the list at its drag-start height keeps the drop target where it was.
+  onDragStarted(list: HTMLElement) {
+    const style = getComputedStyle(list);
+    this.pinnedListHeight =
+      list.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    this.dragging = true;
+  }
 
   onDragEnded() {
     this.dragging = false;
     this.dragUpActive = false;
+    this.pinnedListHeight = null;
   }
 
   drop(event: CdkDragDrop<DeviceActionView[]>) {

@@ -1,7 +1,21 @@
 /* Card internals live in app-action-card — this file only styles the sheet chrome: header, the
    drag-up remove zone, and the slots the cards drop into. */
 
+/* The sheet renders in the overlay under Material's bottom-sheet typography (Roboto, 24px
+   line-height, 0.5px tracking), not the page's (styles.css `body`). The cards size their text
+   bands by line-height, so a 9.5px device label became a 24px line, the name band grew 13px, and
+   the body below it lost that much: the power button slid under the "last seen" badge and its
+   bottom edge was clipped. Restore the page's typography so a card here is the dashboard's card. */
+:host {
+  display: block;
+  font-family: 'Inter', Roboto, 'Helvetica Neue', sans-serif;
+  line-height: normal;
+  letter-spacing: normal;
+}
+
 .sheet-header {
+  /* Anchors the remove zone, which lies over the header rather than below it. */
+  position: relative;
   display: flex;
   align-items: center;
   padding: 12px 8px 10px 16px;
@@ -38,37 +52,47 @@
 
 /* ── Drag-up-to-ungroup zone ─────────────────────────────────────── */
 .drag-up-zone {
+  /* Laid over the header, so dragging a card up onto the sheet's title removes it. It used to
+     sit in its own 40px band below the header, which was dead space whenever nothing was being
+     dragged. Absolute positioning keeps the old rule intact: CDK caches every item's geometry in
+     _draggingStarted(), so revealing the zone must never reflow the card list — and a zone that
+     is out of flow cannot. Reveal it with opacity only, never height/display. */
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  /* Height is ALWAYS reserved, never animated. CDK caches every item's
-     geometry in _draggingStarted(); collapsing/expanding this zone during a
-     drag reflows the card list and invalidates that cache, which silently
-     breaks sorting. Reveal it with opacity only — never height/display.
-     Do not add `pointer-events: none`: CDK's _canReceive() uses
-     elementFromPoint, so the zone must stay hit-testable to accept a drop. */
-  height: 40px;
-  overflow: hidden;
-  background: transparent;
+  /* The header shows through otherwise: the tints below are translucent. */
+  background-color: var(--overlay-solid);
   color: var(--online);
   font-size: 12px;
   font-weight: 600;
   opacity: 0;
-  transition: opacity 0.2s, background 0.2s, box-shadow 0.2s;
+  /* Idle, it would swallow taps on the close button beneath it. It only has to be hit-testable
+     during a drag — CDK's _canReceive() uses elementFromPoint — and .visible covers exactly that. */
+  pointer-events: none;
+  transition: opacity 0.2s, box-shadow 0.2s;
 }
 
 /* .visible = a drag is in progress; .active = pointer is armed over the zone. */
 .drag-up-zone.visible {
   opacity: 1;
-  background: rgba(46, 204, 113, 0.10);
+  pointer-events: auto;
+  background-image: linear-gradient(rgba(46, 204, 113, 0.10), rgba(46, 204, 113, 0.10));
 }
 
 .drag-up-zone.active {
-  background: rgba(46, 204, 113, 0.22);
+  background-image: linear-gradient(rgba(46, 204, 113, 0.22), rgba(46, 204, 113, 0.22));
   box-shadow: inset 0 0 0 2px var(--online);
 }
 .drag-up-zone mat-icon { font-size: 18px; width: 18px; height: 18px; }
+
+/* CDK moves the placeholder into whichever list the card is over. In the zone it is a tile-tall
+   dashed box hanging out of a header-high overlay; the zone's own highlight already says where the
+   card will land. */
+.drag-up-zone .drag-placeholder-sheet { display: none; }
 
 /* ── Drag rail (same as dashboard) ──────────────────────────────── */
 .drag-rail {
@@ -147,6 +171,17 @@
   box-sizing: border-box;
 }
 
+/* Same clamp as the dashboard grid: without it a phone fits one 216px tile per row, so every card
+   in a group stretched to the full sheet width and read as a different card from the one on the
+   dashboard. Compact and Standard go two-up; the two wide densities take the full width. */
 @media (max-width: 599px) {
-  .sheet-cards { padding: 10px 8px; }
+  .sheet-cards {
+    padding: 10px 8px;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sheet-cards[data-density='detailed'],
+  .sheet-cards[data-density='list'] {
+    grid-template-columns: 1fr;
+  }
 }

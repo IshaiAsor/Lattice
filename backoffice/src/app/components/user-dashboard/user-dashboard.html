@@ -153,7 +153,7 @@
     @for (entry of section.entries; track itemTrackId(entry.item)) {
     @let item = entry.item;
     @let i = entry.index;
-    <div class="device-card-wrapper" cdkDrag [cdkDragData]="item"
+    <div class="device-card-wrapper" cdkDrag appLongPressDrag [cdkDragData]="item"
         [class.deprecated-card]="item.action?.status === 'deprecated'"
          [attr.data-item-index]="i"
          [class.group-hover]="groupDropTargetIndex === i"
