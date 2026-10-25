@@ -214,6 +214,65 @@ export function resolveTiers(input: TierResolutionInput): ResolvedTiers {
   return { tiers, source, rejected };
 }
 
+/**
+ * Where one scope stands for one action (F18.20).
+ *
+ * - `answering` — it supplies the list that applies.
+ * - `has-list` — it holds a list, but a more specific scope answers first.
+ * - `empty` — it could apply and holds nothing.
+ * - `n/a` — it cannot reach this action at all: no setup binds the device, or no released sealed
+ *   template covers it. Kept apart from `empty` because "not in a setup" and "the setup's blueprint
+ *   has no list" are different answers to the person reading them.
+ */
+export type ScopeState = 'answering' | 'has-list' | 'empty' | 'n/a';
+
+export interface ScopeStanding {
+  scope: TierScope;
+  state: ScopeState;
+}
+
+export interface ResolutionDescription {
+  /** What applies now. */
+  effective: ResolvedTiers;
+  /** What applies once the action's own list is removed — the preview behind "Remove list". */
+  fallback: ResolvedTiers;
+  /** Every scope, in resolution order. */
+  scopes: ScopeStanding[];
+}
+
+/**
+ * The resolution of one action, described for a screen: what applies, what removing its own list
+ * would fall back to, and where each of the six scopes stands.
+ *
+ * Lives beside `resolveTiers` rather than in the API because it is resolution, not presentation —
+ * both halves are `resolveTiers` itself, so a seventh scope cannot be added to one and missed by
+ * the other.
+ */
+export function describeResolution(
+  input: TierResolutionInput,
+  applies: { blueprint: boolean; sealed: boolean },
+): ResolutionDescription {
+  const effective = resolveTiers(input);
+  const fallback = resolveTiers({ ...input, action: undefined });
+  const lists: Record<TierScope, readonly Tier[] | undefined> = {
+    action: input.action,
+    device: input.device,
+    blueprint: input.blueprint,
+    sealed: input.sealed,
+    user: input.user,
+    platform: input.platform,
+  };
+  const scopes = TIER_SCOPES.map((scope): ScopeStanding => {
+    // Answering first: whatever supplied the list is never drawn as unreachable, even if `applies`
+    // and the input were ever to disagree.
+    if (scope === effective.source) return { scope, state: 'answering' };
+    if ((scope === 'blueprint' && !applies.blueprint) || (scope === 'sealed' && !applies.sealed))
+      return { scope, state: 'n/a' };
+    return { scope, state: (lists[scope]?.length ?? 0) > 0 ? 'has-list' : 'empty' };
+  });
+  return { effective, fallback, scopes };
+}
+
 export interface TierListValidation {
   kind: DataKind;
   buckets: ReadonlyMap<string, BucketDef>;

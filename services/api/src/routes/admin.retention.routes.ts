@@ -133,6 +133,27 @@ adminRetentionRouter.put(
   },
 );
 
+// Remove a slot action's list so its devices fall back to the wider scope (F18.20). A PUT cannot
+// do it — every list needs its raw tier — so without this a blueprint list was permanent.
+adminRetentionRouter.delete(
+  '/blueprints/:blueprintId/:slotKey/:actionName/:kind',
+  async (req, res, next) => {
+    try {
+      res.json(
+        await retentionTiersService.clearBlueprintTiers(
+          Number(req.params.blueprintId),
+          req.params.slotKey,
+          req.params.actionName,
+          req.params.kind,
+          req.user!.id,
+        ),
+      );
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 // Sealed template tiers (F18.21) — one list per (entry, kind), inherited by every device the
 // template covers. Admin-only for the same reason blueprint tiers are.
 adminRetentionRouter.get('/sealed/:templateId', async (req, res, next) => {

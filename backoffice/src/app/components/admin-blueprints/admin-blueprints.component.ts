@@ -13,6 +13,13 @@ import {
   SealedTemplateDetail,
 } from 'src/app/services/admin.blueprints.service';
 import {
+  RetentionTiersService,
+  type BlueprintRetentionView,
+  type BucketView,
+  type PolicyTiersView,
+} from 'src/app/services/retention-tiers.service';
+import { BlueprintSlotRetentionComponent } from '../blueprint-slot-retention/blueprint-slot-retention.component';
+import {
   BlueprintDraft,
   COMPRESSIONS,
   CONDITION_TYPES,
@@ -114,6 +121,7 @@ export type SectionId = (typeof SECTIONS)[number] | 'backup';
     MatTabsModule,
     MatCheckboxModule,
     NgTemplateOutlet,
+    BlueprintSlotRetentionComponent,
   ],
   templateUrl: './admin-blueprints.component.html',
   styleUrl: './admin-blueprints.component.css',
@@ -128,6 +136,13 @@ export class AdminBlueprintsComponent implements OnInit {
   templates = signal<SealedTemplateDetail[]>([]);
   mlModels = signal<MlModelOption[]>([]);
   selected = signal<BlueprintSummary | null>(null);
+
+  // F18.20 — retention per slot action. Live, not part of the draft: a list applies to every setup of
+  // the blueprint the moment it is saved, and only on slots the stored blueprint actually has.
+  private tiersApi = inject(RetentionTiersService);
+  retention = signal<BlueprintRetentionView | null>(null);
+  retentionBuckets = signal<BucketView[]>([]);
+  retentionPolicies = signal<PolicyTiersView[]>([]);
 
   draft: BlueprintDraft = emptyDraft();
   problems = signal<string[]>([]);
@@ -152,6 +167,14 @@ export class AdminBlueprintsComponent implements OnInit {
     }).subscribe(({ templates, models }) => {
       this.templates.set(templates);
       this.mlModels.set(models);
+    });
+    // Apart from the list above, so a retention hiccup cannot block authoring.
+    forkJoin({ buckets: this.tiersApi.buckets(), policies: this.tiersApi.policyTiers() }).subscribe({
+      next: ({ buckets, policies }) => {
+        this.retentionBuckets.set(buckets);
+        this.retentionPolicies.set(policies);
+      },
+      error: () => this.snackBar.open('Could not load retention settings', 'Close', { duration: 3000 }),
     });
     // Load the list first, then let the URL's id decide what's open — the id lookup needs the
     // summaries. Subscribing (not a one-off snapshot) also handles back/forward and our own
@@ -816,6 +839,7 @@ export class AdminBlueprintsComponent implements OnInit {
       next: (full) => {
         this.selected.set(bp);
         this.draft = toDraft(full as RawBlueprint);
+        this.loadRetention(bp.id);
         this.rememberSlotKeys();
         this.rememberParamKeys();
         this.rememberPersistedKeyed();
@@ -831,8 +855,17 @@ export class AdminBlueprintsComponent implements OnInit {
   }
 
   /** The empty-form state, reached by navigating to the id-less route. */
+  /** The saved blueprint's lists per slot action — what the slot panels edit. */
+  private loadRetention(id: number): void {
+    this.tiersApi.blueprintRetention(id).subscribe({
+      next: (view) => this.retention.set(view),
+      error: () => this.retention.set(null),
+    });
+  }
+
   private resetToNew(): void {
     this.selected.set(null);
+    this.retention.set(null);
     this.draft = emptyDraft();
     this.problems.set([]);
     this.validated.set(false);
@@ -1161,6 +1194,8 @@ export class AdminBlueprintsComponent implements OnInit {
         // and keeps the draft, rather than re-fetching it.
         this.selected.set(saved);
         void this.router.navigate(['/admin/blueprints', saved.id]);
+        // A save can drop the lists of slots it removed or re-templated, server-side.
+        this.loadRetention(saved.id);
         this.validate();
       },
       error: (err) => {

@@ -1,0 +1,162 @@
+:host {
+  display: block;
+  margin: 0 0 10px;
+}
+.bsr {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--card-divider);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.bsr-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+.bsr-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.bsr-sub {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.bsr-live {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+  color: var(--warning);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.bsr-live mat-icon,
+.bsr-foot mat-icon,
+.bsr-note mat-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.bsr-item {
+  border-top: 1px solid var(--border);
+}
+.bsr-item.open {
+  background: color-mix(in srgb, var(--stage-vlm) 4%, transparent);
+}
+.bsr-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 200px) 24px;
+  grid-template-areas:
+    'name chip caret'
+    'kept kept kept';
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.bsr-row:hover {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+.bsr-name {
+  grid-area: name;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.bsr-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.bsr-name code,
+.bsr-plain-list code {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.bsr-chip {
+  grid-area: chip;
+  min-width: 0;
+}
+.bsr-kept {
+  grid-area: kept;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.bsr-caret {
+  grid-area: caret;
+  color: var(--text-muted);
+}
+.bsr-detail {
+  padding: 0 14px 14px;
+}
+.bsr-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.bsr-plain {
+  gap: 6px;
+  padding: 10px 14px;
+  border: none;
+  border-left: 2px solid var(--primary);
+  border-radius: 0;
+}
+.bsr-plain-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.bsr-plain-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.bsr-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--error);
+}
+.bsr-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+  .bsr-row {
+    grid-template-columns: minmax(0, 1fr) 24px;
+    grid-template-areas:
+      'name caret'
+      'chip chip'
+      'kept kept';
+    min-height: 56px;
+  }
+}

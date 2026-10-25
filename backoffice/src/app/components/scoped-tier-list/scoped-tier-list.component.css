@@ -1,0 +1,119 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stl-follow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-divider);
+}
+.stl-follow-icon {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.stl-follow-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stl-follow-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.stl-follow-sum {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.stl-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.stl-note {
+  flex: 1 1 260px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.stl-note b {
+  color: var(--text);
+  font-weight: 600;
+}
+.stl-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stl-btn mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+.stl-ghost {
+  background: transparent;
+  color: var(--primary);
+  border-color: var(--border-strong);
+}
+.stl-btn:disabled,
+.stl-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.stl-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .stl-follow {
+    flex-wrap: wrap;
+  }
+  .stl-follow .stl-btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+  .stl-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .stl-actions .stl-btn {
+    min-height: 44px;
+  }
+}

@@ -1,0 +1,213 @@
+.dr {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dr-intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.dr-loading,
+.dr-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.dr-kind {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dr-label {
+  margin: 10px 0 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.dr-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+}
+.dr-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dr-kind-icon {
+  color: var(--stage-digest);
+}
+.dr-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dr-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.dr-note mat-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+.dr-warn {
+  color: var(--warning);
+  flex-wrap: wrap;
+}
+
+/* ── Per-sensor list ─────────────────────────────────────────────────────── */
+.dr-list {
+  padding: 4px 0;
+  overflow: hidden;
+}
+/* Name, who decides and what is stored on the first line; what is kept, in full, on the second —
+   a tier summary is a sentence, and squeezed into a column it wrapped five lines deep. */
+.dr-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 260px) 90px 24px;
+  grid-template-areas:
+    'name chip stored caret'
+    'kept kept kept kept';
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.dr-name {
+  grid-area: name;
+}
+.dr-chip {
+  grid-area: chip;
+  min-width: 0;
+}
+.dr-head {
+  grid-template-areas: 'name chip stored caret';
+  cursor: default;
+  padding-top: 8px;
+  padding-bottom: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.dr-item {
+  border-top: 1px solid var(--border);
+  /* The deep link scrolls a row to the top; leave room for what sits above it. */
+  scroll-margin-top: 16px;
+}
+.dr-item.open {
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
+}
+.dr-item .dr-row:hover {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+.dr-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dr-name-main {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dr-name code {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.dr-kept {
+  grid-area: kept;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.dr-stored {
+  grid-area: stored;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+}
+.dr-caret {
+  grid-area: caret;
+  color: var(--text-muted);
+}
+.dr-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.dr-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.dr-foot mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+.dr-foot a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (max-width: 760px) {
+  .dr-head {
+    display: none;
+  }
+  .dr-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name chip'
+      'kept kept'
+      'stored caret';
+    gap: 6px 10px;
+    min-height: 56px;
+  }
+  .dr-stored {
+    text-align: left;
+  }
+  /* The phone's device chip bar is pinned above the panel. */
+  .dr-item {
+    scroll-margin-top: 140px;
+  }
+  .dr-caret {
+    justify-self: end;
+  }
+  .dr-detail {
+    padding: 0 12px 14px;
+  }
+  .dr-card {
+    padding: 14px;
+  }
+}

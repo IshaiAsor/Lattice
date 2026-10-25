@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
+import { SetupRetentionComponent } from '../setup-retention/setup-retention.component';
 import { SHARED_MATERIAL } from 'src/app/shared-ui';
 import { ConfirmDialogComponent } from '../admin-device-config/confirm-dialog.component';
 import { PhaseChangeDialogComponent, PhaseChangeResult } from './phase-change-dialog.component';
@@ -49,7 +50,7 @@ import { AuthService } from 'src/app/services/auth.service';
 // browser clock that disagrees with the server cannot skew the countdown.
 @Component({
   selector: 'app-blueprint-instance',
-  imports: [SHARED_MATERIAL, MatTabsModule],
+  imports: [SHARED_MATERIAL, MatTabsModule, SetupRetentionComponent],
   templateUrl: './blueprint-instance.component.html',
   styleUrl: './blueprint-instance.component.css',
 })
@@ -90,6 +91,7 @@ export class BlueprintInstanceComponent implements OnInit, OnDestroy {
     if (this.hasDeviceLifecycles || this.sharedBindings().length > 0) index++;
     if ((this.instance?.params.length ?? 0) > 0) index++;
     if ((this.instance?.phases.length ?? 0) > 0) index++;
+    index++; // Data (F18.20) — always shown, a setup's actions always keep something
     return index;
   }
 

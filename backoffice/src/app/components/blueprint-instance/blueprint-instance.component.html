@@ -823,6 +823,20 @@
         </mat-tab>
       }
 
+      <!-- ── Data (F18.20) ───────────────────────────────────────────────────
+           How long each action in this setup keeps its readings, and who decided — the
+           blueprint, its sealed template, or the owner, who can keep their own list per action.
+           Lazy: nothing is fetched until the tab is opened. -->
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon class="tab-icon">storage</mat-icon>
+          Data
+        </ng-template>
+        <ng-template matTabContent>
+          <app-setup-retention [instanceId]="instance.id" />
+        </ng-template>
+      </mat-tab>
+
       <!-- ── Blueprint ─────────────────────────────────────────────────────
            Everything about this setup's relationship to the blueprint it came from: what a newer
            version would bring, what the user has changed so an update will leave it alone, and the

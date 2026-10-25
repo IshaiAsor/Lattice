@@ -15,6 +15,7 @@ import { DeviceUpdateDialogComponent } from '../device-update-dialog/device-upda
 import { ConfirmDialogComponent } from '../admin-device-config/confirm-dialog.component';
 import { AreaAssignDialogComponent } from '../area-assign-dialog/area-assign-dialog.component';
 import { DeviceHealthComponent } from '../device-health/device-health.component';
+import { DeviceRetentionComponent } from '../device-retention/device-retention.component';
 
 export interface ActiveInstance {
   cap: CapabilityView;
@@ -23,7 +24,7 @@ export interface ActiveInstance {
 
 @Component({
   selector: 'app-device-config',
-  imports: [SHARED_MATERIAL, DeviceHealthComponent],
+  imports: [SHARED_MATERIAL, DeviceHealthComponent, DeviceRetentionComponent],
   templateUrl: './device-config.component.html',
   styleUrls: ['./device-config.component.css'],
 })
@@ -41,9 +42,12 @@ export class DeviceConfigComponent implements OnInit {
 
   devices: DeviceView[] = [];
   selectedDevice: DeviceView | null = null;
-  /** Which half of the device panel is showing. Actions is what was always here; Health is
-   *  F18.3 — availability, the device's own timeline, and the commands it received. */
-  tab: 'actions' | 'health' = 'actions';
+  /** Which part of the device panel is showing. Actions is what was always here; Health is
+   *  F18.3 — availability, the device's own timeline, and the commands it received; Data is F18.20
+   *  — how long its history is kept, per device and per sensor. */
+  tab: 'actions' | 'health' | 'data' = 'actions';
+  /** A sensor the Data tab opens on arrival (`?tab=data&action=<id>`, the dashboard sheet's link). */
+  focusActionId: number | null = null;
   capabilities: CapabilityView[] = [];
   areas: AreaView[] = [];
   loadingDevices = false;
@@ -124,6 +128,14 @@ export class DeviceConfigComponent implements OnInit {
       this.route.paramMap
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe((pm) => this.applyRouteId(pm.get('id')));
+    });
+
+    // `?tab=data&action=<id>` — how the dashboard's sensor sheet opens that sensor's retention here.
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((qp) => {
+      const tab = qp.get('tab');
+      if (tab === 'actions' || tab === 'health' || tab === 'data') this.tab = tab;
+      const action = Number(qp.get('action'));
+      this.focusActionId = Number.isInteger(action) && action > 0 ? action : null;
     });
 
     // A dispatched update settles here, not when the dialog closes: the device downloads and

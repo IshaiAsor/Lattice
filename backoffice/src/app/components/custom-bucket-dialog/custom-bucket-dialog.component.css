@@ -149,3 +149,79 @@
   opacity: 0.45;
   cursor: default;
 }
+
+/* F18.20 — the custom sizes, each removable by whoever added it (or an admin). */
+.cb-customs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.cb-customs-head {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cb-custom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--card-divider);
+}
+.cb-custom-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cb-custom-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cb-custom-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.cb-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--error) 45%, transparent);
+  background: transparent;
+  color: var(--error);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.cb-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cb-remove mat-icon,
+.cb-custom-error mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+.cb-custom-error {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warning);
+}

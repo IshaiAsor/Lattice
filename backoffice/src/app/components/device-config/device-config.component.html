@@ -242,10 +242,19 @@
         <button type="button" class="tab" [class.on]="tab === 'health'" (click)="tab = 'health'">
           Health
         </button>
+        <!-- F18.20: how long this device's history is kept. Shown for sealed devices too — a
+             template fixes pins and actions, not retention, which stays the owner's. -->
+        <button type="button" class="tab" [class.on]="tab === 'data'" (click)="tab = 'data'">
+          Data
+        </button>
       </div>
 
       @if (tab === 'health') {
         <app-device-health [deviceId]="selectedDevice.id" />
+      }
+
+      @if (tab === 'data') {
+        <app-device-retention [deviceId]="selectedDevice.id" [focusActionId]="focusActionId" />
       }
 
       @if (tab === 'actions') {

@@ -18,7 +18,7 @@ adminBlueprintsRouter.get('/', async (_req, res, next) => {
 
 adminBlueprintsRouter.post('/import', async (req, res, next) => {
   try {
-    res.status(201).json(await blueprintsAdminService.importBlueprint(req.body));
+    res.status(201).json(await blueprintsAdminService.importBlueprint(req.body, req.user!.id));
   } catch (err) {
     next(err);
   }
@@ -64,7 +64,7 @@ adminBlueprintsRouter.post('/:id/publish', async (req, res, next) => {
 
 adminBlueprintsRouter.delete('/:id', async (req, res, next) => {
   try {
-    await blueprintsAdminService.deleteBlueprint(Number(req.params.id));
+    await blueprintsAdminService.deleteBlueprint(Number(req.params.id), req.user!.id);
     res.sendStatus(204);
   } catch (err) {
     next(err);

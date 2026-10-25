@@ -9,6 +9,7 @@ import {
   type BucketView,
 } from '../../services/retention-tiers.service';
 import type { DataKind } from '../../services/retention.service';
+import { AuthService } from '../../services/auth.service';
 
 // "＋ Custom size…" — opened from the bottom of the tier editor's add row, so a person meets it
 // exactly when the list does not have what they want.
@@ -25,6 +26,12 @@ export interface CustomBucketData {
   buckets: BucketView[];
 }
 
+/**
+ * What the dialog closes with: the size just added, or — when it was closed after removing some —
+ * the codes that no longer exist, so the editor stops offering them (F18.20).
+ */
+export type CustomBucketResult = BucketView | { removed: string[] } | undefined;
+
 type Unit = 'minutes' | 'hours' | 'days';
 const UNIT_SECONDS: Record<Unit, number> = { minutes: 60, hours: 3600, days: 86_400 };
 
@@ -38,6 +45,7 @@ const UNIT_SECONDS: Record<Unit, number> = { minutes: 60, hours: 3600, days: 86_
 export class CustomBucketDialogComponent {
   private api = inject(RetentionTiersService);
   private ref = inject(MatDialogRef<CustomBucketDialogComponent>);
+  private auth = inject(AuthService);
   readonly data = inject<CustomBucketData>(MAT_DIALOG_DATA);
 
   readonly units: Unit[] = ['minutes', 'hours', 'days'];
@@ -48,6 +56,54 @@ export class CustomBucketDialogComponent {
   serverError = signal<string | null>(null);
 
   seconds = computed(() => Math.round(this.value() * UNIT_SECONDS[this.unit()]));
+
+  // ── Removing a custom size (F18.20) ─────────────────────────────────────
+  //
+  // The API has always allowed it — for whoever added the size, or an admin — and refused it while
+  // any tier list names the size or rollup rows are still stored under it. No screen offered it.
+  // The refusal is shown under the row as the server words it, because it says what to do next.
+
+  /** The sizes anyone added, oldest catalog order kept; built-ins cannot be removed. */
+  customs = signal<BucketView[]>(this.data.buckets.filter((b) => !b.isBuiltin));
+  removing = signal<string | null>(null);
+  rowError = signal<Record<string, string>>({});
+  private removed: string[] = [];
+
+  /** Whoever added a size may remove it, and an admin may remove any. */
+  canRemove(b: BucketView): boolean {
+    const me = this.auth.getCurrentUser();
+    return me?.role === 'admin' || (me?.id !== undefined && b.createdByUserId === me.id);
+  }
+
+  addedBy(b: BucketView): string {
+    const me = this.auth.getCurrentUser();
+    if (me?.id !== undefined && b.createdByUserId === me.id) return 'added by you';
+    return b.createdBy ? `added by ${b.createdBy}` : 'added by another user';
+  }
+
+  remove(b: BucketView): void {
+    if (this.removing()) return;
+    this.removing.set(b.code);
+    this.rowError.update((e) => {
+      const next = { ...e };
+      delete next[b.code];
+      return next;
+    });
+    this.api.deleteBucket(b.code).subscribe({
+      next: () => {
+        this.removing.set(null);
+        this.removed.push(b.code);
+        this.customs.update((list) => list.filter((x) => x.code !== b.code));
+      },
+      error: (e: { error?: { error?: string } }) => {
+        this.removing.set(null);
+        this.rowError.update((errs) => ({
+          ...errs,
+          [b.code]: e.error?.error ?? `Could not remove ${b.label}.`,
+        }));
+      },
+    });
+  }
 
   /** The floor the platform imposes, in seconds — 0 when there is none. */
   private floor = computed(
@@ -129,7 +185,8 @@ export class CustomBucketDialogComponent {
     });
   }
 
+  /** Closing reports any sizes removed, so the editor stops offering them. */
   cancel(): void {
-    this.ref.close();
+    this.ref.close(this.removed.length > 0 ? { removed: this.removed } : undefined);
   }
 }

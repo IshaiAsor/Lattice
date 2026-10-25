@@ -33,6 +33,11 @@
                 <span>Remove from group</span>
             </button>
             }
+            <!-- F18.20: how long this sensor's history is kept, and who decided it. -->
+            <button mat-menu-item (click)="openRetention(a)">
+                <mat-icon>storage</mat-icon>
+                <span>Data kept…</span>
+            </button>
             <!-- Command actions only: a telemetry action re-confirms itself on its next reading,
                  so asking it explicitly buys nothing the cycle isn't already doing. -->
             @if (!isTelemetryAction(a) && !isCameraAction(a)) {

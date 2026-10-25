@@ -394,25 +394,18 @@
                 </mat-form-field>
 
                 @if (slot.sealed_template) {
-                  <div class="slot-actions">
-                    <span class="slot-actions-title">
-                      Rules, scenes and pipelines can address these {{ slotActions(slot).length }}
-                      action(s):
-                    </span>
-                    <ul>
-                      @for (action of slotActions(slot); track action.name) {
-                        <li>
-                          <span class="action-label">{{ action.label }}</span>
-                          <code>{{ action.name }}</code>
-                        </li>
-                      }
-                    </ul>
-                    @if (slotActions(slot).length === 0) {
-                      <p class="slot-actions-empty">
-                        This template has no entries — nothing can be addressed on it.
-                      </p>
-                    }
-                  </div>
+                  <!-- The slot's actions, and how long each keeps its readings (F18.20). Editable on a
+                       saved slot; a new or re-templated one lists its actions and asks for a save. -->
+                  <app-blueprint-slot-retention
+                    [blueprintId]="selected()?.id ?? null"
+                    [slotKey]="slot.key"
+                    [templateName]="slot.sealed_template"
+                    [draftActions]="slotActions(slot)"
+                    [view]="retention()"
+                    [buckets]="retentionBuckets()"
+                    [policies]="retentionPolicies()"
+                    (updated)="retention.set($event)"
+                  />
                 }
 
                 <mat-form-field appearance="outline" class="full" subscriptSizing="dynamic">

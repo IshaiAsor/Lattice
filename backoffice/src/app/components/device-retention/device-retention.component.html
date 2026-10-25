@@ -1,0 +1,134 @@
+<div class="dr">
+  <p class="dr-intro">
+    How long this device's history is kept. The most specific list wins, and it wins whole: a
+    sensor's own list, then this device's, then the blueprint or sealed template it came with, then
+    your settings.
+  </p>
+
+  @if (loading() && !view()) {
+    <p class="dr-loading">Loading…</p>
+  }
+
+  @if (view(); as v) {
+    @for (k of v.kinds; track k.dataKind) {
+      <section class="dr-kind">
+        <h3 class="dr-label">This device · {{ kindMeta[k.dataKind].label }}</h3>
+        <div class="lattice-card dr-card">
+          <div class="dr-card-head">
+            <mat-icon class="dr-kind-icon">{{ kindMeta[k.dataKind].icon }}</mat-icon>
+            <span class="dr-card-title">{{ kindMeta[k.dataKind].label }}</span>
+            @if (k.own.length > 0) {
+              <app-scope-chip scope="device" text="This device" />
+            }
+          </div>
+          <app-scoped-tier-list
+            [own]="k.own"
+            [fallbackLabel]="followsPhrase(k.fallback.source)"
+            [fallbackTiers]="k.fallback.tiers"
+            [kind]="k.dataKind"
+            [buckets]="buckets()"
+            [minBucket]="k.minBucket"
+            [ceilings]="k.ceilings"
+            subject="this device"
+            [busy]="busy()"
+            (save)="saveDevice(k.dataKind, $event)"
+            (clear)="clearDevice(k.dataKind)"
+          />
+          @if (hasBoardLists(k.dataKind)) {
+            <p class="dr-note">
+              <mat-icon>info</mat-icon>
+              Some sensors below take a list from their blueprint or sealed template. A list for
+              this device overrides those too; a sensor's own list still overrides it.
+            </p>
+          }
+          @if (!k.enabled) {
+            <p class="dr-note dr-warn">
+              <mat-icon>pause_circle</mat-icon>
+              Cleanup is switched off for this kind on the platform, so nothing is deleted yet.
+            </p>
+          }
+        </div>
+
+        <h3 class="dr-label">Per sensor</h3>
+        <div class="lattice-card dr-list">
+          <div class="dr-row dr-head" aria-hidden="true">
+            <span class="dr-name">Sensor</span>
+            <span class="dr-chip">Decided by</span>
+            <span class="dr-stored">Stored</span>
+            <span class="dr-caret"></span>
+          </div>
+          @for (a of sensorsOf(k.dataKind); track a.actionId) {
+            <div
+              class="dr-item"
+              [class.open]="open()[a.actionId]"
+              [id]="'ret-action-' + a.actionId"
+            >
+              <button
+                type="button"
+                class="dr-row"
+                [attr.aria-expanded]="!!open()[a.actionId]"
+                (click)="toggle(a.actionId)"
+              >
+                <span class="dr-name">
+                  <span class="dr-name-main">{{ a.name }}</span>
+                  <code>{{ a.mqttActionName }}</code>
+                </span>
+                <span class="dr-chip">
+                  <app-scope-chip [scope]="a.effective.source" [text]="decidedBy(a)" />
+                </span>
+                <span class="dr-kept">{{ summary(a.effective.tiers) }}</span>
+                <span class="dr-stored">
+                  {{ a.stored && a.stored.rows > 0 ? (a.stored.rows | number) + ' rows' : '—' }}
+                </span>
+                <mat-icon class="dr-caret">{{
+                  open()[a.actionId] ? 'expand_less' : 'expand_more'
+                }}</mat-icon>
+              </button>
+
+              @if (open()[a.actionId]) {
+                <div class="dr-detail">
+                  <app-scope-ladder [scopes]="a.scopes" />
+                  <app-scoped-tier-list
+                    [own]="a.own"
+                    [fallbackLabel]="fallbackLabel(a)"
+                    [fallbackTiers]="a.fallback.tiers"
+                    [kind]="a.dataKind"
+                    [buckets]="buckets()"
+                    [minBucket]="knobs(a.dataKind)?.minBucket ?? 'raw'"
+                    [ceilings]="knobs(a.dataKind)?.ceilings ?? {}"
+                    [usage]="a.stored?.buckets ?? {}"
+                    [showStored]="true"
+                    [subject]="a.name"
+                    [busy]="busy()"
+                    (save)="saveAction(a, $event)"
+                    (clear)="clearAction(a)"
+                  />
+                  @if (a.effective.rejected.length > 0) {
+                    <!-- Stored but not applied — usually a size finer than the platform minimum
+                         chosen before an admin raised it. Saying so beats silently dropping it. -->
+                    <p class="dr-note dr-warn">
+                      <mat-icon>info</mat-icon>
+                      @for (r of a.effective.rejected; track r.bucket) {
+                        <span
+                          ><b>{{ r.bucket }}</b> is not being used — {{ r.reason }}.</span
+                        >
+                      }
+                    </p>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    } @empty {
+      <p class="dr-empty">None of this device's actions keep history yet.</p>
+    }
+
+    <p class="dr-foot">
+      <mat-icon>info</mat-icon>
+      <span>Commands and device events are kept per account, not per sensor.</span>
+      <a routerLink="/settings">Change them in Settings</a>
+    </p>
+  }
+</div>

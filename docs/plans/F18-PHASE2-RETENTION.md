@@ -33,6 +33,13 @@ the order **action → device → blueprint → sealed → user → platform**: 
 overridden by an owner's Settings list, only by their device or sensor lists. The five-scope shapes
 in §2.2 below are as Phase 2 built them; `TIER_SCOPES` in `@lattice/retention` is the current order.
 
+**Later addition (F18.20, 2026-09-22) — every scope has a screen.** The device page's Data tab
+(device and per-sensor lists), a read-only "Data kept…" sheet from any dashboard card, a list per
+slot action in the admin blueprint builder (live, not drafted), a setup page's Data tab (the
+owner's own list is stored at the ACTION scope) and custom-size removal. Per-action kinds are now
+refused at every scope below the user's, and blueprint lists are dropped and logged when a save,
+delete or sealed-template edit strands them. See `docs/plans/F18-20-RETENTION-UI.md`.
+
 ---
 
 ## Superseded after build (2026-08-26)

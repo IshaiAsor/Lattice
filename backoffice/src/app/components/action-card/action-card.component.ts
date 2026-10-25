@@ -25,6 +25,11 @@ import {
   type SeriesPoint,
 } from 'src/app/services/history.service';
 import { ChartRangeService } from 'src/app/services/chart-range.service';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import {
+  SensorRetentionSheetComponent,
+  type SensorRetentionSheetData,
+} from '../sensor-retention-sheet/sensor-retention-sheet.component';
 import {
   TileDensityService,
   defaultFieldsFor,
@@ -108,6 +113,24 @@ export class ActionCardComponent {
     return pinned ? defaultFieldsFor(pinned) : this.tiles.fields();
   });
   private destroyRef = inject(DestroyRef);
+  private bottomSheet = inject(MatBottomSheet);
+
+  /**
+   * "Data kept…" (F18.20): what this sensor keeps and who decided, read-only, with a link to edit it on
+   * the device page. Opened here rather than through an output, because the card lives on the
+   * dashboard, in a group sheet and on a setup tile, and the item should work in all three.
+   */
+  openRetention(a: DeviceActionView): void {
+    this.bottomSheet.open<SensorRetentionSheetComponent, SensorRetentionSheetData>(
+      SensorRetentionSheetComponent,
+      {
+        data: { deviceId: a.deviceId, deviceName: a.deviceName, actionId: a.id, actionName: a.name },
+        panelClass: ['glass-bottom-sheet', 'solid-sheet'],
+        // Focus the sheet, not its close button — see the group sheet for why.
+        autoFocus: 'dialog',
+      },
+    );
+  }
 
   // ── History on the tile (F18.3 + F21.4) ───────────────────────────────────
   //

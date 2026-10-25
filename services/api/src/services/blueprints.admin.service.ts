@@ -12,6 +12,7 @@ import {
 } from './blueprints.admin.types';
 import { collectProblems, collectDocumentProblems } from './blueprints.admin.validation';
 import { buildBlueprintDefinition } from './blueprints.admin.persist';
+import { dropBlueprintTiers } from './retention-blueprints.service';
 
 const log = createLogger('api:blueprints-admin');
 
@@ -87,7 +88,10 @@ export const blueprintsAdminService = {
   // `BlueprintInstance.blueprint_id` is Restrict anyway, so delete-and-recreate could not work.
   // Instances keep their bindings and overrides and simply fall a version behind until the new
   // definition is published, which is what reconciles them.
-  async importBlueprint(doc: BlueprintDoc): Promise<BlueprintRow> {
+  async importBlueprint(
+    doc: BlueprintDoc,
+    actorUserId: number | null = null,
+  ): Promise<BlueprintRow> {
     if (!doc?.key || !doc.name) throw badRequest('key and name are required');
     if (!Array.isArray(doc.slots) || doc.slots.length === 0) {
       throw badRequest('at least one slot is required');
@@ -228,6 +232,18 @@ export const blueprintsAdminService = {
         }
       }
 
+      // Retention lists name a slot by key and an action by name, so a save that drops a slot,
+      // renames its key or points it at a template without that action strands them (F18.20).
+      // Left behind, a list would attach itself to whatever a later save gives that name.
+      if (existing) {
+        await dropBlueprintTiers(
+          tx,
+          { blueprintId: bp.id },
+          actorUserId,
+          'slot or action removed from the blueprint',
+        );
+      }
+
       return bp;
     });
   },
@@ -263,7 +279,7 @@ export const blueprintsAdminService = {
     return published;
   },
 
-  async deleteBlueprint(id: number): Promise<void> {
+  async deleteBlueprint(id: number, actorUserId: number | null = null): Promise<void> {
     const bp = await db.blueprint.findUnique({
       where: { id },
       include: { _count: { select: { instances: true } } },
@@ -272,6 +288,16 @@ export const blueprintsAdminService = {
     if (bp._count.instances > 0) {
       throw conflict(`blueprint has ${bp._count.instances} live instance(s)`);
     }
-    await db.blueprint.delete({ where: { id } });
+    await db.$transaction(async (tx) => {
+      // The FK cascade would remove its retention lists silently; log them first so the deletion of
+      // a retention configuration is on the trail like every other one (F18.19, F18.20).
+      await dropBlueprintTiers(
+        tx,
+        { blueprintId: id, deleting: true },
+        actorUserId,
+        'blueprint deleted',
+      );
+      await tx.blueprint.delete({ where: { id } });
+    });
   },
 };

@@ -724,6 +724,40 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
   - `staleSealedLists` is what a template save strands: a list left behind for a removed entry
     would attach itself to whichever entry a later save gives that name
 
+### History — `history.retention-scopes.test.ts` ✅ (F18.20 device, sensor and setup Data tabs)
+
+- a sensor's own list answers, and removing it falls back to the device's
+- leaves a neighbour on the same device on the device's list
+  - F18.20's acceptance criterion at resolver level: a 15m tier on one sensor does not change the
+    sensor beside it, and clearing it visibly falls back to the device's
+- without an own list, the fallback is what already applies
+- marks a scope that cannot reach the action n/a, not empty
+- shows a list below the answering scope as held but not reached
+- lets the platform answer when nothing else is configured
+- never marks a scope n/a when it answers
+  - `describeResolution` is what every Data tab draws. A wrong fallback is a screen promising one
+    list and applying another the moment "Remove list" is pressed
+- keeps only the actions the slot addresses, in the device order
+- shows nothing for a slot the blueprint no longer has
+  - `slotActionsOf` decides what a setup page shows: a board may carry actions the blueprint never
+    mentions, and those are not the setup's to edit
+
+### History — `history.retention-blueprints.test.ts` ✅ (F18.20 blueprint retention)
+
+- refuses the kinds that are kept per user
+- admits the kinds whose history belongs to an action
+  - blueprint lists for `command`/`device_event` were accepted, stored and shown, and never
+    applied — those windows resolve per user. Only the sealed scope refused them
+- maps each slot key to its template's entry names
+- keeps every list whose slot still addresses its action
+- returns the whole list of an action the slot's template no longer carries
+- strands every list on a removed slot, per action and kind
+- treats a renamed slot key as removed
+- returns every list when the blueprint is deleted
+  - `staleBlueprintLists` is what a blueprint save, a blueprint delete and a sealed-template save
+    strand. Before F18.20 none of the three removed anything, and a blueprint list could not be
+    cleared at all — a PUT of an empty list is refused, and there was no DELETE
+
 ### Commands — `commands.command-models.test.js` ✅
 
 - OutletCommandAction accepts on/off/1/0 and rejects others

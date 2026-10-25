@@ -85,6 +85,7 @@
             </div>
 
             <app-tier-editor
+              #ed
               [tiers]="tiersFor(k.kind)"
               [buckets]="buckets()"
               [kind]="k.kind"
@@ -107,10 +108,10 @@
               </span>
               <span class="us-hint-actions">
                 @if (dirty(k.kind)) {
-                  <button type="button" class="us-reset" (click)="discard(k.kind)">Discard</button>
-                  <button type="button" class="us-save" (click)="save(k.kind)">Save</button>
+                  <button type="button" class="us-reset" (click)="discard(k.kind); ed.reset()">Discard</button>
+                  <button type="button" class="us-save" (click)="save(k.kind); ed.reset()">Save</button>
                 } @else if (p.overridden) {
-                  <button type="button" class="us-reset" (click)="reset(k.kind)">
+                  <button type="button" class="us-reset" (click)="reset(k.kind); ed.reset()">
                     Reset to default
                   </button>
                 }

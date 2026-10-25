@@ -1,0 +1,88 @@
+@if (saved(); as s) {
+  <div class="bsr">
+    <div class="bsr-intro">
+      <span class="bsr-title">Actions on this slot, and how long their readings are kept</span>
+      <span class="bsr-sub">
+        Rules, scenes and pipelines can address these {{ s.actions.length }} action(s). A list set here
+        applies to that action on every device bound to this slot, in every setup made from this
+        blueprint.
+      </span>
+    </div>
+    <div class="bsr-live">
+      <mat-icon>bolt</mat-icon>
+      <span>
+        Retention is saved on its own and takes effect at once
+        @if (instanceCount() > 0) {
+          for the {{ instanceCount() }} existing setup(s)
+        }
+        — it is not part of the draft and does not wait for Publish.
+      </span>
+    </div>
+
+    @for (a of s.actions; track a.actionName) {
+      <div class="bsr-item" [class.open]="open()[a.actionName]">
+        <button
+          type="button"
+          class="bsr-row"
+          [attr.aria-expanded]="!!open()[a.actionName]"
+          (click)="toggle(a.actionName)"
+        >
+          <span class="bsr-name">
+            <span class="bsr-label">{{ a.label }}</span>
+            <code>{{ a.actionName }}</code>
+          </span>
+          <span class="bsr-chip">
+            <app-scope-chip [scope]="decider(a).scope" [text]="decider(a).text" />
+          </span>
+          <span class="bsr-kept">{{ keptText(a) }}</span>
+          <mat-icon class="bsr-caret">{{ open()[a.actionName] ? 'expand_less' : 'expand_more' }}</mat-icon>
+        </button>
+        @if (open()[a.actionName]) {
+          <div class="bsr-detail">
+            <app-scoped-tier-list
+              [own]="a.own"
+              [fallbackLabel]="fallbackLabel(a)"
+              [fallbackTiers]="fallbackTiers(a)"
+              [kind]="a.dataKind"
+              [buckets]="buckets()"
+              [minBucket]="minBucket(a.dataKind)"
+              [ceilings]="ceilings(a.dataKind)"
+              [subject]="a.label"
+              [busy]="busy()"
+              (save)="save(a, $event)"
+              (clear)="clear(a)"
+            />
+          </div>
+        }
+      </div>
+    }
+    <p class="bsr-foot">
+      <mat-icon>info</mat-icon>
+      Owners can still keep their own list for any action, on their setup's Data tab.
+    </p>
+  </div>
+} @else {
+  <!-- Not editable yet: a new slot, or one whose template the draft has changed. The actions are
+       still listed, because the admin needs them to write rules against this slot. -->
+  <div class="bsr bsr-plain">
+    <span class="bsr-sub">
+      Rules, scenes and pipelines can address these {{ draftActions().length }} action(s):
+    </span>
+    <ul class="bsr-plain-list">
+      @for (a of draftActions(); track a.name) {
+        <li>
+          <span class="bsr-label">{{ a.label }}</span>
+          <code>{{ a.name }}</code>
+        </li>
+      }
+    </ul>
+    @if (draftActions().length === 0) {
+      <p class="bsr-empty">This template has no entries — nothing can be addressed on it.</p>
+    } @else {
+      <p class="bsr-note">
+        <mat-icon>save</mat-icon>
+        Save the blueprint to set how long these actions keep their readings.
+      </p>
+    }
+  </div>
+}

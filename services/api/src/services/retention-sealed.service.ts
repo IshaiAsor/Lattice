@@ -8,10 +8,11 @@
 // row, because a template save deletes and recreates every entry row — so this file also owns what
 // happens to a list when its entry is removed from the template (`dropSealedTiers`).
 
-import { badRequest, isActionScopedKind, type DataKind, type Tier } from '@lattice/retention';
+import { badRequest, type Tier } from '@lattice/retention';
 import { db } from '../db';
 import { retentionActivityService } from './retention-activity.service';
 import {
+  assertActionScoped,
   assertKind,
   parseTiers,
   replaceSealedTiers,
@@ -31,19 +32,6 @@ async function loadTemplate(templateId: number) {
   });
   if (!t) throw notFound('Sealed template not found');
   return t;
-}
-
-/**
- * Only the kinds whose history belongs to an action.
- *
- * `command` and `device_event` windows are resolved per user, so a sealed row for them would be
- * stored, shown, and silently never applied — refused instead of accepted and ignored.
- */
-function assertActionScoped(kind: DataKind): void {
-  if (!isActionScopedKind(kind))
-    throw badRequest(
-      `${kind} history is kept per user, not per board — set it in the user or platform list`,
-    );
 }
 
 /**

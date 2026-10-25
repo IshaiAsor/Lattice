@@ -1,8 +1,9 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { apiUrl } from './api.config';
-import type { DataKind } from './retention.service';
+import { formatDays, type DataKind, type KindUsage } from './retention.service';
+import { SILENT_ERRORS } from './error.interceptor';
 
 // Client for the F18 Phase 2 tier API. Cold observables, thin methods, no caching layer — the same
 // shape as every other service here.
@@ -155,11 +156,101 @@ export interface PreviewView {
   bytesEstimated: Record<DataKind, boolean>;
 }
 
+// ── Device, sensor, setup and blueprint lists (F18.20) ──────────────────────
+
+/** What resolved for one action, and which scope — and, where it has one, which named thing — decided. */
+export interface ResolvedView {
+  tiers: ResolvedTierView[];
+  source: TierScope;
+  /** The device, blueprint, sealed template or action name; null for your settings and platform. */
+  sourceLabel: string | null;
+  rejected: RejectedTierView[];
+}
+
+/** Where one scope stands for one action — the "who decides" strip. */
+export type ScopeState = 'answering' | 'has-list' | 'empty' | 'n/a';
+
+export interface ScopeStanding {
+  scope: TierScope;
+  state: ScopeState;
+}
+
+/** One action as every Data tab shows it. */
+export interface ActionRetentionView {
+  actionId: number;
+  name: string;
+  mqttActionName: string;
+  dataKind: DataKind;
+  /** The action's own list — empty when it follows a wider scope. */
+  own: TierView[];
+  effective: ResolvedView;
+  /** What removing the action's own list falls back to. */
+  fallback: ResolvedView;
+  scopes: ScopeStanding[];
+  stored?: KindUsage;
+}
+
+/** The knobs an editor at a per-device scope needs for one kind. */
+export interface KindKnobsView {
+  dataKind: DataKind;
+  own: TierView[];
+  /** What removing the device list sends a sensor with nothing more specific to. */
+  fallback: ResolvedView;
+  enabled: boolean;
+  minBucket: string;
+  ceilings: Record<string, number | null>;
+}
+
+export interface DeviceRetentionView {
+  deviceId: number;
+  deviceName: string;
+  kinds: KindKnobsView[];
+  actions: ActionRetentionView[];
+}
+
+export interface SetupRetentionView {
+  instanceId: number;
+  name: string;
+  blueprintId: number;
+  blueprintName: string;
+  slots: {
+    slotKey: string;
+    slotLabel: string;
+    devices: { deviceId: number; deviceName: string; actions: ActionRetentionView[] }[];
+  }[];
+}
+
+export interface BlueprintRetentionView {
+  blueprintId: number;
+  name: string;
+  instanceCount: number;
+  slots: {
+    slotKey: string;
+    slotLabel: string;
+    templateId: number;
+    templateName: string;
+    actions: {
+      actionName: string;
+      label: string;
+      dataKind: DataKind;
+      /** The blueprint's own list for this slot action. */
+      own: TierView[];
+      /** The sealed template entry's list — what the action falls back to without the blueprint's. */
+      sealed: TierView[];
+    }[];
+  }[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class RetentionTiersService {
   private http = inject(HttpClient);
   private base = `${apiUrl()}/api/retention`;
   private admin = `${apiUrl()}/api/admin/retention`;
+  /**
+   * For writes whose caller shows the server's own refusal ("40m is still in 1 tier list") — the
+   * generic toast would stack a less useful copy of the same failure on top of it.
+   */
+  private silent = { context: new HttpContext().set(SILENT_ERRORS, true) };
 
   // ── Catalog ───────────────────────────────────────────────────────────────
 
@@ -170,6 +261,50 @@ export class RetentionTiersService {
   /** A size that already exists resolves to the existing row rather than erroring. */
   createBucket(seconds: number, label?: string): Observable<BucketView> {
     return this.http.post<BucketView>(`${this.base}/buckets`, { seconds, label });
+  }
+
+  /**
+   * Remove an unused custom size. Refused while any tier list names it, or while rollup rows are
+   * still stored under it — the error carries which, so show it rather than a generic failure.
+   */
+  deleteBucket(code: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/buckets/${encodeURIComponent(code)}`, this.silent);
+  }
+
+  // ── Device, sensor and setup lists (F18.20) ───────────────────────────────
+
+  /** Every sensor on a device, resolved — the device page's Data tab in one read. */
+  deviceRetention(deviceId: number): Observable<DeviceRetentionView> {
+    return this.http.get<DeviceRetentionView>(`${this.base}/scopes/devices/${deviceId}/effective`);
+  }
+
+  setDeviceTiers(deviceId: number, kind: DataKind, tiers: TierView[]): Observable<TierView[]> {
+    return this.http.put<TierView[]>(
+      `${this.base}/scopes/devices/${deviceId}/${kind}`,
+      { tiers },
+      this.silent,
+    );
+  }
+
+  clearDeviceTiers(deviceId: number, kind: DataKind): Observable<void> {
+    return this.http.delete<void>(`${this.base}/scopes/devices/${deviceId}/${kind}`, this.silent);
+  }
+
+  setActionTiers(actionId: number, kind: DataKind, tiers: TierView[]): Observable<TierView[]> {
+    return this.http.put<TierView[]>(
+      `${this.base}/scopes/actions/${actionId}/${kind}`,
+      { tiers },
+      this.silent,
+    );
+  }
+
+  clearActionTiers(actionId: number, kind: DataKind): Observable<void> {
+    return this.http.delete<void>(`${this.base}/scopes/actions/${actionId}/${kind}`, this.silent);
+  }
+
+  /** What each action in one of your setups keeps, and who decided it. */
+  setupRetention(instanceId: number): Observable<SetupRetentionView> {
+    return this.http.get<SetupRetentionView>(`${this.base}/scopes/setups/${instanceId}`);
   }
 
   // ── My tiers ──────────────────────────────────────────────────────────────
@@ -280,7 +415,114 @@ export class RetentionTiersService {
       `${this.admin}/sealed/${templateId}/${encodeURIComponent(actionName)}/${kind}`,
     );
   }
+
+  // ── Blueprints (F18.20) ───────────────────────────────────────────────────
+
+  /** A blueprint's lists per saved slot action, with the sealed list each falls back to. */
+  blueprintRetention(blueprintId: number): Observable<BlueprintRetentionView> {
+    return this.http.get<BlueprintRetentionView>(`${this.admin}/blueprints/${blueprintId}`);
+  }
+
+  /** Applies at once to every setup of the blueprint — lists are not part of its draft. */
+  setBlueprintTiers(
+    blueprintId: number,
+    slotKey: string,
+    actionName: string,
+    kind: DataKind,
+    tiers: TierView[],
+  ): Observable<BlueprintRetentionView> {
+    return this.http.put<BlueprintRetentionView>(
+      `${this.admin}/blueprints/${blueprintId}/${encodeURIComponent(slotKey)}/${encodeURIComponent(actionName)}/${kind}`,
+      { tiers },
+      this.silent,
+    );
+  }
+
+  clearBlueprintTiers(
+    blueprintId: number,
+    slotKey: string,
+    actionName: string,
+    kind: DataKind,
+  ): Observable<BlueprintRetentionView> {
+    return this.http.delete<BlueprintRetentionView>(
+      `${this.admin}/blueprints/${blueprintId}/${encodeURIComponent(slotKey)}/${encodeURIComponent(actionName)}/${kind}`,
+      this.silent,
+    );
+  }
 }
+
+/**
+ * A tier list in one line — "Raw 14 days · 1 hour 90 days · 1 day forever" — or "keep everything"
+ * for an empty list, which is what an empty list means to the sweep.
+ */
+export function tierSummary(
+  tiers: readonly { bucket: string; keepDays: number; position: number }[],
+  buckets: readonly BucketView[],
+): string {
+  if (tiers.length === 0) return 'keep everything';
+  return [...tiers]
+    .sort((a, b) => a.position - b.position)
+    .map((t) => {
+      const b = buckets.find((x) => x.code === t.bucket);
+      const name = b ? (b.seconds === 0 ? 'Raw' : b.label) : t.bucket;
+      return `${name} ${formatDays(t.keepDays).toLowerCase()}`;
+    })
+    .join(' · ');
+}
+
+/**
+ * Who decided a list, as the "Decided by" chip reads. The action's own list is the reader's own, so
+ * it is "Your list" rather than the action's name.
+ */
+export function scopeLabel(scope: TierScope): string {
+  switch (scope) {
+    case 'action':
+      return 'Your list';
+    case 'device':
+      return 'This device';
+    case 'blueprint':
+      return 'Blueprint';
+    case 'sealed':
+      return 'Sealed template';
+    case 'user':
+      return 'Your settings';
+    case 'platform':
+      return 'Platform';
+  }
+}
+
+/** A scope as the object of "follows …" / "Remove list — follow …". */
+export function followsPhrase(scope: TierScope): string {
+  switch (scope) {
+    case 'action':
+      return 'its own list';
+    case 'device':
+      return 'this device';
+    case 'blueprint':
+      return 'the blueprint';
+    case 'sealed':
+      return 'the sealed template';
+    case 'user':
+      return 'your settings';
+    case 'platform':
+      return 'the platform list';
+  }
+}
+
+/** A scope's name on the "who decides" strip — `action` is the sensor itself there. */
+export function ladderName(scope: TierScope): string {
+  return scope === 'action' ? 'This sensor' : scopeLabel(scope);
+}
+
+/** The Material icon for each scope, so a chip reads at a glance. */
+export const SCOPE_ICONS: Record<TierScope, string> = {
+  action: 'sensors',
+  device: 'developer_board',
+  blueprint: 'account_tree',
+  sealed: 'lock',
+  user: 'person',
+  platform: 'public',
+};
 
 /** A bucket code as a duration a human reads, for a select option. */
 export function bucketLabel(b: BucketView): string {

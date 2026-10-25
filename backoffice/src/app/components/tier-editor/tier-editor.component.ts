@@ -16,7 +16,10 @@ import {
   type DataKind,
   type UsageBucket,
 } from '../../services/retention.service';
-import { CustomBucketDialogComponent } from '../custom-bucket-dialog/custom-bucket-dialog.component';
+import {
+  CustomBucketDialogComponent,
+  type CustomBucketResult,
+} from '../custom-bucket-dialog/custom-bucket-dialog.component';
 
 // One tier list, editable. Used by the admin page (the platform list, with ceilings) and by
 // Settings → Data & storage (a user's own list), because they are the same thing at two scopes.
@@ -81,6 +84,8 @@ export class TierEditorComponent {
 
   /** Local working copy, so a half-finished edit is not pushed on every keystroke. */
   draft = signal<TierView[] | null>(null);
+  /** Sizes removed from the catalog in the dialog — gone, even if the host's catalog is older. */
+  private removedCodes = signal<ReadonlySet<string>>(new Set());
   saving = signal(false);
 
   rows = computed(() => this.draft() ?? this.tiers());
@@ -108,10 +113,11 @@ export class TierEditorComponent {
    */
   available = computed<BucketView[]>(() => {
     const used = new Set(this.rows().map((t) => t.bucket));
+    const removed = this.removedCodes();
     const floor = this.secondsOf(this.minBucket());
     const k = this.kind();
     return this.buckets().filter((b) => {
-      if (used.has(b.code)) return false;
+      if (used.has(b.code) || removed.has(b.code)) return false;
       if (b.seconds === 0) return false; // raw is mandatory and always present
       if (k === 'frame') return false; // a frame has nothing to summarise
       if (k === 'command' || k === 'device_event') return b.seconds % 86_400 === 0;
@@ -229,8 +235,13 @@ export class TierEditorComponent {
       autoFocus: 'dialog',
       data: { kind: this.kind(), minBucket: this.minBucket(), buckets: this.buckets() },
     });
-    const created = (await firstValueFrom(ref.afterClosed())) as BucketView | undefined;
-    if (!created) return;
+    const result = (await firstValueFrom(ref.afterClosed())) as CustomBucketResult;
+    if (!result) return;
+    if ('removed' in result) {
+      this.removedCodes.update((s) => new Set([...s, ...result.removed]));
+      return;
+    }
+    const created = result;
     this.snack.open(`${created.label} is available`, undefined, { duration: 2500 });
     // The parent reloads the catalog; adding it here too means it lands in the list immediately.
     if (!this.rows().some((t) => t.bucket === created.code)) this.add(created.code);

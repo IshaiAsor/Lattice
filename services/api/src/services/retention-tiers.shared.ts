@@ -1,6 +1,7 @@
 import {
   badRequest,
   isDataKind,
+  isActionScopedKind,
   assertTierList,
   diffTiers,
   summarizeTierChanges,
@@ -44,6 +45,21 @@ export const KIND_LABELS: Record<DataKind, string> = {
 
 export function assertKind(kind: string): asserts kind is DataKind {
   if (!isDataKind(kind)) throw badRequest(`Unknown data kind: ${kind}`);
+}
+
+/**
+ * Only the kinds whose history belongs to an action, for every scope below the user's: action,
+ * device, blueprint and sealed.
+ *
+ * `command` and `device_event` windows are resolved per user, so a list for them at any of those
+ * scopes would be stored, shown, and silently never applied — refused instead of accepted and
+ * ignored. The sealed scope refused them from F18.21; the other three since F18.20.
+ */
+export function assertActionScoped(kind: DataKind): void {
+  if (!isActionScopedKind(kind))
+    throw badRequest(
+      `${kind} history is kept per user, not per board — set it in the user or platform list`,
+    );
 }
 
 export async function loadCatalog(): Promise<Map<string, BucketDef>> {
@@ -139,6 +155,24 @@ export const view = (t: { bucket: string; keep_days: number; position: number })
   position: t.position,
 });
 
+/** Implementation types whose history is frames rather than readings. */
+const FRAME_IMPL_TYPES = new Set(['CameraAction']);
+
+/** The one kind an action records: frames for a camera, readings for everything else. */
+export function kindOfImplementation(implementationType: string): DataKind {
+  return FRAME_IMPL_TYPES.has(implementationType) ? 'frame' : 'scalar';
+}
+
+/** One kind's list out of a scope's stored rows, in stored order, as the API shape. */
+export function listOf<
+  R extends { data_kind: string; bucket: string; keep_days: number; position: number },
+>(rows: readonly R[], kind: DataKind, match?: (r: R) => boolean): Tier[] {
+  return rows
+    .filter((r) => r.data_kind === kind && (match === undefined || match(r)))
+    .sort((a, b) => a.position - b.position)
+    .map(view);
+}
+
 // ── The six scopes, as one shape ─────────────────────────────────────────────
 //
 // Each scope is a different table (see prisma/SCHEMA.md for why it is six tables and not one with
@@ -167,7 +201,7 @@ interface AuditContext {
 /**
  * Replace one scope's tier list, and log what changed **in the same transaction**.
  *
- * One function for all four stored scopes rather than four near-identical ones. That is not only
+ * One function for every stored scope rather than one near-identical copy each. That is not only
  * de-duplication: it is what makes it impossible to add a scope later that silently writes without
  * an audit entry, because there is no other path to a tier write. The `before` list is read inside
  * the transaction, so the pair recorded is the pair that actually applied — reading it outside
@@ -177,7 +211,11 @@ async function replaceTiers(
   where: Record<string, unknown>,
   create: (t: Tier) => Record<string, unknown>,
   model:
-    'userRetentionTier' | 'deviceRetentionTier' | 'actionRetentionTier' | 'sealedRetentionTier',
+    | 'userRetentionTier'
+    | 'deviceRetentionTier'
+    | 'actionRetentionTier'
+    | 'blueprintRetentionTier'
+    | 'sealedRetentionTier',
   kind: DataKind,
   tiers: Tier[],
   audit: AuditContext,
@@ -280,6 +318,37 @@ export async function replaceActionTiers(
       position: t.position,
     }),
     'actionRetentionTier',
+    kind,
+    tiers,
+    audit,
+  );
+}
+
+/**
+ * A blueprint slot action's list (F18.12), addressed by `(blueprint, slot_key, action_name)` — keys,
+ * not rows, because a blueprint save recreates every slot row. Routed through `replaceTiers` since
+ * F18.20; before that it was the one tier write with its own copy of the delete/insert/log.
+ */
+export async function replaceBlueprintTiers(
+  blueprintId: number,
+  slotKey: string,
+  actionName: string,
+  kind: DataKind,
+  tiers: Tier[],
+  audit: AuditContext,
+): Promise<void> {
+  await replaceTiers(
+    { blueprint_id: blueprintId, slot_key: slotKey, action_name: actionName, data_kind: kind },
+    (t) => ({
+      blueprint_id: blueprintId,
+      slot_key: slotKey,
+      action_name: actionName,
+      data_kind: kind,
+      bucket: t.bucket,
+      keep_days: t.keepDays,
+      position: t.position,
+    }),
+    'blueprintRetentionTier',
     kind,
     tiers,
     audit,

@@ -1,0 +1,48 @@
+@if (!editing()) {
+  <div class="stl-follow">
+    <mat-icon class="stl-follow-icon">subdirectory_arrow_right</mat-icon>
+    <div class="stl-follow-text">
+      <span class="stl-follow-title">Follows {{ fallbackLabel() }}</span>
+      <span class="stl-follow-sum">{{ fallbackSummary() }}</span>
+    </div>
+    <button type="button" class="stl-btn stl-ghost" [disabled]="busy()" (click)="customise()">
+      <mat-icon>tune</mat-icon>
+      Customise{{ subject() ? ' for ' + subject() : '' }}
+    </button>
+  </div>
+} @else {
+  <app-tier-editor
+    [tiers]="shown()"
+    [buckets]="buckets()"
+    [kind]="kind()"
+    [minBucket]="minBucket()"
+    [ceilings]="ceilings()"
+    [usage]="usage()"
+    [showStored]="showStored()"
+    [disabled]="busy()"
+    (changed)="onChanged($event)"
+  />
+  <div class="stl-foot">
+    <!-- What applies once this list is gone, said BEFORE anyone presses Remove — and while an unsaved
+         first list is open, what is still applying until Save. -->
+    <span class="stl-note">
+      {{ own().length > 0 ? 'Without this list:' : 'Until you save, it follows' }}
+      <b>{{ fallbackLabel() }}</b> · {{ fallbackSummary() }}
+    </span>
+    <span class="stl-actions">
+      @if (dirty()) {
+        <button type="button" class="stl-link" [disabled]="busy()" (click)="discard()">
+          Discard
+        </button>
+        <button type="button" class="stl-btn" [disabled]="busy()" (click)="submit()">
+          Save{{ subject() ? ' for ' + subject() : '' }}
+        </button>
+      } @else if (own().length > 0) {
+        <button type="button" class="stl-link" [disabled]="busy()" (click)="remove()">
+          Remove list — follow {{ fallbackLabel() }}
+        </button>
+      }
+    </span>
+  </div>
+}
+<ng-content />

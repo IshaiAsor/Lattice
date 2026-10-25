@@ -1,4 +1,4 @@
-<h2 mat-dialog-title class="cb-title">Add a bucket size</h2>
+<h2 mat-dialog-title class="cb-title">Bucket sizes</h2>
 
 <mat-dialog-content class="cb-body">
   <p class="cb-lead">
@@ -60,10 +60,47 @@
       <span>{{ e }}</span>
     </div>
   }
+
+  <!-- F18.20: the custom sizes on this platform, and removing one that is no longer needed. -->
+  <div class="cb-customs">
+    <div class="cb-customs-head">Custom sizes</div>
+    @for (b of customs(); track b.code) {
+      <div class="cb-custom">
+        <div class="cb-custom-text">
+          <span class="cb-custom-name">{{ b.label }}</span>
+          <span class="cb-custom-meta">{{ b.seconds | number }} s · {{ addedBy(b) }}</span>
+        </div>
+        @if (canRemove(b)) {
+          <button
+            type="button"
+            class="cb-remove"
+            [disabled]="removing() !== null"
+            (click)="remove(b)"
+          >
+            <mat-icon>delete_outline</mat-icon>
+            {{ removing() === b.code ? 'Removing…' : 'Remove' }}
+          </button>
+        } @else {
+          <span class="cb-custom-meta">Not yours to remove</span>
+        }
+        @if (rowError()[b.code]; as err) {
+          <div class="cb-custom-error">
+            <mat-icon>info</mat-icon>
+            <span>{{ err }}</span>
+          </div>
+        }
+      </div>
+    } @empty {
+      <p class="cb-custom-meta">No custom sizes yet — the built-in ones ship with the platform.</p>
+    }
+    @if (customs().length > 0) {
+      <p class="cb-custom-meta">Built-in sizes ship with the platform and can't be removed.</p>
+    }
+  </div>
 </mat-dialog-content>
 
 <mat-dialog-actions align="end" class="cb-actions">
-  <button type="button" class="cb-btn" (click)="cancel()">Cancel</button>
+  <button type="button" class="cb-btn" (click)="cancel()">Done</button>
   <button
     type="button"
     class="cb-btn cb-primary"

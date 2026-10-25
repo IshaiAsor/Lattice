@@ -1,0 +1,51 @@
+<div class="srs">
+  <div class="srs-head">
+    <div class="srs-title">
+      <span class="srs-name">{{ data.actionName }}</span>
+      <span class="srs-sub">{{ data.deviceName }} · data kept</span>
+    </div>
+    <button type="button" class="srs-close" aria-label="Close" (click)="close()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  @if (action(); as a) {
+    <div class="srs-decided">
+      <span class="srs-muted">Decided by</span>
+      <app-scope-chip [scope]="a.effective.source" [text]="decidedBy()" />
+    </div>
+
+    <app-scope-ladder [scopes]="a.scopes" [vertical]="true" />
+
+    <div class="srs-label">What is kept</div>
+    <div class="srs-kept">
+      @for (t of a.effective.tiers; track t.bucket) {
+        <div class="srs-tier">
+          <span class="srs-bucket">{{ bucketName(t.bucket) }}</span>
+          <span class="srs-keep">{{ formatDays(t.keepDays) }}</span>
+          <span class="srs-cost">{{ costOf(t.bucket) }}</span>
+          <span class="srs-stored">
+            {{ storedIn(t.bucket) > 0 ? (storedIn(t.bucket) | number) + ' stored' : 'nothing stored yet' }}
+          </span>
+        </div>
+      } @empty {
+        <div class="srs-tier"><span class="srs-bucket">Everything is kept</span></div>
+      }
+    </div>
+
+    <div class="srs-actions">
+      <button type="button" class="srs-btn" (click)="customise()">
+        <mat-icon>tune</mat-icon>
+        Customise for this sensor
+      </button>
+      <button type="button" class="srs-btn srs-ghost" (click)="customise(false)">
+        This device's data settings
+        <mat-icon>arrow_forward</mat-icon>
+      </button>
+    </div>
+  } @else if (failed()) {
+    <p class="srs-muted">Could not load what this sensor keeps.</p>
+  } @else {
+    <p class="srs-muted">Loading…</p>
+  }
+</div>

@@ -4,15 +4,24 @@
 // specific scope that has one - not a tier-by-tier merge, which would leave "removing it falls
 // back to the device's" without a single answer.
 
-import { releasedTemplateFor } from '@lattice/capability-validation';
-import { DATA_KINDS, resolveTiers, type PlatformTier, type Tier } from '@lattice/retention';
+import {
+  ACTION_SCOPED_KINDS,
+  DATA_KINDS,
+  resolveTiers,
+  type PlatformTier,
+  type ResolvedTiers,
+} from '@lattice/retention';
 import { db } from '../db';
 import { ensureActionOwned, ensureDeviceOwned } from './ownership';
 import { retentionActivityService } from './retention-activity.service';
+import { actionRetentionView, loadDeviceResolution } from './retention-device-resolution';
+import { retentionUsageService } from './retention-usage.service';
 import {
+  assertActionScoped,
   assertKind,
   actionLabel,
   deviceLabel,
+  listOf,
   loadCatalog,
   parseTiers,
   replaceActionTiers,
@@ -143,6 +152,7 @@ export const retentionScopesService = {
     body: Record<string, unknown>,
   ) {
     assertKind(kind);
+    assertActionScoped(kind);
     await ensureDeviceOwned(userId, deviceId);
     const tiers = parseTiers(body);
     await validate(kind, tiers, { applyCeilings: true });
@@ -159,6 +169,7 @@ export const retentionScopesService = {
 
   async clearDeviceTiers(userId: number, deviceId: number, kind: string) {
     assertKind(kind);
+    assertActionScoped(kind);
     await ensureDeviceOwned(userId, deviceId);
     const label = await deviceLabel(deviceId);
     await db.$transaction(async (tx) => {
@@ -210,6 +221,7 @@ export const retentionScopesService = {
     body: Record<string, unknown>,
   ) {
     assertKind(kind);
+    assertActionScoped(kind);
     await ensureActionOwned(userId, actionId);
     const tiers = parseTiers(body);
     await validate(kind, tiers, { applyCeilings: true });
@@ -226,6 +238,7 @@ export const retentionScopesService = {
 
   async clearActionTiers(userId: number, actionId: number, kind: string) {
     assertKind(kind);
+    assertActionScoped(kind);
     await ensureActionOwned(userId, actionId);
     const label = await actionLabel(actionId);
     await db.$transaction(async (tx) => {
@@ -260,93 +273,56 @@ export const retentionScopesService = {
     });
   },
 
-  /** What actually applies to one action, and which scope decided it. */
-  async effectiveForAction(userId: number, actionId: number, kind: string) {
+  /**
+   * What actually applies to one action, and which scope decided it.
+   *
+   * The chart's tier choice rides on this (`history.service`), so it is built on the same loader as
+   * the Data tabs — the chart and the screen cannot resolve the same action differently.
+   */
+  async effectiveForAction(userId: number, actionId: number, kind: string): Promise<ResolvedTiers> {
     assertKind(kind);
     await ensureActionOwned(userId, actionId);
-    const [buckets, policy, action] = await Promise.all([
-      loadCatalog(),
-      db.retentionPolicy.findUnique({ where: { data_kind: kind }, include: { tiers: true } }),
-      db.userDeviceAction.findUniqueOrThrow({
-        where: { id: actionId },
-        select: {
-          mqtt_action_name: true,
-          user_device_id: true,
-          user_device: {
-            select: {
-              user_id: true,
-              device: { select: { type: true, version: true, is_sealed: true } },
-              blueprint_bindings: {
-                select: { slot_key: true, instance: { select: { blueprint_id: true } } },
-              },
-            },
-          },
-        },
-      }),
-    ]);
-    const binding = action.user_device.blueprint_bindings[0];
-    // The sealed template covering this device, resolved the way materialization resolves it
-    // (F18.21) — so the list shown is the one the sweep applies.
-    const catalog = action.user_device.device;
-    const templateId = catalog.is_sealed
-      ? releasedTemplateFor(
-          catalog.type,
-          catalog.version,
-          await db.sealedTemplateTarget.findMany({
-            where: { device_type: catalog.type, template: { status: 'released' } },
-            select: { template_id: true, device_type: true, version_min: true, version_max: true },
-          }),
-        )
-      : null;
-    const [own, device, blueprint, sealed, act] = await Promise.all([
-      db.userRetentionTier.findMany({ where: { user_id: userId, data_kind: kind } }),
-      db.deviceRetentionTier.findMany({
-        where: { user_device_id: action.user_device_id, data_kind: kind },
-      }),
-      binding
-        ? db.blueprintRetentionTier.findMany({
-            where: {
-              blueprint_id: binding.instance.blueprint_id,
-              slot_key: binding.slot_key,
-              action_name: action.mqtt_action_name,
-              data_kind: kind,
-            },
-          })
-        : Promise.resolve([]),
-      templateId !== null
-        ? db.sealedRetentionTier.findMany({
-            where: {
-              sealed_template_id: templateId,
-              action_name: action.mqtt_action_name,
-              data_kind: kind,
-            },
-          })
-        : Promise.resolve([]),
-      db.actionRetentionTier.findMany({
-        where: { user_device_action_id: actionId, data_kind: kind },
-      }),
-    ]);
-    const toTier = (r: { bucket: string; keep_days: number; position: number }): Tier => ({
-      bucket: r.bucket,
-      keepDays: r.keep_days,
-      position: r.position,
+    const { user_device_id } = await db.userDeviceAction.findUniqueOrThrow({
+      where: { id: actionId },
+      select: { user_device_id: true },
     });
-    return resolveTiers({
-      kind,
-      buckets,
-      platform:
-        policy?.tiers.map((t) => ({
-          bucket: t.bucket,
-          keepDays: t.keep_days,
-          maxKeepDays: t.max_keep_days,
-          position: t.position,
-        })) ?? [],
-      user: own.map(toTier),
-      device: device.map(toTier),
-      blueprint: blueprint.map(toTier),
-      sealed: sealed.map(toTier),
-      action: act.map(toTier),
-      minBucket: policy?.min_bucket ?? null,
-    });
+    const r = await loadDeviceResolution(userId, user_device_id, actionId);
+    return resolveTiers(r.inputFor(r.actions[0]!, kind));
+  },
+
+  /**
+   * Every sensor on a device: its own list, what applies and who decided, what removing its list
+   * would fall back to, where each scope stands, and what it is storing (F18.20).
+   *
+   * One read for the device page's Data tab rather than a call per action per kind. Only the kinds an
+   * action owns appear — `command` and `device_event` windows are per user, not per sensor.
+   */
+  async deviceRetention(userId: number, deviceId: number) {
+    await ensureDeviceOwned(userId, deviceId);
+    const r = await loadDeviceResolution(userId, deviceId);
+    const stored = await retentionUsageService.usageByAction(r.actions.map((a) => a.id));
+
+    const kinds = ACTION_SCOPED_KINDS.filter((k) => r.actions.some((a) => r.kindOf(a) === k));
+    return {
+      deviceId,
+      deviceName: r.deviceName,
+      kinds: kinds.map((kind) => {
+        const policy = r.policyOf(kind);
+        return {
+          dataKind: kind,
+          own: listOf(r.deviceRows, kind),
+          // What removing the device list sends a sensor with nothing more specific to — the
+          // user's list, else the platform's.
+          fallback: { ...resolveTiers(r.baseInputFor(kind)), sourceLabel: null },
+          enabled: policy?.enabled ?? false,
+          minBucket: policy?.min_bucket ?? 'raw',
+          // So the editor can refuse above-ceiling chips before Save, the way Settings does.
+          ceilings: Object.fromEntries(
+            (policy?.tiers ?? []).map((t) => [t.bucket, t.max_keep_days]),
+          ) as Record<string, number | null>,
+        };
+      }),
+      actions: r.actions.map((a) => actionRetentionView(r, a, stored.get(a.id))),
+    };
   },
 };

@@ -302,51 +302,6 @@
   margin-left: 2px;
 }
 
-/* The actions a slot brings — read-only, because a slot exposes all of its template's entries
-   and the choice of which one to use belongs to the rule/scene/pipeline that addresses it. */
-.slot-actions {
-  border-left: 2px solid var(--primary);
-  padding: 2px 0 2px 10px;
-  margin: 0 0 10px;
-}
-
-.slot-actions-title {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.slot-actions ul {
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-}
-
-.slot-actions li {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.action-label {
-  font-weight: 500;
-}
-
-.slot-actions code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.slot-actions-empty {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--offline, #ef5350);
-}
-
 /* One row of the repeatable lists. */
 .row-card {
   border: 1px solid var(--border);

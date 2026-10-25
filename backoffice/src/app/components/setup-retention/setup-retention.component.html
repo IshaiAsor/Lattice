@@ -1,0 +1,96 @@
+<div class="sr">
+  @if (view(); as v) {
+    @if (total() > 0) {
+      <div class="sr-summary">
+        <mat-icon>storage</mat-icon>
+        <span>
+          The blueprint sets how long <b>{{ byBlueprint() }} of {{ total() }}</b> actions keep their
+          readings.
+          @if (ownCount() > 0) {
+            You keep your own list for <b>{{ ownCount() }}</b>.
+          }
+        </span>
+        @if (ownCount() > 0) {
+          <button type="button" class="sr-link" [disabled]="busy()" (click)="useBlueprintEverywhere()">
+            Use the blueprint's everywhere
+          </button>
+        }
+      </div>
+    }
+
+    @for (s of v.slots; track s.slotKey) {
+      @for (d of s.devices; track d.deviceId) {
+        <section class="sr-group">
+          <h3 class="sr-group-title">
+            {{ s.slotLabel }}
+            <span class="sr-group-device">{{ d.deviceName }}</span>
+          </h3>
+          <div class="lattice-card sr-list">
+            @for (a of d.actions; track a.actionId) {
+              <div class="sr-item" [class.open]="open()[a.actionId]">
+                <button
+                  type="button"
+                  class="sr-row"
+                  [attr.aria-expanded]="!!open()[a.actionId]"
+                  (click)="toggle(a.actionId)"
+                >
+                  <span class="sr-name">
+                    <span class="sr-name-main">{{ a.name }}</span>
+                    <code>{{ a.mqttActionName }}</code>
+                  </span>
+                  <span class="sr-chip">
+                    <app-scope-chip [scope]="decidedBy(a).scope" [text]="decidedBy(a).text" />
+                  </span>
+                  <span class="sr-kept">
+                    {{ summary(a.effective.tiers) }}
+                    @if (blueprintSilent(a) && a.own.length === 0) {
+                      <span class="sr-silent">· the blueprint sets nothing for this</span>
+                    }
+                  </span>
+                  <mat-icon class="sr-caret">{{ open()[a.actionId] ? 'expand_less' : 'expand_more' }}</mat-icon>
+                </button>
+                @if (open()[a.actionId]) {
+                  <div class="sr-detail">
+                    <app-scoped-tier-list
+                      [own]="a.own"
+                      [fallbackLabel]="fallbackLabel(a)"
+                      [fallbackTiers]="a.fallback.tiers"
+                      [kind]="a.dataKind"
+                      [buckets]="buckets()"
+                      [minBucket]="minBucket(a.dataKind)"
+                      [ceilings]="ceilings(a.dataKind)"
+                      [usage]="a.stored?.buckets ?? {}"
+                      [showStored]="true"
+                      [subject]="a.name"
+                      [busy]="busy()"
+                      (save)="save(a, $event)"
+                      (clear)="clear(a)"
+                    >
+                      <!-- Where the list lives, said where it is edited: on the device's action, so
+                           it outlives the device's place in this setup. -->
+                      <p class="sr-note">
+                        <mat-icon>info</mat-icon>
+                        Your list belongs to {{ d.deviceName }}'s {{ a.name }}, so it stays if the
+                        device leaves this setup.
+                      </p>
+                    </app-scoped-tier-list>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </section>
+      }
+    } @empty {
+      <p class="sr-empty">No device in this setup keeps readings yet.</p>
+    }
+
+    <p class="sr-foot">
+      <mat-icon>info</mat-icon>
+      <span>Commands and device events are kept per account, not per setup.</span>
+      <a routerLink="/settings">Change them in Settings</a>
+    </p>
+  } @else {
+    <p class="sr-empty">Loading…</p>
+  }
+</div>

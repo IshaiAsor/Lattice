@@ -105,4 +105,70 @@ export const retentionUsageService = {
       }),
     };
   },
+
+  /**
+   * Rows and bytes per ACTION, for the two kinds an action owns — readings (raw + each rollup
+   * bucket) and frames (F18.20). The per-sensor "stored" figure on the device page and the sheet.
+   *
+   * One grouped query per table for the whole id set, each on an index led by
+   * `user_device_action_id`, so a device costs three queries however many sensors it has.
+   * The caller owns authorisation: every id passed must already be the requester's.
+   */
+  async usageByAction(
+    actionIds: readonly number[],
+  ): Promise<Map<number, { scalar: KindUsage; frame: KindUsage }>> {
+    const out = new Map<number, { scalar: KindUsage; frame: KindUsage }>();
+    if (actionIds.length === 0) return out;
+    const where = { user_device_action_id: { in: [...actionIds] } };
+
+    const [readings, rollups, frames] = await Promise.all([
+      db.sensorHistory.groupBy({
+        by: ['user_device_action_id'],
+        where,
+        _count: { _all: true },
+      }),
+      db.sensorRollup.groupBy({
+        by: ['user_device_action_id', 'bucket'],
+        where,
+        _count: { _all: true },
+      }),
+      db.cameraFrameHistory.groupBy({
+        by: ['user_device_action_id'],
+        where,
+        _count: { _all: true },
+        _sum: { byte_size: true },
+      }),
+    ]);
+
+    const scalar = new Map<number, Record<string, UsageBucket>>();
+    const bucketsOf = (id: number): Record<string, UsageBucket> => {
+      let b = scalar.get(id);
+      if (!b) scalar.set(id, (b = {}));
+      return b;
+    };
+    for (const r of readings)
+      bucketsOf(r.user_device_action_id)[RAW_BUCKET] = estimate(r._count._all, READING_BYTES);
+    for (const r of rollups)
+      bucketsOf(r.user_device_action_id)[r.bucket] = estimate(r._count._all, ROLLUP_BYTES);
+    const frameBy = new Map(frames.map((f) => [f.user_device_action_id, f]));
+
+    for (const id of actionIds) {
+      const f = frameBy.get(id);
+      out.set(id, {
+        scalar: sumUsage(scalar.get(id) ?? {}),
+        frame: sumUsage(
+          f
+            ? {
+                [RAW_BUCKET]: {
+                  rows: f._count._all,
+                  bytes: f._sum.byte_size ?? 0,
+                  estimated: false,
+                },
+              }
+            : {},
+        ),
+      });
+    }
+    return out;
+  },
 };

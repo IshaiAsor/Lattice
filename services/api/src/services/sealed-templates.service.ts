@@ -9,6 +9,7 @@ import {
   type TemplateUsage,
 } from './sealed-templates.usage';
 import { dropSealedTiers } from './retention-sealed.service';
+import { dropBlueprintTiers } from './retention-blueprints.service';
 
 // Sealed-device template authoring (admin only). A sealed template is the admin's SELECTION from
 // the shared catalog: which capabilities (by capability_key) to activate on a factory-soldered
@@ -245,6 +246,14 @@ class SealedTemplatesService {
           new Set(named.map((e) => e.mqtt_action_name)),
           actorUserId,
           'entry removed from the template',
+        );
+        // The same names are what blueprint lists address on every slot built on this template
+        // (F18.20), so the entries a save removes strand those lists too.
+        await dropBlueprintTiers(
+          tx,
+          { templateId: id },
+          actorUserId,
+          'action removed from the sealed template',
         );
       }
       await tx.sealedTemplate.update({ where: { id }, data: { updated_at: new Date() } });
