@@ -935,6 +935,28 @@ Legend: ✅ implemented (sync-enforced) · ⬜ planned · ⏸ deferred.
 - publishes a heartbeat with the expected diagnostics shape
   - device heartbeat → RK.DEVICE_HEARTBEAT → digest writes the Valkey last-seen key
 
+### MQTT ACL — `mqtt-acl.e2e.test.ts` ✅ (F25.7)
+
+Row ids follow docs/plans/F25.7-EMQX-ACL-AUDIT.md §8. The connect rows run once per listener (tcp and
+TLS locally), so their titles carry the `${l.name}` template verbatim.
+
+- C1 [${l.name}] a device token connects as its own user/device
+- C5 [${l.name}] a login (app_usage) token is refused as a device credential
+  - refused 134 (claim mismatch) or 135 (bad signature) — P0's `verify_claims` on `purpose`
+- C6 [${l.name}] a device refresh token is refused as a device credential
+- S1 a device may subscribe to its own command topic
+- S2 a device may not subscribe to a sibling device's commands
+- S3 a device may not wildcard over its user's devices
+- S4 a device may not wildcard over every user's telemetry
+- S5 a device may not subscribe to #, $SYS, or a shared group on another device
+  - refusal is SUBACK 0x87, read from `err.packet.granted` — mqtt.js echoes the requested qos in `granted`
+- P1 a device may publish its own status, telemetry, ack and heartbeat
+- P2 a device may not publish onto its own command topic
+- P3 a device may not publish a sibling's or another user's telemetry
+  - refusal is PUBACK 0x87, plus a superuser observer proving nothing leaked
+- ⬜ C2–C4, C7–C10, R1, R2, B1, B2 — Phase 1 (fingerprint authentication)
+- ⬜ S6, P4 — Phase 2 (ACL cleanup, retain restriction)
+
 ### Commands — `command-read.e2e.test.ts` ✅
 
 - read reports current state, and still does after a restart
