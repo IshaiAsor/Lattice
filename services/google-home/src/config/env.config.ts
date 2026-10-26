@@ -1,14 +1,27 @@
+// jsonwebtoken reads `expiresIn: 0` as "expires now", not "never" — a 0 here silently mints
+// dead tokens (that unlinked Google Home after every access-token expiry), so refuse to start.
+function positiveSeconds(name: string, fallback: number): number {
+  const value = +(process.env[name] ?? fallback);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${name} must be a positive number of seconds, got '${process.env[name]}'`);
+  }
+  return value;
+}
+
 const config = {
   port: +(process.env['PORT'] ?? 3010),
   rabbitmqUrl: process.env['RABBITMQ_URL'] ?? 'amqp://localhost',
   valkeyUrl: process.env['VALKEY_URL'] ?? 'redis://localhost:6379',
   jwt: {
     secret: process.env['JWT_SECRET'] ?? '',
-    googleCloudToCloudLoginExpiresIn: +(
-      process.env['JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_EXPIRES_IN'] ?? 3600
+    googleCloudToCloudLoginExpiresIn: positiveSeconds(
+      'JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_EXPIRES_IN',
+      3600,
     ),
-    googleCloudToCloudLoginRefreshExpiresIn: +(
-      process.env['JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_REFRESH'] ?? 0
+    // 180 days, sliding: every refresh issues a new refresh token, so an active link never lapses.
+    googleCloudToCloudLoginRefreshExpiresIn: positiveSeconds(
+      'JWT_GOOGLE_CLOUD_TO_CLOUD_LOGIN_REFRESH',
+      15552000,
     ),
   },
   // Where account linking sends the user to sign in. Empty → same origin as this service, which

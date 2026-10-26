@@ -108,7 +108,7 @@ router.post('/token', async (req: Request, res: Response) => {
       const cached = await valkeyService.get<{ userId: number; redirectUri: string }>(
         `oauth_code:${code}`,
       );
-      if (!cached) return res.status(401).json({ error: 'invalid_grant' });
+      if (!cached) return res.status(400).json({ error: 'invalid_grant' });
 
       if (redirect_uri && redirect_uri !== cached.redirectUri) {
         await valkeyService.del(`oauth_code:${code}`);
@@ -126,7 +126,11 @@ router.post('/token', async (req: Request, res: Response) => {
         refresh_token,
         JwtPurpose.google_cloud_to_cloud_login_refresh,
       );
-      if (!result.valid) return res.status(401).json({ error: 'invalid_grant' });
+      if (!result.valid) {
+        // Google unlinks the account on invalid_grant, so this is worth a trace.
+        log.warn({ reason: result.err }, 'refresh token rejected');
+        return res.status(400).json({ error: 'invalid_grant' });
+      }
       userId = result.decoded.id;
     } else {
       return res.status(400).json({ error: 'unsupported_grant_type' });
@@ -149,7 +153,9 @@ router.post('/token', async (req: Request, res: Response) => {
     });
   } catch (err) {
     log.error({ err }, 'token error');
-    res.status(401).json({ error: 'invalid_grant' });
+    // Not invalid_grant: that tells Google to unlink, and a transient failure (e.g. Valkey) should
+    // only make it retry.
+    res.status(500).json({ error: 'server_error' });
   }
 });
 
