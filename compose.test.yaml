@@ -43,6 +43,9 @@ services:
       - EMQX_AUTHENTICATION__1__ALGORITHM=hmac-based
       - EMQX_AUTHENTICATION__1__SECRET=${JWT_SECRET}
       - EMQX_AUTHENTICATION__1__SECRET_BASE64_ENCODED=false
+      # F25.7 P0: only device tokens are MQTT credentials. Must be the HOCON literal — the
+      # __VERIFY_CLAIMS__PURPOSE map form is silently ignored by EMQX 5.6 (verify with conf show).
+      - 'EMQX_AUTHENTICATION__1__VERIFY_CLAIMS={purpose = "device_usage"}'
       - EMQX_AUTHENTICATION__2__MECHANISM=password_based
       - EMQX_AUTHENTICATION__2__BACKEND=postgresql
       - EMQX_AUTHENTICATION__2__SERVER=postgres:5432
